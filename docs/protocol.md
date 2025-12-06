@@ -4,6 +4,7 @@ Purpose: guide sandbox agents to deliver changes with total correctness using re
 
 ## Initial Prompt (copy verbatim to sandbox agents)
 You are a sandbox agent with no prior context. Your goal is to implement a run with zero defects. Follow these steps, referencing documents by path:
+0) Before any git fetch/push, run `source scripts/load_github_token.sh` to export `DARELWASL_GITHUB_TOKEN`/`GITHUB_TOKEN`. Keep the remote set to HTTPS (`git remote set-url origin https://github.com/damjanbab/darelwasl.git`). If a non-interactive push is needed, create a temporary askpass helper (`cat <<'EOF' >/tmp/git-askpass.sh\n#!/usr/bin/env bash\nif [[ \"$1\" == *Username* ]]; then echo \"x-access-token\"; else echo \"${GITHUB_TOKEN:?}\"; fi\nEOF\nchmod +x /tmp/git-askpass.sh`) and run `GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin main`. Do not print or log the token and do not commit the loader script.
 1) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
 2) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate each task against the Task Schema below. If a task is malformed, fix the brief or split work inside the run file; do not proceed on invalid input.
 3) Plan the run; keep scope inside the run file and referenced capabilities. The run should be complete when defined; avoid adding tasks unless a blocker makes it impossible to proceed without an explicit new task entry.
