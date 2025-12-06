@@ -57,7 +57,7 @@
   - Reporting: summarize design spec
 
 - Task ID: theme-registry
-  - Status: pending
+  - Status: done (Codex, 2025-12-06 15:02 UTC)
   - Objective: Add theme tokens registry (colors/typography/spacing/radius/shadows/motion) and CSS vars generator stub.
   - Scope: Add `registries/theme.edn` and note generator plan.
   - Out of Scope: Full CSS implementation.

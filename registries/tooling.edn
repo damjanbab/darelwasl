@@ -45,4 +45,14 @@
   :enforces [:ui-boot]
   :related {:capabilities [:cap/view/login :cap/view/tasks]}
   :gotchas []}
+
+ {:id :cap/tooling/theme-css-vars
+  :title "Theme CSS variable generator"
+  :version "v1"
+  :invocation "scripts/theme-css-vars.sh [theme-id] [output-file]"
+  :scope :shared
+  :determinism {:fixtures []}
+  :enforces [:theme-vars]
+  :related {:capabilities [:theme/default]}
+  :gotchas []}
 ]
