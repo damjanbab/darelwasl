@@ -113,6 +113,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Runtime & Commands
 - Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
 - Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
+- Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
 
 ## Product Spec: Task App v1 (two users)
@@ -171,6 +172,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Starter Scaffolding
 - Registries: `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, `registries/integrations.edn`, `registries/tooling.edn` (placeholder entries to copy/extend).
 - Checks harness: `scripts/checks.sh` (stub entry point for registry sanity, schema load, action contracts, view integrity, headless app smoke). Extend with real commands as the codebase grows.
+- Datomic helpers: `darelwasl.db` (dev-local client/connection helpers) and `darelwasl.schema` (registry reader + schema transact + temp DB helper defaulting to `:mem`) are the entry points for backend schema checks.
 - Theme CSS variable generator: `scripts/theme-css-vars.sh` (registry-driven, registered as `:cap/tooling/theme-css-vars`) with npm wrapper `npm run theme:css-vars` that writes `public/css/theme.css` (auto-run before dev/build/check) so the UI shell pulls theme vars.
 - Frontend scaffold: `package.json`, `shadow-cljs.edn`, `public/index.html`, `public/css/main.css`, and `src/darelwasl/app.cljs` (re-frame shell). Commands: `npm install`; `npm run dev` (shadow-cljs watch with dev-http on :3000 serving `public/`); `npm run build` (release build to `public/js`); `npm run check` (compile-only smoke).
 
