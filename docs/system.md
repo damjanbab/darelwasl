@@ -82,6 +82,20 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Related Capabilities and Proofs:
 - Gotchas (link to `docs/faq.md` entries if any):
 
+### Theme
+- ID:
+- Title:
+- Version:
+- Purpose:
+- Colors (background/surface/text/accent/warn/danger/success/focus):
+- Typography (font-family, sizes, line-heights):
+- Spacing (base + scale):
+- Radius:
+- Shadows:
+- Motion:
+- Compatibility/Flags:
+- Related Views/Tools:
+
 ## Patterns and Guidelines
 - Data modeling: fact-first; prefer attributes over blobs; model history intentionally (use :db.cardinality/one with upserts for identity, or time-indexed facts for history); avoid duplicating derived data unless cached with clear invalidation rules; use enums/idents instead of ad-hoc strings.
 - Naming: use stable, descriptive idents; keep capability IDs aligned with registry IDs; avoid abbreviations that hide meaning.
@@ -111,6 +125,8 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Components: buttons (primary/secondary/ghost), inputs/textarea/select, tag chips, status/priority badges, cards for list rows, empty/error states.
 - Theming: tokens stored in `registries/theme.edn`; generate CSS vars; components must consume tokens/vars only (no hardcoded colors/spacing/fonts). Use radius/shadow/motion tokens for consistency.
 - Login: dedicated screen before tasks; uses same theme/tokens; shows error states clearly; supports shared password flow.
+- Theme tokens: default `:theme/default` uses background `#F7F4EF`, surface `#FFFFFF`, muted surface `#F0ECE6`, text `#1F2933/#52606D`, accent `#0FA3B1` with strong `#0B7E89`, focus color matches accent, warning/danger/success use `#F59E0B/#D14343/#2D9D78`. Typography uses `Inter, "IBM Plex Sans", system-ui, -apple-system, sans-serif` with sizes 20/16/14/12px and matching line heights 28/22/20/16px. Spacing base 4px with 4–32px scale, radius 4/8/12px, card shadow `0 6px 20px rgba(0,0,0,0.06)`, motion transition `150ms ease`.
+- Theme CSS vars: run `scripts/theme-css-vars.sh [theme-id] [output-file]` (defaults to `:theme/default` and stdout) to emit `:root { --color-... }` tokens. Tokens should be stored with CSS-ready units to avoid guessing; generated output can be redirected to a stylesheet when wiring UI.
 
 ## Composability Rules
 - Schema: reuse existing enums/refs when semantics match; avoid duplicating attributes; introduce new attrs only with clear invariants. Shared attributes must not change meaning between entities.
@@ -150,6 +166,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Starter Scaffolding
 - Registries: `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, `registries/integrations.edn`, `registries/tooling.edn` (placeholder entries to copy/extend).
 - Checks harness: `scripts/checks.sh` (stub entry point for registry sanity, schema load, action contracts, view integrity, headless app smoke). Extend with real commands as the codebase grows.
+- Theme CSS variable generator: `scripts/theme-css-vars.sh` (registry-driven, registered as `:cap/tooling/theme-css-vars`) to translate theme tokens into CSS variables for the UI shell.
 
 ## Glossary (optional)
 - Domain terms and definitions to keep naming consistent.

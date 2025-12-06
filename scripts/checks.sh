@@ -56,14 +56,14 @@ check_registry_fields() {
   require_keys "$ROOT/registries/actions.edn" ":id" ":version" ":inputs" ":outputs" ":side-effects" ":adapter" ":audit" ":idempotency" ":contracts" ":compatibility"
   require_keys "$ROOT/registries/views.edn" ":id" ":version" ":data" ":actions" ":ux" ":compatibility"
   require_keys "$ROOT/registries/tooling.edn" ":id" ":version" ":invocation" ":scope" ":determinism" ":enforces"
-  require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius"
+  require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius" ":shadows" ":motion" ":compatibility"
   echo "Registry field checks passed."
 }
 
 check_edn_parse() {
   check_clojure_available
   echo "Parsing EDN registries..."
-  ROOT_DIR="$ROOT" clojure - <<'CLJ'
+  ROOT_DIR="$ROOT" clojure -M - <<'CLJ'
 (let [root (System/getenv "ROOT_DIR")
       files [(str root "/registries/schema.edn")
              (str root "/registries/actions.edn")
