@@ -9,4 +9,6 @@
         ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}
  :aliases {:dev {:main-opts ["-m" "darelwasl.main"]
                  :jvm-opts ["-Dclojure.main.report=stderr"]
-                 :exec-fn darelwasl.main/-main}}}
+                 :exec-fn darelwasl.main/-main}
+           :seed {:main-opts ["-m" "darelwasl.fixtures"]
+                  :jvm-opts ["-Dclojure.main.report=stderr"]}}}

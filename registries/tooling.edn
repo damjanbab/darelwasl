@@ -36,6 +36,16 @@
                            :cap/action/auth-login]}
   :gotchas []}
 
+ {:id :cap/tooling/fixtures-loader
+  :title "Fixture loader"
+  :version "v1"
+  :invocation "clojure -M:seed [--temp]"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/users :fixtures/tasks]}
+  :enforces [:fixtures-load]
+  :related {:capabilities [:cap/schema/user :cap/schema/task]}
+  :gotchas ["Run from repo root; --temp seeds a Datomic dev-local DB in :mem storage by default."]}
+
  {:id :cap/tooling/app-smoke
   :title "Headless app smoke"
   :version "v1"
