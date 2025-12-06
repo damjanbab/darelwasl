@@ -202,7 +202,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Fixtures
 
 - Task ID: fixtures-users
-  - Status: in-progress (Codex, 2025-12-06 18:11 UTC)
+  - Status: done (Codex, 2025-12-06 18:22 UTC)
   - Objective: Finalize canonical user fixtures (huda, damjan) with stable IDs/password for auth and downstream checks.
   - Scope: Validate/update `fixtures/users.edn` to align with `:cap/schema/user`, document usage assumptions for seed/tests, ensure compatibility with registries.
   - Out of Scope: Changes to user schema or auth implementation; fixture loader tooling (covered by other tasks).

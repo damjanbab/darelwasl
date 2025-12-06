@@ -142,7 +142,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Integrations: wrap external systems behind adapters; expose contracts via the integration registry; provide fakes for composition in tests.
 - Process: when a change affects composability rules, update this section and the relevant registry entries in the same run; tasks must declare their composability impact.
 ## Fixtures and Test Data
-- :fixtures/users (`fixtures/users.edn`): two dev users (`huda`, `damjan`) with fixed UUIDs and shared password `Damjan1!`. Used by auth/login action contracts and any seed tasks; keep IDs stable for task references.
+- :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tags (`:ops`, `:home`, `:finance`, `:urgent`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
 - Determinism: fixture UUIDs and timestamps are fixed; loaders should insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
 
