@@ -96,7 +96,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Commands: documented curl examples; start command reused
 
 - Task ID: fixtures-loader
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 18:44 UTC)
   - Objective: Wire fixtures (users/tasks) into backend/test harness; provide seed/load command.
   - Scope: loader for Datomic temp DB and dev DB; bb/clj task to seed.
   - Acceptance: Seed command loads users/tasks; used by action tests and app smoke.
