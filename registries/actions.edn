@@ -1,21 +1,175 @@
 [
- {:id :cap/action/example-send
-  :title "Send example notification"
+ {:id :cap/action/auth-login
+  :title "Login"
   :version "v1"
-  :inputs {:example/id :uuid
-           :recipient/email :string}
-  :outputs {:status :keyword}
-  :side-effects ["Send email via :cap/integration/email"]
-  :adapter {:integration :cap/integration/email}
-  :audit {:records [:cap/integration/email]
-          :fields [:example/id :status]}
+  :inputs {:user/username :string
+           :user/password :string}
+  :outputs {:session/token :string
+            :user/id :uuid}
+  :side-effects ["Create session for user"]
+  :adapter {:integration :local/session}
+  :audit {:records [:auth/login]
+          :fields [:user/username]}
   :idempotency {:strategy :dedupe-on
-                :keys [:example/id :recipient/email]}
-  :contracts {:fixtures [:fixtures/example]}
+                :keys [:user/username]}
+  :contracts {:fixtures [:fixtures/users]}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/example]
-            :views [:cap/view/example-page]}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/login]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-create
+  :title "Create Task"
+  :version "v1"
+  :inputs {:task/title :string
+           :task/description :string
+           :task/status :keyword
+           :task/assignee :uuid
+           :task/due-date :instant?
+           :task/priority :keyword
+           :task/tags :keyword-set}
+  :outputs {:task/id :uuid}
+  :side-effects ["Persist task"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/status :task/assignee]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/title :task/assignee]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:task/extended?]}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-update
+  :title "Update Task"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/title :string?
+           :task/description :string?
+           :task/priority :keyword?
+           :task/tags :keyword-set?}
+  :outputs {:task/id :uuid}
+  :side-effects ["Persist changes"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:task/extended?]}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-set-status
+  :title "Set Task Status"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/status :keyword}
+  :outputs {:task/id :uuid
+            :task/status :keyword}
+  :side-effects ["Persist status change"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/status]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/status]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-assign
+  :title "Assign Task"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/assignee :uuid}
+  :outputs {:task/id :uuid
+            :task/assignee :uuid}
+  :side-effects ["Persist assignment"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/assignee]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/assignee]}
+  :contracts {:fixtures [:fixtures/tasks :fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/user]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-set-due
+  :title "Set Due Date"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/due-date :instant?}
+  :outputs {:task/id :uuid
+            :task/due-date :instant?}
+  :side-effects ["Persist due date"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/due-date]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/due-date]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-set-tags
+  :title "Set Task Tags"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/tags :keyword-set}
+  :outputs {:task/id :uuid
+            :task/tags :keyword-set}
+  :side-effects ["Persist tags"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/tags]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/tags]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:task/extended?]}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-archive
+  :title "Archive Task"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/archived? :boolean}
+  :outputs {:task/id :uuid
+            :task/archived? :boolean}
+  :side-effects ["Persist archived flag"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/archived?]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/archived?]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 ]

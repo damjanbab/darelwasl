@@ -110,6 +110,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Typography: clean sans (Inter/IBM Plex Sans), hierarchy for title/section/body/meta.
 - Components: buttons (primary/secondary/ghost), inputs/textarea/select, tag chips, status/priority badges, cards for list rows, empty/error states.
 - Theming: tokens stored in `registries/theme.edn`; generate CSS vars; components must consume tokens/vars only (no hardcoded colors/spacing/fonts). Use radius/shadow/motion tokens for consistency.
+- Login: dedicated screen before tasks; uses same theme/tokens; shows error states clearly; supports shared password flow.
 
 ## Composability Rules
 - Schema: reuse existing enums/refs when semantics match; avoid duplicating attributes; introduce new attrs only with clear invariants. Shared attributes must not change meaning between entities.

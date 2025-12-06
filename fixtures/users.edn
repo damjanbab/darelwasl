@@ -1,0 +1,10 @@
+[
+ {:user/id #uuid "00000000-0000-0000-0000-000000000001"
+  :user/username "huda"
+  :user/name "Huda"
+  :user/password "Damjan1!"}
+ {:user/id #uuid "00000000-0000-0000-0000-000000000002"
+  :user/username "damjan"
+  :user/name "Damjan"
+  :user/password "Damjan1!"}
+]

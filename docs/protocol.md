@@ -3,12 +3,12 @@
 Purpose: guide sandbox agents to deliver changes with total correctness using referenced documents (`docs/system.md`, `docs/faq.md`) as the canonical sources. Agents rely on reasoning, not automation, but must enforce a fail-closed mindset.
 
 ## Initial Prompt (copy verbatim to sandbox agents)
-You are a sandbox agent with no prior context. Your goal is to implement a run with zero defects. Follow these steps, referencing documents by path:
+You are a sandbox agent with no prior context. Your goal is to pick ONE task from the current run, complete it with zero defects, open a PR, merge if green, and report back. Follow these steps, referencing documents by path:
 0) Before any git fetch/push, run `source scripts/load_github_token.sh` to export `DARELWASL_GITHUB_TOKEN`/`GITHUB_TOKEN`. Keep the remote set to HTTPS (`git remote set-url origin https://github.com/damjanbab/darelwasl.git`). If a non-interactive push is needed, create a temporary askpass helper (`cat <<'EOF' >/tmp/git-askpass.sh\n#!/usr/bin/env bash\nif [[ \"$1\" == *Username* ]]; then echo \"x-access-token\"; else echo \"${GITHUB_TOKEN:?}\"; fi\nEOF\nchmod +x /tmp/git-askpass.sh`) and run `GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin main`. Do not print or log the token and do not commit the loader script.
 1) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
-2) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate each task against the Task Schema below. If a task is malformed, fix the brief or split work inside the run file; do not proceed on invalid input.
-3) Plan the run; keep scope inside the run file and referenced capabilities. The run should be complete when defined; avoid adding tasks unless a blocker makes it impossible to proceed without an explicit new task entry.
-4) Execute tasks in order. Do not hack or introduce untracked changes; every change must map to a task entry. Before starting a task, confirm its parallel-safety fields and current statuses to avoid conflicts.
+2) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate the task you intend to claim against the Task Schema below. If a task is malformed, fix/split it in the run file; do not proceed on invalid input.
+3) Claim ONE task only. Mark it `in-progress` with your name/timestamp. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks.
+4) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Update task status to `done` (or `blocked` with reason) when finished; leave other tasks untouched.
 5) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
 6) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
 7) Open a PR with a clear summary and proof results; merge only if everything is green; no manual overrides.
@@ -26,6 +26,7 @@ Core invariants: correctness > speed; no flaky or external-dependent proofs; bro
 - When a run is finished, archive the run file and start a new one for subsequent work.
 - Each task must declare parallel-safety information (see schema). Agents decide to start only if their task’s exclusive capability set does not intersect any in-progress tasks.
 - Task status is tracked in the run file (`pending`/`in-progress`/`done`/`blocked`). Update status when claiming/finishing a task so other agents can see conflicts.
+- Status transitions: only the claiming agent may set `in-progress`; tasks go pending → in-progress → done/blocked. If blocked, include a reason. Claims must include agent name/time.
 
 ## Run Definition (before tasks exist)
 - Before creating a run, extract requirements from the user until complete. At minimum capture: product goal, success criteria, UX/interaction expectations, design direction, data model seed, constraints/flags, and proof expectations.
@@ -70,13 +71,13 @@ If any field is missing/ambiguous, pause and correct the brief before coding.
 
 ## Default Workflow
 1) Bootstrap: read `docs/protocol.md` → read `docs/system.md` → read `docs/faq.md` → read/validate the run file.
-2) Plan: outline steps tied to tasks, capabilities, and proofs; respect task order. Check task statuses and parallel-safety; only start tasks with non-conflicting exclusive capabilities.
-3) Execute: implement within scope; keep changes consistent with patterns, invariants, and composability rules; no untracked hacks.
-4) Update `docs/system.md`, registries in `registries/`, and `docs/faq.md`: record capability changes, fixtures, patterns, tooling, composability notes, and gotchas as needed. If other parallel runs have landed, re-read these docs before final proofs/merge.
+2) Claim: pick ONE task whose dependencies are done and no exclusive-capability conflict exists; mark it `in-progress` with name/time.
+3) Execute: implement within scope of your task only; keep changes consistent with patterns, invariants, and composability rules; no untracked hacks.
+4) Update `docs/system.md`, registries in `registries/`, and `docs/faq.md`: record capability changes, fixtures, patterns, tooling, composability notes, and gotchas as needed. If other tasks have landed while you worked, re-read these docs before final proofs/merge and integrate, not overwrite.
 5) Proofs: run required checks; if blocked, stop and report. Before merging, ensure proofs run against the latest `docs/system.md`/registries state.
 6) PR: include summary, capability references, proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved.
 7) Merge: only with all proofs green; no manual overrides. Avoid force-pushes that could drop others’ changes.
-8) Report back per task brief and archive the run file when complete.
+8) Report back per task brief. Leave other tasks untouched for the next agent.
 
 ## Required Proofs (defaults; task may add more)
 - Datomic schema sanity: load schema into a temp DB; ensure invariants hold.
@@ -96,6 +97,7 @@ If a proof cannot run, do not bypass it; surface the blocker and stop.
 - Tools must be stable and reproducible; prefer deterministic fixtures and pinned dependencies.
 - Reference new tooling in task reports and PRs so future agents can reuse it.
 - Do not ship per-task bespoke scripts; extend shared entry points (e.g., `scripts/checks.sh`) and registries instead.
+- If `docs/system.md` or registries change while you work, integrate those changes before proofs/merge; never delete others’ updates.
 
 ## Maintaining `docs/system.md`
 - Add/update capability entries (schema/action/view/integration) when they change.

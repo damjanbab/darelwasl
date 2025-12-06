@@ -14,7 +14,7 @@ EOF
 check_registries() {
   echo "Checking registry files exist and are non-empty..."
   local missing=0
-  for f in schema actions views integrations tooling; do
+  for f in schema actions views tooling theme; do
     local path="$ROOT/registries/$f.edn"
     if [ ! -s "$path" ]; then
       echo "Missing or empty registry: $path"
@@ -43,14 +43,44 @@ require_keys() {
   fi
 }
 
+check_clojure_available() {
+  if ! command -v clojure >/dev/null 2>&1; then
+    echo "clojure command not found. Install Clojure CLI to run checks."
+    exit 1
+  fi
+}
+
 check_registry_fields() {
   echo "Checking required fields in registries..."
   require_keys "$ROOT/registries/schema.edn" ":id" ":version" ":attributes" ":invariants" ":history" ":compatibility"
   require_keys "$ROOT/registries/actions.edn" ":id" ":version" ":inputs" ":outputs" ":side-effects" ":adapter" ":audit" ":idempotency" ":contracts" ":compatibility"
   require_keys "$ROOT/registries/views.edn" ":id" ":version" ":data" ":actions" ":ux" ":compatibility"
-  require_keys "$ROOT/registries/integrations.edn" ":id" ":version" ":contracts" ":auth" ":failure-modes" ":compatibility" ":adapter"
   require_keys "$ROOT/registries/tooling.edn" ":id" ":version" ":invocation" ":scope" ":determinism" ":enforces"
+  require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius"
   echo "Registry field checks passed."
+}
+
+check_edn_parse() {
+  check_clojure_available
+  echo "Parsing EDN registries..."
+  ROOT_DIR="$ROOT" clojure - <<'CLJ'
+(let [root (System/getenv "ROOT_DIR")
+      files [(str root "/registries/schema.edn")
+             (str root "/registries/actions.edn")
+             (str root "/registries/views.edn")
+             (str root "/registries/tooling.edn")
+             (str root "/registries/theme.edn")
+             (str root "/fixtures/users.edn")
+             (str root "/fixtures/tasks.edn")]]
+  (doseq [f files]
+    (try
+      (with-open [r (java.io.PushbackReader. (clojure.java.io/reader f))]
+        (clojure.edn/read r))
+      (println "Parsed" f)
+      (catch Exception e
+        (println "Failed" f ":" (.getMessage e))
+        (System/exit 1)))))
+CLJ
 }
 
 stub() {
@@ -59,14 +89,15 @@ stub() {
 
 target="${1:-all}"
 case "$target" in
-  registries) check_registries; check_registry_fields ;;
-  schema) check_registries; check_registry_fields; stub "schema load into temp Datomic" ;;
-  actions|action-contracts) check_registries; check_registry_fields; stub "action contract tests (fixtures, idempotency, audit)" ;;
-  views) check_registries; check_registry_fields; stub "view registry integrity checks" ;;
-  app-smoke) check_registries; check_registry_fields; stub "headless app boot / browser loader smoke" ;;
+  registries) check_registries; check_registry_fields; check_edn_parse ;;
+  schema) check_registries; check_registry_fields; check_edn_parse; stub "schema load into temp Datomic" ;;
+  actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; stub "action contract tests (fixtures, idempotency, audit)" ;;
+  views) check_registries; check_registry_fields; check_edn_parse; stub "view registry integrity checks" ;;
+  app-smoke) check_registries; check_registry_fields; check_edn_parse; stub "headless app boot / browser loader smoke" ;;
   all)
     check_registries
     check_registry_fields
+    check_edn_parse
     stub "schema load into temp Datomic"
     stub "action contract tests"
     stub "view registry integrity checks"

@@ -1,16 +1,36 @@
 [
- {:id :cap/view/example-page
-  :title "Example page"
+ {:id :cap/view/login
+  :title "Login"
   :version "v1"
-  :data {:source :cap/schema/example
-         :pull [:example/id :example/name]}
-  :actions [:cap/action/example-send]
-  :ux {:states [:loading :empty :ready :error]
+  :data {:source :cap/schema/user
+         :pull [:user/username]}
+  :actions [:cap/action/auth-login]
+  :ux {:states [:loading :ready :error]
        :performance {:budget_ms 200}
        :state-model :finite}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/example]
-            :integrations [:cap/integration/email]}}
+  :related {:schema [:cap/schema/user]}}
+
+ {:id :cap/view/tasks
+  :title "Task List + Detail"
+  :version "v1"
+  :data {:source :cap/schema/task
+         :pull [:task/id :task/title :task/description :task/status :task/assignee :task/due-date :task/priority :task/tags :task/archived?]}
+  :actions [:cap/action/task-create
+            :cap/action/task-update
+            :cap/action/task-set-status
+            :cap/action/task-assign
+            :cap/action/task-set-due
+            :cap/action/task-set-tags
+            :cap/action/task-archive]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 250}
+       :state-model :finite
+       :layout {:desktop "list + side panel" :mobile "stacked with sheet"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:task/extended?]}
+  :related {:schema [:cap/schema/task :cap/schema/user]}}
 ]

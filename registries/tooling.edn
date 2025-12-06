@@ -1,11 +1,48 @@
 [
+ {:id :cap/tooling/edn-validate
+  :title "Registry EDN validation"
+  :version "v1"
+  :invocation "scripts/checks.sh registries"
+  :scope :shared
+  :determinism {:fixtures []}
+  :enforces [:registry-shape]
+  :related {:capabilities [:cap/schema/user :cap/schema/task]}
+  :gotchas []}
+
+ {:id :cap/tooling/schema-load
+  :title "Schema load check"
+  :version "v1"
+  :invocation "scripts/checks.sh schema"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
+  :enforces [:schema]
+  :related {:capabilities [:cap/schema/task :cap/schema/user]}
+  :gotchas []}
+
  {:id :cap/tooling/action-contract
   :title "Action contract harness"
   :version "v1"
-  :invocation "scripts/checks.sh action-contracts"
+  :invocation "scripts/checks.sh actions"
   :scope :shared
-  :determinism {:fixtures [:fixtures/example]}
+  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
   :enforces [:contracts :compatibility]
-  :related {:capabilities [:cap/action/example-send]}
+  :related {:capabilities [:cap/action/task-create
+                           :cap/action/task-update
+                           :cap/action/task-set-status
+                           :cap/action/task-assign
+                           :cap/action/task-set-due
+                           :cap/action/task-set-tags
+                           :cap/action/task-archive
+                           :cap/action/auth-login]}
+  :gotchas []}
+
+ {:id :cap/tooling/app-smoke
+  :title "Headless app smoke"
+  :version "v1"
+  :invocation "scripts/checks.sh app-smoke"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
+  :enforces [:ui-boot]
+  :related {:capabilities [:cap/view/login :cap/view/tasks]}
   :gotchas []}
 ]

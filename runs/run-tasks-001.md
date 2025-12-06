@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: product-spec
-  - Status: pending
+  - Status: done
   - Objective: Write the product spec in `docs/system.md` for the Task app v1 (fields, flows, acceptance) including auth (users, login, responsibilities).
   - Scope: Functional spec only.
   - Out of Scope: Design, code.
@@ -30,7 +30,7 @@
   - Reporting: summarize spec
 
 - Task ID: design-spec
-  - Status: pending
+  - Status: done
   - Objective: Write design spec (visual language, theme tokens, layout, components) in docs/system.md.
   - Scope: Design/theming spec.
   - Out of Scope: Code.

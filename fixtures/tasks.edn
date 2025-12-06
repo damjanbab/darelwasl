@@ -1,0 +1,20 @@
+[
+ {:task/id #uuid "10000000-0000-0000-0000-000000000001"
+  :task/title "Set up task app skeleton"
+  :task/description "Scaffold UI and backend for tasks"
+  :task/status :todo
+  :task/assignee #uuid "00000000-0000-0000-0000-000000000001"
+  :task/priority :high
+  :task/tags [:ops :urgent]
+  :task/archived? false
+  :task/extended? false}
+ {:task/id #uuid "10000000-0000-0000-0000-000000000002"
+  :task/title "Polish design system"
+  :task/description "Refine theme tokens and components"
+  :task/status :in-progress
+  :task/assignee #uuid "00000000-0000-0000-0000-000000000002"
+  :task/priority :medium
+  :task/tags [:ops]
+  :task/archived? false
+  :task/extended? false}
+]
