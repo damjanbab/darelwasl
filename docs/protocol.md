@@ -8,7 +8,7 @@ You are a sandbox agent with no prior context. Your goal is to pick ONE task fro
 1) Pull latest: `git pull origin main` before inspecting tasks.
 2) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
 3) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate the task you intend to claim against the Task Schema below. If a task is malformed, fix/split it in the run file; do not proceed on invalid input.
-4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks; if already claimed, back off.
+4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks; if already claimed, back off. Commit/push the status change to main immediately after claiming.
 5) Create a branch for your task: `git checkout -b run/<run-id>/<task-id>`.
 6) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Extra work goes to a new task in the next run unless it is a blocker fix. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched; do not alter the run beyond your task status updates.
 7) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
