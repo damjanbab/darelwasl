@@ -306,11 +306,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Dependencies: auth-implementation, task-api-implementation, fixtures-loader
 
 - Task ID: checks-app-smoke
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 23:55 UTC)
   - Objective: Headless app smoke via shadow-cljs + chosen runner (Karma/ChromeHeadless or Playwright); pin command in scripts/checks.sh app-smoke.
   - Scope: headless config, minimal smoke test that logs in and renders task list/detail.
-  - Acceptance: `scripts/checks.sh app-smoke` runs and passes.
+  - Out of Scope: Backend contract changes, theme/token updates, new UI features beyond smoke coverage, CI wiring beyond shared checks entrypoint.
+  - Capabilities Touched: [:cap/tooling/app-smoke :cap/view/login :cap/view/tasks :cap/action/auth-login :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/app-smoke]
+    - Shared/Read-only Capabilities: [:cap/view/login :cap/view/tasks :cap/action/auth-login :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/tooling/theme-css-vars]
+    - Sequencing Constraints: after frontend-login/frontend-task-detail/fixtures-loader; before checks-update-script.
+  - Composability Impact:
+    - Layers Affected: tooling/checks for views/actions
+    - Patterns/Registries Reused or Extended: shadow-cljs build, fixture-driven login/task flows, theme CSS var consumption, shared scripts/checks.sh entrypoint
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: convert :cap/tooling/app-smoke from placeholder to real headless smoke covering login + task list/detail to catch regressions.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: frontend-login, frontend-task-detail, fixtures-loader
+  - Deliverables: Headless runner config (Karma/ChromeHeadless or Playwright) wired to shadow-cljs, deterministic smoke that logs in with fixtures and exercises task list/detail, scripts/checks.sh app-smoke command invoking it, registry/doc updates if invocation or gotchas shift.
+  - Proof Plan: `scripts/checks.sh app-smoke` (includes underlying runner invocation).
+  - Fixtures/Data Assumptions: Uses fixtures/users (huda/damjan with Damjan1!), fixtures/tasks for list/detail content; requires session cookie from /api/login.
+  - Protocol/System Updates: Update docs/system.md and tooling registry if runner/invocation or expectations change.
+  - FAQ Updates: Note headless runner requirements (e.g., Chrome install flags) if any quirks emerge.
+  - Tooling/Automation: Extend shared checks entrypoint; avoid bespoke scripts beyond runner config.
+  - Reporting: Summarize smoke coverage, commands wired, proofs/results.
 
 - Task ID: checks-update-script
   - Status: pending
@@ -371,9 +392,29 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Status: pending
   - Objective: Update docs/system.md and docs/faq.md with start/run/test commands, acceptance summaries, and any gotchas; ensure registries match code.
   - Scope: backend start, fixture seed, frontend dev/build, checks commands, acceptance per task (brief).
-  - Acceptance: Commands verified; docs align with delivered code; registries consistent.
+  - Out of Scope: Changing runtime defaults or adding new features/flags; code edits beyond doc/registry sync.
+  - Capabilities Touched: [:cap/tooling/schema-load :cap/tooling/action-contract :cap/tooling/app-smoke :cap/tooling/fixtures-loader :cap/tooling/theme-css-vars :cap/tooling/edn-validate :cap/view/login :cap/view/tasks]
+  - Parallel Safety:
+    - Exclusive Capabilities: documentation for docs/system.md and docs/faq.md
+    - Shared/Read-only Capabilities: registries (read), existing capabilities referenced
+    - Sequencing Constraints: after implementation tasks to reflect final commands.
+  - Composability Impact:
+    - Layers Affected: documentation of tooling/views
+    - Patterns/Registries Reused or Extended: registry entries for tooling/view capabilities; doc command tables
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: document current run/command contracts for usability and future checks.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: all implementation tasks
-  - Proof Plan: scripts/checks.sh registries
+  - Deliverables: Updated docs/system.md and docs/faq.md entries with verified commands and acceptance notes; registry references aligned.
+  - Proof Plan: `scripts/checks.sh registries`; spot-check commands where updated.
+  - Fixtures/Data Assumptions: uses fixtures/users and fixtures/tasks for documented examples.
+  - Protocol/System Updates: none expected beyond doc edits.
+  - FAQ Updates: add any gotchas encountered while verifying commands.
+  - Tooling/Automation: none beyond existing scripts; note invocations for future runs.
+  - Reporting: summarize doc updates and command verification.
 
 ## Notes
 - Follow protocol: claim one task, respect dependencies/parallel safety, run proofs, branch per task, merge only when green.
