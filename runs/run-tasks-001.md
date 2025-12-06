@@ -59,7 +59,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Proof Plan: scripts/checks.sh schema (once implemented)
 
 - Task ID: auth-implementation
-  - Status: in-progress (Codex, 2025-12-06 18:37 UTC)
+  - Status: done (Codex, 2025-12-06 18:54 UTC)
   - Objective: Implement login/session for users huda/damjan (password `Damjan1!`), session cookie (in-memory), error handling.
   - Scope: POST /api/login handler, session middleware for protected routes, 401 on bad creds, structured error responses; logout optional; plaintext password acceptable for dev.
   - Out of Scope: frontend login UI changes, task endpoints, password hashing/rotation, multi-tenant/authz.
