@@ -1,6 +1,7 @@
 (ns darelwasl.main
   (:gen-class)
   (:require [clojure.tools.logging :as log]
+            [darelwasl.auth :as auth]
             [darelwasl.config :as config]
             [darelwasl.db :as db]
             [darelwasl.server :as server]))
@@ -12,10 +13,14 @@
   ([] (start! (config/load-config)))
   ([cfg]
    (let [db-state (db/connect! (:datomic cfg))
+         users (auth/load-users!)
+         user-index (auth/user-index-by-username users)
          _ (when (:error db-state)
              (log/warn (:error db-state) "Datomic dev-local not ready; health endpoint will report error"))
          started (server/start-http {:config cfg
-                                     :db db-state})]
+                                     :db db-state
+                                     :auth/users users
+                                     :auth/user-index user-index})]
      (reset! system-state started)
      started)))
 

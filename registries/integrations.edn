@@ -7,10 +7,30 @@
               :rate_limit "tbd"}
   :auth {:strategy :env-vars}
   :failure-modes ["timeouts" "rate limits" "invalid recipients"]
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :adapter {:library "tbd"}
   :related {:actions [:cap/action/example-send]
             :schema []}}
+
+ {:id :cap/integration/local-session
+  :title "Local session store"
+  :version "v1"
+  :external-system "Ring session cookie backed by in-memory store"
+  :contracts {:store :memory
+              :cookie-name "ring-session"
+              :cookie-attrs {:http-only true
+                             :same-site :lax
+                             :path "/"}}
+  :auth {:strategy :session-cookie
+         :secrets "none (dev-only; plaintext fixtures)"}
+  :failure-modes ["Server restart clears sessions" "Missing/expired cookie yields 401 on protected routes"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "ring.middleware.session"
+            :notes "Used by :cap/action/auth-login to establish sessions"}
+  :related {:actions [:cap/action/auth-login]
+            :schema [:cap/schema/user]}}
 ]

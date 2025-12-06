@@ -7,7 +7,7 @@
   :outputs {:session/token :string
             :user/id :uuid}
   :side-effects ["Create session for user"]
-  :adapter {:integration :local/session}
+  :adapter {:integration :cap/integration/local-session}
   :audit {:records [:auth/login]
           :fields [:user/username]}
   :idempotency {:strategy :dedupe-on
