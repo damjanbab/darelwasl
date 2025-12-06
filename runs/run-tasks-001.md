@@ -114,7 +114,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize scaffold, commands, proofs, and any doc/registry updates.
 
 - Task ID: theme-css-vars
-  - Status: in-progress (Codex, 2025-12-06 17:40 UTC)
+  - Status: done (Codex, 2025-12-06 17:47 UTC)
   - Objective: Generate CSS vars from `registries/theme.edn` and consume in frontend shell.
   - Scope: wire theme-var generation into dev/build so a stylesheet is emitted from the registry; import it in the app; ensure layout components rely solely on generated tokens (no hardcoded theme values); document usage.
   - Out of Scope: new UI flows beyond the shell, backend changes, altering theme tokens themselves.

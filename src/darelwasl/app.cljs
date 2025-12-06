@@ -48,10 +48,7 @@
     [:div.brand "Darel Wasl Tasks"]
     [:div.meta "Frontend scaffold · shadow-cljs + re-frame"]]
    [:div.badge
-    [:span {:style {:width "10px"
-                    :height "10px"
-                    :border-radius "50%"
-                    :background "var(--colors-text-on-accent, #F8FBFC)"}}]
+    [:span.badge-dot]
     "Ready to wire"]])
 
 (defn placeholder-card [{:keys [id title body]}]
@@ -97,11 +94,7 @@
      (for [{:keys [id title body label]} items]
        ^{:key id}
        [:div.placeholder-card
-        [:div {:style {:display "flex"
-                       :align-items "center"
-                       :justify-content "space-between"
-                       :gap "12px"
-                       :margin-bottom "8px"}}
+        [:div.workspace-row
          [:strong title]
          (when label
            [:span.badge label])]
@@ -115,11 +108,9 @@
     [:div.app-shell
      [top-bar]
      [:main.main-grid
-      [notes-panel]
-      [workspace-panel]]
-     [:footer {:style {:padding "12px 20px"
-                       :color "var(--colors-text-secondary, #52606D)"
-                       :font-size "12px"}}
+     [notes-panel]
+     [workspace-panel]]
+     [:footer.app-footer
       [:span "Active view: " (name active) " · Theme tokens via CSS vars with warm neutrals + teal accent."]]]))
 
 (defn mount-root []

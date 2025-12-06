@@ -1,0 +1,37 @@
+:root {
+  --colors-text-on-accent: #F8FBFC;
+  --colors-background: #F7F4EF;
+  --colors-warning: #F59E0B;
+  --colors-danger: #D14343;
+  --colors-success: #2D9D78;
+  --colors-text-primary: #1F2933;
+  --colors-focus: #0FA3B1;
+  --colors-text-secondary: #52606D;
+  --colors-border: #E0E0E0;
+  --colors-accent: #0FA3B1;
+  --colors-accent-strong: #0B7E89;
+  --colors-surface: #FFFFFF;
+  --colors-surface-muted: #F0ECE6;
+  --typography-font-family: Inter, "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --typography-font-sizes-title: 20px;
+  --typography-font-sizes-section: 16px;
+  --typography-font-sizes-body: 14px;
+  --typography-font-sizes-meta: 12px;
+  --typography-line-heights-title: 28px;
+  --typography-line-heights-section: 22px;
+  --typography-line-heights-body: 20px;
+  --typography-line-heights-meta: 16px;
+  --spacing-base: 4px;
+  --spacing-scale-1: 4px;
+  --spacing-scale-2: 8px;
+  --spacing-scale-3: 12px;
+  --spacing-scale-4: 16px;
+  --spacing-scale-5: 20px;
+  --spacing-scale-6: 24px;
+  --spacing-scale-7: 32px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadows-card: 0 6px 20px rgba(0,0,0,0.06);
+  --motion-transition: 150ms ease;
+}
