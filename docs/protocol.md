@@ -8,8 +8,8 @@ You are a sandbox agent with no prior context. Your goal is to pick ONE task fro
 1) Pull latest: `git pull origin main` before inspecting tasks.
 2) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
 3) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate the task you intend to claim against the Task Schema below. If a task is malformed, fix/split it in the run file; do not proceed on invalid input.
-4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks.
-5) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched.
+4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks; if already claimed, back off.
+5) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Extra work goes to a new task in the next run unless it is a blocker fix. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched.
 5) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
 6) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
 7) Open a PR with a clear summary and proof results; merge only if everything is green; no manual overrides.
@@ -24,10 +24,10 @@ Core invariants: correctness > speed; no flaky or external-dependent proofs; bro
 ## Run and Task Structure
 - Runs live in `runs/<run-id>.md` and contain an ordered list of tasks that should ideally be complete before work starts.
 - Agents should not invent new tasks; if unavoidable (blocker), add a minimal task entry inside the run file and mark it as blocker-driven. Prefer queuing follow-ups for the next run instead of expanding the current one.
-- When a run is finished, archive the run file and start a new one for subsequent work.
 - Each task must declare parallel-safety information (see schema). Agents decide to start only if their task’s exclusive capability set does not intersect any in-progress tasks.
 - Task status is tracked in the run file (`pending`/`in-progress`/`done`/`blocked`). Update status when claiming/finishing a task so other agents can see conflicts.
 - Status transitions: only the claiming agent may set `in-progress`; tasks go pending → in-progress → done/blocked. If blocked, include a reason. Claims must include agent name/time.
+- Dependencies: a task can start only when all listed dependencies are `done`. If dependencies are missing or ambiguous, fix/split before claiming.
 
 ## Run Definition (before tasks exist)
 - Before creating a run, extract requirements from the user until complete. At minimum capture: product goal, success criteria, UX/interaction expectations, design direction, data model seed, constraints/flags, and proof expectations.
@@ -71,12 +71,12 @@ Core invariants: correctness > speed; no flaky or external-dependent proofs; bro
 If any field is missing/ambiguous, pause and correct the brief before coding.
 
 ## Default Workflow
-1) Bootstrap: read `docs/protocol.md` → read `docs/system.md` → read `docs/faq.md` → read/validate the run file.
-2) Claim: pick ONE task whose dependencies are done and no exclusive-capability conflict exists; mark it `in-progress` with name/time.
-3) Execute: implement within scope of your task only; keep changes consistent with patterns, invariants, and composability rules; no untracked hacks.
+1) Bootstrap: read `docs/protocol.md` → read `docs/system.md` → read `docs/faq.md` → read/validate the run file after pulling latest.
+2) Claim: pick ONE task whose dependencies are done and no exclusive-capability conflict exists; mark it `in-progress` with name/time. If already claimed, back off. If dependencies are missing/ambiguous, fix/split before claiming.
+3) Execute: implement within scope of your task only; keep changes consistent with patterns, invariants, and composability rules; no untracked hacks. Extra work goes to a new task in the next run unless it is a blocker fix.
 4) Update `docs/system.md`, registries in `registries/`, and `docs/faq.md`: record capability changes, fixtures, patterns, tooling, composability notes, and gotchas as needed. If other tasks have landed while you worked, re-read these docs before final proofs/merge and integrate, not overwrite.
 5) Proofs: run required checks; if blocked, stop and report. Before merging, ensure proofs run against the latest `docs/system.md`/registries state.
-6) PR: include summary, capability references, proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved. Use a branch per task (e.g., `run/<run-id>/<task-id>`).
+6) PR: include summary, capabilities touched (IDs), proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved. Use a branch per task (e.g., `run/<run-id>/<task-id>`); PR title should include run ID and task ID.
 7) Merge: only with all proofs green; no manual overrides. Avoid force-pushes that could drop others’ changes. Delete branch after merge.
 8) Report back per task brief. Leave other tasks untouched for the next agent.
 
