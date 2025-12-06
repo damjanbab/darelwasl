@@ -47,12 +47,12 @@
    [:div
     [:div.brand "Darel Wasl Tasks"]
     [:div.meta "Frontend scaffold · shadow-cljs + re-frame"]]
-    [:div.badge
-     [:span {:style {:width "10px"
-                     :height "10px"
-                     :border-radius "50%"
+   [:div.badge
+    [:span {:style {:width "10px"
+                    :height "10px"
+                    :border-radius "50%"
                     :background "var(--colors-text-on-accent, #F8FBFC)"}}]
-     "Ready to wire"]])
+    "Ready to wire"]])
 
 (defn placeholder-card [{:keys [id title body]}]
   ^{:key id}
@@ -95,17 +95,17 @@
         :tasks "Focus on task list/detail flows; keep filters/sorts and feature-flagged fields ready."
         "Use the theme tokens and registries to keep UI consistent. Start dev server to iterate quickly.")]
      (for [{:keys [id title body label]} items]
-        ^{:key id}
-        [:div.placeholder-card
-         [:div {:style {:display "flex"
-                        :align-items "center"
-                        :justify-content "space-between"
-                        :gap "12px"
-                        :margin-bottom "8px"}}
-          [:strong title]
-           (when label
-             [:span.badge label])]
-         [:div body]])
+       ^{:key id}
+       [:div.placeholder-card
+        [:div {:style {:display "flex"
+                       :align-items "center"
+                       :justify-content "space-between"
+                       :gap "12px"
+                       :margin-bottom "8px"}}
+         [:strong title]
+         (when label
+           [:span.badge label])]
+        [:div body]])
      [:div.button-row
       [:button.button {:type "button"} "npm run dev"]
       [:button.button.secondary {:type "button"} "npm run build"]]]))
@@ -116,11 +116,11 @@
      [top-bar]
      [:main.main-grid
       [notes-panel]
-     [workspace-panel]]
-    [:footer {:style {:padding "12px 20px"
-                      :color "var(--colors-text-secondary, #52606D)"
-                      :font-size "12px"}}
-     [:span "Active view: " (name active) " · Theme tokens via CSS vars with warm neutrals + teal accent."]]]))
+      [workspace-panel]]
+     [:footer {:style {:padding "12px 20px"
+                       :color "var(--colors-text-secondary, #52606D)"
+                       :font-size "12px"}}
+      [:span "Active view: " (name active) " · Theme tokens via CSS vars with warm neutrals + teal accent."]]]))
 
 (defn mount-root []
   (when-let [root (.getElementById js/document "app")]
