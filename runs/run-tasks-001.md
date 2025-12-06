@@ -51,7 +51,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: PR notes server scaffolding, health endpoint, Datomic wiring, proof outputs.
 
 - Task ID: datomic-setup
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 17:44 UTC)
   - Objective: Configure Datomic Local (dev-local, no auth), connection utilities, and schema loader for temp DB.
   - Scope: Datomic config, connection helper, temp DB load function for checks; no cloud/auth.
   - Acceptance: Temp DB load works for schema; config documented; no credentials required.
