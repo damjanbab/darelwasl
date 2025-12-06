@@ -4,8 +4,8 @@
   :version "v1"
   :invocation "scripts/checks.sh registries"
   :scope :shared
-  :determinism {:fixtures []}
-  :enforces [:registry-shape]
+  :determinism {:fixtures [:fixtures/users :fixtures/tasks]}
+  :enforces [:registry-shape :fixtures-consistency]
   :related {:capabilities [:cap/schema/user :cap/schema/task]}
   :gotchas []}
 

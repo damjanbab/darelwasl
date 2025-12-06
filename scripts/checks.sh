@@ -62,24 +62,82 @@ check_registry_fields() {
 
 check_edn_parse() {
   check_clojure_available
-  echo "Parsing EDN registries..."
+  echo "Parsing EDN registries and validating fixtures..."
   ROOT_DIR="$ROOT" clojure -M - <<'CLJ'
+(require '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
+         '[clojure.set :as set]
+         '[clojure.string :as str])
+
+(defn read-edn! [path]
+  (try
+    (with-open [r (java.io.PushbackReader. (io/reader path))]
+      (let [data (edn/read r)]
+        (println "Parsed" path)
+        data))
+    (catch Exception e
+      (println "Failed" path ":" (.getMessage e))
+      (System/exit 1))))
+
 (let [root (System/getenv "ROOT_DIR")
-      files [(str root "/registries/schema.edn")
-             (str root "/registries/actions.edn")
-             (str root "/registries/views.edn")
-             (str root "/registries/tooling.edn")
-             (str root "/registries/theme.edn")
-             (str root "/fixtures/users.edn")
-             (str root "/fixtures/tasks.edn")]]
-  (doseq [f files]
-    (try
-      (with-open [r (java.io.PushbackReader. (clojure.java.io/reader f))]
-        (clojure.edn/read r))
-      (println "Parsed" f)
-      (catch Exception e
-        (println "Failed" f ":" (.getMessage e))
-        (System/exit 1)))))
+      registry-paths [(str root "/registries/schema.edn")
+                      (str root "/registries/actions.edn")
+                      (str root "/registries/views.edn")
+                      (str root "/registries/tooling.edn")
+                      (str root "/registries/theme.edn")]
+      fixture-paths {:users (str root "/fixtures/users.edn")
+                     :tasks (str root "/fixtures/tasks.edn")}
+      _ (doseq [f registry-paths] (read-edn! f))
+      fixtures (into {} (for [[k path] fixture-paths] [k (read-edn! path)]))
+      users (:users fixtures)
+      tasks (:tasks fixtures)
+      required-user-keys #{:user/id :user/username :user/name :user/password}
+      missing-keys (seq (for [u users
+                              :let [missing (set/difference required-user-keys (set (keys u)))]
+                              :when (seq missing)]
+                         {:user/username (:user/username u)
+                          :missing missing}))
+      user-ids (map :user/id users)
+      duplicate-ids (seq (for [[id freq] (frequencies user-ids)
+                               :when (> freq 1)]
+                           id))
+      duplicate-usernames (seq (for [[uname freq] (frequencies (map :user/username users))
+                                     :when (> freq 1)]
+                                 uname))
+      invalid-users (seq (for [u users
+                               :let [id (:user/id u)
+                                     uname (:user/username u)
+                                     pwd (:user/password u)]
+                               :when (or (not (instance? java.util.UUID id))
+                                         (not (string? uname))
+                                         (str/blank? uname)
+                                         (not (string? pwd))
+                                         (str/blank? pwd))]
+                          {:user/username uname :reason "Invalid id/username/password"}))
+      user-id-set (set user-ids)
+      missing-assignees (seq (for [t tasks
+                                   :let [assignee (:task/assignee t)]
+                                   :when (not (contains? user-id-set assignee))]
+                               {:task/id (:task/id t)
+                                :task/assignee assignee}))]
+  (when missing-keys
+    (doseq [m missing-keys]
+      (println "User fixture missing keys" m))
+    (System/exit 1))
+  (when duplicate-ids
+    (println "Duplicate user IDs in fixtures:" duplicate-ids)
+    (System/exit 1))
+  (when duplicate-usernames
+    (println "Duplicate usernames in fixtures:" duplicate-usernames)
+    (System/exit 1))
+  (when invalid-users
+    (doseq [u invalid-users]
+      (println "Invalid user fixture" u))
+    (System/exit 1))
+  (when missing-assignees
+    (println "Task assignees missing in user fixtures:" missing-assignees)
+    (System/exit 1))
+  (println "User fixtures validated (count" (count users) ") and referenced by tasks."))
 CLJ
 }
 
