@@ -9,11 +9,12 @@ You are a sandbox agent with no prior context. Your goal is to pick ONE task fro
 2) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
 3) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate the task you intend to claim against the Task Schema below. If a task is malformed, fix/split it in the run file; do not proceed on invalid input.
 4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Only claim if its dependencies are `done` and its exclusive capabilities do not conflict with other `in-progress` tasks; if already claimed, back off.
-5) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Extra work goes to a new task in the next run unless it is a blocker fix. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched; do not archive or alter the run beyond your task status updates.
-5) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
-6) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
-7) Open a PR with a clear summary and proof results; merge only if everything is green; no manual overrides.
-8) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent.
+5) Create a branch for your task: `git checkout -b run/<run-id>/<task-id>`.
+6) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Extra work goes to a new task in the next run unless it is a blocker fix. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched; do not alter the run beyond your task status updates.
+7) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
+8) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
+9) Open a PR from your branch with a clear summary and proof results; merge only if everything is green; no manual overrides. Delete the branch after merge.
+10) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent.
 
 Core invariants: correctness > speed; no flaky or external-dependent proofs; browser loader/app boot must succeed; changes must align with capability definitions in `docs/system.md`.
 
