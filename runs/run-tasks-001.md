@@ -88,7 +88,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Frontend
 
 - Task ID: frontend-scaffold
-  - Status: in-progress (Codex, 2025-12-06 16:43 UTC)
+  - Status: done (Codex, 2025-12-06 16:56 UTC)
   - Objective: Scaffold shadow-cljs + re-frame; define build/dev/test commands; include base layout shell.
   - Scope: shadow-cljs.edn, package.json scripts, base app root, state setup, minimal layout shell that consumes theme CSS vars when available.
   - Out of Scope: wiring to backend APIs, login/task feature flows, theme CSS var generation, headless smoke harness.

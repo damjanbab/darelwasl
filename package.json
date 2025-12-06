@@ -1,0 +1,17 @@
+{
+  "name": "darelwasl-task-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "shadow-cljs watch app",
+    "build": "shadow-cljs release app",
+    "check": "shadow-cljs compile app"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "shadow-cljs": "2.28.14"
+  }
+}

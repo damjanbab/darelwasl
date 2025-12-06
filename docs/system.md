@@ -167,6 +167,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Registries: `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, `registries/integrations.edn`, `registries/tooling.edn` (placeholder entries to copy/extend).
 - Checks harness: `scripts/checks.sh` (stub entry point for registry sanity, schema load, action contracts, view integrity, headless app smoke). Extend with real commands as the codebase grows.
 - Theme CSS variable generator: `scripts/theme-css-vars.sh` (registry-driven, registered as `:cap/tooling/theme-css-vars`) to translate theme tokens into CSS variables for the UI shell.
+- Frontend scaffold: `package.json`, `shadow-cljs.edn`, `public/index.html`, `public/css/main.css`, and `src/darelwasl/app.cljs` (re-frame shell). Commands: `npm install`; `npm run dev` (shadow-cljs watch with dev-http on :3000 serving `public/`); `npm run build` (release build to `public/js`); `npm run check` (compile-only smoke).
 
 ## Glossary (optional)
 - Domain terms and definitions to keep naming consistent.

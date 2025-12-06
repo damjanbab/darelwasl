@@ -1,1 +1,8 @@
+node_modules
+public/js
+.shadow-cljs
+.cpcache
+.DS_Store
+npm-debug.log*
+yarn-error.log*
 scripts/load_github_token.sh

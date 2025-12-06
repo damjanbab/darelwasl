@@ -1,0 +1,183 @@
+:root {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--colors-background, #F7F4EF);
+  color: var(--colors-text-primary, #1F2933);
+  font-family: var(--typography-font-family, "Inter, \"IBM Plex Sans\", system-ui, -apple-system, sans-serif");
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--colors-background, #F7F4EF);
+}
+
+.top-bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-scale-3, 12px);
+  padding: var(--spacing-scale-4, 16px) var(--spacing-scale-5, 20px);
+  background: var(--colors-surface, #FFFFFF);
+  border-bottom: 1px solid var(--colors-border, #E0E0E0);
+  box-shadow: var(--shadows-card, 0 6px 20px rgba(0, 0, 0, 0.06));
+  z-index: 10;
+}
+
+.brand {
+  font-size: var(--typography-font-sizes-title, 20px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--colors-accent-strong, #0B7E89);
+}
+
+.meta {
+  color: var(--colors-text-secondary, #52606D);
+  font-size: var(--typography-font-sizes-meta, 12px);
+}
+
+.main-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: var(--spacing-scale-5, 20px);
+  padding: var(--spacing-scale-5, 20px);
+}
+
+.panel {
+  background: var(--colors-surface, #FFFFFF);
+  border: 1px solid var(--colors-border, #E0E0E0);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadows-card, 0 6px 20px rgba(0, 0, 0, 0.06));
+  padding: var(--spacing-scale-5, 20px);
+}
+
+.panel h2 {
+  margin: 0 0 var(--spacing-scale-3, 12px);
+  font-size: var(--typography-font-sizes-section, 16px);
+  color: var(--colors-text-primary, #1F2933);
+}
+
+.panel p {
+  margin: 0;
+  color: var(--colors-text-secondary, #52606D);
+}
+
+.placeholder-card {
+  margin-top: var(--spacing-scale-4, 16px);
+  padding: var(--spacing-scale-4, 16px);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px dashed var(--colors-border, #E0E0E0);
+  background: var(--colors-surface-muted, #F0ECE6);
+  color: var(--colors-text-secondary, #52606D);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--colors-accent, #0FA3B1);
+  color: var(--colors-text-on-accent, #F8FBFC);
+  font-size: var(--typography-font-sizes-meta, 12px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.button-row {
+  display: flex;
+  gap: var(--spacing-scale-3, 12px);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-scale-4, 16px);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  background: var(--colors-accent, #0FA3B1);
+  color: var(--colors-text-on-accent, #F8FBFC);
+  transition: transform var(--motion-transition, 150ms ease), box-shadow var(--motion-transition, 150ms ease);
+}
+
+.button.secondary {
+  background: var(--colors-surface, #FFFFFF);
+  color: var(--colors-text-primary, #1F2933);
+  border-color: var(--colors-border, #E0E0E0);
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadows-card, 0 6px 20px rgba(0, 0, 0, 0.06));
+}
+
+.sections {
+  display: grid;
+  gap: var(--spacing-scale-4, 16px);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-scale-3, 12px);
+  margin-bottom: var(--spacing-scale-3, 12px);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--colors-surface, #FFFFFF);
+  border-radius: 999px;
+  border: 1px solid var(--colors-border, #E0E0E0);
+  color: var(--colors-text-secondary, #52606D);
+}
+
+.pill .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--colors-accent, #0FA3B1);
+}
+
+@media (max-width: 960px) {
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .top-bar {
+    position: static;
+  }
+}
