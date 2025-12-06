@@ -114,12 +114,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize scaffold, commands, proofs, and any doc/registry updates.
 
 - Task ID: theme-css-vars
-  - Status: pending
-  - Objective: Generate CSS vars from `registries/theme.edn` and consume in frontend.
-  - Scope: script or build step to produce CSS vars; import into app.
-  - Acceptance: CSS vars generated; components use vars; no hardcoded colors/spacing/fonts.
+  - Status: in-progress (Codex, 2025-12-06 17:40 UTC)
+  - Objective: Generate CSS vars from `registries/theme.edn` and consume in frontend shell.
+  - Scope: wire theme-var generation into dev/build so a stylesheet is emitted from the registry; import it in the app; ensure layout components rely solely on generated tokens (no hardcoded theme values); document usage.
+  - Out of Scope: new UI flows beyond the shell, backend changes, altering theme tokens themselves.
+  - Capabilities Touched: [:cap/tooling/theme-css-vars :theme/default :cap/view/login :cap/view/tasks]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/theme-css-vars :theme/default :cap/view/login :cap/view/tasks]
+    - Shared/Read-only Capabilities: [:cap/tooling/app-smoke]
+    - Sequencing Constraints: after frontend-scaffold and theme-registry; precedes frontend-login/frontend-task-list/frontend-task-detail and checks-app-smoke
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: tooling (theme var generator) reused; views consume generated CSS vars for theming; reinforces registry-driven styling.
+    - New composability rules needed: none (restate "no hardcoded theme values; use generated CSS vars").
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: move theme consumption to registry-driven CSS vars via generated stylesheet so registry stays source of truth.
+    - Compatibility expectation (backward/forward/none): backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
   - Dependencies: frontend-scaffold, theme-registry
-  - Proof Plan: scripts/checks.sh views
+  - Deliverables: generated theme CSS vars file wired into public assets, build/dev scripts invoking generator, frontend styles consuming vars, docs updates if pipeline shifts.
+  - Proof Plan: scripts/theme-css-vars.sh default run; npm run build; scripts/checks.sh registries
+  - Fixtures/Data Assumptions: none.
+  - Protocol/System Updates: update docs/system.md if theme tooling usage changes.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: add npm script/integration for CSS var generation using existing script.
+  - Reporting: summarize CSS var pipeline, files touched (HTML/CSS/CLJS/scripts), proofs run/results.
 
 - Task ID: frontend-login
   - Status: pending
