@@ -191,11 +191,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Objective: Real EDN validation in scripts/checks.sh (implemented).
 
 - Task ID: checks-schema-load
-  - Status: pending
-  - Objective: Implement schema load check using temp Datomic; pin command in scripts/checks.sh schema.
-  - Scope: clj/bb script to load registries/schema.edn into temp DB.
-  - Acceptance: `scripts/checks.sh schema` loads schema and passes.
+  - Status: in-progress (Codex, 2025-12-06 19:10 UTC)
+  - Objective: Implement schema load check using temp Datomic; pin command in `scripts/checks.sh schema`.
+  - Scope: real clj/bb command that reads `registries/schema.edn` and transacts into a temp dev-local DB (default :mem) using existing helpers; ensure non-zero exit on failure; document invocation.
+  - Out of Scope: action contract harness, frontend/app smoke checks, schema migrations beyond registry definitions.
+  - Capabilities Touched: [:cap/tooling/schema-load :cap/schema/user :cap/schema/task]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/schema-load]
+    - Shared/Read-only Capabilities: [:cap/schema/user :cap/schema/task :fixtures/users :fixtures/tasks]
+    - Sequencing Constraints: after datomic-setup and fixtures-loader; precedes checks-action-contract and checks-update-script
+  - Composability Impact:
+    - Layers Affected: tooling/checks
+    - Patterns/Registries Reused or Extended: `darelwasl.schema/temp-db-with-schema!`, `registries/schema.edn`, shared `scripts/checks.sh` entrypoint
+    - New Composability Rule Needed: none (reaffirm shared checks entrypoint, registry-driven schema load)
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: deliver a real schema load proof so registry-defined schema is validated via the shared harness.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: datomic-setup, fixtures-loader
+  - Deliverables: working schema check command invoked via `scripts/checks.sh schema`, supporting script/namespace, and any doc/registry updates needed for tooling capability.
+  - Proof Plan: run `scripts/checks.sh schema`.
+  - Fixtures/Data Assumptions: uses registry-defined schema and temp Datomic (:mem) with no persistent side effects.
+  - Protocol/System Updates: update docs/system.md if schema check invocation or capability narrative shifts.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: integrate check into shared script; no additional automation beyond entrypoint.
+  - Reporting: include command output/result and any doc/registry updates in PR/report.
 
 - Task ID: checks-action-contract
   - Status: pending
