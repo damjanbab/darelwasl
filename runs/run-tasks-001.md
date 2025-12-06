@@ -237,12 +237,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize list UX, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-detail
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 22:49 UTC)
   - Objective: Build task detail/edit pane with full interactions.
-  - Scope: detail panel, create/edit, status change, assign, due date, tags, archive; feature flag respected.
-  - Acceptance: All interactions succeed against API; error handling shown; responsive; uses theme tokens.
+  - Scope: detail side panel for viewing/editing existing tasks; create new tasks; change status/assignee; set/clear due date; add/remove tags; archive/unarchive; honor :task/extended? flag gating extended fields.
+  - Out of Scope: backend schema/API changes, theme token changes, new filters/sorts, auth/session mechanics, headless smoke harness wiring (covered by checks-app-smoke).
+  - Capabilities Touched: [:cap/view/tasks] (consumes :cap/action/task-* contracts)
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/tasks]
+    - Shared/Read-only Capabilities: [:cap/action/auth-login :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/tooling/theme-css-vars :cap/view/login]
+    - Sequencing Constraints: after frontend-task-list/task-api-implementation; before checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: views/apps
+    - Patterns/Registries Reused or Extended: theme CSS vars consumption; finite-state UI model for loading/error/ready; reuse task action contracts for mutations; session-based API client patterns from list/login views
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: deliver full task detail/edit UI per product spec so users can manage tasks end-to-end from the frontend.
+    - Compatibility expectation: backward/forward compatible with existing APIs and theme tokens; no new flags beyond :task/extended? already present.
+    - Flag/Rollout plan: ensure :task/extended? gated fields remain behind existing flag; no new toggles.
+  - Breaking/Deprecation: none expected.
   - Dependencies: frontend-task-list, task-api-implementation
-  - Proof Plan: scripts/checks.sh views; app-smoke covers detail
+  - Deliverables: CLJS detail pane components/events for view/create/edit/archive/status/assignee/due/tags; feature-flagged field handling; responsive styles; state management for loading/error/ready; doc/registry updates only if contracts shift.
+  - Proof Plan: scripts/checks.sh views; app-smoke covers detail when added.
+  - Fixtures/Data Assumptions: uses fixtures/users for auth and fixtures/tasks for data coverage; assumes session cookie present.
+  - Protocol/System Updates: none expected.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: none beyond existing npm/shadow-cljs commands; reuse theme CSS var generator.
+  - Reporting: summarize detail UX/flows, capabilities touched, proofs run/results.
 
 # Checks and Tooling
 
