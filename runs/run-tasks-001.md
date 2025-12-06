@@ -209,12 +209,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize login UX/flows, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-list
-  - Status: pending
-  - Objective: Build task list UI with filters/sorts, loading/empty/error states.
-  - Scope: list pane, filters (status/assignee/tag/priority), sorts (due/priority/updated), uses theme tokens.
-  - Acceptance: Filters/sorts work against API; states render correctly; responsive layout.
-  - Dependencies: frontend-scaffold, theme-css-vars, task-api-implementation, registry-views-tasks
-  - Proof Plan: scripts/checks.sh views; app-smoke covers list
+  - Status: in-progress (Codex, 2025-12-06 21:31 UTC)
+  - Objective: Deliver the task list pane with filters/sorts and explicit loading/empty/error states.
+  - Scope: build list layout for desktop/mobile; fetch tasks from /api/tasks using the session cookie; filters (status/assignee/tag/priority); sorts (due/priority/updated); render badges for status/priority/tags; show loading/empty/error states; keep theme token usage.
+  - Out of Scope: detail/edit interactions (frontend-task-detail), create/update flows, headless app smoke harness, backend schema/action changes, new theme tokens.
+  - Capabilities Touched: [:cap/view/tasks] (read-only consumption of task APIs)
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/tasks]
+    - Shared/Read-only Capabilities: [:cap/action/auth-login :cap/tooling/theme-css-vars :cap/view/login]
+    - Sequencing Constraints: after frontend-scaffold/theme-css-vars/task-api-implementation/registries-complete; before frontend-task-detail and checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: views/apps
+    - Patterns/Registries Reused or Extended: theme CSS vars, finite state handling for UX states, registry-driven task view contract; reuse fixtures for data examples.
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: replace placeholder workspace cards with a real task list that honors filters/sorts per product spec so users can browse tasks after login.
+    - Compatibility expectation: backward/forward compatible; uses existing APIs/theme tokens; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
+  - Dependencies: [frontend-scaffold, theme-css-vars, task-api-implementation, registries-complete]
+  - Deliverables: CLJS state/events for task list fetch + filters/sorts; UI components for list, filter controls, status/priority/tag chips, and empty/error/loading states; responsive CSS updates; doc/registry touch only if contracts shift.
+  - Proof Plan: npm run build; scripts/checks.sh views; manual login + filter/sort smoke as needed.
+  - Fixtures/Data Assumptions: uses fixtures/users for login and fixtures/tasks for list/filter coverage; session cookie required.
+  - Protocol/System Updates: none expected.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: reuse theme generator + shadow-cljs scripts; no new tooling.
+  - Reporting: summarize list UX, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-detail
   - Status: pending
