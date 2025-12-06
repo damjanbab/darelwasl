@@ -279,7 +279,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: include command output/result and any doc/registry updates in PR/report.
 
 - Task ID: checks-action-contract
-  - Status: in-progress (Codex, 2025-12-06 21:33 UTC)
+  - Status: done (Codex, 2025-12-06 22:04 UTC)
   - Objective: Action contract harness for auth/tasks using fixtures; pin command in scripts/checks.sh actions.
   - Scope: tests verifying inputs/outputs, side effects, idempotency, audit expectations per registry.
   - Acceptance: `scripts/checks.sh actions` runs and passes against fixtures.

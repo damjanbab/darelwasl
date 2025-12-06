@@ -147,6 +147,12 @@ check_schema_load() {
   (cd "$ROOT" && clojure -M -m darelwasl.checks.schema)
 }
 
+check_actions() {
+  check_clojure_available
+  echo "Running action contract checks..."
+  (cd "$ROOT" && clojure -M -m darelwasl.checks.actions)
+}
+
 stub() {
   echo "TODO: implement $1"
 }
@@ -155,7 +161,7 @@ target="${1:-all}"
 case "$target" in
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
-  actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; stub "action contract tests (fixtures, idempotency, audit)" ;;
+  actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
   views) check_registries; check_registry_fields; check_edn_parse; stub "view registry integrity checks" ;;
   app-smoke) check_registries; check_registry_fields; check_edn_parse; stub "headless app boot / browser loader smoke" ;;
   all)
@@ -163,7 +169,7 @@ case "$target" in
     check_registry_fields
     check_edn_parse
     check_schema_load
-    stub "action contract tests"
+    check_actions
     stub "view registry integrity checks"
     stub "headless app boot / browser loader smoke"
     ;;

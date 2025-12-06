@@ -185,7 +185,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Starter Scaffolding
 - Registries: `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, `registries/integrations.edn`, `registries/tooling.edn` (placeholder entries to copy/extend).
-- Checks harness: `scripts/checks.sh` (registry presence + EDN parse + schema load into a temp Datomic via `schema`; action contracts/views/app-smoke remain stubs until implemented). Extend with real commands as the codebase grows.
+- Checks harness: `scripts/checks.sh` (registry presence + EDN parse + schema load into a temp Datomic via `schema`; action contracts for auth/tasks via `scripts/checks.sh actions`; views/app-smoke remain stubs until implemented). Extend with real commands as the codebase grows.
 - Datomic helpers: `darelwasl.db` (dev-local client/connection helpers) and `darelwasl.schema` (registry reader + schema transact + temp DB helper defaulting to `:mem`) are the entry points for backend schema checks.
 - Theme CSS variable generator: `scripts/theme-css-vars.sh` (registry-driven, registered as `:cap/tooling/theme-css-vars`) with npm wrapper `npm run theme:css-vars` that writes `public/css/theme.css` (auto-run before dev/build/check) so the UI shell pulls theme vars.
 - Frontend scaffold: `package.json`, `shadow-cljs.edn`, `public/index.html`, `public/css/main.css`, and `src/darelwasl/app.cljs` (re-frame shell). Commands: `npm install`; `npm run dev` (shadow-cljs watch with dev-http on :3000 serving `public/`); `npm run build` (release build to `public/js`); `npm run check` (compile-only smoke).
