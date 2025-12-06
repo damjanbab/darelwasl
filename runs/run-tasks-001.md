@@ -88,13 +88,30 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Frontend
 
 - Task ID: frontend-scaffold
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 16:43 UTC)
   - Objective: Scaffold shadow-cljs + re-frame; define build/dev/test commands; include base layout shell.
-  - Scope: shadow-cljs.edn, package.json scripts, base app root, state setup.
-  - Acceptance: `npm install`; `npm run dev` (or documented) starts; `npm run build` succeeds.
+  - Scope: shadow-cljs.edn, package.json scripts, base app root, state setup, minimal layout shell that consumes theme CSS vars when available.
+  - Out of Scope: wiring to backend APIs, login/task feature flows, theme CSS var generation, headless smoke harness.
+  - Capabilities Touched: [:cap/view/login :cap/view/tasks :cap/tooling/app-smoke]
+  - Parallel Safety:
+    - Exclusive Capabilities: frontend build/runtime scaffold (package.json, shadow-cljs config, app root/layout shell)
+    - Shared/Read-only Capabilities: theme registry (read), docs (read), registries (read)
+    - Sequencing Constraints: precedes theme-css-vars, frontend-login, frontend-task-list, frontend-task-detail, checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: views/apps, tooling (frontend build/start commands)
+    - Patterns/Registries Reused: theme tokens from `registries/theme.edn`, re-frame event/state model
+    - New Composability Rules: none
+  - Requirement Change & Compatibility:
+    - Adds runnable frontend scaffold; additive/backward-compatible; no flags or rollout.
+  - Breaking/Deprecation: none.
   - Dependencies: design-spec, theme-registry
-  - Proof Plan: scripts/checks.sh views/app-smoke when ready
-  - Commands: documented in docs/system.md
+  - Deliverables: package.json with scripts (install/dev/build/test placeholder), shadow-cljs.edn app build, src namespaces for app entry/root/layout, public index/asset wiring, docs for commands.
+  - Proof Plan: run `npm install` and `npm run build`; document results.
+  - Fixtures/Data Assumptions: uses default theme tokens; no data fixtures required.
+  - Protocol/System Updates: add frontend commands/start notes to docs/system.md if new.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: npm scripts for dev/build; hook into scripts/checks.sh views placeholder as needed.
+  - Reporting: summarize scaffold, commands, proofs, and any doc/registry updates.
 
 - Task ID: theme-css-vars
   - Status: pending
