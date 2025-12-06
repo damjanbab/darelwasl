@@ -87,7 +87,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize auth endpoint/session behavior, proofs run/results, and any registry/doc touches.
 
 - Task ID: task-api-implementation
-  - Status: in-progress (Codex, 2025-12-06 19:23 UTC)
+  - Status: done (Codex, 2025-12-06 21:11 UTC)
   - Objective: Implement task endpoints wired to Datomic: list with filters/sorts; create/update; status/assign/due/tags; archive.
   - Scope: REST/JSON handlers, validations for enums/flags, persistence, audit per registry, feature flag respect.
   - Out of Scope: Frontend/UI wiring, headless/app smoke harness, schema changes beyond registry, pagination or search beyond specified filters/sorts, auth/session mechanics beyond reuse of existing middleware.

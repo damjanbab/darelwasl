@@ -1,6 +1,7 @@
 (ns darelwasl.http
   (:require [darelwasl.auth :as auth]
             [darelwasl.db :as db]
+            [darelwasl.tasks :as tasks]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
             [reitit.ring.middleware.exception :as exception]
@@ -24,9 +25,10 @@
                   :path "/"}})
 
 (defn- error-response
-  [status message]
-  {:status status
-   :body {:error message}})
+  [status message & [details]]
+  (cond-> {:status status
+           :body {:error message}}
+    details (assoc-in [:body :details] details)))
 
 (defn- login-handler
   [state]
@@ -61,6 +63,97 @@
                       :user/username (:user/username user)}
                :session session-data})))))))
 
+(defn- require-session
+  [handler]
+  (fn [request]
+    (let [session (:session request)]
+      (if (and session (:session/token session) (:user/id session))
+        (handler (assoc request :auth/session session))
+        (error-response 401 "Unauthorized")))))
+
+(defn- handle-task-result
+  [result & [success-status]]
+  (if-let [err (:error result)]
+    (error-response (or (:status err) 500)
+                    (:message err)
+                    (:details err))
+    {:status (or success-status 200)
+     :body result}))
+
+(defn- task-id-param
+  [request]
+  (get-in request [:path-params :id]))
+
+(defn- list-tasks-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/list-tasks (get-in state [:db :conn])
+                       (:query-params request)))))
+
+(defn- create-task-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/create-task! (get-in state [:db :conn])
+                         (or (:body-params request) {})
+                         (:auth/session request))
+     201)))
+
+(defn- update-task-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/update-task! (get-in state [:db :conn])
+                         (task-id-param request)
+                         (or (:body-params request) {})
+                         (:auth/session request)))))
+
+(defn- set-status-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/set-status! (get-in state [:db :conn])
+                        (task-id-param request)
+                        (or (:body-params request) {})
+                        (:auth/session request)))))
+
+(defn- assign-task-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/assign-task! (get-in state [:db :conn])
+                         (task-id-param request)
+                         (or (:body-params request) {})
+                         (:auth/session request)))))
+
+(defn- due-date-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/set-due-date! (get-in state [:db :conn])
+                          (task-id-param request)
+                          (or (:body-params request) {})
+                          (:auth/session request)))))
+
+(defn- tags-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/set-tags! (get-in state [:db :conn])
+                      (task-id-param request)
+                      (or (:body-params request) {})
+                      (:auth/session request)))))
+
+(defn- archive-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/archive-task! (get-in state [:db :conn])
+                          (task-id-param request)
+                          (or (:body-params request) {})
+                          (:auth/session request)))))
+
 (defn app
   "Build the Ring handler with shared middleware and routes."
   [state]
@@ -68,7 +161,18 @@
     (ring/ring-handler
      (ring/router
       [["/health" {:get (fn [_request] (health-response state))}]
-       ["/api/login" {:post (login-handler state)}]]
+       ["/api"
+       ["/login" {:post (login-handler state)}]
+        ["/tasks"
+         {:middleware [require-session]}
+         ["" {:get (list-tasks-handler state)
+              :post (create-task-handler state)}]
+         ["/:id" {:put (update-task-handler state)}]
+         ["/:id/status" {:post (set-status-handler state)}]
+         ["/:id/assignee" {:post (assign-task-handler state)}]
+         ["/:id/due-date" {:post (due-date-handler state)}]
+         ["/:id/tags" {:post (tags-handler state)}]
+         ["/:id/archive" {:post (archive-handler state)}]]]]
       {:data {:muuntaja muuntaja-instance
               :middleware [[session/wrap-session session-opts]
                            parameters/parameters-middleware

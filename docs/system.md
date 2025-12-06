@@ -117,6 +117,17 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
 - Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by an in-memory store; server restarts clear sessions.
+- Task API (requires session cookie from `/api/login`):
+  - GET `/api/tasks` supports filters `status`, `priority`, `tag`, `assignee`, `archived` (defaults to active tasks; use `archived=all` to include archived) and sort/order (`updated` default desc, `due` default asc, `priority` default desc).
+  - POST `/api/tasks` creates a task with title/description/status/assignee/priority/tags (set) plus optional `task/due-date` (ISO-8601) and `task/archived?`/`task/extended?` booleans; values are validated against registry enums and assignees must exist.
+  - PUT `/api/tasks/:id` updates title/description/priority/tags/extended?; POST helpers: `/api/tasks/:id/status`, `/assignee`, `/due-date` (null clears), `/tags` (replaces set), `/archive` (toggle archived flag).
+  - Example (seed dev DB first):
+    ```
+    clojure -M:seed
+    curl -c /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"user/username":"huda","user/password":"Damjan1!"}' http://localhost:3000/api/login
+    curl -b /tmp/dw-cookies.txt "http://localhost:3000/api/tasks?status=todo&sort=due&order=asc"
+    curl -b /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"task/title":"Draft API doc","task/description":"Check filters","task/status":"todo","task/assignee":"00000000-0000-0000-0000-000000000001","task/priority":"high","task/tags":["ops"]}' http://localhost:3000/api/tasks
+    ```
 
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
