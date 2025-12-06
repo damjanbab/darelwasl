@@ -188,7 +188,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Dependencies: schema-users
 
 - Task ID: fixtures-tasks
-  - Status: in-progress (Codex, 2025-12-06 16:56 UTC)
+  - Status: done (Codex, 2025-12-06 17:00 UTC)
   - Objective: Ensure tasks fixtures are final and referenced.
   - Acceptance: fixtures/tasks.edn correct; used by seed and tests; includes status/priority/tags coverage.
   - Dependencies: schema-tasks
