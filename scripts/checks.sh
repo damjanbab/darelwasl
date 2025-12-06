@@ -141,6 +141,12 @@ check_edn_parse() {
 CLJ
 }
 
+check_schema_load() {
+  check_clojure_available
+  echo "Loading schema into temp Datomic..."
+  (cd "$ROOT" && clojure -M -m darelwasl.checks.schema)
+}
+
 stub() {
   echo "TODO: implement $1"
 }
@@ -148,7 +154,7 @@ stub() {
 target="${1:-all}"
 case "$target" in
   registries) check_registries; check_registry_fields; check_edn_parse ;;
-  schema) check_registries; check_registry_fields; check_edn_parse; stub "schema load into temp Datomic" ;;
+  schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; stub "action contract tests (fixtures, idempotency, audit)" ;;
   views) check_registries; check_registry_fields; check_edn_parse; stub "view registry integrity checks" ;;
   app-smoke) check_registries; check_registry_fields; check_edn_parse; stub "headless app boot / browser loader smoke" ;;
@@ -156,7 +162,7 @@ case "$target" in
     check_registries
     check_registry_fields
     check_edn_parse
-    stub "schema load into temp Datomic"
+    check_schema_load
     stub "action contract tests"
     stub "view registry integrity checks"
     stub "headless app boot / browser loader smoke"
