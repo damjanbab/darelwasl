@@ -26,7 +26,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Backend
 
 - Task ID: backend-project-setup
-  - Status: in-progress (Codex, 2025-12-06 16:37 UTC)
+  - Status: done (Codex, 2025-12-06 17:11 UTC)
   - Objective: Create Clojure + Datomic Local service scaffold with deps, config, and start scripts.
   - Scope: deps.edn with aliases, env/config handling with defaults, base router + middleware, health endpoint, start command and docs, Datomic dev-local client/connect helper (no auth/creds) wired for future schema/tasks.
   - Out of Scope: auth/session flows, task CRUD endpoints, schema migrations, frontend work, CI wiring beyond start/health proof.

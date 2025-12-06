@@ -110,6 +110,11 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Frontend: CLJS + re-frame via shadow-cljs. Views registered declaratively; state handled through finite-state models.
 - Headless checks: shadow-cljs test with Karma/ChromeHeadless or Playwright; required for “app-smoke” in `scripts/checks.sh` once implemented.
 
+## Runtime & Commands
+- Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
+- Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
+- Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
+
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
 - Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (enum set), archived flag, feature flag `:task/extended?` (default false) for future fields.

@@ -6,3 +6,11 @@ public/js
 npm-debug.log*
 yarn-error.log*
 scripts/load_github_token.sh
+target/
+classes/
+.cpcache/
+.nrepl-port
+data/
+node_modules/
+.shadow-cljs/
+.cljs_node_repl/
