@@ -87,13 +87,33 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize auth endpoint/session behavior, proofs run/results, and any registry/doc touches.
 
 - Task ID: task-api-implementation
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 19:23 UTC)
   - Objective: Implement task endpoints wired to Datomic: list with filters/sorts; create/update; status/assign/due/tags; archive.
   - Scope: REST/JSON handlers, validations for enums/flags, persistence, audit per registry, feature flag respect.
+  - Out of Scope: Frontend/UI wiring, headless/app smoke harness, schema changes beyond registry, pagination or search beyond specified filters/sorts, auth/session mechanics beyond reuse of existing middleware.
+  - Capabilities Touched: [:cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/schema/task :cap/schema/user]
   - Acceptance: Endpoints match action contracts; filters (status/assignee/tag/priority) and sorts (due/priority/updated) work; uses session auth.
   - Dependencies: auth-implementation, datomic-setup, registry-actions-tasks, fixtures-tasks
-  - Proof Plan: scripts/checks.sh actions (tasks) after harness ready
-  - Commands: documented curl examples; start command reused
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive]
+    - Shared/Read-only Capabilities: [:cap/schema/task :cap/schema/user :fixtures/tasks :fixtures/users]
+    - Sequencing Constraints: after auth-implementation/datomic-setup/registry-actions-tasks/fixtures-tasks; precedes frontend-task-list/frontend-task-detail/checks-action-contract/checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: actions + backend runtime routing/integration with Datomic
+    - Patterns/Registries Reused or Extended: reitit/ring routes, Datomic helpers from datomic-setup, action registry contracts, fixture-driven validation; no new adapters introduced
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: deliver real task CRUD/list APIs aligned to registry contracts so frontend and checks can depend on them.
+    - Compatibility expectation: backward/forward compatible with registry definitions; honors :task/extended? flag default false.
+    - Flag/Rollout plan: feature-flagged fields remain gated behind :task/extended?; otherwise no new flags.
+  - Breaking/Deprecation: none; additive implementation of existing contracts.
+  - Deliverables: Auth-protected task routes (list with filters/sorts; create/update/status/assign/due/tags/archive), validation against enums/flags, Datomic persistence and audit logging per registry, documented curl examples using existing start/seed commands.
+  - Proof Plan: scripts/checks.sh actions (tasks) after harness ready; manual curl smoke (login + list/create/update/status/assign/tag/due/archive) against dev server.
+  - Fixtures/Data Assumptions: uses fixtures/users for auth and fixtures/tasks enums/IDs for validation; temp/dev Datomic allowed.
+  - Protocol/System Updates: none expected unless runtime commands shift (document if so).
+  - FAQ Updates: none expected.
+  - Tooling/Automation: reuse existing start/seed commands; no new tooling beyond potential curls in docs.
+  - Reporting: summarize endpoints/behaviors, capability IDs touched, proofs run/results, and any doc/registry updates.
 
 - Task ID: fixtures-loader
   - Status: done (Codex, 2025-12-06 18:58 UTC)
