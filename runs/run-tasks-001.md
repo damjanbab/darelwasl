@@ -161,7 +161,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize CSS var pipeline, files touched (HTML/CSS/CLJS/scripts), proofs run/results.
 
 - Task ID: frontend-login
-  - Status: in-progress (Codex, 2025-12-06 19:20 UTC)
+  - Status: done (Codex, 2025-12-06 19:35 UTC)
   - Objective: Build login view wired to /api/login with error states; uses theme.
   - Scope: dedicated login screen using theme tokens; username/password form with inline validation; submit via re-frame event calling backend; loading/success/error states; success stores session token/user and switches to tasks shell; responsive layout for desktop/mobile.
   - Out of Scope: task list/detail implementation, headless smoke harness, routing beyond login->tasks toggle, password hashing/authz changes.
