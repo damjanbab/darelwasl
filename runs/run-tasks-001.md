@@ -237,7 +237,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize list UX, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-detail
-  - Status: in-progress (Codex, 2025-12-06 22:49 UTC)
+  - Status: done (Codex, 2025-12-06 23:18 UTC)
   - Objective: Build task detail/edit pane with full interactions.
   - Scope: detail side panel for viewing/editing existing tasks; create new tasks; change status/assignee; set/clear due date; add/remove tags; archive/unarchive; honor :task/extended? flag gating extended fields.
   - Out of Scope: backend schema/API changes, theme token changes, new filters/sorts, auth/session mechanics, headless smoke harness wiring (covered by checks-app-smoke).
