@@ -1,0 +1,16 @@
+[
+ {:id :cap/view/example-page
+  :title "Example page"
+  :version "v1"
+  :data {:source :cap/schema/example
+         :pull [:example/id :example/name]}
+  :actions [:cap/action/example-send]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 200}
+       :state-model :finite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/example]
+            :integrations [:cap/integration/email]}}
+]

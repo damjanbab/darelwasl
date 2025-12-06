@@ -1,0 +1,24 @@
+[
+ {:id :cap/schema/example
+  :title "Example entity"
+  :version "v1"
+  :attributes
+  [{:ident :example/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Identity for example entity"}
+   {:ident :example/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :fulltext true
+    :doc "Display name"}]
+  :enums []
+  :invariants ["Name must be non-empty"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:actions [:cap/action/example-send]
+            :views [:cap/view/example-page]}}
+]

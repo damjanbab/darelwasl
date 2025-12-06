@@ -1,0 +1,16 @@
+[
+ {:id :cap/integration/email
+  :title "Email provider"
+  :version "v1"
+  :external-system "SMTP or API provider"
+  :contracts {:timeout_ms 3000
+              :rate_limit "tbd"}
+  :auth {:strategy :env-vars}
+  :failure-modes ["timeouts" "rate limits" "invalid recipients"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "tbd"}
+  :related {:actions [:cap/action/example-send]
+            :schema []}}
+]

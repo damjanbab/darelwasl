@@ -1,0 +1,21 @@
+[
+ {:id :cap/action/example-send
+  :title "Send example notification"
+  :version "v1"
+  :inputs {:example/id :uuid
+           :recipient/email :string}
+  :outputs {:status :keyword}
+  :side-effects ["Send email via :cap/integration/email"]
+  :adapter {:integration :cap/integration/email}
+  :audit {:records [:cap/integration/email]
+          :fields [:example/id :status]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:example/id :recipient/email]}
+  :contracts {:fixtures [:fixtures/example]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/example]
+            :views [:cap/view/example-page]}
+  :tooling [:cap/tooling/action-contract]}
+]

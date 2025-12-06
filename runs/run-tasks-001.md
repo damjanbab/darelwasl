@@ -1,0 +1,573 @@
+# Run run-tasks-001
+
+## Tasks
+- Task ID: product-spec
+  - Status: pending
+  - Objective: Write the product spec in `docs/system.md` for the Task app v1 (fields, flows, acceptance) including auth (users, login, responsibilities).
+  - Scope: Functional spec only.
+  - Out of Scope: Design, code.
+  - Capabilities Touched: docs/system.md
+  - Parallel Safety:
+    - Exclusive Capabilities: docs/system.md product spec section
+    - Shared/Read-only Capabilities: n/a
+    - Sequencing Constraints: precedes design-spec and all implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: schema/actions/views
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: define v1 scope (tasks + auth)
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: introduce “extended task fields” flag default off
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none
+  - Dependencies: requirements from user
+  - Deliverables: Product spec (task fields, flows, acceptance) in docs/system.md
+  - Proof Plan: none (doc task)
+  - Fixtures/Data Assumptions: none
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize spec
+
+- Task ID: design-spec
+  - Status: pending
+  - Objective: Write design spec (visual language, theme tokens, layout, components) in docs/system.md.
+  - Scope: Design/theming spec.
+  - Out of Scope: Code.
+  - Capabilities Touched: docs/system.md
+  - Parallel Safety:
+    - Exclusive Capabilities: design section in docs/system.md
+    - Shared/Read-only Capabilities: product spec (read)
+    - Sequencing Constraints: after product-spec, before UI implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view patterns, theme registry
+    - New composability rules needed: theme registry usage
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: define aesthetic and UI patterns
+    - Compatibility expectation: n/a
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: product-spec
+  - Deliverables: Design spec + theming rules in docs/system.md
+  - Proof Plan: none
+  - Fixtures/Data Assumptions: none
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize design spec
+
+- Task ID: theme-registry
+  - Status: pending
+  - Objective: Add theme tokens registry (colors/typography/spacing/radius/shadows/motion) and CSS vars generator stub.
+  - Scope: Add `registries/theme.edn` and note generator plan.
+  - Out of Scope: Full CSS implementation.
+  - Capabilities Touched: registries (new theme), docs/system.md (style guide)
+  - Parallel Safety:
+    - Exclusive Capabilities: theme registry
+    - Shared/Read-only Capabilities: design spec
+    - Sequencing Constraints: after design-spec
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: theming
+    - New composability rules needed: theme usage rules
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: make styles swappable
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: design-spec
+  - Deliverables: theme registry file; docs update on token usage
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: n/a
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: generator plan noted
+  - Reporting: summarize theme registry
+
+- Task ID: schema-tasks
+  - Status: pending
+  - Objective: Add Task schema entry (fields, enums, flags) to registries/schema.edn and docs/system.md narrative.
+  - Scope: Registry + doc narrative.
+  - Out of Scope: actions/views.
+  - Capabilities Touched: registries/schema.edn, docs/system.md
+  - Parallel Safety:
+    - Exclusive Capabilities: Task schema entry
+    - Shared/Read-only Capabilities: product spec
+    - Sequencing Constraints: after product-spec
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: enums, flags
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: materialize Task schema
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: include extended task flag attr
+  - Breaking/Deprecation: none
+  - Dependencies: product-spec
+  - Deliverables: schema registry entry + docs narrative
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: none
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize schema
+
+- Task ID: schema-users
+  - Status: pending
+  - Objective: Add User schema entry (id, name, login credential) to registries/schema.edn and docs/system.md narrative; seed for two users (huda, damjan).
+  - Scope: Registry + doc narrative.
+  - Out of Scope: auth actions/UI.
+  - Capabilities Touched: registries/schema.edn, docs/system.md
+  - Parallel Safety:
+    - Exclusive Capabilities: User schema entry
+    - Shared/Read-only Capabilities: product spec
+    - Sequencing Constraints: after product-spec
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: enums/flags if any
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: support login and assignment
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: product-spec
+  - Deliverables: user schema registry entry + docs narrative; note seed users
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: seed users
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize user schema
+
+- Task ID: registry-actions-tasks
+  - Status: pending
+  - Objective: Add Task actions (create/edit/status change/assign/due/tag/archive) to registries/actions.edn with adapters/idempotency/contracts/flags.
+  - Scope: Registry entries.
+  - Out of Scope: code.
+  - Capabilities Touched: registries/actions.edn
+  - Parallel Safety:
+    - Exclusive Capabilities: Task actions entries
+    - Shared/Read-only Capabilities: schema registry
+    - Sequencing Constraints: after schema-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: adapter pattern, idempotency
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: actionable workflow
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: respect extended task flag
+  - Breaking/Deprecation: none
+  - Dependencies: schema-tasks
+  - Deliverables: action registry entries with versions/adapters/contracts/compat
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: reference fixtures placeholder
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize action entries
+
+- Task ID: registry-actions-auth
+  - Status: pending
+  - Objective: Add Auth actions to registries/actions.edn (login with shared password, session handling stub).
+  - Scope: Registry entries.
+  - Out of Scope: code.
+  - Capabilities Touched: registries/actions.edn
+  - Parallel Safety:
+    - Exclusive Capabilities: Auth action entries
+    - Shared/Read-only Capabilities: schema-users
+    - Sequencing Constraints: after schema-users
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: adapter pattern
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enable login
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: schema-users
+  - Deliverables: auth action entries with versions/adapters/contracts/compat
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: reference user fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize auth action entries
+
+- Task ID: registry-views-tasks
+  - Status: pending
+  - Objective: Add Task view entry to registries/views.edn (list + detail pane, filters/sorts, ux states, compat/flags).
+  - Scope: Registry entry.
+  - Out of Scope: UI code.
+  - Capabilities Touched: registries/views.edn
+  - Parallel Safety:
+    - Exclusive Capabilities: Task view entry
+    - Shared/Read-only Capabilities: schema/actions registries
+    - Sequencing Constraints: after registry-actions-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view state model
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: define view
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: extended task flag
+  - Breaking/Deprecation: none
+  - Dependencies: registry-actions-tasks
+  - Deliverables: view registry entry with version, ux states, compat/flags
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: reference fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize view entry
+
+- Task ID: registry-view-login
+  - Status: pending
+  - Objective: Add Login view entry to registries/views.edn (login form, error states).
+  - Scope: Registry entry.
+  - Out of Scope: UI code.
+  - Capabilities Touched: registries/views.edn
+  - Parallel Safety:
+    - Exclusive Capabilities: login view entry
+    - Shared/Read-only Capabilities: schema-users, auth actions
+    - Sequencing Constraints: after registry-actions-auth
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view state model
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: define login view
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: registry-actions-auth
+  - Deliverables: login view registry entry with version, ux states
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: reference user fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: summarize login view entry
+
+- Task ID: scaffold-shadow
+  - Status: pending
+  - Objective: Scaffold shadow-cljs + re-frame project with base theme tokens wired as CSS vars; setup build/test scripts.
+  - Scope: tooling, deps, base UI shell consuming tokens.
+  - Out of Scope: task UI logic.
+  - Capabilities Touched: tooling, frontend scaffold
+  - Parallel Safety:
+    - Exclusive Capabilities: frontend scaffold
+    - Shared/Read-only Capabilities: registries (read)
+    - Sequencing Constraints: after theme-registry
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared UI components
+    - New composability rules needed: UI token usage
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: provide aesthetic base
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: theme-registry
+  - Deliverables: shadow-cljs config, deps, base theme vars injection
+  - Proof Plan: scripts/checks.sh app-smoke (hook shadow build), views (placeholder)
+  - Fixtures/Data Assumptions: none
+  - Protocol/System Updates: add UI token usage to docs/system.md
+  - FAQ Updates: headless CLJS setup if needed
+  - Tooling/Automation: add npm/shadow scripts to scripts/checks.sh
+  - Reporting: summarize scaffold
+
+- Task ID: fixtures-tasks
+  - Status: pending
+  - Objective: Create deterministic fixtures for tasks (schema load, action tests, UI smoke).
+  - Scope: fixture data and wiring into tests.
+  - Out of Scope: new features.
+  - Capabilities Touched: fixtures (refs in registries/tooling if needed)
+  - Parallel Safety:
+    - Exclusive Capabilities: fixtures
+    - Shared/Read-only Capabilities: registries (read)
+    - Sequencing Constraints: after schema-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: fixture reuse
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: test determinism
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: include flag states
+  - Breaking/Deprecation: none
+  - Dependencies: schema-tasks
+  - Deliverables: fixture files; registry/tooling references
+  - Proof Plan: used by actions/views checks
+  - Fixtures/Data Assumptions: define in task
+  - Protocol/System Updates: none
+  - FAQ Updates: fixture usage notes
+  - Tooling/Automation: none
+  - Reporting: summarize fixtures
+
+- Task ID: fixtures-users
+  - Status: pending
+  - Objective: Create deterministic fixtures for users (huda, damjan) with shared password.
+  - Scope: fixture data and wiring into tests.
+  - Out of Scope: new features.
+  - Capabilities Touched: fixtures (refs in registries/tooling if needed)
+  - Parallel Safety:
+    - Exclusive Capabilities: user fixtures
+    - Shared/Read-only Capabilities: registries (read)
+    - Sequencing Constraints: after schema-users
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: fixture reuse
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: auth determinism
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: schema-users
+  - Deliverables: user fixture files; registry/tooling references
+  - Proof Plan: used by auth/action checks
+  - Fixtures/Data Assumptions: password "Damjan1!" shared
+  - Protocol/System Updates: none
+  - FAQ Updates: fixture usage notes
+  - Tooling/Automation: none
+  - Reporting: summarize user fixtures
+
+- Task ID: checks-edn-validate
+  - Status: pending
+  - Objective: Replace grep checks with real EDN validation for registries.
+  - Scope: scripts/checks.sh updates; possibly bb/clojure script.
+  - Out of Scope: schema load.
+  - Capabilities Touched: scripts/checks.sh, registries/tooling.edn (if new tool)
+  - Parallel Safety:
+    - Exclusive Capabilities: checks script
+    - Shared/Read-only Capabilities: registries (read)
+    - Sequencing Constraints: none
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared tooling entry point
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enforce registry structure
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: none
+  - Deliverables: EDN validation integrated into checks
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: n/a
+  - Protocol/System Updates: none
+  - FAQ Updates: add tool notes
+  - Tooling/Automation: register tool if added
+  - Reporting: summarize validation
+
+- Task ID: checks-schema-load
+  - Status: pending
+  - Objective: Add Datomic temp DB schema load check.
+  - Scope: script/harness to load schema; used in scripts/checks.sh schema.
+  - Out of Scope: complex migrations.
+  - Capabilities Touched: scripts/checks.sh, tooling
+  - Parallel Safety:
+    - Exclusive Capabilities: schema check harness
+    - Shared/Read-only Capabilities: registries (read)
+    - Sequencing Constraints: after checks-edn-validate, schema-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared tooling
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: prove schema validity
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: checks-edn-validate, schema-tasks
+  - Deliverables: schema load check wired to scripts/checks.sh schema
+  - Proof Plan: scripts/checks.sh schema
+  - Fixtures/Data Assumptions: uses task schema
+  - Protocol/System Updates: none
+  - FAQ Updates: schema check notes
+  - Tooling/Automation: register tool if needed
+  - Reporting: summarize schema check
+
+- Task ID: checks-action-contract
+  - Status: pending
+  - Objective: Add minimal action contract test harness using fixtures for task actions.
+  - Scope: harness + test for task actions; wire into scripts/checks.sh actions.
+  - Out of Scope: full suite.
+  - Capabilities Touched: scripts/checks.sh, tooling, action tests
+  - Parallel Safety:
+    - Exclusive Capabilities: action contract harness
+    - Shared/Read-only Capabilities: registries/fixtures (read)
+    - Sequencing Constraints: after fixtures-tasks, implement-actions-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared tooling
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enforce action contracts
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: include flag states
+  - Breaking/Deprecation: none
+  - Dependencies: fixtures-tasks, implement-actions-tasks
+  - Deliverables: action contract test harness + task tests
+  - Proof Plan: scripts/checks.sh actions
+  - Fixtures/Data Assumptions: task fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: harness usage
+  - Tooling/Automation: register tool if new
+  - Reporting: summarize harness/tests
+
+- Task ID: checks-app-smoke
+  - Status: pending
+  - Objective: Add headless CLJS app smoke (shadow-cljs + Karma/Playwright) and wire to scripts/checks.sh app-smoke.
+  - Scope: headless config + minimal smoke test that boots app and renders task view.
+  - Out of Scope: deep E2E flows.
+  - Capabilities Touched: tooling, scripts/checks.sh, frontend
+  - Parallel Safety:
+    - Exclusive Capabilities: app smoke harness
+    - Shared/Read-only Capabilities: frontend code
+    - Sequencing Constraints: after implement-view-tasks, scaffold-shadow
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared tooling
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: ensure browser loader works
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: include flag state if needed
+  - Breaking/Deprecation: none
+  - Dependencies: implement-view-tasks, scaffold-shadow
+  - Deliverables: headless smoke test wired to checks
+  - Proof Plan: scripts/checks.sh app-smoke
+  - Fixtures/Data Assumptions: task fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: headless setup notes
+  - Tooling/Automation: register tool if needed
+  - Reporting: summarize smoke
+
+- Task ID: implement-actions-tasks
+  - Status: pending
+  - Objective: Implement Clojure task actions (core + adapter stubs) per registry; add contract fixtures/tests.
+  - Scope: code + tests; update tooling if needed.
+  - Out of Scope: UI.
+  - Capabilities Touched: action impls, registries/tooling.edn (if harness added)
+  - Parallel Safety:
+    - Exclusive Capabilities: action impls/tests
+    - Shared/Read-only Capabilities: schema registry
+    - Sequencing Constraints: after registry-actions-tasks, fixtures-tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: adapter pattern, idempotency
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: deliver actionable workflow
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: respect extended task flag
+  - Breaking/Deprecation: none
+  - Dependencies: registry-actions-tasks, fixtures-tasks
+  - Deliverables: action code, adapter stubs, contract fixtures/tests
+  - Proof Plan: scripts/checks.sh actions
+  - Fixtures/Data Assumptions: task fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: adapter gotchas
+  - Tooling/Automation: extend action-contract harness
+  - Reporting: summarize actions/tests
+
+- Task ID: implement-actions-auth
+  - Status: pending
+  - Objective: Implement Auth actions (login/session) per registry; add tests using user fixtures.
+  - Scope: code + tests; update tooling if needed.
+  - Out of Scope: UI.
+  - Capabilities Touched: auth impls, registries/tooling.edn (if harness added)
+  - Parallel Safety:
+    - Exclusive Capabilities: auth impls/tests
+    - Shared/Read-only Capabilities: schema-users
+    - Sequencing Constraints: after registry-actions-auth, fixtures-users
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: adapter pattern
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enable login
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: registry-actions-auth, fixtures-users
+  - Deliverables: auth code, adapter stubs, tests
+  - Proof Plan: scripts/checks.sh actions
+  - Fixtures/Data Assumptions: user fixtures
+  - Protocol/System Updates: none
+  - FAQ Updates: auth gotchas
+  - Tooling/Automation: extend action-contract harness if needed
+  - Reporting: summarize auth actions/tests
+
+- Task ID: implement-view-tasks
+  - Status: pending
+  - Objective: Build Task UI (list + detail pane; create/edit/status/assign/due/tag/filter/sort) with professional aesthetic using base theme.
+  - Scope: re-frame components, routes, state handling, styling; flag-aware UI.
+  - Out of Scope: mobile-specific beyond responsive basics.
+  - Capabilities Touched: frontend code, registries/views.edn (if adjustments), docs/system.md (view narrative)
+  - Parallel Safety:
+    - Exclusive Capabilities: task UI components
+    - Shared/Read-only Capabilities: action impls (read)
+    - Sequencing Constraints: after implement-actions-tasks, scaffold-shadow
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared components/state patterns
+    - New composability rules needed: UI state guidelines if missing
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: deliver end-to-end view
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: extended task flag for future fields
+  - Breaking/Deprecation: none
+  - Dependencies: implement-actions-tasks, scaffold-shadow
+  - Deliverables: UI components, styling, view wired to registry actions/data
+  - Proof Plan: scripts/checks.sh views; scripts/checks.sh app-smoke
+  - Fixtures/Data Assumptions: task fixtures for UI smoke
+  - Protocol/System Updates: UI design/state guidelines
+  - FAQ Updates: UI/CLJS gotchas
+  - Tooling/Automation: none
+  - Reporting: summarize UI and design
+
+- Task ID: implement-view-login
+  - Status: pending
+  - Objective: Build Login UI (login screen with username/password, error states) using base theme; integrate with auth actions.
+  - Scope: re-frame components, state handling, styling.
+  - Out of Scope: multi-user management beyond two seeded users.
+  - Capabilities Touched: frontend code, registries/views.edn (if adjustments), docs/system.md (view narrative)
+  - Parallel Safety:
+    - Exclusive Capabilities: login UI components
+    - Shared/Read-only Capabilities: auth impls (read)
+    - Sequencing Constraints: after implement-actions-auth, scaffold-shadow
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared components/state patterns
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enable login flow
+    - Compatibility expectation: backward/forward true
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: implement-actions-auth, scaffold-shadow
+  - Deliverables: login UI components, styling, view wired to auth actions
+  - Proof Plan: scripts/checks.sh views; scripts/checks.sh app-smoke
+  - Fixtures/Data Assumptions: user fixtures for UI smoke
+  - Protocol/System Updates: UI design/state guidelines
+  - FAQ Updates: UI/CLJS gotchas
+  - Tooling/Automation: none
+  - Reporting: summarize login UI
+
+- Task ID: docs-polish
+  - Status: pending
+  - Objective: Update docs/system.md, docs/faq.md, registries to reflect all task work, flags, fixtures, design guidelines.
+  - Scope: docs updates only.
+  - Out of Scope: code.
+  - Capabilities Touched: docs/system.md, docs/faq.md, registries (if minor tweaks)
+  - Parallel Safety:
+    - Exclusive Capabilities: docs edits
+    - Shared/Read-only Capabilities: none
+    - Sequencing Constraints: after feature tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: documentation of patterns
+    - New composability rules needed: record if emerged
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: documentation alignment
+    - Compatibility expectation: n/a
+    - Flag/Rollout plan: n/a
+  - Breaking/Deprecation: none
+  - Dependencies: all prior tasks
+  - Deliverables: updated docs and registry consistency
+  - Proof Plan: scripts/checks.sh registries
+  - Fixtures/Data Assumptions: n/a
+  - Protocol/System Updates: add if patterns changed
+  - FAQ Updates: add gotchas
+  - Tooling/Automation: none
+  - Reporting: summarize doc updates
+
+## Notes
+- Product-spec and design-spec are mandatory prerequisites. Keep tasks small; add blocker tasks only if unavoidable.

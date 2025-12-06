@@ -1,0 +1,11 @@
+[
+ {:id :cap/tooling/action-contract
+  :title "Action contract harness"
+  :version "v1"
+  :invocation "scripts/checks.sh action-contracts"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/example]}
+  :enforces [:contracts :compatibility]
+  :related {:capabilities [:cap/action/example-send]}
+  :gotchas []}
+]

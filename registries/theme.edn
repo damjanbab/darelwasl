@@ -1,0 +1,24 @@
+[
+ {:id :theme/default
+  :title "Warm neutral + teal accent"
+  :version "v1"
+  :colors {:background "#F7F4EF"
+           :surface "#FFFFFF"
+           :text-primary "#1F2933"
+           :text-secondary "#52606D"
+           :border "#E0E0E0"
+           :accent "#0FA3B1"
+           :accent-strong "#0B7E89"
+           :warning "#F59E0B"
+           :danger "#D14343"
+           :success "#2D9D78"}
+  :typography {:font-family "Inter, system-ui, -apple-system, sans-serif"
+               :font-sizes {:title "20px" :section "16px" :body "14px" :meta "12px"}
+               :line-heights {:title "28px" :section "22px" :body "20px" :meta "16px"}}
+  :spacing {:base "4px"
+            :scale [4 8 12 16 20 24 32]}
+  :radius {:sm "4px" :md "8px" :lg "12px"}
+  :shadows {:card "0 6px 20px rgba(0,0,0,0.06)"}
+  :motion {:transition "150ms ease"}
+  :compatibility {:backward true :forward true :flags []}}
+]
