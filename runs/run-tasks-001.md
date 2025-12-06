@@ -209,7 +209,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize login UX/flows, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-list
-  - Status: in-progress (Codex, 2025-12-06 21:31 UTC)
+  - Status: done (Codex, 2025-12-06 22:08 UTC)
   - Objective: Deliver the task list pane with filters/sorts and explicit loading/empty/error states.
   - Scope: build list layout for desktop/mobile; fetch tasks from /api/tasks using the session cookie; filters (status/assignee/tag/priority); sorts (due/priority/updated); render badges for status/priority/tags; show loading/empty/error states; keep theme token usage.
   - Out of Scope: detail/edit interactions (frontend-task-detail), create/update flows, headless app smoke harness, backend schema/action changes, new theme tokens.
