@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "theme:css-vars": "scripts/theme-css-vars.sh :theme/default public/css/theme.css",
+    "predev": "npm run theme:css-vars",
     "dev": "shadow-cljs watch app",
+    "prebuild": "npm run theme:css-vars",
     "build": "shadow-cljs release app",
+    "precheck": "npm run theme:css-vars",
     "check": "shadow-cljs compile app"
   },
   "dependencies": {

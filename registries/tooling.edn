@@ -49,7 +49,7 @@
  {:id :cap/tooling/theme-css-vars
   :title "Theme CSS variable generator"
   :version "v1"
-  :invocation "scripts/theme-css-vars.sh [theme-id] [output-file]"
+  :invocation "npm run theme:css-vars (scripts/theme-css-vars.sh :theme/default public/css/theme.css)"
   :scope :shared
   :determinism {:fixtures []}
   :enforces [:theme-vars]
