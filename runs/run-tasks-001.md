@@ -26,13 +26,29 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Backend
 
 - Task ID: backend-project-setup
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 16:37 UTC)
   - Objective: Create Clojure + Datomic Local service scaffold with deps, config, and start scripts.
-  - Scope: deps (deps.edn), profiles, env/config handling, base router, health endpoint, start command.
-  - Acceptance: `clojure -M:dev` (or documented command) starts server; health endpoint 200; config files documented; Datomic dev-local (no auth/creds) wiring in place.
+  - Scope: deps.edn with aliases, env/config handling with defaults, base router + middleware, health endpoint, start command and docs, Datomic dev-local client/connect helper (no auth/creds) wired for future schema/tasks.
+  - Out of Scope: auth/session flows, task CRUD endpoints, schema migrations, frontend work, CI wiring beyond start/health proof.
+  - Capabilities Touched: [:cap/schema/user :cap/schema/task] (runtime support only)
+  - Parallel Safety:
+    - Exclusive Capabilities: backend runtime scaffold (server entrypoint, routing, config, Datomic dev-local bootstrap)
+    - Shared/Read-only Capabilities: registries (read), fixtures (read)
+    - Sequencing Constraints: precedes datomic-setup/auth-implementation/task-api-implementation/fixtures-loader
+  - Composability Impact:
+    - Layers Affected: tooling/runtime (backend server + Datomic client wiring)
+    - Patterns/Registries Reused: config-from-env with defaults; ring/reitit router skeleton
+    - New Composability Rules: none
+  - Requirement Change & Compatibility: adds runnable backend skeleton; additive/non-breaking; no flags or rollout needed.
+  - Breaking/Deprecation: none
   - Dependencies: registries-complete
-  - Proof Plan: server start, health check
-  - Commands: `clojure -M:dev` (or equivalent) documented in docs/system.md
+  - Deliverables: deps.edn + src namespaces for config/db/server/main, health route returning 200 JSON, Datomic dev-local helper, start instructions documented.
+  - Proof Plan: start server via `clojure -M:dev`, curl /health returns 200 with service + datastore status.
+  - Fixtures/Data Assumptions: none required beyond existing registry fixtures.
+  - Protocol/System Updates: document backend start/config defaults in docs/system.md.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: start alias/command only; no CI wiring yet.
+  - Reporting: PR notes server scaffolding, health endpoint, Datomic wiring, proof outputs.
 
 - Task ID: datomic-setup
   - Status: pending
