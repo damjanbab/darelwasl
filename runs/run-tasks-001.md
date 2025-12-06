@@ -162,6 +162,16 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 
 # Docs
 
+- Task ID: protocol-prompt-hardening
+  - Status: done (Codex, 2025-12-06 16:24 UTC)
+  - Objective: Harden the initial prompt to prevent token/auth hiccups; clarify loader usage and fallback token sourcing.
+  - Scope: Update `docs/protocol.md` initial prompt text.
+  - Out of Scope: Changing loader scripts or task definitions.
+  - Capabilities Touched: docs/protocol.md
+  - Dependencies: theme-registry
+  - Proof Plan: none (doc change)
+  - Reporting: summarize prompt change
+
 - Task ID: docs-commands
   - Status: pending
   - Objective: Update docs/system.md and docs/faq.md with start/run/test commands, acceptance summaries, and any gotchas; ensure registries match code.
