@@ -202,10 +202,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 # Fixtures
 
 - Task ID: fixtures-users
-  - Status: pending
-  - Objective: Ensure users fixtures (huda, damjan, password) are final and referenced.
-  - Acceptance: fixtures/users.edn correct; used by seed and tests.
-  - Dependencies: schema-users
+  - Status: in-progress (Codex, 2025-12-06 18:11 UTC)
+  - Objective: Finalize canonical user fixtures (huda, damjan) with stable IDs/password for auth and downstream checks.
+  - Scope: Validate/update `fixtures/users.edn` to align with `:cap/schema/user`, document usage assumptions for seed/tests, ensure compatibility with registries.
+  - Out of Scope: Changes to user schema or auth implementation; fixture loader tooling (covered by other tasks).
+  - Capabilities Touched: [:cap/schema/user]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/schema/user]
+    - Shared/Read-only Capabilities: [:cap/schema/task]
+    - Sequencing Constraints: after registries-complete; before auth-implementation, fixtures-loader, checks-* that rely on user data
+  - Composability Impact:
+    - Layers Affected: fixtures/test-data
+    - Patterns/Registries Reused: schema registry for users; stable UUID/password fixtures; registry-driven data consistency
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - Requirement Change: make user fixtures canonical and referenced for auth/tests so downstream tasks rely on stable data
+    - Compatibility Expectation: backward/forward compatible (no flags)
+    - Flag/Rollout Plan: none
+  - Breaking/Deprecation: none (no schema or contract breakage)
+  - Dependencies: [registries-complete]
+  - Deliverables: updated/validated `fixtures/users.edn`, documentation notes if assumptions shift, registry alignment confirmed.
+  - Proof Plan: `scripts/checks.sh registries`; load `fixtures/users.edn` via clj REPL snippet to confirm validity/alignment.
+  - Fixtures/Data Assumptions: two users with fixed UUIDs and shared password `Damjan1!`; usernames unique.
+  - Protocol/System Updates: none expected unless fixture handling changes.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: no new tooling (loader handled in fixtures-loader task).
+  - Reporting: note fixture contents/IDs/password assumptions, proofs run/results, any doc updates.
 
 - Task ID: fixtures-tasks
   - Status: done (Codex, 2025-12-06 17:00 UTC)
