@@ -114,6 +114,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
 - Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
 - Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
+- Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
 
 ## Product Spec: Task App v1 (two users)
@@ -144,7 +145,8 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Fixtures and Test Data
 - :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tags (`:ops`, `:home`, `:finance`, `:urgent`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
-- Determinism: fixture UUIDs and timestamps are fixed; loaders should insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
+- Loader tooling: `darelwasl.fixtures/seed-dev!` and CLI `clojure -M:seed [--temp]` load schema + fixtures (users first, then tasks with lookup refs). Use `darelwasl.fixtures/temp-db-with-fixtures!` or `with-temp-fixtures` to spin disposable DBs for checks.
+- Determinism: fixture UUIDs and timestamps are fixed; loaders insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.
