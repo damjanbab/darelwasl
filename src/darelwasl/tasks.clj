@@ -102,6 +102,8 @@
   [value label {:keys [default allow-all?]}]
   (let [raw (if (sequential? value) (first value) value)]
     (cond
+      (keyword? raw) (recur (name raw) label {:default default
+                                              :allow-all? allow-all?})
       (nil? raw) {:value default}
       (boolean? raw) {:value raw}
       (string? raw) (let [v (str/lower-case (str/trim raw))]
@@ -265,11 +267,15 @@
         priority-filter (:priority filters)
         assignee-filter (:assignee filters)
         tag-filter (:tag filters)
+        tag-set (cond
+                  (set? tags) tags
+                  (sequential? tags) (set tags)
+                  :else #{})
         archived-filter (:archived filters)]
     (and (or (nil? status-filter) (= status status-filter))
          (or (nil? priority-filter) (= priority priority-filter))
          (or (nil? assignee-filter) (= (:user/id assignee) assignee-filter))
-         (or (nil? tag-filter) (and tags (contains? tags tag-filter)))
+         (or (nil? tag-filter) (and (seq tag-set) (contains? tag-set tag-filter)))
          (case archived-filter
            :all true
            true archived?
@@ -367,8 +373,8 @@
 
 (defn- update-tags-tx
   [task-id existing-tags new-tags]
-  (let [new-set (or new-tags #{})
-        existing (or existing-tags #{})
+  (let [new-set (set (or new-tags #{}))
+        existing (set (or existing-tags #{}))
         to-add (set/difference new-set existing)
         to-retract (set/difference existing new-set)]
     (concat (map (fn [tag] [:db/add [:task/id task-id] :task/tags tag]) to-add)
