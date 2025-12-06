@@ -59,13 +59,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Proof Plan: scripts/checks.sh schema (once implemented)
 
 - Task ID: auth-implementation
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 18:37 UTC)
   - Objective: Implement login/session for users huda/damjan (password `Damjan1!`), session cookie (in-memory), error handling.
-  - Scope: POST /api/login, session middleware, 401 on bad creds, logout optional; plaintext password acceptable for dev.
-  - Acceptance: Login with fixtures succeeds; bad creds 401; session persists; error responses defined.
+  - Scope: POST /api/login handler, session middleware for protected routes, 401 on bad creds, structured error responses; logout optional; plaintext password acceptable for dev.
+  - Out of Scope: frontend login UI changes, task endpoints, password hashing/rotation, multi-tenant/authz.
+  - Capabilities Touched: [:cap/action/auth-login :cap/schema/user :cap/integration/local-session]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/action/auth-login :cap/integration/local-session]
+    - Shared/Read-only Capabilities: [:cap/schema/user :fixtures/users]
+    - Sequencing Constraints: after backend-project-setup/datomic-setup; precedes task-api-implementation, frontend-login, checks-action-contract
+  - Composability Impact:
+    - Layers Affected: actions, integrations, runtime middleware
+    - Patterns/Registries Reused: reitit/ring middleware stack, fixtures-driven user lookup, registry-defined auth action contract
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: fulfill :cap/action/auth-login contract with real session handling so downstream APIs/views can rely on auth.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none; additive local auth only.
   - Dependencies: backend-project-setup, datomic-setup, registry-actions-auth, fixtures-users
-  - Proof Plan: scripts/checks.sh actions (auth) after harness ready
-  - Commands: documented curl examples; start command reused from backend
+  - Deliverables: /api/login endpoint, session middleware wiring, credential validation against fixtures, 200/401 responses with messages, curl examples/docs updates as needed.
+  - Proof Plan: scripts/checks.sh actions (auth) after harness ready; manual curl login/401 smoke; clj server start check.
+  - Fixtures/Data Assumptions: fixtures/users.edn with huda and damjan using password `Damjan1!`.
+  - Protocol/System Updates: update docs/system.md to record auth runtime flow/commands if shifted.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: reuse existing start alias; no new scripts required.
+  - Reporting: summarize auth endpoint/session behavior, proofs run/results, and any registry/doc touches.
 
 - Task ID: task-api-implementation
   - Status: pending
