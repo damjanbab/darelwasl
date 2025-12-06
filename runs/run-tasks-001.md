@@ -161,12 +161,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize CSS var pipeline, files touched (HTML/CSS/CLJS/scripts), proofs run/results.
 
 - Task ID: frontend-login
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-06 19:20 UTC)
   - Objective: Build login view wired to /api/login with error states; uses theme.
-  - Scope: form, loading/error states, success stores session (cookie), redirects to tasks.
-  - Acceptance: Valid creds (huda/damjan) log in; invalid shows error; responsive.
+  - Scope: dedicated login screen using theme tokens; username/password form with inline validation; submit via re-frame event calling backend; loading/success/error states; success stores session token/user and switches to tasks shell; responsive layout for desktop/mobile.
+  - Out of Scope: task list/detail implementation, headless smoke harness, routing beyond login->tasks toggle, password hashing/authz changes.
+  - Capabilities Touched: [:cap/view/login :cap/action/auth-login]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/login]
+    - Shared/Read-only Capabilities: [:cap/action/auth-login :cap/tooling/theme-css-vars]
+    - Sequencing Constraints: after frontend-scaffold/theme-css-vars/auth-implementation; precedes frontend-task-list/frontend-task-detail/checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: views/apps
+    - Patterns/Registries Reused or Extended: theme CSS vars consumption, finite-state UI model for loading/error/ready, auth action contract for POST /api/login
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: fulfill product/login spec with real UI that calls auth endpoint and manages session state.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: frontend-scaffold, theme-css-vars, auth-implementation, registry-view-login
-  - Proof Plan: scripts/checks.sh views; app-smoke includes login
+  - Deliverables: login view components/styles wired to backend, re-frame events/effects for submit + state handling, session persistence in app state, navigation to tasks shell on success, docs/examples as needed.
+  - Proof Plan: npm run build; scripts/checks.sh views (current harness)
+  - Fixtures/Data Assumptions: use fixtures/users credentials (huda/damjan with Damjan1!); relies on session cookie.
+  - Protocol/System Updates: none expected.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: none beyond existing npm/shadow-cljs commands.
+  - Reporting: summarize login UX/flows, capabilities touched, proofs run/results.
 
 - Task ID: frontend-task-list
   - Status: pending
