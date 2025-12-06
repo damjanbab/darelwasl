@@ -106,7 +106,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Testing: use fixture-driven tests; spin a temp Datomic for schema/action checks; run headless app boot smoke; avoid flaky external calls.
 
 ## Technology Baseline
-- Backend: Clojure + Datomic Local (dev). Adapters for side effects; pure cores isolated.
+- Backend: Clojure + Datomic Local (dev) with no auth/creds. Use Datomic dev-local style connection (no cloud, no passwords).
 - Frontend: CLJS + re-frame via shadow-cljs. Views registered declaratively; state handled through finite-state models.
 - Headless checks: shadow-cljs test with Karma/ChromeHeadless or Playwright; required for “app-smoke” in `scripts/checks.sh` once implemented.
 

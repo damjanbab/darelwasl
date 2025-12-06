@@ -29,16 +29,16 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Status: pending
   - Objective: Create Clojure + Datomic Local service scaffold with deps, config, and start scripts.
   - Scope: deps (deps.edn), profiles, env/config handling, base router, health endpoint, start command.
-  - Acceptance: `clojure -M:dev` (or documented command) starts server; health endpoint 200; config files documented.
+  - Acceptance: `clojure -M:dev` (or documented command) starts server; health endpoint 200; config files documented; Datomic dev-local (no auth/creds) wiring in place.
   - Dependencies: registries-complete
   - Proof Plan: server start, health check
   - Commands: `clojure -M:dev` (or equivalent) documented in docs/system.md
 
 - Task ID: datomic-setup
   - Status: pending
-  - Objective: Configure Datomic Local, connection utilities, and schema loader for temp DB.
-  - Scope: Datomic config, connection helper, temp DB load function for checks.
-  - Acceptance: Temp DB load works for schema; config documented.
+  - Objective: Configure Datomic Local (dev-local, no auth), connection utilities, and schema loader for temp DB.
+  - Scope: Datomic config, connection helper, temp DB load function for checks; no cloud/auth.
+  - Acceptance: Temp DB load works for schema; config documented; no credentials required.
   - Dependencies: backend-project-setup, schema-tasks, schema-users
   - Proof Plan: scripts/checks.sh schema (once implemented)
 
