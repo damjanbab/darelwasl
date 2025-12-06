@@ -191,7 +191,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Objective: Real EDN validation in scripts/checks.sh (implemented).
 
 - Task ID: checks-schema-load
-  - Status: in-progress (Codex, 2025-12-06 19:10 UTC)
+  - Status: done (Codex, 2025-12-06 19:17 UTC)
   - Objective: Implement schema load check using temp Datomic; pin command in `scripts/checks.sh schema`.
   - Scope: real clj/bb command that reads `registries/schema.edn` and transacts into a temp dev-local DB (default :mem) using existing helpers; ensure non-zero exit on failure; document invocation.
   - Out of Scope: action contract harness, frontend/app smoke checks, schema migrations beyond registry definitions.

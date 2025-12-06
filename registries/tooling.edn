@@ -17,7 +17,7 @@
   :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
   :enforces [:schema]
   :related {:capabilities [:cap/schema/task :cap/schema/user]}
-  :gotchas []}
+  :gotchas ["Runs against a temp Datomic dev-local DB with :mem storage; run via scripts/checks.sh schema from the repo root."]}
 
  {:id :cap/tooling/action-contract
   :title "Action contract harness"
