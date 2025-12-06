@@ -98,11 +98,30 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
 - Task ID: fixtures-loader
   - Status: in-progress (Codex, 2025-12-06 18:44 UTC)
   - Objective: Wire fixtures (users/tasks) into backend/test harness; provide seed/load command.
-  - Scope: loader for Datomic temp DB and dev DB; bb/clj task to seed.
-  - Acceptance: Seed command loads users/tasks; used by action tests and app smoke.
+  - Scope: loader for Datomic temp DB and dev DB; clj task to seed; ensure referential load order and config overrides for storage/system/db.
+  - Out of Scope: API/auth wiring, frontend seeding, schema changes beyond existing fixtures, CI harness beyond seed integration.
+  - Capabilities Touched: [:cap/schema/user :cap/schema/task :fixtures/users :fixtures/tasks :cap/tooling/fixtures-load]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:fixtures/users :fixtures/tasks :cap/tooling/fixtures-load]
+    - Shared/Read-only Capabilities: [:cap/schema/user :cap/schema/task :cap/tooling/schema-load]
+    - Sequencing Constraints: after datomic-setup/fixtures-users/fixtures-tasks; before checks-schema-load/checks-action-contract/checks-app-smoke
+  - Composability Impact:
+    - Layers Affected: tooling/fixtures (backend seed + temp DB helper)
+    - Patterns/Registries Reused: datomic config helpers, schema registry, fixture determinism, temp DB utilities
+    - New Composability Rule Needed: enforce loading users before tasks; support :mem storage for checks; document in docs/system.md
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: add deterministic fixture seeding so dev and checks share stable data.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: datomic-setup, fixtures-users, fixtures-tasks
-  - Proof Plan: seed invoked in checks; scripts/checks.sh uses it
-  - Commands: e.g., `bb seed` or `clojure -M:dev -m fixtures.seed` documented
+  - Deliverables: clj namespace/command to load fixtures into temp/dev DB, entry point (e.g., `clojure -M:dev -m ...`), docs for usage, registry/faq updates if needed.
+  - Proof Plan: run seed command against :mem/temp DB and dev-local storage; ensure idempotent/respects fixtures; `scripts/checks.sh registries` baseline.
+  - Fixtures/Data Assumptions: use fixtures/users.edn and fixtures/tasks.edn; load users before tasks; deterministic UUIDs/timestamps; default storage :mem for checks; allow env/config overrides.
+  - Protocol/System Updates: document fixture loader + commands in docs/system.md; register tooling entry.
+  - FAQ Updates: note any seeding gotchas if encountered (storage dir, :mem resets).
+  - Tooling/Automation: add tooling registry entry for fixture loader and wire into scripts/checks.sh as needed.
+  - Reporting: include commands run, data counts/ids, docs/registry updates, proofs.
 
 # Frontend
 
