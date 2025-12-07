@@ -51,10 +51,11 @@
   :version "v1"
   :invocation "scripts/checks.sh app-smoke"
   :scope :shared
-  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
-  :enforces [:ui-boot]
+ :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
+ :enforces [:ui-boot]
   :related {:capabilities [:cap/view/login :cap/view/tasks]}
-  :gotchas []}
+  :gotchas ["Requires Playwright Chromium download (handled by scripts/checks.sh); needs outbound network on first run."
+            "Seeds a temp Datomic storage under .cpcache/datomic-smoke-*; uses APP_PORT 3100 by default and will kill anything listening there during the smoke run."]}
 
  {:id :cap/tooling/theme-css-vars
   :title "Theme CSS variable generator"

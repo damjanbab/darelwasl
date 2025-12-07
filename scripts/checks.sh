@@ -2,12 +2,14 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SERVER_PID=""
+DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
 Usage: scripts/checks.sh [all|registries|schema|actions|views|app-smoke|action-contracts]
 
-This is a starter harness. Extend each stub to run real checks (Datomic temp DB, action contract tests, headless app boot).
+View registry integrity remains a stub; other entries run real checks.
 EOF
 }
 
@@ -48,6 +50,31 @@ check_clojure_available() {
     echo "clojure command not found. Install Clojure CLI to run checks."
     exit 1
   fi
+}
+
+check_node_available() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "node command not found. Install Node.js to run frontend checks."
+    exit 1
+  fi
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "npm command not found. Install npm to run frontend checks."
+    exit 1
+  fi
+}
+
+ensure_playwright_browser() {
+  local attempt=1
+  while [[ $attempt -le 2 ]]; do
+    if (cd "$ROOT" && npx playwright install chromium); then
+      return 0
+    fi
+    echo "Playwright install attempt $attempt failed; retrying..."
+    attempt=$((attempt + 1))
+    sleep 3
+  done
+  echo "Failed to install Playwright Chromium after retries."
+  exit 1
 }
 
 check_registry_fields() {
@@ -153,6 +180,83 @@ check_actions() {
   (cd "$ROOT" && clojure -M -m darelwasl.checks.actions)
 }
 
+cleanup_server() {
+  if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+    wait "$SERVER_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${DATOMIC_TMP:-}" && -d "${DATOMIC_TMP}" ]]; then
+    rm -rf "${DATOMIC_TMP}" || true
+  fi
+}
+
+kill_port_if_listening() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti :"$port" || true)
+    if [[ -n "$pids" ]]; then
+      echo "Killing existing process on port $port ($pids)..."
+      echo "$pids" | xargs kill >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+wait_for_health() {
+  local url="$1"
+  local attempts="${2:-20}"
+  for ((i=1; i<=attempts; i++)); do
+    if curl -sf "$url" >/dev/null 2>&1; then
+      echo "Health check passed at ${url}"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Server did not become healthy at ${url}"
+  return 1
+}
+
+check_app_smoke() {
+  check_clojure_available
+  check_node_available
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "curl command not found. Install curl to run app smoke."
+    exit 1
+  fi
+
+  echo "Installing npm dependencies..."
+  (cd "$ROOT" && npm install --no-progress --no-audit)
+
+  echo "Ensuring Playwright Chromium is installed..."
+  ensure_playwright_browser
+
+  echo "Building frontend for smoke..."
+  (cd "$ROOT" && npm run check)
+
+  local host="${APP_HOST:-127.0.0.1}"
+  local port="${APP_PORT:-3100}"
+  local base_url="http://${host}:${port}"
+  DATOMIC_TMP="$(mktemp -d "${ROOT}/.cpcache/datomic-smoke-XXXXXX")"
+
+  echo "Seeding Datomic fixtures (:mem storage) for app smoke..."
+  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" clojure -M:seed)
+
+  echo "Starting backend server for app smoke on ${base_url}..."
+  mkdir -p "$ROOT/.cpcache"
+  kill_port_if_listening "$port"
+  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" clojure -M:dev >"$ROOT/.cpcache/app-smoke.log" 2>&1) &
+  SERVER_PID=$!
+  trap cleanup_server EXIT
+
+  wait_for_health "${base_url}/health" 30
+
+  echo "Running headless app smoke..."
+  (cd "$ROOT" && APP_URL="$base_url" node scripts/app-smoke.js)
+
+  cleanup_server
+  trap - EXIT
+}
+
 stub() {
   echo "TODO: implement $1"
 }
@@ -163,7 +267,7 @@ case "$target" in
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
   views) check_registries; check_registry_fields; check_edn_parse; stub "view registry integrity checks" ;;
-  app-smoke) check_registries; check_registry_fields; check_edn_parse; stub "headless app boot / browser loader smoke" ;;
+  app-smoke) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions; check_app_smoke ;;
   all)
     check_registries
     check_registry_fields
@@ -171,7 +275,7 @@ case "$target" in
     check_schema_load
     check_actions
     stub "view registry integrity checks"
-    stub "headless app boot / browser loader smoke"
+    check_app_smoke
     ;;
   *)
     usage
