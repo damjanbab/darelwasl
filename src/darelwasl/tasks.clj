@@ -21,10 +21,6 @@
   (delay (or (some-> @task-schema-entry (get-in [:enums :task/priority]) set)
              #{:low :medium :high})))
 
-(def ^:private allowed-tags
-  (delay (or (some-> @task-schema-entry (get-in [:enums :task/tags]) set)
-             #{:ops :home :finance :urgent})))
-
 (def ^:private priority-rank
   {:high 3 :medium 2 :low 1})
 
@@ -36,7 +32,7 @@
    {:task/assignee [:user/id :user/username :user/name]}
    :task/due-date
    :task/priority
-   :task/tags
+   {:task/tags [:tag/id :tag/name]}
    :task/archived?
    :task/extended?])
 
@@ -131,30 +127,57 @@
                         {:error (str "Invalid " label " format; expected ISO-8601")}))
       :else {:error (str "Invalid " label)})))
 
+(defn- tag-by-id
+  [db tag-id]
+  (when tag-id
+    (-> (d/q '[:find (pull ?t [:tag/id :tag/name])
+               :in $ ?id
+               :where [?t :tag/id ?id]]
+             db tag-id)
+        ffirst)))
+
+(defn- ensure-tags-exist
+  [db tag-ids]
+  (let [tags (->> tag-ids
+                  (map (fn [id] [id (tag-by-id db id)]))
+                  (into {}))
+        missing (->> tags (keep (fn [[id tag]] (when-not tag id))) seq)]
+    (cond
+      missing {:error (str "Unknown tag(s): " (str/join ", " (map str missing)))}
+      :else {:tags (vals tags)
+             :tag-ids tag-ids})))
+
 (defn- normalize-tags
-  ([value] (normalize-tags value {:default-on-nil #{}}))
-  ([value {:keys [default-on-nil]}]
+  ([db value] (normalize-tags db value {:default-on-nil #{}}))
+  ([db value {:keys [default-on-nil]}]
    (cond
-     (nil? value) {:value default-on-nil}
+     (nil? value) {:value default-on-nil :tags []}
      :else
      (let [raw (cond
                  (set? value) value
                  (sequential? value) (set value)
                  (string? value) (set (map str/trim (str/split value #",")))
                  :else ::invalid)
-           kw-tags (when-not (= raw ::invalid)
+           tag-ids (when-not (= raw ::invalid)
                      (->> raw
-                          (map to-keyword)
+                          (map (fn [v]
+                                 (cond
+                                   (uuid? v) v
+                                   (string? v) (try
+                                                 (UUID/fromString (str/trim v))
+                                                 (catch Exception _ nil))
+                                   :else nil)))
                           (remove nil?)
                           set))]
        (cond
          (= raw ::invalid) {:error "Tags must be provided as a collection"}
-         (nil? kw-tags) {:value default-on-nil}
-         (not (set/subset? kw-tags @allowed-tags))
-         {:error (str "Unsupported tag(s): "
-                      (str/join ", "
-                                (map name (set/difference kw-tags @allowed-tags))))}
-         :else {:value kw-tags})))))
+         (nil? tag-ids) {:value default-on-nil :tags []}
+         :else
+         (let [{:keys [error tags]} (ensure-tags-exist db tag-ids)]
+           (if error
+             {:error error}
+             {:value tag-ids
+              :tags tags})))))))
 
 (defn- user-by-id
   [db user-id]
@@ -195,7 +218,24 @@
       (update :task/updated-at format-inst)
       (update :task/tags (fn [tags]
                            (when tags
-                             (->> tags sort vec))))))
+                             (->> tags
+                                  (sort-by (comp str/lower-case :tag/name))
+                                  vec))))))
+
+(defn- existing-tag-by-name
+  [db tag-name]
+  (let [lname (-> tag-name str/trim str/lower-case)]
+    (some (fn [[tag]]
+            (when (= lname (-> (:tag/name tag) str/lower-case))
+              tag))
+          (d/q '[:find (pull ?t [:tag/id :tag/name])
+                 :where [?t :tag/name _]]
+               db))))
+
+(defn- tag-name-field
+  [name]
+  (normalize-string-field name "Tag name" {:required true
+                                           :allow-blank? false}))
 
 (defn- error
   [status message & [details]]
@@ -224,7 +264,7 @@
   [params]
   (let [{status :value status-err :error} (normalize-enum (param-value params :status) @allowed-statuses "status")
         {priority :value priority-err :error} (normalize-enum (param-value params :priority) @allowed-priorities "priority")
-        {tag :value tag-err :error} (normalize-enum (param-value params :tag) @allowed-tags "tag")
+        {tag :value tag-err :error} (normalize-uuid (param-value params :tag) "tag")
         {assignee :value assignee-err :error} (normalize-uuid (param-value params :assignee) "assignee")
         {archived :value archived-err :error} (normalize-boolean (param-value params :archived) "archived" {:default false
                                                                                                           :allow-all? true})
@@ -267,10 +307,7 @@
         priority-filter (:priority filters)
         assignee-filter (:assignee filters)
         tag-filter (:tag filters)
-        tag-set (cond
-                  (set? tags) tags
-                  (sequential? tags) (set tags)
-                  :else #{})
+        tag-set (->> tags (map :tag/id) set)
         archived-filter (:archived filters)]
     (and (or (nil? status-filter) (= status status-filter))
          (or (nil? priority-filter) (= priority priority-filter))
@@ -341,7 +378,7 @@
                                                                                                                    :allow-blank? false})
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
-        {tags :value tags-err :error} (normalize-tags (param-value body :task/tags) {:default-on-nil #{}})
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil #{}})
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")
         {archived? :value archived-err :error} (normalize-boolean (param-value body :task/archived?) "archived" {:default false})
         {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default false})
@@ -351,21 +388,22 @@
       desc-err (error 400 desc-err)
       status-err (error 400 status-err)
       priority-err (error 400 priority-err)
-      tags-err (error 400 tags-err)
+      (:error tags-result) (error 400 (:error tags-result))
       due-err (error 400 due-err)
       archived-err (error 400 archived-err)
       extended-err (error 400 extended-err)
       assignee-err (error 400 assignee-err)
       :else
-      (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
+          (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
         (if assignee-error
           {:error assignee-error}
-          (let [base {:task/id (UUID/randomUUID)
+          (let [tag-ids (or value #{})
+                base {:task/id (UUID/randomUUID)
                       :task/title title
                       :task/description desc
                       :task/status status
                       :task/priority priority
-                      :task/tags (or tags #{})
+                      :task/tags (mapv (fn [tid] [:tag/id tid]) tag-ids)
                       :task/assignee [:user/id (:user/id assignee)]
                       :task/archived? (boolean archived?)
                       :task/extended? (boolean extended?)}
@@ -374,13 +412,13 @@
             {:data data}))))))
 
 (defn- update-tags-tx
-  [task-id existing-tags new-tags]
-  (let [new-set (set (or new-tags #{}))
-        existing (set (or existing-tags #{}))
+  [task-id existing-tags new-tag-ids]
+  (let [existing (->> existing-tags (map :tag/id) set)
+        new-set (set (or new-tag-ids #{}))
         to-add (set/difference new-set existing)
         to-retract (set/difference existing new-set)]
-    (concat (map (fn [tag] [:db/add [:task/id task-id] :task/tags tag]) to-add)
-            (map (fn [tag] [:db/retract [:task/id task-id] :task/tags tag]) to-retract))))
+    (concat (map (fn [tag-id] [:db/add [:task/id task-id] :task/tags [:tag/id tag-id]]) to-add)
+            (map (fn [tag-id] [:db/retract [:task/id task-id] :task/tags [:tag/id tag-id]]) to-retract))))
 
 (defn- validate-update
   [db task-id body]
@@ -390,16 +428,16 @@
         {desc :value desc-err :error} (normalize-string-field (param-value body :task/description) "Description" {:required false
                                                                                                                    :allow-blank? true})
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
-        {tags :value tags-err :error} (normalize-tags (param-value body :task/tags) {:default-on-nil nil})
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil nil})
         {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default nil})]
     (cond
       id-err (error 400 id-err)
       title-err (error 400 title-err)
       desc-err (error 400 desc-err)
       priority-err (error 400 priority-err)
-      tags-err (error 400 tags-err)
+      (:error tags-result) (error 400 (:error tags-result))
       extended-err (error 400 extended-err)
-      (and (nil? title) (nil? desc) (nil? priority) (nil? tags) (nil? extended?))
+      (and (nil? title) (nil? desc) (nil? priority) (nil? value) (nil? extended?))
       (error 400 "No fields provided to update")
       :else
       (if-let [eid (task-eid db task-id)]
@@ -410,7 +448,7 @@
                     desc (assoc :task/description desc)
                     priority (assoc :task/priority priority)
                     (some? extended?) (assoc :task/extended? extended?))
-         :tags tags}
+         :tags value}
         (error 404 "Task not found")))))
 
 (defn- validate-simple-status
@@ -460,16 +498,16 @@
 (defn- validate-tags-update
   [db task-id body]
   (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
-        {tags :value tags-err :error} (normalize-tags (param-value body :task/tags) {:default-on-nil nil})]
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil nil})]
     (cond
       id-err (error 400 id-err)
-      tags-err (error 400 tags-err)
-      (nil? tags) (error 400 "Tags are required")
+      (:error tags-result) (error 400 (:error tags-result))
+      (nil? value) (error 400 "Tags are required")
       :else
       (if-let [eid (task-eid db task-id)]
         {:task-id task-id
          :eid eid
-         :tags tags}
+         :tags value}
         (error 404 "Task not found")))))
 
 (defn- validate-archive-update
@@ -652,9 +690,114 @@
             (cond
               (:error tx-result) {:error (:error tx-result)}
               updated (do
-                        (log/infof "AUDIT task-archive user=%s task=%s archived=%s"
-                                   (or (:user/username actor) (:user/id actor))
-                                   task-id
-                                   (:task/archived? updates))
-                        {:task updated})
+                (log/infof "AUDIT task-archive user=%s task=%s archived=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           task-id
+                           (:task/archived? updates))
+                {:task updated})
               :else (error 500 "Task not available after archive update")))))))
+
+(defn list-tags
+  [conn]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            tags (->> (d/q '[:find (pull ?t [:tag/id :tag/name])
+                             :where [?t :tag/id _]]
+                           db)
+                      (map first)
+                      (sort-by (comp str/lower-case :tag/name))
+                      vec)]
+        {:tags tags})))
+
+(defn create-tag!
+  [conn body]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            {:keys [value] :as tag-result} (tag-name-field (param-value body :tag/name))]
+        (cond
+          (:error tag-result) (error 400 (:error tag-result))
+          (existing-tag-by-name db value) (error 409 "Tag name already exists")
+          :else
+          (let [tag-id (UUID/randomUUID)
+                tx [{:tag/id tag-id
+                     :tag/name value}]
+                tx-result (attempt-transact conn tx "create tag")]
+            (if-let [tx-error (:error tx-result)]
+              {:error tx-error}
+              {:tag {:tag/id tag-id
+                     :tag/name value}}))))))
+
+(defn rename-tag!
+  [conn tag-id body]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            {tag-name :value name-err :error} (tag-name-field (param-value body :tag/name))
+            {parsed-id :value id-err :error} (normalize-uuid tag-id "tag id")]
+        (cond
+          id-err (error 400 id-err)
+          name-err (error 400 name-err)
+          :else
+          (let [tag (tag-by-id db parsed-id)
+                dup (existing-tag-by-name db tag-name)]
+            (cond
+              (nil? tag) (error 404 "Tag not found")
+              (and dup (not= (:tag/id dup) parsed-id)) (error 409 "Tag name already exists")
+              :else
+              (let [tx-result (attempt-transact conn [[:db/add [:tag/id parsed-id] :tag/name tag-name]]
+                                                "rename tag")]
+                (if-let [tx-error (:error tx-result)]
+                  {:error tx-error}
+                  {:tag {:tag/id parsed-id
+                         :tag/name tag-name}}))))))))
+
+(defn delete-tag!
+  [conn tag-id]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            {:keys [value id-err :error]} (normalize-uuid tag-id "tag id")]
+        (cond
+          id-err (error 400 id-err)
+          :else
+          (if-let [tag (tag-by-id db value)]
+            (let [tasks-with-tag (d/q '[:find ?t
+                                        :in $ ?tag-id
+                                        :where [?t :task/tags ?tag]
+                                               [?tag :tag/id ?tag-id]]
+                                      db value)
+                  tx-data (concat
+                           (map (fn [[task-eid]]
+                                  [:db/retract task-eid :task/tags [:tag/id value]])
+                                tasks-with-tag)
+                           [[:db/retractEntity [:tag/id value]]])
+                  tx-result (attempt-transact conn tx-data "delete tag")]
+              (if-let [tx-error (:error tx-result)]
+                {:error tx-error}
+                {:tag {:tag/id value
+                       :tag/name (:tag/name tag)}}))
+            (error 404 "Tag not found"))))))
+
+(defn migrate-tags!
+  "Migrate keyword-based tags to tag entities if present."
+  [conn]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            tasks-with-kw (d/q '[:find ?t ?kw
+                                 :where [?t :task/tags ?kw]
+                                        [(keyword? ?kw)]]
+                               db)]
+        (when (seq tasks-with-kw)
+          (let [kw->id (into {}
+                             (for [[_ kw] tasks-with-kw]
+                               [kw (UUID/randomUUID)]))
+                create-tags (for [[kw id] kw->id]
+                              {:tag/id id
+                               :tag/name (-> kw name (str/capitalize))})
+                tx-data (concat
+                         create-tags
+                         (mapcat (fn [[task kw]]
+                                   (let [tid (get kw->id kw)]
+                                     [[:db/add task :task/tags [:tag/id tid]]
+                                      [:db/retract task :task/tags kw]]))
+                                 tasks-with-kw))]
+            (attempt-transact conn tx-data "migrate tags")))
+        {:status :ok})))

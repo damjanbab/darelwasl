@@ -154,6 +154,35 @@
                           (or (:body-params request) {})
                           (:auth/session request)))))
 
+(defn- list-tags-handler
+  [state]
+  (fn [_request]
+    (handle-task-result
+     (tasks/list-tags (get-in state [:db :conn])))))
+
+(defn- create-tag-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/create-tag! (get-in state [:db :conn])
+                        (or (:body-params request) {}))
+     201)))
+
+(defn- update-tag-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/rename-tag! (get-in state [:db :conn])
+                        (task-id-param request)
+                        (or (:body-params request) {})))))
+
+(defn- delete-tag-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/delete-tag! (get-in state [:db :conn])
+                        (task-id-param request)))))
+
 (defn app
   "Build the Ring handler with shared middleware and routes."
   [state]
@@ -172,7 +201,13 @@
          ["/:id/assignee" {:post (assign-task-handler state)}]
          ["/:id/due-date" {:post (due-date-handler state)}]
          ["/:id/tags" {:post (tags-handler state)}]
-         ["/:id/archive" {:post (archive-handler state)}]]]]
+         ["/:id/archive" {:post (archive-handler state)}]]
+        ["/tags"
+         {:middleware [require-session]}
+         ["" {:get (list-tags-handler state)
+              :post (create-tag-handler state)}]
+         ["/:id" {:put (update-tag-handler state)
+                  :delete (delete-tag-handler state)}]]]]
      {:data {:muuntaja muuntaja-instance
              :middleware [[session/wrap-session session-opts]
                           parameters/parameters-middleware

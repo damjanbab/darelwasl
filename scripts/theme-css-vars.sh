@@ -37,10 +37,9 @@ generate() {
       (str/lower-case)))
 
 (let [root (System/getenv "ROOT")
-      theme-id (read-string (System/getenv "THEME_ID"))
       theme-file (str root "/registries/theme.edn")
       themes (edn/read-string (slurp theme-file))
-      theme (some #(when (= (:id %) theme-id) %) themes)
+      default-id (read-string (System/getenv "THEME_ID"))
       token-keys [:colors :typography :spacing :radius :shadows :motion]
       flatten-tokens (fn flatten [prefix data]
                        (cond
@@ -55,24 +54,31 @@ generate() {
                                                            [(str prefix "-" (inc idx)) v])
                                                          data)
                          :else [[prefix data]]))
-      tokens (->> token-keys
-                  (mapcat (fn [k]
-                            (when-let [v (get theme k)]
-                              (flatten-tokens (normalize-key (name k)) v)))))]
-  (when-not theme
+      emit-theme (fn [{:keys [id] :as theme}]
+                   (let [slug (normalize-key (name id))
+                         selector (if (= id default-id)
+                                    (str ":root, [data-theme=\"" slug "\"]")
+                                    (str "[data-theme=\"" slug "\"]"))
+                         tokens (->> token-keys
+                                     (mapcat (fn [k]
+                                               (when-let [v (get theme k)]
+                                                 (flatten-tokens (normalize-key (name k)) v)))))]
+                     (println (str selector " {"))
+                     (doseq [[k v] tokens]
+                       (let [value (cond
+                                     (string? v) v
+                                     (keyword? v) (name v)
+                                     (number? v) (str v "px")
+                                     :else (str v))]
+                         (println (format "  --%s: %s;" k value))))
+                     (println "}")))]
+  (when-not (some #(= (:id %) default-id) themes)
     (binding [*out* *err*]
-      (println "Theme not found:" theme-id))
+      (println "Theme not found:" default-id))
     (System/exit 1))
 
-  (println ":root {")
-  (doseq [[k v] tokens]
-    (let [value (cond
-                  (string? v) v
-                  (keyword? v) (name v)
-                  (number? v) (str v "px")
-                  :else (str v))]
-      (println (format "  --%s: %s;" k value))))
-  (println "}"))
+  (doseq [theme themes]
+    (emit-theme theme)))
 CLJ
 }
 

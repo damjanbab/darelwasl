@@ -9,6 +9,7 @@
   (:import (java.io PushbackReader)))
 
 (def default-users-path "fixtures/users.edn")
+(def default-tags-path "fixtures/tags.edn")
 (def default-tasks-path "fixtures/tasks.edn")
 
 (defn- read-fixture
@@ -21,31 +22,35 @@
       (edn/read r))))
 
 (defn load-fixtures
-  "Read fixture data from disk. Returns {:users [...] :tasks [...]}. Paths
-  default to fixtures/users.edn and fixtures/tasks.edn."
-  ([] (load-fixtures default-users-path default-tasks-path))
-  ([users-path tasks-path]
+  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...]}. Paths
+  default to fixtures/users.edn, fixtures/tags.edn, and fixtures/tasks.edn."
+  ([] (load-fixtures default-users-path default-tags-path default-tasks-path))
+  ([users-path tags-path tasks-path]
    {:users (read-fixture users-path)
+    :tags (read-fixture tags-path)
     :tasks (read-fixture tasks-path)}))
 
 (defn- task->tx
   "Prepare a task fixture for Datomic transact by converting the assignee UUID
-  into a lookup ref against :user/id."
+  into a lookup ref against :user/id. Tags are already provided as lookup refs."
   [task]
   (update task :task/assignee (fn [user-id] [:user/id user-id])))
 
 (defn seed-conn!
   "Transact fixtures into an existing Datomic connection. Returns {:status :ok
-  :users n :tasks n} or {:error e} on failure."
+  :users n :tags n :tasks n} or {:error e} on failure."
   ([conn] (seed-conn! conn (load-fixtures)))
-  ([conn {:keys [users tasks]}]
+  ([conn {:keys [users tags tasks]}]
    (try
      (when (seq users)
        (d/transact conn {:tx-data users}))
+     (when (seq tags)
+       (d/transact conn {:tx-data tags}))
      (when (seq tasks)
        (d/transact conn {:tx-data (map task->tx tasks)}))
      {:status :ok
       :users (count users)
+      :tags (count tags)
       :tasks (count tasks)}
      (catch Exception e
        (log/error e "Failed to seed fixtures into Datomic")

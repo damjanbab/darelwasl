@@ -1,7 +1,9 @@
 (ns darelwasl.checks.actions
   (:require [darelwasl.auth :as auth]
             [darelwasl.fixtures :as fixtures]
-            [darelwasl.tasks :as tasks])
+            [darelwasl.tasks :as tasks]
+            [datomic.client.api :as d]
+            [clojure.string :as str])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -21,13 +23,21 @@
       nil)
     result))
 
+(defn- tag-index
+  [conn]
+  (let [tags (:tags (tasks/list-tags conn))]
+    (into {}
+          (map (fn [{:tag/keys [id name]}]
+                 [(-> name str/lower-case keyword) id])
+               tags))))
+
 (defn- sorted-by?
   "Return true if coll is non-decreasing according to comparator."
   [cmp-fn coll]
   (every? (fn [[a b]] (not (pos? (cmp-fn a b)))) (partition 2 1 coll)))
 
 (defn- check-listing
-  [conn failures]
+  [conn failures tag-index]
   (let [default-list (tasks/list-tasks conn {})
         listing (ensure-success failures "Default task list" default-list)]
     (when listing
@@ -58,16 +68,17 @@
       (when assignee-list
         (when-not (= 2 (count (:tasks assignee-list)))
           (fail! failures "Assignee filter should return two tasks for huda"))))
-    (let [home-default (tasks/list-tasks conn {:tag :home})
-          home-default-list (ensure-success failures "Tag filter with archived default" home-default)]
-      (when home-default-list
-        (when-not (zero? (count (:tasks home-default-list)))
-          (fail! failures "Tag filter should respect archived=false by default"))))
-    (let [home-archived (tasks/list-tasks conn {:tag :home :archived true})
-          home-archived-list (ensure-success failures "Tag filter with archived=true" home-archived)]
-      (when home-archived-list
-        (when-not (= 1 (count (:tasks home-archived-list)))
-          (fail! failures "Tag filter with archived=true should return archived home task"))))
+    (let [home-id (:home tag-index)]
+      (let [home-default (tasks/list-tasks conn {:tag home-id})
+            home-default-list (ensure-success failures "Tag filter with archived default" home-default)]
+        (when home-default-list
+          (when-not (zero? (count (:tasks home-default-list)))
+            (fail! failures "Tag filter should respect archived=false by default"))))
+      (let [home-archived (tasks/list-tasks conn {:tag home-id :archived true})
+            home-archived-list (ensure-success failures "Tag filter with archived=true" home-archived)]
+        (when home-archived-list
+          (when-not (= 1 (count (:tasks home-archived-list)))
+            (fail! failures "Tag filter with archived=true should return archived home task")))))
     (let [due-sort (tasks/list-tasks conn {:archived :all
                                            :sort :due
                                            :order :asc})
@@ -98,16 +109,18 @@
      :actor (:user good)}))
 
 (defn- check-mutations
-  [conn failures {:keys [user-index actor]}]
+  [conn failures {:keys [user-index actor tag-index]}]
   (when (and conn actor)
     (let [assignee-huda (:user/id (get user-index "huda"))
            assignee-damjan (:user/id (get user-index "damjan"))
+           tag-ops (:ops tag-index)
+           tag-urgent (:urgent tag-index)
            create-body {:task/title "Write action harness"
                         :task/description "Add contract tests for auth and tasks"
                         :task/status :todo
                         :task/assignee assignee-huda
                         :task/priority :high
-                        :task/tags [:ops :urgent]
+                        :task/tags [tag-ops tag-urgent]
                         :task/due-date "2025-12-20T10:00:00Z"}
            created (tasks/create-task! conn create-body actor)
            created-task (some-> (ensure-success failures "Create task" created) :task)]
@@ -116,7 +129,7 @@
            (fail! failures "Create should set provided status" created-task))
          (when-not (= assignee-huda (:user/id (:task/assignee created-task)))
            (fail! failures "Create should assign to provided user" created-task))
-         (when-not (= #{:ops :urgent} (set (:task/tags created-task)))
+         (when-not (= #{tag-ops tag-urgent} (set (map :tag/id (:task/tags created-task))))
            (fail! failures "Create should persist tags" created-task)))
        (let [bad-create (tasks/create-task! conn {} actor)]
          (when-not (and (:error bad-create) (= 400 (get-in bad-create [:error :status])))
@@ -126,14 +139,14 @@
                update-body {:task/title "Action harness ready"
                             :task/description "Contracts run via scripts/checks.sh actions"
                             :task/priority :medium
-                            :task/tags [:finance]
+                            :task/tags [(:finance tag-index)]
                             :task/extended? true}
                updated (tasks/update-task! conn task-id update-body actor)
                updated-task (some-> (ensure-success failures "Update task" updated) :task)]
            (when updated-task
              (when-not (= :medium (:task/priority updated-task))
                (fail! failures "Update should change priority" updated-task))
-             (when-not (= #{:finance} (set (:task/tags updated-task)))
+             (when-not (= #{(:finance tag-index)} (set (map :tag/id (:task/tags updated-task))))
                (fail! failures "Update should replace tags" updated-task))
              (when-not (= "Action harness ready" (:task/title updated-task))
                (fail! failures "Update should change title" updated-task))
@@ -160,12 +173,12 @@
                    cleared-task (some-> (ensure-success failures "Clear due date" cleared) :task)]
                (when (and cleared-task (some? (:task/due-date cleared-task)))
                  (fail! failures "Due date should clear when nil provided" cleared-task))))
-           (let [tags (tasks/set-tags! conn task-id {:task/tags [:finance :ops]} actor)
+           (let [tags (tasks/set-tags! conn task-id {:task/tags [(:finance tag-index) tag-ops]} actor)
                  tags-task (some-> (ensure-success failures "Set tags" tags) :task)]
              (when tags-task
-               (when-not (= #{:finance :ops} (set (:task/tags tags-task)))
+               (when-not (= #{(:finance tag-index) tag-ops} (set (map :tag/id (:task/tags tags-task))))
                  (fail! failures "Tags should update fully" tags-task))))
-           (let [invalid-tags (tasks/set-tags! conn task-id {:task/tags [:invalid/tag]} actor)]
+           (let [invalid-tags (tasks/set-tags! conn task-id {:task/tags [(UUID/randomUUID)]} actor)]
              (when-not (and (:error invalid-tags) (= 400 (get-in invalid-tags [:error :status])))
                (fail! failures "Invalid tags should return 400" invalid-tags)))
            (let [archive (tasks/archive-task! conn task-id {:task/archived? true} actor)
@@ -194,8 +207,9 @@
                        (if-let [err (:error state)]
                          (fail! failures "Fixture setup failed" err)
                          (let [auth-state (check-auth failures)]
-                           (check-listing conn failures)
-                           (check-mutations conn failures auth-state)))))]
+                           (let [state' (assoc auth-state :tag-index (tag-index conn))]
+                             (check-listing conn failures (:tag-index state'))
+                             (check-mutations conn failures state'))))))]
         (when (and (map? result) (:error result))
           (fail! failures "Action contract checks failed during setup" (:error result))))
       (catch Exception e

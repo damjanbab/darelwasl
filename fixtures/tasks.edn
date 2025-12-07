@@ -6,7 +6,8 @@
   :task/assignee #uuid "00000000-0000-0000-0000-000000000001"
   :task/due-date #inst "2025-12-12T09:00:00.000Z"
   :task/priority :high
-  :task/tags [:ops :urgent]
+  :task/tags [[:tag/id #uuid "30000000-0000-0000-0000-000000000001"]
+              [:tag/id #uuid "30000000-0000-0000-0000-000000000004"]]
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000002"
@@ -16,7 +17,7 @@
   :task/assignee #uuid "00000000-0000-0000-0000-000000000002"
   :task/due-date #inst "2025-12-14T15:00:00.000Z"
   :task/priority :medium
-  :task/tags [:ops]
+  :task/tags [[:tag/id #uuid "30000000-0000-0000-0000-000000000001"]]
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000003"
@@ -26,7 +27,7 @@
   :task/assignee #uuid "00000000-0000-0000-0000-000000000001"
   :task/due-date #inst "2025-12-05T00:00:00.000Z"
   :task/priority :low
-  :task/tags [:finance]
+  :task/tags [[:tag/id #uuid "30000000-0000-0000-0000-000000000003"]]
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000004"
@@ -35,7 +36,7 @@
   :task/status :todo
   :task/assignee #uuid "00000000-0000-0000-0000-000000000002"
   :task/priority :medium
-  :task/tags [:home]
+  :task/tags [[:tag/id #uuid "30000000-0000-0000-0000-000000000002"]]
   :task/archived? true
   :task/extended? true}
 ]

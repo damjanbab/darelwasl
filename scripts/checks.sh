@@ -118,11 +118,13 @@ check_edn_parse() {
                       (str root "/registries/tooling.edn")
                       (str root "/registries/theme.edn")]
       fixture-paths {:users (str root "/fixtures/users.edn")
-                     :tasks (str root "/fixtures/tasks.edn")}
+                     :tasks (str root "/fixtures/tasks.edn")
+                     :tags (str root "/fixtures/tags.edn")}
       _ (doseq [f registry-paths] (read-edn! f))
       fixtures (into {} (for [[k path] fixture-paths] [k (read-edn! path)]))
       users (:users fixtures)
       tasks (:tasks fixtures)
+      tags (:tags fixtures)
       required-user-keys #{:user/id :user/username :user/name :user/password}
       missing-keys (seq (for [u users
                               :let [missing (set/difference required-user-keys (set (keys u)))]
@@ -147,11 +149,43 @@ check_edn_parse() {
                                          (str/blank? pwd))]
                           {:user/username uname :reason "Invalid id/username/password"}))
       user-id-set (set user-ids)
+      required-tag-keys #{:tag/id :tag/name}
+      tag-missing (seq (for [t tags
+                             :let [missing (set/difference required-tag-keys (set (keys t)))]
+                             :when (seq missing)]
+                        {:tag t :missing missing}))
+      tag-ids (map :tag/id tags)
+      duplicate-tag-ids (seq (for [[id freq] (frequencies tag-ids)
+                                   :when (> freq 1)]
+                               id))
+      invalid-tags (seq (for [t tags
+                              :let [tid (:tag/id t)
+                                    name (:tag/name t)]
+                              :when (or (not (instance? java.util.UUID tid))
+                                        (not (string? name))
+                                        (str/blank? name))]
+                         {:tag/id tid :reason "Invalid id/name"}))
+      tag-id-set (set tag-ids)
       missing-assignees (seq (for [t tasks
                                    :let [assignee (:task/assignee t)]
                                    :when (not (contains? user-id-set assignee))]
                                {:task/id (:task/id t)
-                                :task/assignee assignee}))]
+                                :task/assignee assignee}))
+      task-tag-errors (seq
+                       (for [t tasks
+                             tag (:task/tags t)
+                             :let [tid (cond
+                                         (and (vector? tag) (= (first tag) :tag/id)) (second tag)
+                                         (map? tag) (:tag/id tag)
+                                         :else tag)
+                                   valid? (instance? java.util.UUID tid)]
+                             :when (or (not valid?)
+                                       (not (contains? tag-id-set tid)))]
+                         {:task/id (:task/id t)
+                         :tag tid
+                          :reason (if (not valid?)
+                                    "Tag is not a UUID"
+                                    "Tag not present in fixtures/tags.edn")}))]
   (when missing-keys
     (doseq [m missing-keys]
       (println "User fixture missing keys" m))
@@ -166,10 +200,26 @@ check_edn_parse() {
     (doseq [u invalid-users]
       (println "Invalid user fixture" u))
     (System/exit 1))
+  (when tag-missing
+    (doseq [m tag-missing]
+      (println "Tag fixture missing keys" m))
+    (System/exit 1))
+  (when duplicate-tag-ids
+    (println "Duplicate tag IDs in fixtures:" duplicate-tag-ids)
+    (System/exit 1))
+  (when invalid-tags
+    (doseq [t invalid-tags]
+      (println "Invalid tag fixture" t))
+    (System/exit 1))
   (when missing-assignees
     (println "Task assignees missing in user fixtures:" missing-assignees)
     (System/exit 1))
-  (println "User fixtures validated (count" (count users) ") and referenced by tasks."))
+  (when task-tag-errors
+    (doseq [err task-tag-errors]
+      (println "Task tag reference invalid" err))
+    (System/exit 1))
+  (println "User fixtures validated (count" (count users) ") and referenced by tasks.")
+  (println "Tag fixtures validated (count" (count tags) ") and referenced by tasks."))
 CLJ
 }
 

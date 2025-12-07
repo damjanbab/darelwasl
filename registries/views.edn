@@ -14,8 +14,8 @@
   :related {:schema [:cap/schema/user]}}
 
  {:id :cap/view/tasks
-  :title "Task List + Detail"
-  :version "v1"
+ :title "Task List + Detail"
+ :version "v1"
   :data {:source :cap/schema/task
          :pull [:task/id :task/title :task/description :task/status :task/assignee :task/due-date :task/priority :task/tags :task/archived?]}
   :actions [:cap/action/task-create
@@ -24,13 +24,18 @@
             :cap/action/task-assign
             :cap/action/task-set-due
             :cap/action/task-set-tags
-            :cap/action/task-archive]
+            :cap/action/task-archive
+            :cap/action/tag-create
+            :cap/action/tag-update
+            :cap/action/tag-delete]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 250}
        :state-model :finite
-       :layout {:desktop "list + side panel" :mobile "stacked with sheet"}}
+       :layout {:desktop "list + side panel" :mobile "stacked with sheet"}
+       :theme [:theme/default :theme/dark]
+       :toggles [:light-dark-switch]}
   :compatibility {:backward true
                   :forward true
                   :flags [:task/extended?]}
-  :related {:schema [:cap/schema/task :cap/schema/user]}}
+  :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
 ]

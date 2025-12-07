@@ -120,31 +120,32 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by an in-memory store; server restarts clear sessions.
 - Task API (requires session cookie from `/api/login`):
   - GET `/api/tasks` supports filters `status`, `priority`, `tag`, `assignee`, `archived` (defaults to active tasks; use `archived=all` to include archived) and sort/order (`updated` default desc, `due` default asc, `priority` default desc).
-  - POST `/api/tasks` creates a task with title/description/status/assignee/priority/tags (set) plus optional `task/due-date` (ISO-8601) and `task/archived?`/`task/extended?` booleans; values are validated against registry enums and assignees must exist.
+  - POST `/api/tasks` creates a task with title/description/status/assignee/priority plus optional `task/due-date` (ISO-8601), `task/archived?`/`task/extended?` booleans, and `task/tags` as a set of `:tag/id` UUIDs; values are validated against enums/refs and assignees must exist.
   - PUT `/api/tasks/:id` updates title/description/priority/tags/extended?; POST helpers: `/api/tasks/:id/status`, `/assignee`, `/due-date` (null clears), `/tags` (replaces set), `/archive` (toggle archived flag).
+  - Tag API (requires session): GET `/api/tags` lists tag entities (id + name sorted by name), POST `/api/tags` creates, PUT `/api/tags/:id` renames, DELETE `/api/tags/:id` removes and detaches from tasks; duplicate names return 409.
   - Example (seed dev DB first):
     ```
     clojure -M:seed
     curl -c /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"user/username":"huda","user/password":"Damjan1!"}' http://localhost:3000/api/login
     curl -b /tmp/dw-cookies.txt "http://localhost:3000/api/tasks?status=todo&sort=due&order=asc"
-    curl -b /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"task/title":"Draft API doc","task/description":"Check filters","task/status":"todo","task/assignee":"00000000-0000-0000-0000-000000000001","task/priority":"high","task/tags":["ops"]}' http://localhost:3000/api/tasks
+    curl -b /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"task/title":"Draft API doc","task/description":"Check filters","task/status":"todo","task/assignee":"00000000-0000-0000-0000-000000000001","task/priority":"high","task/tags":["30000000-0000-0000-0000-000000000001"]}' http://localhost:3000/api/tasks
     ```
 
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
-- Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (enum set), archived flag, feature flag `:task/extended?` (default false) for future fields.
-- Actions: create/edit task; change status; assign/reassign; set/clear due date; add/remove tags; archive/unarchive; login (auth action).
-- Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view.
+- Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (set of tag entities via `:tag/id`), archived flag, feature flag `:task/extended?` (default false) for future fields.
+- Actions: create/edit task; change status; assign/reassign; set/clear due date; add/remove/rename/delete tags; archive/unarchive; login (auth action).
+- Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
-- Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, tag, archive, filter/sort; UI shows states correctly; theme applied; headless smoke passes.
+- Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
 
 ## Design Spec & Theming
 - Vibe: calm, professional; warm neutrals with teal accent.
 - Layout: desktop-first; list on left, detail side panel on right; mobile: stacked with slide-up detail.
 - Typography: clean sans (Inter/IBM Plex Sans), hierarchy for title/section/body/meta.
 - Components: buttons (primary/secondary/ghost), inputs/textarea/select, tag chips, status/priority badges, cards for list rows, empty/error states.
-- Theming: tokens stored in `registries/theme.edn`; generate CSS vars; components must consume tokens/vars only (no hardcoded colors/spacing/fonts). Use radius/shadow/motion tokens for consistency.
-- Login: dedicated screen before tasks; uses same theme/tokens; shows error states clearly; supports shared password flow.
+- Theming: tokens stored in `registries/theme.edn`; generate CSS vars; components must consume tokens/vars only (no hardcoded colors/spacing/fonts). Use radius/shadow/motion tokens for consistency. Light (`:theme/default`) and dark (`:theme/dark`) palettes ship together; UI exposes a sun/moon toggle.
+- Login: dedicated screen before tasks; uses same theme/tokens; shows error states clearly; supports shared password flow; minimal hero copy.
 - Theme tokens: default `:theme/default` uses background `#F7F4EF`, surface `#FFFFFF`, muted surface `#F0ECE6`, text `#1F2933/#52606D`, accent `#0FA3B1` with strong `#0B7E89`, focus color matches accent, warning/danger/success use `#F59E0B/#D14343/#2D9D78`. Typography uses `Inter, "IBM Plex Sans", system-ui, -apple-system, sans-serif` with sizes 20/16/14/12px and matching line heights 28/22/20/16px. Spacing base 4px with 4–32px scale, radius 4/8/12px, card shadow `0 6px 20px rgba(0,0,0,0.06)`, motion transition `150ms ease`.
 - Theme CSS vars: `npm run theme:css-vars` writes `public/css/theme.css` from `registries/theme.edn` (defaults to `:theme/default`) and runs automatically before `npm run dev/build/check`; `public/index.html` loads it ahead of `public/css/main.css`, which uses only generated tokens (no hardcoded fallbacks).
 
@@ -157,7 +158,8 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Process: when a change affects composability rules, update this section and the relevant registry entries in the same run; tasks must declare their composability impact.
 ## Fixtures and Test Data
 - :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
-- :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tags (`:ops`, `:home`, `:finance`, `:urgent`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
+- :fixtures/tags (`fixtures/tags.edn`): tag entities with fixed IDs and names (`Ops`, `Home`, `Finance`, `Urgent`) used by tasks and exposed via `/api/tags`.
+- :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tag references (lookup refs to `:tag/id`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
 - Loader tooling: `darelwasl.fixtures/seed-dev!` and CLI `clojure -M:seed [--temp]` load schema + fixtures (users first, then tasks with lookup refs). Use `darelwasl.fixtures/temp-db-with-fixtures!` or `with-temp-fixtures` to spin disposable DBs for checks.
 - Determinism: fixture UUIDs and timestamps are fixed; loaders insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
 

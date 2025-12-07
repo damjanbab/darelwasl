@@ -23,13 +23,13 @@
  {:id :cap/action/task-create
   :title "Create Task"
   :version "v1"
-  :inputs {:task/title :string
+ :inputs {:task/title :string
            :task/description :string
            :task/status :keyword
            :task/assignee :uuid
            :task/due-date :instant?
            :task/priority :keyword
-           :task/tags :keyword-set}
+           :task/tags :uuid-set}
   :outputs {:task/id :uuid}
   :side-effects ["Persist task"]
   :adapter {:integration :local/db}
@@ -48,11 +48,11 @@
  {:id :cap/action/task-update
   :title "Update Task"
   :version "v1"
-  :inputs {:task/id :uuid
+ :inputs {:task/id :uuid
            :task/title :string?
            :task/description :string?
            :task/priority :keyword?
-           :task/tags :keyword-set?}
+           :task/tags :uuid-set?}
   :outputs {:task/id :uuid}
   :side-effects ["Persist changes"]
   :adapter {:integration :local/db}
@@ -134,10 +134,10 @@
  {:id :cap/action/task-set-tags
   :title "Set Task Tags"
   :version "v1"
-  :inputs {:task/id :uuid
-           :task/tags :keyword-set}
-  :outputs {:task/id :uuid
-            :task/tags :keyword-set}
+ :inputs {:task/id :uuid
+           :task/tags :uuid-set}
+ :outputs {:task/id :uuid
+            :task/tags :uuid-set}
   :side-effects ["Persist tags"]
   :adapter {:integration :local/db}
   :audit {:records [:task/change]
@@ -166,10 +166,66 @@
   :idempotency {:strategy :dedupe-on
                 :keys [:task/id :task/archived?]}
   :contracts {:fixtures [:fixtures/tasks]}
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/task]
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/tag-create
+  :title "Create Tag"
+  :version "v1"
+  :inputs {:tag/name :string}
+  :outputs {:tag/id :uuid}
+  :side-effects ["Persist tag"]
+  :adapter {:integration :local/db}
+  :audit {:records [:tag/change]
+          :fields [:tag/id :tag/name]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:tag/name]}
+  :contracts {:fixtures [:fixtures/tags]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/tag]
+            :views [:cap/view/tasks]}}
+
+ {:id :cap/action/tag-update
+  :title "Rename Tag"
+  :version "v1"
+  :inputs {:tag/id :uuid
+           :tag/name :string}
+  :outputs {:tag/id :uuid
+            :tag/name :string}
+  :side-effects ["Persist tag name change"]
+  :adapter {:integration :local/db}
+  :audit {:records [:tag/change]
+          :fields [:tag/id :tag/name]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:tag/id]}
+  :contracts {:fixtures [:fixtures/tags]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/tag]
+            :views [:cap/view/tasks]}}
+
+ {:id :cap/action/tag-delete
+  :title "Delete Tag"
+  :version "v1"
+  :inputs {:tag/id :uuid}
+  :outputs {:tag/id :uuid}
+  :side-effects ["Remove tag from tasks and delete entity"]
+  :adapter {:integration :local/db}
+  :audit {:records [:tag/change]
+          :fields [:tag/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:tag/id]}
+  :contracts {:fixtures [:fixtures/tags]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/tag]
+            :views [:cap/view/tasks]}}
 ]

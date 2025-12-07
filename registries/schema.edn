@@ -1,5 +1,5 @@
 [
- {:id :cap/schema/user
+{:id :cap/schema/user
   :title "User"
   :version "v1"
   :attributes
@@ -29,6 +29,29 @@
                   :flags []}
   :related {:actions [:cap/action/auth-login]
             :views [:cap/view/login]}}
+
+ {:id :cap/schema/tag
+  :title "Tag"
+  :version "v1"
+  :attributes
+  [{:ident :tag/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Tag identity"}
+   {:ident :tag/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Tag display name"}]
+  :enums []
+  :invariants ["Tag names unique (case-insensitive)"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:actions [:cap/action/tag-create :cap/action/tag-update :cap/action/tag-delete]
+            :views [:cap/view/tasks]}}
 
  {:id :cap/schema/task
   :title "Task"
@@ -64,9 +87,9 @@
     :cardinality :db.cardinality/one
     :doc "Priority enum"}
    {:ident :task/tags
-    :type :db.type/keyword
+    :type :db.type/ref
     :cardinality :db.cardinality/many
-    :doc "Tag enums"}
+    :doc "Tags (refs to :tag/id)"}
    {:ident :task/archived?
     :type :db.type/boolean
     :cardinality :db.cardinality/one
@@ -76,9 +99,8 @@
     :cardinality :db.cardinality/one
     :doc "Feature flag gating future fields"}]
   :enums {:task/status [:todo :in-progress :done]
-          :task/priority [:low :medium :high]
-          :task/tags [:ops :home :finance :urgent]}
-  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags in enum set"]
+          :task/priority [:low :medium :high]}
+  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true

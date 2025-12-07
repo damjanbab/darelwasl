@@ -466,7 +466,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize doc updates and command verification.
 
 - Task ID: ui-polish-auth-tags
-  - Status: in-progress (Codex, 2025-12-07 07:00 UTC)
+  - Status: done (Codex, 2025-12-07 04:47 UTC)
   - Objective: Redesign the auth screen into a clean, centered login card with no fixture hints; modernize the task workspace layout (filters/list/detail) inspired by Linear/Things3; add intuitive tag CRUD persisted in Datomic and managed inline; introduce a bottom-left sun/moon toggle for light/dark themes.
   - Scope: remove the current hero/steps from login, drop hardcoded username/password hints and out-of-place badges; deliver a professional, focused login UI; tighten workspace spacing and align filters/header/list/detail to a modern task-manager layout; enable creating/renaming/deleting tags inline (typeahead/new-chip UX) and use them in filters and task detail; migrate tags to real Datomic entities; add a bottom-left theme toggle (sun/moon) that switches light/dark modes.
   - Out of Scope: bulk task features, auth logic changes beyond UI, multi-tenant/user management flows.
