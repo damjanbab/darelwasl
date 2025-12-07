@@ -334,11 +334,32 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: Summarize smoke coverage, commands wired, proofs/results.
 
 - Task ID: checks-update-script
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-07 01:18 UTC)
   - Objective: Update scripts/checks.sh to include real commands for schema, actions, app-smoke; ensure `scripts/checks.sh all` runs everything.
   - Scope: wire commands from the above tasks; ensure exits non-zero on failure.
-  - Acceptance: `scripts/checks.sh all` passes locally.
+  - Out of Scope: changing underlying check implementations or contracts beyond invoking them; adding new capabilities.
+  - Capabilities Touched: [:cap/tooling/edn-validate :cap/tooling/schema-load :cap/tooling/action-contract :cap/tooling/app-smoke]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/edn-validate :cap/tooling/schema-load :cap/tooling/action-contract :cap/tooling/app-smoke]
+    - Shared/Read-only Capabilities: registries (read), fixtures (read)
+    - Sequencing Constraints: after checks-schema-load, checks-action-contract, checks-app-smoke; precedes any CI wiring follow-ups.
+  - Composability Impact:
+    - Layers Affected: tooling/checks entrypoint
+    - Patterns/Registries Reused or Extended: shared scripts/checks.sh entrypoint orchestrating registered checks; no new adapters.
+    - New Composability Rule Needed: none
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: make `scripts/checks.sh all` run the real schema/action/app-smoke checks to enforce full proof coverage.
+    - Compatibility expectation: backward/forward compatible; no flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
   - Dependencies: checks-schema-load, checks-action-contract, checks-app-smoke
+  - Deliverables: updated scripts/checks.sh with working targets for schema/actions/app-smoke and all aggregate.
+  - Proof Plan: `scripts/checks.sh all`.
+  - Fixtures/Data Assumptions: uses existing fixtures (users/tasks) via underlying checks.
+  - Protocol/System Updates: none expected.
+  - FAQ Updates: none expected.
+  - Tooling/Automation: reuse scripts/checks.sh; no new scripts beyond entrypoint updates.
+  - Reporting: summarize entrypoint changes and proof results.
 
 # Fixtures
 
