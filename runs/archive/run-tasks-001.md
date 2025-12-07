@@ -265,7 +265,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize detail UX/flows, capabilities touched, proofs run/results.
 
 - Task ID: bugfix-task-persistence
-  - Status: in-progress (Codex, 2025-12-07 01:43 UTC)
+  - Status: done (Codex, 2025-12-07 17:03 UTC)
   - Objective: Fix task loading and saving flows in the UI so tasks fetch and persist correctly after login.
   - Scope: investigate/fix frontend data fetch + save wiring for tasks (list/detail/create/update/archive); ensure navigation flows are reachable; expand smoke coverage to include full navigation and task interactions as needed.
   - Out of Scope: new features, theme/design changes, new filters/sorts beyond existing spec.
@@ -438,7 +438,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: summarize prompt change
 
 - Task ID: docs-commands
-  - Status: pending
+  - Status: done (Codex, 2025-12-07 17:10 UTC)
   - Objective: Update docs/system.md and docs/faq.md with start/run/test commands, acceptance summaries, and any gotchas; ensure registries match code.
   - Scope: backend start, fixture seed, frontend dev/build, checks commands, acceptance per task (brief).
   - Out of Scope: Changing runtime defaults or adding new features/flags; code edits beyond doc/registry sync.
