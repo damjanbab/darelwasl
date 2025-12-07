@@ -125,7 +125,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Reporting: summarize script/unit, commands to deploy/restart, and verification output.
 
 - Task ID: ci-cd-hetzner
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-07 23:18 UTC)
   - Objective: Wire push-to-main auto-deploy via CI (GitHub Actions or equivalent) that SSHes into Hetzner and runs `deploy.sh` with secrets handled safely.
   - Scope: create workflow file triggered on main pushes; use repo-origin HTTPS and askpass/token rules; configure SSH key/secrets; call deploy script, capture logs; optional concurrency guard; document secret setup.
   - Out of Scope: changing app code, modifying deploy.sh/systemd, setting up DNS/SSL.
