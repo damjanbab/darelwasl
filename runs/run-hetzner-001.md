@@ -97,7 +97,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Reporting: list installed versions and env file location.
 
 - Task ID: deploy-script-systemd
-  - Status: in-progress (Codex, 2025-12-07 22:20 UTC)
+  - Status: done (Codex, 2025-12-07 23:13 UTC)
   - Objective: Add a deployment script and systemd unit to run the app as a service on Hetzner with logs via journalctl.
   - Scope: create `deploy.sh` (git fetch/checkout main, npm install, npm run build, clj build/start or uberjar as chosen, restart service); add systemd unit running under app user with environment file; define working directory, ExecStart/ExecReload, Restart=on-failure, log guidance; ensure theme/css vars and checks invoked as needed.
   - Out of Scope: CI trigger, proxy/SSL setup, code changes beyond scripts/units, database migrations beyond existing schema load.
