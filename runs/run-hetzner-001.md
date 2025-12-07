@@ -1,0 +1,177 @@
+# Run run-hetzner-001
+
+Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no live sync), service managed via systemd, and documented ops smokes.
+
+## Tasks
+
+- Task ID: deploy-plan-hetzner
+  - Status: pending
+  - Objective: Capture deployment topology and requirements (domain/ports, env vars, branches, storage paths, service user, logs) for Hetzner.
+  - Scope: Confirm hostnames/domains, APP_HOST/APP_PORT and proxy expectations, Datomic storage location, service user/group, repo path, log retention/rotation, secrets handling, allowed inbound ports (app/proxy/ssh).
+  - Out of Scope: Writing automation, server changes, CI wiring, code edits.
+  - Capabilities Touched: [:cap/tooling/deploy-plan-hetzner]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/deploy-plan-hetzner]
+    - Shared/Read-only Capabilities: []
+    - Sequencing Constraints: precedes server-prep-hetzner, runtime-deps-hetzner, deploy-script-systemd, ci-cd-hetzner, ops-docs-hetzner
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: ops planning aligned to existing runtime/config defaults; no code.
+    - New composability rules needed: none (decisions only)
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add Hetzner deployment requirements so automation matches desired topology.
+    - Compatibility expectation (backward/forward/none): backward compatible (no runtime change yet)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none
+  - Dependencies: none
+  - Deliverables: documented deployment decisions (env vars, ports, domain, repo path, user, log policy) recorded in this run + docs/system.md.
+  - Proof Plan: review/ack with user; no automated check.
+  - Fixtures/Data Assumptions: reuse existing fixtures; no data change.
+  - Protocol/System Updates: update docs/system.md deployment/runtime notes if clarified.
+  - FAQ Updates: add deploy gotchas if found.
+  - Tooling/Automation: none.
+  - Reporting: summarize decisions and confirm downstream task readiness.
+
+- Task ID: server-prep-hetzner
+  - Status: pending
+  - Objective: Prepare Hetzner host with non-root app user, SSH access, firewall, repo checkout, and directories for app + Datomic storage.
+  - Scope: Create app user/group, set up SSH key-based auth, configure UFW/iptables for SSH + app/proxy ports, create data directories (app checkout, logs, Datomic storage), clone repo via HTTPS, set permissions/ownership.
+  - Out of Scope: installing runtime toolchains, systemd unit, deploy script, CI wiring.
+  - Capabilities Touched: [:cap/tooling/server-prep-hetzner]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/server-prep-hetzner]
+    - Shared/Read-only Capabilities: [:cap/tooling/deploy-plan-hetzner]
+    - Sequencing Constraints: after deploy-plan-hetzner; before runtime-deps-hetzner and deploy-script-systemd
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: infrastructure baseline; aligns with repo origin HTTPS and token loader guidance.
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: provision host so deployments can run under least-privileged user.
+    - Compatibility expectation: backward compatible (no app behavior change).
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
+  - Dependencies: deploy-plan-hetzner
+  - Deliverables: app user + SSH access configured, firewall rules applied, repo cloned to target path, data/log directories created with correct ownership.
+  - Proof Plan: manual SSH check, listing paths/permissions; optional `systemctl status` not yet applicable.
+  - Fixtures/Data Assumptions: none beyond existing repo contents.
+  - Protocol/System Updates: note host prep commands/paths in docs/system.md if needed.
+  - FAQ Updates: add host access quirks if any.
+  - Tooling/Automation: optional helper scripts to create dirs/permissions if warranted.
+  - Reporting: record host prep steps and verification.
+
+- Task ID: runtime-deps-hetzner
+  - Status: pending
+  - Objective: Install and pin required runtime/build deps on the Hetzner host (JDK, node/npm, Playwright/Chromium deps, git) and configure env files.
+  - Scope: Install OpenJDK (matching dev baseline), Node/npm versions, build-essential, git, Playwright/Chromium system deps; set up env file with APP_HOST/APP_PORT/DATOMIC_STORAGE_DIR, NODE_ENV, JVM opts; ensure npm cache dirs writable; verify `npm run build` and `clojure -M:dev` prerequisites.
+  - Out of Scope: deployment scripting, systemd service, CI wiring, schema/data changes.
+  - Capabilities Touched: [:cap/tooling/runtime-deps-hetzner]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/runtime-deps-hetzner]
+    - Shared/Read-only Capabilities: [:cap/tooling/server-prep-hetzner]
+    - Sequencing Constraints: after server-prep-hetzner; before deploy-script-systemd and ci-cd-hetzner
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: tooling/runtime alignment with existing commands (`npm run build`, `scripts/checks.sh`).
+    - New composability rules needed: none.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: ensure host has matching toolchain so builds and checks succeed remotely.
+    - Compatibility expectation: backward compatible; uses existing versions.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
+  - Dependencies: server-prep-hetzner
+  - Deliverables: installed deps verified on host; env file template filled (without secrets); note version pins.
+  - Proof Plan: run `java -version`, `node -v`, `npm -v`, optional `npm run check` in dry-run, confirm Playwright deps installed.
+  - Fixtures/Data Assumptions: none (uses existing fixtures when running app).
+  - Protocol/System Updates: document required versions/commands in docs/system.md.
+  - FAQ Updates: note any host-specific install quirks.
+  - Tooling/Automation: optional setup script for dependency install.
+  - Reporting: list installed versions and env file location.
+
+- Task ID: deploy-script-systemd
+  - Status: pending
+  - Objective: Add a deployment script and systemd unit to run the app as a service on Hetzner with logs via journalctl.
+  - Scope: create `deploy.sh` (git fetch/checkout main, npm install, npm run build, clj build/start or uberjar as chosen, restart service); add systemd unit running under app user with environment file; define working directory, ExecStart/ExecReload, Restart=on-failure, log guidance; ensure theme/css vars and checks invoked as needed.
+  - Out of Scope: CI trigger, proxy/SSL setup, code changes beyond scripts/units, database migrations beyond existing schema load.
+  - Capabilities Touched: [:cap/tooling/deploy-script :cap/tooling/systemd-service]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/deploy-script :cap/tooling/systemd-service]
+    - Shared/Read-only Capabilities: [:cap/tooling/runtime-deps-hetzner]
+    - Sequencing Constraints: after runtime-deps-hetzner; before ci-cd-hetzner and ops-docs-hetzner
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shared scripts entrypoint; aligns with existing build/start commands; logs via journalctl.
+    - New composability rules needed: none.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enable repeatable deployment and managed service on Hetzner.
+    - Compatibility expectation: backward compatible; deploy script respects registry-driven build steps.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none (additive).
+  - Dependencies: runtime-deps-hetzner
+  - Deliverables: `deploy.sh` in repo, systemd unit file/template, instructions to enable/start service, journalctl log guidance.
+  - Proof Plan: run deploy script on host (dry-run if needed), `systemctl status` shows active service, `curl /health` returns OK.
+  - Fixtures/Data Assumptions: uses existing fixtures when app runs.
+  - Protocol/System Updates: update docs/system.md with deploy + service commands; register new tooling capabilities.
+  - FAQ Updates: add notes on service/logging quirks if any.
+  - Tooling/Automation: deploy script + systemd unit; optional logrotate if needed.
+  - Reporting: summarize script/unit, commands to deploy/restart, and verification output.
+
+- Task ID: ci-cd-hetzner
+  - Status: pending
+  - Objective: Wire push-to-main auto-deploy via CI (GitHub Actions or equivalent) that SSHes into Hetzner and runs `deploy.sh` with secrets handled safely.
+  - Scope: create workflow file triggered on main pushes; use repo-origin HTTPS and askpass/token rules; configure SSH key/secrets; call deploy script, capture logs; optional concurrency guard; document secret setup.
+  - Out of Scope: changing app code, modifying deploy.sh/systemd, setting up DNS/SSL.
+  - Capabilities Touched: [:cap/tooling/ci-cd-hetzner]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/ci-cd-hetzner]
+    - Shared/Read-only Capabilities: [:cap/tooling/deploy-script :cap/tooling/systemd-service]
+    - Sequencing Constraints: after deploy-script-systemd
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: CI pipeline invoking shared deploy script; respects token loader guidance.
+    - New composability rules needed: none.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: automate deployment on main pushes.
+    - Compatibility expectation: backward/forward compatible with existing dev flow.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
+  - Dependencies: deploy-script-systemd
+  - Deliverables: workflow YAML, secret names/placement documented, dry-run/first-run notes.
+  - Proof Plan: trigger workflow on test branch or manual dispatch hitting staging host; verify deploy script runs successfully.
+  - Fixtures/Data Assumptions: none.
+  - Protocol/System Updates: record workflow commands/entrypoints in docs/system.md.
+  - FAQ Updates: add CI/SSH quirks if any.
+  - Tooling/Automation: CI workflow; optional helper for askpass if needed.
+  - Reporting: include workflow summary, secret requirements, and test execution notes.
+
+- Task ID: ops-docs-hetzner
+  - Status: pending
+  - Objective: Document Hetzner deploy/run/rollback commands and add a simple remote smoke (health/deploy check) script.
+  - Scope: update docs/system.md and docs/faq.md with deploy steps, service commands, env file locations, health/rollback instructions; add helper script for remote health/deploy smoke (e.g., curl /health, systemctl status); ensure registries capture new tooling capabilities.
+  - Out of Scope: core app code changes, frontend/backend features, CI logic beyond documentation.
+  - Capabilities Touched: [:cap/tooling/deploy-script :cap/tooling/systemd-service :cap/tooling/ci-cd-hetzner :cap/tooling/app-smoke]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/tooling/app-smoke] (doc + helper script scope)
+    - Shared/Read-only Capabilities: [:cap/tooling/deploy-script :cap/tooling/systemd-service :cap/tooling/ci-cd-hetzner]
+    - Sequencing Constraints: after deploy-script-systemd and ci-cd-hetzner
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: documentation and smoke tooling leveraging existing checks harness patterns.
+    - New composability rules needed: none; ensure new tooling registered.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: provide ops guide and quick smoke to keep deployment reliable.
+    - Compatibility expectation: backward compatible.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
+  - Dependencies: deploy-script-systemd, ci-cd-hetzner
+  - Deliverables: updated docs/system.md + docs/faq.md, helper smoke script, registry updates for new tooling capabilities.
+  - Proof Plan: run smoke script against Hetzner host (health + service status).
+  - Fixtures/Data Assumptions: uses seeded data when app runs; none for docs.
+  - Protocol/System Updates: ensure protocol references (token loader/HTTPS origin) remain consistent if mentioned.
+  - FAQ Updates: capture deploy/host quirks.
+  - Tooling/Automation: add smoke script leveraging existing checks pattern.
+  - Reporting: summarize docs and smoke tool, provide commands to verify.
+
+## Notes
+- Coordinate with user for domain/port/env decisions during deploy-plan-hetzner before automating.
+- Register new tooling capabilities in registries once implemented to satisfy system invariants.
