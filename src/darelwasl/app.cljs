@@ -149,6 +149,23 @@
       (:id (first assignees))
       (:id (first fallback-assignees))))
 
+(defn- kw
+  [v]
+  (cond
+    (keyword? v) v
+    (string? v) (keyword v)
+    :else v))
+
+(defn- normalize-task
+  "Coerce API payload fields into keywords/sets/booleans for UI consumption."
+  [task]
+  (-> task
+      (update :task/status kw)
+      (update :task/priority kw)
+      (update :task/tags (fn [ts] (vec (set (map kw ts)))))
+      (update :task/archived? boolean)
+      (update :task/extended? boolean)))
+
 (defn- task->form
   [task]
   (merge default-task-form
@@ -362,7 +379,7 @@
 (rf/reg-event-db
  ::fetch-success
  (fn [db [_ payload]]
-   (let [tasks (vec (:tasks payload))
+   (let [tasks (mapv normalize-task (:tasks payload))
          selected (when (seq tasks)
                     (let [current (get-in db [:tasks :selected])]
                       (if (some #(= (:task/id %) current) tasks)
@@ -388,7 +405,7 @@
                        selected-task (detail-from-task selected-task)
                        :else (blank-detail assignees (:session db)))))
           (assoc-in [:tasks :status] (if (seq tasks) :ready :empty))
-          (assoc-in [:tasks :error] nil)))))
+         (assoc-in [:tasks :error] nil)))))
 
 (rf/reg-event-db
  ::fetch-failure
@@ -591,7 +608,7 @@
 (rf/reg-event-fx
  ::op-success
  (fn [{:keys [db]} [_ remaining context payload]]
-   (let [task (:task payload)
+   (let [task (some-> (:task payload) normalize-task)
          next-op (first remaining)
          rest-ops (vec (rest remaining))
          updated-db (cond-> db
