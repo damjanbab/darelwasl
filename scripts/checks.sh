@@ -7,9 +7,14 @@ DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/checks.sh [all|registries|schema|actions|views|app-smoke|action-contracts]
+Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts]
 
-View registry integrity remains a stub; other entries run real checks.
+Commands:
+  registries       Registry presence + field checks + EDN/fixture parse
+  schema           Registries + schema load into temp Datomic
+  actions          Registries + schema + action contract harness
+  app-smoke|views  Full stack smoke: registries + schema + actions + headless UI flow
+  all              Runs registries, schema, actions, and app smoke
 EOF
 }
 
@@ -257,24 +262,18 @@ check_app_smoke() {
   trap - EXIT
 }
 
-stub() {
-  echo "TODO: implement $1"
-}
-
 target="${1:-all}"
 case "$target" in
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
-  views) check_registries; check_registry_fields; check_edn_parse; stub "view registry integrity checks" ;;
-  app-smoke) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions; check_app_smoke ;;
+  app-smoke|views) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions; check_app_smoke ;;
   all)
     check_registries
     check_registry_fields
     check_edn_parse
     check_schema_load
     check_actions
-    stub "view registry integrity checks"
     check_app_smoke
     ;;
   *)

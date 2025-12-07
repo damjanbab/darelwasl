@@ -334,7 +334,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Reporting: Summarize smoke coverage, commands wired, proofs/results.
 
 - Task ID: checks-update-script
-  - Status: in-progress (Codex, 2025-12-07 01:18 UTC)
+  - Status: done (Codex, 2025-12-07 01:25 UTC)
   - Objective: Update scripts/checks.sh to include real commands for schema, actions, app-smoke; ensure `scripts/checks.sh all` runs everything.
   - Scope: wire commands from the above tasks; ensure exits non-zero on failure.
   - Out of Scope: changing underlying check implementations or contracts beyond invoking them; adding new capabilities.
