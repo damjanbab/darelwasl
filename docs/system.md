@@ -135,6 +135,14 @@ Maintain stable IDs; reference them in tasks/PRs.
     curl -b /tmp/dw-cookies.txt -H "Content-Type: application/json" -d '{"task/title":"Draft API doc","task/description":"Check filters","task/status":"todo","task/assignee":"00000000-0000-0000-0000-000000000001","task/priority":"high","task/tags":["30000000-0000-0000-0000-000000000001"]}' http://localhost:3000/api/tasks
     ```
 
+## Deployment (Hetzner plan)
+- Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); no domain/proxy yet—serve on the raw IP for now.
+- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env file at `/etc/darelwasl/app.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
+- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; reserve 80/443 for a future reverse proxy/SSL front.
+- Ports/firewall: allow inbound 22 (SSH) and 3000 (app); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
+- Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
+- SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
+
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
 - Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (set of tag entities via `:tag/id`), archived flag, feature flag `:task/extended?` (default false) for future fields.

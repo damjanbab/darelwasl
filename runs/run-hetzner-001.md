@@ -5,7 +5,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
 ## Tasks
 
 - Task ID: deploy-plan-hetzner
-  - Status: pending
+  - Status: done (Codex, 2025-12-07 17:26 UTC)
   - Objective: Capture deployment topology and requirements (domain/ports, env vars, branches, storage paths, service user, logs) for Hetzner.
   - Scope: Confirm hostnames/domains, APP_HOST/APP_PORT and proxy expectations, Datomic storage location, service user/group, repo path, log retention/rotation, secrets handling, allowed inbound ports (app/proxy/ssh).
   - Out of Scope: Writing automation, server changes, CI wiring, code edits.
@@ -25,6 +25,14 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
     - Breaking change? Deprecation plan/timeline/mitigations: none
   - Dependencies: none
   - Deliverables: documented deployment decisions (env vars, ports, domain, repo path, user, log policy) recorded in this run + docs/system.md.
+  - Decisions:
+    - Host: Debian CPX22 at 77.42.30.144 (IPv6 /64 available), no domain/proxy yet; serve app on raw IP.
+    - Service user: `darelwasl`; repo path `/opt/darelwasl`; env file `/etc/darelwasl/app.env` (root-readable, owned by app user).
+    - App bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; future proxy can front on 80/443.
+    - Datomic storage: `/var/lib/darelwasl/datomic`; ensure directory owned by app user.
+    - Ports to allow: inbound 22 (SSH) and 3000 (app); keep 80/443 reserved for future proxy; outbound SMTP 25/465 blocked by provider (irrelevant).
+    - Logging: systemd journal (no separate files); optional logrotate not needed initially.
+    - SSH: add maintainer public key to root and app user `~/.ssh/authorized_keys` (key to be provided before server-prep-hetzner).
   - Proof Plan: review/ack with user; no automated check.
   - Fixtures/Data Assumptions: reuse existing fixtures; no data change.
   - Protocol/System Updates: update docs/system.md deployment/runtime notes if clarified.
