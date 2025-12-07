@@ -41,7 +41,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Reporting: summarize decisions and confirm downstream task readiness.
 
 - Task ID: server-prep-hetzner
-  - Status: pending
+  - Status: done (Codex, 2025-12-07 22:07 UTC)
   - Objective: Prepare Hetzner host with non-root app user, SSH access, firewall, repo checkout, and directories for app + Datomic storage.
   - Scope: Create app user/group, set up SSH key-based auth, configure UFW/iptables for SSH + app/proxy ports, create data directories (app checkout, logs, Datomic storage), clone repo via HTTPS, set permissions/ownership.
   - Out of Scope: installing runtime toolchains, systemd unit, deploy script, CI wiring.
