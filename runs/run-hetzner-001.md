@@ -69,7 +69,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Reporting: record host prep steps and verification.
 
 - Task ID: runtime-deps-hetzner
-  - Status: pending
+  - Status: done (Codex, 2025-12-07 22:17 UTC)
   - Objective: Install and pin required runtime/build deps on the Hetzner host (JDK, node/npm, Playwright/Chromium deps, git) and configure env files.
   - Scope: Install OpenJDK (matching dev baseline), Node/npm versions, build-essential, git, Playwright/Chromium system deps; set up env file with APP_HOST/APP_PORT/DATOMIC_STORAGE_DIR, NODE_ENV, JVM opts; ensure npm cache dirs writable; verify `npm run build` and `clojure -M:dev` prerequisites.
   - Out of Scope: deployment scripting, systemd service, CI wiring, schema/data changes.
