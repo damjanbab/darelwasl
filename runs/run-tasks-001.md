@@ -306,7 +306,7 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Dependencies: auth-implementation, task-api-implementation, fixtures-loader
 
 - Task ID: checks-app-smoke
-  - Status: in-progress (Codex, 2025-12-06 23:55 UTC)
+  - Status: done (Codex, 2025-12-07 00:43 UTC)
   - Objective: Headless app smoke via shadow-cljs + chosen runner (Karma/ChromeHeadless or Playwright); pin command in scripts/checks.sh app-smoke.
   - Scope: headless config, minimal smoke test that logs in and renders task list/detail.
   - Out of Scope: Backend contract changes, theme/token updates, new UI features beyond smoke coverage, CI wiring beyond shared checks entrypoint.

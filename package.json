@@ -9,13 +9,15 @@
     "prebuild": "npm run theme:css-vars",
     "build": "shadow-cljs release app",
     "precheck": "npm run theme:css-vars",
-    "check": "shadow-cljs compile app"
+    "check": "shadow-cljs compile app",
+    "smoke:app": "node scripts/app-smoke.js"
   },
   "dependencies": {
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "playwright": "1.49.1",
     "shadow-cljs": "2.28.14"
   }
 }

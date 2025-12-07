@@ -162,7 +162,7 @@
      (ring/router
       [["/health" {:get (fn [_request] (health-response state))}]
        ["/api"
-       ["/login" {:post (login-handler state)}]
+        ["/login" {:post (login-handler state)}]
         ["/tasks"
          {:middleware [require-session]}
          ["" {:get (list-tasks-handler state)
@@ -173,11 +173,14 @@
          ["/:id/due-date" {:post (due-date-handler state)}]
          ["/:id/tags" {:post (tags-handler state)}]
          ["/:id/archive" {:post (archive-handler state)}]]]]
-      {:data {:muuntaja muuntaja-instance
-              :middleware [[session/wrap-session session-opts]
-                           parameters/parameters-middleware
-                           muuntaja/format-negotiate-middleware
-                           muuntaja/format-response-middleware
-                           muuntaja/format-request-middleware
-                           exception/exception-middleware]}})
-     (ring/create-default-handler))))
+     {:data {:muuntaja muuntaja-instance
+             :middleware [[session/wrap-session session-opts]
+                          parameters/parameters-middleware
+                          muuntaja/format-negotiate-middleware
+                          muuntaja/format-response-middleware
+                          muuntaja/format-request-middleware
+                          exception/exception-middleware]}})
+     (ring/routes
+      (ring/create-file-handler {:path "/"
+                                 :root "public"})
+      (ring/create-default-handler)))))

@@ -108,13 +108,14 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Technology Baseline
 - Backend: Clojure + Datomic Local (dev) with no auth/creds. Use Datomic dev-local style connection (no cloud, no passwords).
 - Frontend: CLJS + re-frame via shadow-cljs. Views registered declaratively; state handled through finite-state models.
-- Headless checks: shadow-cljs test with Karma/ChromeHeadless or Playwright; required for “app-smoke” in `scripts/checks.sh` once implemented.
+- Headless checks: Playwright-driven smoke harness (`scripts/checks.sh app-smoke`) that builds the frontend, seeds fixtures, starts the backend, and runs a login + task render flow.
 
 ## Runtime & Commands
 - Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
 - Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
 - Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
 - Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
+- App smoke run: `scripts/checks.sh app-smoke` seeds fixtures into a temp Datomic storage under `.cpcache/datomic-smoke-*`, builds the frontend (`npm run check`), starts the backend on `APP_PORT` (default 3100), and runs Playwright headless login + task rendering. Requires Node/npm and initial Playwright browser download.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
 - Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by an in-memory store; server restarts clear sessions.
 - Task API (requires session cookie from `/api/login`):
