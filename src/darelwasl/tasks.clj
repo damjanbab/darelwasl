@@ -360,16 +360,18 @@
       (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
         (if assignee-error
           {:error assignee-error}
-          {:data {:task/id (UUID/randomUUID)
-                  :task/title title
-                  :task/description desc
-                  :task/status status
-                  :task/priority priority
-                  :task/tags (or tags #{})
-                  :task/assignee [:user/id (:user/id assignee)]
-                  :task/due-date due-date
-                  :task/archived? (boolean archived?)
-                  :task/extended? (boolean extended?)}})))))
+          (let [base {:task/id (UUID/randomUUID)
+                      :task/title title
+                      :task/description desc
+                      :task/status status
+                      :task/priority priority
+                      :task/tags (or tags #{})
+                      :task/assignee [:user/id (:user/id assignee)]
+                      :task/archived? (boolean archived?)
+                      :task/extended? (boolean extended?)}
+                data (cond-> base
+                       due-date (assoc :task/due-date due-date))]
+            {:data data}))))))
 
 (defn- update-tags-tx
   [task-id existing-tags new-tags]
