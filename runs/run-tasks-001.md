@@ -465,6 +465,34 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Tooling/Automation: none beyond existing scripts; note invocations for future runs.
   - Reporting: summarize doc updates and command verification.
 
+- Task ID: ui-polish-auth-tags
+  - Status: pending
+  - Objective: Redesign the auth screen into a clean, centered login card with no fixture hints; modernize the task workspace layout (filters/list/detail) inspired by Linear/Things3; add intuitive tag CRUD persisted in Datomic and managed inline; introduce a bottom-left sun/moon toggle for light/dark themes.
+  - Scope: remove the current hero/steps from login, drop hardcoded username/password hints and out-of-place badges; deliver a professional, focused login UI; tighten workspace spacing and align filters/header/list/detail to a modern task-manager layout; enable creating/renaming/deleting tags inline (typeahead/new-chip UX) and use them in filters and task detail; migrate tags to real Datomic entities; add a bottom-left theme toggle (sun/moon) that switches light/dark modes.
+  - Out of Scope: bulk task features, auth logic changes beyond UI, multi-tenant/user management flows.
+  - Capabilities Touched: [:cap/view/login :cap/view/tasks :cap/action/auth-login :cap/schema/task :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/tooling/app-smoke]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/login :cap/view/tasks :cap/schema/task :cap/action/task-set-tags]
+    - Shared/Read-only Capabilities: [:cap/action/auth-login :cap/action/task-* :fixtures/users :fixtures/tasks]
+    - Sequencing Constraints: after existing task features; coordinate with docs-commands for updated references.
+  - Composability Impact:
+    - Layers Affected: views/apps, actions, schema (tag handling), tooling (smoke coverage).
+    - Patterns/Registries Reused or Extended: registry-driven schema; UI finite states; Playwright smoke should cover login + tag create/use.
+    - New Composability Rule Needed: tags become entities, not hardcoded enums; UI avoids fixture hints.
+  - Requirement Change & Compatibility:
+    - Change: professionalize auth UI; modernize workspace UI; introduce dynamic tag management with persistence; add light/dark theming toggle.
+    - Compatibility: breaking for tag enums (requires migration to tag entities and updated filters); otherwise backward-compatible behaviors.
+    - Flag/Rollout: none; migrate in-place with data backfill.
+  - Breaking/Deprecation: deprecate hardcoded tag enums and fixture hints; provide migration/backfill for existing tasks’ tags.
+  - Dependencies: none (builds on completed feature set).
+  - Deliverables: refreshed login UI; updated workspace layout/styles; tag schema/actions/UI for CRUD + filters; light/dark theme toggle in bottom-left; migration/backfill for tags; updated registries/docs if schema/actions/views change.
+  - Proof Plan: `scripts/checks.sh all` (includes app-smoke), targeted UI/UX validation for login + tag create/use/filter flows + theme toggle, migration sanity check.
+  - Fixtures/Data Assumptions: existing user fixtures remain; tasks/tags migrated to new tag entities.
+  - Protocol/System Updates: update docs/system.md and registries for tag schema/action/view changes.
+  - FAQ Updates: note tag migration and any design quirks if needed.
+  - Tooling/Automation: extend app-smoke to cover tag create/use if not already; no separate tag management app.
+  - Reporting: summarize UI changes, tag migration, tests run/results, registry/doc updates, theme toggle behavior.
+
 ## Notes
 - Follow protocol: claim one task, respect dependencies/parallel safety, run proofs, branch per task, merge only when green.
 - Aim for zero stubs: each implementation task must meet its acceptance and command expectations.***
