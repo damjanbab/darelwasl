@@ -142,6 +142,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Ports/firewall: allow inbound 22 (SSH) and 3000 (app); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
 - Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
+- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
 
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
