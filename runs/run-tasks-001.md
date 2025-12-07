@@ -264,6 +264,34 @@ Goal: deliver a fully usable local task app (login as huda/damjan, manage tasks 
   - Tooling/Automation: none beyond existing npm/shadow-cljs commands; reuse theme CSS var generator.
   - Reporting: summarize detail UX/flows, capabilities touched, proofs run/results.
 
+- Task ID: bugfix-task-persistence
+  - Status: in-progress (Codex, 2025-12-07 01:43 UTC)
+  - Objective: Fix task loading and saving flows in the UI so tasks fetch and persist correctly after login.
+  - Scope: investigate/fix frontend data fetch + save wiring for tasks (list/detail/create/update/archive); ensure navigation flows are reachable; expand smoke coverage to include full navigation and task interactions as needed.
+  - Out of Scope: new features, theme/design changes, new filters/sorts beyond existing spec.
+  - Capabilities Touched: [:cap/view/tasks :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/action/auth-login :cap/tooling/app-smoke]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/tasks :cap/action/task-create :cap/action/task-update :cap/action/task-set-status :cap/action/task-assign :cap/action/task-set-due :cap/action/task-set-tags :cap/action/task-archive :cap/tooling/app-smoke]
+    - Shared/Read-only Capabilities: [:cap/view/login :cap/schema/task :cap/schema/user :cap/tooling/schema-load :cap/tooling/action-contract]
+    - Sequencing Constraints: after frontend-task-detail, task-api-implementation, checks-app-smoke.
+  - Composability Impact:
+    - Layers Affected: views/actions/tooling (app-smoke coverage)
+    - Patterns/Registries Reused or Extended: existing API client + finite-state UI patterns; Playwright smoke harness; registry-defined action contracts.
+    - New Composability Rule Needed: none.
+  - Requirement Change & Compatibility:
+    - What requirement is changing and why: restore expected task persistence (load/save) and navigation flows so the app is usable end-to-end.
+    - Compatibility expectation: backward/forward compatible; no new flags.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation: none.
+  - Dependencies: frontend-task-detail, task-api-implementation, checks-app-smoke
+  - Deliverables: working task load/save flows (list + detail + create/update/archive); navigation verified; enhanced automated/manual coverage; doc updates if checks expand.
+  - Proof Plan: scripts/checks.sh all; manual full navigation smoke (login, list load, create/edit/archive with reload) or expanded app-smoke harness.
+  - Fixtures/Data Assumptions: fixtures/users and fixtures/tasks as baseline; temp Datomic via checks harness.
+  - Protocol/System Updates: update docs/system.md if tooling coverage changes.
+  - FAQ Updates: capture any gotchas encountered during fixes/testing.
+  - Tooling/Automation: extend app-smoke script if needed; reuse shared checks entrypoint.
+  - Reporting: summarize fixes, tests run/results, and any doc/registry touches.
+
 # Checks and Tooling
 
 - Task ID: checks-edn-validate
