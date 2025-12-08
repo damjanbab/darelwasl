@@ -223,9 +223,28 @@
   :idempotency {:strategy :dedupe-on
                 :keys [:tag/id]}
   :contracts {:fixtures [:fixtures/tags]}
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/tag]
             :views [:cap/view/tasks]}}
+
+ {:id :cap/action/task-delete
+  :title "Delete Task"
+  :version "v1"
+  :inputs {:task/id :uuid}
+  :outputs {:task/id :uuid}
+  :side-effects ["Delete task entity and detach tag refs"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
 ]

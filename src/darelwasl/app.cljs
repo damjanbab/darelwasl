@@ -900,7 +900,36 @@
                     (assoc-in [:tasks :detail :error] nil))
             ::task-action (assoc (first ops)
                                  :on-success [::op-success (vec (rest ops)) {:mode :update}]
-                                 :on-error [::save-failure])}))))))
+                                 :on-error [::save-failure])})))))) 
+
+(rf/reg-event-fx
+ ::delete-task
+ (fn [{:keys [db]} [_ task-id]]
+   (if (nil? task-id)
+     {:db (assoc-in db [:tasks :detail :error] "Select a task to delete")}
+     {:db (-> db
+              (assoc-in [:tasks :detail :status] :deleting)
+              (assoc-in [:tasks :detail :error] nil))
+      ::task-action {:url (str "/api/tasks/" task-id)
+                     :method "DELETE"
+                     :on-success [::delete-task-success task-id]
+                     :on-error [::save-failure]}})))
+
+(rf/reg-event-fx
+ ::delete-task-success
+ (fn [{:keys [db]} [_ task-id _payload]]
+   (let [remaining (->> (get-in db [:tasks :items])
+                        (remove #(= (:task/id %) task-id))
+                        vec)
+         next-task (first remaining)
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+     {:db (-> db
+              (assoc-in [:tasks :items] remaining)
+              (assoc-in [:tasks :selected] (:task/id next-task))
+              (assoc-in [:tasks :detail] (if next-task
+                                           (detail-from-task next-task)
+                                           (blank-detail assignees (:session db)))))
+      :dispatch-n [[::fetch-tasks]]})))
 
 (rf/reg-event-fx
  ::op-success
@@ -1374,10 +1403,17 @@
                                       :on-click #(rf/dispatch [::reset-detail])
                                       :disabled saving?}
             "Cancel"]
-           (when saving?
-             [:span.pill "Saving..."])
-           (when success?
-             [:span.pill "Saved"])]]))]))
+           (when-not create?
+             [:button.button.danger {:type "button"
+                                     :disabled (= detail-status :deleting)
+                                     :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
+                                                  (rf/dispatch [::delete-task (:id form)]))}
+              (if (= detail-status :deleting) "Deleting..." "Delete")])
+           (case detail-status
+             :saving [:span.pill "Saving..."]
+             :success [:span.pill "Saved"]
+             :deleting [:span.pill "Deleting..."]
+             nil)]]))]))
 
 (defn top-bar []
   (let [session @(rf/subscribe [::session])

@@ -154,6 +154,14 @@
                           (or (:body-params request) {})
                           (:auth/session request)))))
 
+(defn- delete-task-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/delete-task! (get-in state [:db :conn])
+                         (task-id-param request)
+                         (:auth/session request)))))
+
 (defn- list-tags-handler
   [state]
   (fn [_request]
@@ -196,7 +204,8 @@
          {:middleware [require-session]}
          ["" {:get (list-tasks-handler state)
               :post (create-task-handler state)}]
-         ["/:id" {:put (update-task-handler state)}]
+         ["/:id" {:put (update-task-handler state)
+                  :delete (delete-task-handler state)}]
          ["/:id/status" {:post (set-status-handler state)}]
          ["/:id/assignee" {:post (assign-task-handler state)}]
          ["/:id/due-date" {:post (due-date-handler state)}]
