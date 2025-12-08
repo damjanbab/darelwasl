@@ -230,7 +230,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
 - Task ID: app-switcher-nav
   - Status: pending
   - Objective: Implement modern app switcher (hover/push-to-top drop tab) to switch between Home and Task apps with accessibility and responsiveness.
-  - Scope: Add switcher component to shell; interactions (hover/push to top reveals tab, click/tap to select), keyboard/focus handling, aria labels; remember last app if feasible; integrate with session guard; ensure mobile-friendly behavior.
+  - Scope: Add switcher component to shell; interactions (hover/push to top reveals tab, click/tap to select), keyboard/focus handling, aria labels; remember last app if feasible; integrate with session guard. Mobile-specific: provide an explicit tap target (e.g., top bar button/sheet trigger) since hover/push isn’t available; ensure it’s reachable and obvious on touch devices.
   - Out of Scope: Routing overhaul; multi-tenant contexts.
   - Capabilities Touched: [:cap/view/home :cap/view/tasks] shell/navigation
   - Parallel Safety:
