@@ -199,6 +199,34 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Tooling/Automation: None
   - Reporting: Parity status and key refactors
 
+- Task ID: frontend-entity-cleanup
+  - Status: pending
+  - Objective: Deepen the UI refactor to reduce duplication and tighten config-driven rendering for entities (starting with tasks), removing leftover spaghetti and aligning handlers/state with the new primitives.
+  - Scope: Consolidate task list/detail handlers/state where still bespoke; move repetitive labels/field wiring into config maps where safe; remove dead code/duplicate helpers; ensure primitives cover the common paths while keeping overrides for task-specific behavior. Keep current UX/behavior intact.
+  - Out of Scope: New features, routing changes, or visual redesign; changes to backend APIs.
+  - Capabilities Touched: [:cap/view/tasks] (implementation quality/structure)
+  - Parallel Safety:
+    - Exclusive Capabilities: task view implementation
+    - Shared/Read-only Capabilities: theme/registries (read), backend APIs (read)
+    - Sequencing Constraints: after frontend-task-app-refactor
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view composition pattern; config-driven field rendering
+    - New composability rules needed: document any new config pattern if introduced
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: improve maintainability/clarity of the task view using the new primitives; no behavioral change
+    - Compatibility expectation: backward compatible (no UX/behavior regressions)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: frontend-task-app-refactor
+  - Deliverables: Cleaner task view code with reduced duplication; configs driving common labels/fields where appropriate; removal of dead code; comments only where necessary for clarity.
+  - Proof Plan: `npm run check`; manual task smoke (login, list/filter/create/update/status/assign/due/tags/archive/delete) to confirm behavior unchanged.
+  - Fixtures/Data Assumptions: Existing fixtures
+  - Protocol/System Updates: Note any new pattern in `docs/system.md` if introduced
+  - FAQ Updates: Add gotchas if encountered
+  - Tooling/Automation: None
+  - Reporting: Summarize cleanup and confirm behavioral parity
+
 - Task ID: home-app-implementation
   - Status: pending
   - Objective: Build the Home app using entity primitives/configs to surface summary bits (recent tasks, counts, tags highlights) with proper states.
