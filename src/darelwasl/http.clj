@@ -63,6 +63,15 @@
                       :user/username (:user/username user)}
                :session session-data})))))))
 
+(defn- session-handler
+  [_state]
+  (fn [request]
+    (let [session (:auth/session request)]
+      {:status 200
+       :body {:session/token (:session/token session)
+              :user/id (:user/id session)
+              :user/username (:user/username session)}})))
+
 (defn- require-session
   [handler]
   (fn [request]
@@ -192,6 +201,8 @@
       [["/health" {:get (fn [_request] (health-response state))}]
        ["/api"
         ["/login" {:post (login-handler state)}]
+        ["/session" {:middleware [require-session]
+                     :get (session-handler state)}]
         ["/tasks"
          {:middleware [require-session]}
          ["" {:get (list-tasks-handler state)
