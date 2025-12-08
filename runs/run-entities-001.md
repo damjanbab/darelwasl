@@ -32,7 +32,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Summarize spec additions and alignment to goal
 
 - Task ID: design-spec-entities-home
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-08 16:40 UTC)
   - Objective: Capture UX/design for Home app, Task app reuse with entity primitives, and the app switcher (hover/push-down tab) in `docs/system.md`.
   - Scope: Layouts/states (desktop/mobile), component blocks for Home (hero/summary cards/recent list/tag highlights/quick actions), interaction for app switcher (hover/push, keyboard/focus, aria), theme usage (reuse current tokens), error/loading/empty states for Home, responsive behavior.
   - Out of Scope: New color/typography systems; backend changes.
