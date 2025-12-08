@@ -205,6 +205,22 @@ Maintain stable IDs; reference them in tasks/PRs.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
 
+## Design Spec: Home + App Switcher + Entity Primitives
+- Home (default post-login):
+  - Layout (desktop): hero row with greeting + quick actions (e.g., “New task”), summary cards (status counts), recent tasks list (subset from tasks data), tag highlights (chips/cloud), optional small “recent activity” list using updated-at. Two-column where space allows; cards align to grid; padding consistent with theme tokens.
+  - Layout (mobile): stacked sections; summary cards in a horizontal scroll or 2-up grid; recent list collapses to compact cards; quick actions as prominent buttons.
+  - States: loading (skeletons for cards/list), empty (friendly copy when no tasks), error (inline message + retry). Ready state shows cards and lists.
+  - Interactions: recent tasks and tag chips link into Task app with appropriate filters; quick action opens Task create flow (same route).
+  - Theming: reuse existing tokens; no new colors. Motion: subtle fade/slide for cards; keep 150ms ease.
+- App switcher:
+  - Affordance: pushing/hovering pointer to top edge reveals a drop tab with app options (Home, Tasks); clearly labeled with icons/text. On mobile, a tap target (e.g., top bar button) reveals the same menu.
+  - Accessibility: keyboard reachable (focusable trigger, arrow/tab to select, Enter/Space to activate). Aria labels on trigger and menu items. Escape or leaving the area closes it; retains focus appropriately.
+  - Behavior: remembers last selected app if feasible; does not expose unauthenticated apps; respects session guard.
+  - Motion: smooth slide-down for the tab; no excessive animation.
+- Entity primitives (UI):
+  - Shared list/detail components can be configured per `:entity/type` in code (field definitions, renderers, actions). Task app uses these; Home can reuse list snippets for recent tasks.
+  - Overrides live in code, not registries; config maps keyed by type provide labels/formatters.
+
 ## Design Spec & Theming
 - Vibe: calm, professional; warm neutrals with teal accent.
 - Layout: desktop-first; list on left, detail side panel on right; mobile: stacked with slide-up detail.
