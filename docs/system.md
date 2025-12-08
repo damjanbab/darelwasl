@@ -216,7 +216,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - If a new pattern emerges, document it here and reference it in tasks/PRs.
 - Include version and compatibility/flag information in every registry entry; additive changes are preferred.
 - Run `scripts/checks.sh registries` to ensure required fields are present before merge.
-- Branching/PR flow: main auto-deploys to Hetzner; each run works on a branch `run/<run-id>`, with task branches `run/<run-id>/<task-id>` merging into the run branch via PR. Merge the run branch to `main` via PR only after the run is complete and all proofs are green.
+- Branching/PR flow: main auto-deploys to Hetzner; each run works on a branch `run/<run-id>`, with task branches `run/<run-id>/<task-id>` merging into the run branch via PR. Merge the run branch to `main` via PR only after the run is complete, all proofs are green, and the product owner gives a manual green-signal.
 
 ## Change & Compatibility
 - Flags/Rollout: introduce new behaviors behind flags or capability toggles; document defaults and rollout plan.
