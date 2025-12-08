@@ -172,7 +172,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Parity confirmation and component overview
 
 - Task ID: frontend-task-app-refactor
-  - Status: in-progress (Codex, 2025-12-08 17:22 UTC)
+  - Status: done (Codex, 2025-12-08 17:25 UTC)
   - Objective: Ensure the Task app fully leverages the new entity primitives with no regressions and clean config/override usage.
   - Scope: Map task-specific config (fields, renderers, actions) onto primitives; clean up legacy code; ensure filters/sorts/search params intact; keep tag management, archive/delete flows, and state handling; adjust styling if needed to fit new components.
   - Out of Scope: New task features beyond current spec.
