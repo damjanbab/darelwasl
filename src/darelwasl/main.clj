@@ -1,6 +1,7 @@
 (ns darelwasl.main
   (:gen-class)
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [darelwasl.auth :as auth]
             [darelwasl.config :as config]
             [darelwasl.db :as db]
@@ -46,11 +47,37 @@
           (tasks/migrate-tags! conn)
           prepared)))))
 
+(defn- unsupported-alter-schema?
+  [e]
+  (let [data (ex-data e)
+        msg (when e (.getMessage ^Exception e))]
+    (or (= (:db/error data) :db.error/unsupported-alter-schema)
+        (and msg (str/includes? msg "unsupported-alter-schema")))))
+
+(defn- initialize-db!
+  "Connect to Datomic, load schema/fixtures, and attempt a one-time recovery if
+  schema load fails due to incompatible existing schema (unsupported alter)."
+  [datomic-cfg]
+  (loop [attempt 1
+         state (db/connect! datomic-cfg)]
+    (cond
+      (:error state) state
+      :else
+      (let [prepared (prepare-db! state)]
+        (if-let [err (:error prepared)]
+          (if (and (= attempt 1) (unsupported-alter-schema? err))
+            (do
+              (log/warn err "Schema load failed due to incompatible existing DB; recreating database")
+              (db/delete-database! state)
+              (recur 2 (db/connect! datomic-cfg)))
+            prepared)
+          prepared)))))
+
 (defn start!
   "Start the application with optional config override."
   ([] (start! (config/load-config)))
   ([cfg]
-   (let [db-state (prepare-db! (db/connect! (:datomic cfg)))
+   (let [db-state (initialize-db! (:datomic cfg))
          users (auth/load-users!)
          user-index (auth/user-index-by-username users)
          _ (when (:error db-state)

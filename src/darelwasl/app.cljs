@@ -676,13 +676,15 @@
    (let [tag (:tag payload)
          updated (normalize-tag-list (conj (or (get-in db [:tags :items]) []) tag))
          attach? (:attach? context)
+         pending-save? (get-in db [:tasks :detail :pending-save?])
          db' (-> db
                  (assoc :tags {:items updated :status :ready :error nil})
-                 (assoc-in [:tasks :detail :tag-entry] ""))]
+                 (assoc-in [:tasks :detail :tag-entry] "")
+                 (assoc-in [:tasks :detail :pending-save?] false))]
      {:db (cond-> db'
             attach? (update-in [:tasks :detail :form :tags] (fn [ts] (conj (set (or ts #{})) (:tag/id tag)))))
-      :dispatch-n [[::fetch-tasks]]}))
-)
+      :dispatch-n (cond-> [[::fetch-tasks]]
+                    pending-save? (conj [::save-task]))})))
 
 (rf/reg-event-fx
  ::rename-tag
@@ -905,6 +907,7 @@
    (let [form (get-in db [:tasks :detail :form])
          mode (get-in db [:tasks :detail :mode])
          creating? (= mode :create)
+         tags-status (get-in db [:tags :status])
          validation-error (validate-task-form form)
          tasks (get-in db [:tasks :items])
          selected-id (get-in db [:tasks :selected])
@@ -912,6 +915,12 @@
          due-iso (input-date->iso (:due-date form))
         tags (set (:tags form))]
      (cond
+       (= tags-status :saving)
+       {:db (-> db
+                (assoc-in [:tasks :detail :pending-save?] true)
+                (assoc-in [:tasks :detail :status] :saving)
+                (assoc-in [:tasks :detail :error] nil))}
+
        validation-error {:db (-> db
                                  (assoc-in [:tasks :detail :error] validation-error)
                                  (assoc-in [:tasks :detail :status] :error))}
