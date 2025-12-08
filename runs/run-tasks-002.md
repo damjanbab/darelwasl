@@ -1,0 +1,61 @@
+# Run run-tasks-002
+
+## Tasks
+- Task ID: auth-session-refresh
+  - Status: done (Codex, 2025-12-08 11:01 UTC)
+  - Objective: Stop users from being logged out after a browser refresh; keep the session alive until explicit logout.
+  - Scope: Diagnose and fix the refresh-induced logout (frontend state vs. session cookie); ensure session persists across reloads and reopened tabs; keep login redirect and guarded routes consistent.
+  - Out of Scope: “Remember me”/long-lived tokens; multi-user auth flows; auth UX redesign; rate limiting.
+  - Capabilities Touched: [:cap/view/login :cap/view/tasks :cap/action/auth-login :cap/integration/local-session]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/login :cap/view/tasks :cap/integration/local-session]
+    - Shared/Read-only Capabilities: []
+    - Sequencing Constraints: []
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: views/auth flow and session integration reuse; may adjust client session restore pattern.
+    - New composability rules needed: none expected.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: preserve logged-in state across refresh; avoid surprise logout.
+    - Compatibility expectation (backward/forward/none): backward compatible.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none.
+  - Dependencies: none.
+  - Deliverables: fixed auth/session handling that survives refresh, plus any needed docs/faq note.
+  - Proof Plan: `scripts/checks.sh app-smoke`; manual login-refresh check; targeted test if added.
+  - Fixtures/Data Assumptions: existing auth fixtures.
+  - Protocol/System Updates: add if session handling or adapters change.
+  - FAQ Updates: add session persistence note if behavior changes.
+  - Tooling/Automation: none.
+  - Reporting: summarize root cause, fixes, and proofs.
+
+- Task ID: task-delete-support
+  - Status: done (Codex, 2025-12-08 11:11 UTC)
+  - Objective: Enable deleting tasks from the app (backend + UI) so tasks can be removed, not just archived.
+  - Scope: Add backend support to delete tasks; expose delete affordance in the task view; ensure list updates accordingly; handle confirmations/errors.
+  - Out of Scope: bulk deletes; hardening beyond existing auth/session; audit/history UI.
+  - Capabilities Touched: [:cap/view/tasks :cap/action/task-create :cap/action/task-update (and new/delete action to add)]
+  - Parallel Safety:
+    - Exclusive Capabilities: [:cap/view/tasks :cap/action/task-update :cap/action/task-create]
+    - Shared/Read-only Capabilities: []
+    - Sequencing Constraints: []
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: views/tasks and task actions; may add a delete action capability.
+    - New composability rules needed: none expected (additive).
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: allow task removal; previously only archive.
+    - Compatibility expectation (backward/forward/none): backward compatible if delete is additive and gated via UI.
+    - Flag/Rollout plan: none.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: none (additive; ensure archive still works).
+  - Dependencies: none.
+  - Deliverables: task deletion API/action, UI control with confirmation, registry/doc updates, and tests.
+  - Proof Plan: `scripts/checks.sh actions`; add targeted test for delete; `scripts/checks.sh app-smoke` if UI touched.
+  - Fixtures/Data Assumptions: existing task fixtures; may add delete-specific fixture if needed.
+  - Protocol/System Updates: update capabilities/registries if new action added.
+  - FAQ Updates: note delete vs. archive behavior if needed.
+  - Tooling/Automation: none.
+  - Reporting: summarize behavior, API/UI changes, and proofs.
+
+## Notes
+- Run branch: create `run/run-tasks-002` from `main`; open task PRs into that branch; merge branch to `main` when all tasks are done.

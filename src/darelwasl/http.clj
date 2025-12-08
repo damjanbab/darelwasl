@@ -63,6 +63,15 @@
                       :user/username (:user/username user)}
                :session session-data})))))))
 
+(defn- session-handler
+  [_state]
+  (fn [request]
+    (let [session (:auth/session request)]
+      {:status 200
+       :body {:session/token (:session/token session)
+              :user/id (:user/id session)
+              :user/username (:user/username session)}})))
+
 (defn- require-session
   [handler]
   (fn [request]
@@ -154,6 +163,14 @@
                           (or (:body-params request) {})
                           (:auth/session request)))))
 
+(defn- delete-task-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/delete-task! (get-in state [:db :conn])
+                         (task-id-param request)
+                         (:auth/session request)))))
+
 (defn- list-tags-handler
   [state]
   (fn [_request]
@@ -192,11 +209,14 @@
       [["/health" {:get (fn [_request] (health-response state))}]
        ["/api"
         ["/login" {:post (login-handler state)}]
+        ["/session" {:middleware [require-session]
+                     :get (session-handler state)}]
         ["/tasks"
          {:middleware [require-session]}
          ["" {:get (list-tasks-handler state)
               :post (create-task-handler state)}]
-         ["/:id" {:put (update-task-handler state)}]
+         ["/:id" {:put (update-task-handler state)
+                  :delete (delete-task-handler state)}]
          ["/:id/status" {:post (set-status-handler state)}]
          ["/:id/assignee" {:post (assign-task-handler state)}]
          ["/:id/due-date" {:post (due-date-handler state)}]

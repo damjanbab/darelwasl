@@ -697,6 +697,28 @@
                 {:task updated})
               :else (error 500 "Task not available after archive update")))))))
 
+(defn delete-task!
+  [conn task-id actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            {parsed-id :value id-err :error} (normalize-uuid task-id "task id")]
+        (cond
+          id-err (error 400 id-err)
+          :else
+          (if-let [eid (task-eid db parsed-id)]
+            (let [task (some-> (pull-task db eid) present-task)
+                  tx-result (attempt-transact conn [[:db/retractEntity eid]] "delete task")]
+              (if-let [tx-error (:error tx-result)]
+                {:error tx-error}
+                (do
+                  (log/infof "AUDIT task-delete user=%s task=%s"
+                             (or (:user/username actor) (:user/id actor))
+                             parsed-id)
+                  {:task {:task/id parsed-id
+                          :task/title (:task/title task)
+                          :deleted true}})))
+            (error 404 "Task not found"))))))
+
 (defn list-tags
   [conn]
   (or (ensure-conn conn)

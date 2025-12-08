@@ -312,6 +312,33 @@
                                          :body {:error "Network error. Please try again."}}))))))))
 
 (rf/reg-fx
+ ::session-request
+ (fn [{:keys [on-success on-error]}]
+   (-> (js/fetch "/api/session"
+                 #js {:method "GET"
+                      :headers #js {"Accept" "application/json"}
+                      :credentials "same-origin"})
+       (.then
+        (fn [resp]
+          (-> (.json resp)
+              (.then
+               (fn [data]
+                 (let [payload (js->clj data :keywordize-keys true)
+                       status (.-status resp)]
+                   (if (<= 200 status 299)
+                     (rf/dispatch (conj on-success payload))
+                     (rf/dispatch (conj on-error {:status status
+                                                  :body payload}))))))
+              (.catch
+               (fn [_]
+                 (rf/dispatch (conj on-error {:status (.-status resp)
+                                              :body {:error "Invalid response from server"}})))))))
+       (.catch
+        (fn [_]
+          (rf/dispatch (conj on-error {:status nil
+                                       :body {:error "Network error. Please try again."}})))))))
+
+(rf/reg-fx
  ::tag-request
  (fn [{:keys [url method body on-success on-error]}]
    (let [opts (clj->js (cond-> {:method (or method "GET")
@@ -407,7 +434,8 @@
                   (catch :default _ nil))
          theme-id (resolve-theme-id stored)]
      {:db (assoc-in default-db [:theme :id] theme-id)
-      ::apply-theme theme-id})))
+      ::apply-theme theme-id
+      :dispatch [::restore-session]})))
 
 (rf/reg-event-db
  ::set-view
@@ -479,9 +507,29 @@
    (let [message (or (:error body)
                      (when (= status 401) "Invalid username or password")
                      "Unable to log in. Please try again.")]
-      (-> db
+     (-> db
           (assoc-in [:login :status] :error)
           (assoc-in [:login :error] message)))))
+
+(rf/reg-event-fx
+ ::restore-session
+ (fn [{:keys [db]} _]
+   {:db db
+    ::session-request {:on-success [::session-restored]
+                       :on-error [::session-restore-failed]}}))
+
+(rf/reg-event-fx
+ ::session-restored
+ (fn [_ [_ payload]]
+   {:dispatch [::login-success payload]}))
+
+(rf/reg-event-db
+ ::session-restore-failed
+ (fn [db _]
+   (-> db
+       (assoc :session nil)
+       (assoc :route :login)
+       (assoc :login (assoc default-login-state :username (get-in db [:login :username] ""))))))
 
 (rf/reg-event-fx
  ::logout
@@ -628,13 +676,15 @@
    (let [tag (:tag payload)
          updated (normalize-tag-list (conj (or (get-in db [:tags :items]) []) tag))
          attach? (:attach? context)
+         pending-save? (get-in db [:tasks :detail :pending-save?])
          db' (-> db
                  (assoc :tags {:items updated :status :ready :error nil})
-                 (assoc-in [:tasks :detail :tag-entry] ""))]
+                 (assoc-in [:tasks :detail :tag-entry] "")
+                 (assoc-in [:tasks :detail :pending-save?] false))]
      {:db (cond-> db'
             attach? (update-in [:tasks :detail :form :tags] (fn [ts] (conj (set (or ts #{})) (:tag/id tag)))))
-      :dispatch-n [[::fetch-tasks]]}))
-)
+      :dispatch-n (cond-> [[::fetch-tasks]]
+                    pending-save? (conj [::save-task]))})))
 
 (rf/reg-event-fx
  ::rename-tag
@@ -857,6 +907,7 @@
    (let [form (get-in db [:tasks :detail :form])
          mode (get-in db [:tasks :detail :mode])
          creating? (= mode :create)
+         tags-status (get-in db [:tags :status])
          validation-error (validate-task-form form)
          tasks (get-in db [:tasks :items])
          selected-id (get-in db [:tasks :selected])
@@ -864,6 +915,12 @@
          due-iso (input-date->iso (:due-date form))
         tags (set (:tags form))]
      (cond
+       (= tags-status :saving)
+       {:db (-> db
+                (assoc-in [:tasks :detail :pending-save?] true)
+                (assoc-in [:tasks :detail :status] :saving)
+                (assoc-in [:tasks :detail :error] nil))}
+
        validation-error {:db (-> db
                                  (assoc-in [:tasks :detail :error] validation-error)
                                  (assoc-in [:tasks :detail :status] :error))}
@@ -900,7 +957,36 @@
                     (assoc-in [:tasks :detail :error] nil))
             ::task-action (assoc (first ops)
                                  :on-success [::op-success (vec (rest ops)) {:mode :update}]
-                                 :on-error [::save-failure])}))))))
+                                 :on-error [::save-failure])})))))) 
+
+(rf/reg-event-fx
+ ::delete-task
+ (fn [{:keys [db]} [_ task-id]]
+   (if (nil? task-id)
+     {:db (assoc-in db [:tasks :detail :error] "Select a task to delete")}
+     {:db (-> db
+              (assoc-in [:tasks :detail :status] :deleting)
+              (assoc-in [:tasks :detail :error] nil))
+      ::task-action {:url (str "/api/tasks/" task-id)
+                     :method "DELETE"
+                     :on-success [::delete-task-success task-id]
+                     :on-error [::save-failure]}})))
+
+(rf/reg-event-fx
+ ::delete-task-success
+ (fn [{:keys [db]} [_ task-id _payload]]
+   (let [remaining (->> (get-in db [:tasks :items])
+                        (remove #(= (:task/id %) task-id))
+                        vec)
+         next-task (first remaining)
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+     {:db (-> db
+              (assoc-in [:tasks :items] remaining)
+              (assoc-in [:tasks :selected] (:task/id next-task))
+              (assoc-in [:tasks :detail] (if next-task
+                                           (detail-from-task next-task)
+                                           (blank-detail assignees (:session db)))))
+      :dispatch-n [[::fetch-tasks]]})))
 
 (rf/reg-event-fx
  ::op-success
@@ -1374,10 +1460,17 @@
                                       :on-click #(rf/dispatch [::reset-detail])
                                       :disabled saving?}
             "Cancel"]
-           (when saving?
-             [:span.pill "Saving..."])
-           (when success?
-             [:span.pill "Saved"])]]))]))
+           (when-not create?
+             [:button.button.danger {:type "button"
+                                     :disabled (= detail-status :deleting)
+                                     :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
+                                                  (rf/dispatch [::delete-task (:id form)]))}
+              (if (= detail-status :deleting) "Deleting..." "Delete")])
+           (case detail-status
+             :saving [:span.pill "Saving..."]
+             :success [:span.pill "Saved"]
+             :deleting [:span.pill "Deleting..."]
+             nil)]]))]))
 
 (defn top-bar []
   (let [session @(rf/subscribe [::session])

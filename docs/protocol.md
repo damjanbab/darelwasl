@@ -14,7 +14,7 @@ You are a sandbox agent with no prior context. Your goal is to pick ONE task fro
 7) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
 8) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
 9) Open a PR from your task branch into the run branch (e.g., `run/<run-id>/<task-id>` → `run/<run-id>`) with a clear summary and proof results; merge only if everything is green; no manual overrides. Delete the task branch after merge.
-10) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent. Only after the run is complete should the run branch be merged to `main` via a separate PR gate.
+10) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent. Only after the run is complete should the run branch be merged to `main` via a separate PR gate, and only with explicit product owner approval (“green signal”) after final verification.
 
 Core invariants: correctness > speed; no flaky or external-dependent proofs; browser loader/app boot must succeed; changes must align with capability definitions in `docs/system.md`.
 
@@ -79,7 +79,7 @@ If any field is missing/ambiguous, pause and correct the brief before coding.
 5) Proofs: run required checks; if blocked, stop and report. Before merging, ensure proofs run against the latest `docs/system.md`/registries state.
 6) PR: include summary, capabilities touched (IDs), proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved. Use a branch per task (e.g., `run/<run-id>/<task-id>`) and open the PR into the run branch (`run/<run-id>`); PR title should include run ID and task ID.
 7) Merge: only with all proofs green; no manual overrides. Merge task PRs into the run branch, delete the task branch after merge. Avoid force-pushes that could drop others’ changes.
-8) Report back per task brief. Leave other tasks untouched for the next agent. Only when all tasks in the run are done should a final PR merge the run branch into `main` (main is the auto-deploy branch).
+8) Report back per task brief. Leave other tasks untouched for the next agent. Only when all tasks in the run are done should a final PR merge the run branch into `main` (main is the auto-deploy branch), and only after a manual approval/green-signal from the product owner.
 
 ## Required Proofs (defaults; task may add more)
 - Datomic schema sanity: load schema into a temp DB; ensure invariants hold.
