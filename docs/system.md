@@ -136,17 +136,45 @@ Maintain stable IDs; reference them in tasks/PRs.
     ```
 
 ## Deployment (Hetzner plan)
-- Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); no domain/proxy yet—serve on the raw IP for now.
+- Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); `haloeddepth.com` points here; no reverse proxy/SSL yet—serve on the raw IP/domain for now (port 3000).
 - Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env file at `/etc/darelwasl/app.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
 - Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; reserve 80/443 for a future reverse proxy/SSL front.
 - Ports/firewall: allow inbound 22 (SSH) and 3000 (app); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
 - Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
+- Env file template (`/etc/darelwasl/app.env`):
+  - `APP_HOST=0.0.0.0`
+  - `APP_PORT=3000`
+  - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
+  - `DATOMIC_SYSTEM=darelwasl`
+  - `DATOMIC_DB_NAME=darelwasl`
+  - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
+- Systemd unit (`/etc/systemd/system/darelwasl.service`):
+  ```
+  [Unit]
+  Description=DarelWasl task app
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=darelwasl
+  WorkingDirectory=/opt/darelwasl
+  EnvironmentFile=/etc/darelwasl/app.env
+  ExecStart=/opt/darelwasl/scripts/run-service.sh
+  Restart=on-failure
+  RestartSec=5
+  StandardOutput=journal
+  StandardError=journal
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl`.
 - CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
 - Service ops (Hetzner):
   - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl`.
   - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`.
-  - Health: `curl http://127.0.0.1:3000/health` (or use public IP if exposed).
+  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed).
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
 ## Product Spec: Task App v1 (two users)
