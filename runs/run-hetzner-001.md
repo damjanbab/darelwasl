@@ -153,7 +153,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Reporting: include workflow summary, secret requirements, and test execution notes.
 
 - Task ID: ops-docs-hetzner
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 00:23 UTC)
   - Objective: Document Hetzner deploy/run/rollback commands and add a simple remote smoke (health/deploy check) script.
   - Scope: update docs/system.md and docs/faq.md with deploy steps, service commands, env file locations, health/rollback instructions; add helper script for remote health/deploy smoke (e.g., curl /health, systemctl status); ensure registries capture new tooling capabilities.
   - Out of Scope: core app code changes, frontend/backend features, CI logic beyond documentation.

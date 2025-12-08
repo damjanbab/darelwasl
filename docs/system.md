@@ -143,6 +143,11 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
 - CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
+- Service ops (Hetzner):
+  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl`.
+  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`.
+  - Health: `curl http://127.0.0.1:3000/health` (or use public IP if exposed).
+  - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
