@@ -4,7 +4,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
 
 ## Tasks
 - Task ID: product-spec-entities-home
-  - Status: in-progress (Codex, 2025-12-08 16:36 UTC)
+  - Status: done (Codex, 2025-12-08 17:00 UTC)
   - Objective: Document the product spec for the entity-first model and new Home app + app switcher in `docs/system.md` (capabilities, behaviors, compatibility, migration expectations).
   - Scope: Define entities in scope (user/task/tag now, future-ready note), `:entity/type` usage expectations, Home app purpose/content (summary widgets, recent tasks, quick stats), Task app parity requirements, app switcher behavior (access pattern, discoverability), flags/compatibility/migration narrative.
   - Out of Scope: Visual tokens; code changes; deployment changes.

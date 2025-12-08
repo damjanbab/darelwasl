@@ -177,11 +177,31 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed).
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
+## Product Spec: Entity Foundation + App Suite (Home + Tasks)
+- Entities and identity:
+  - All persisted entities carry `:entity/type` (additive discriminator) alongside their type-specific attrs. Current types: `:entity.type/user`, `:entity.type/task`, `:entity.type/tag`. Future types follow the same pattern (type ident + attrs + refs).
+  - Relationships stay Datomic refs (e.g., task → assignee/user, task → tags). History remains via Datomic tx log; no runtime DSL.
+  - Backfill/migration: existing user/task/tag rows get `:entity/type` set by migration; fixtures and seeds include it going forward.
+- Apps:
+  - Home app (default after login): cross-entity summary surface showing a hero + quick actions (e.g., “New task”), recent/updated tasks (subset), task status counts, tag highlights, and room for a small “recent activity” list derived from updated-at timestamps. Uses existing task data/APIs; no new entity types yet.
+  - Task app: retains full current behavior (list/detail, filters/sorts, tag management, archive/delete, status/assignee/due/priority/extended flag). Implementation will reuse shared entity primitives but preserve all existing flows.
+  - Login remains unchanged (auth required before Home/Tasks).
+- Navigation and app switcher:
+  - After login, route to Home. A modern app switcher lives at the top edge; pushing/hovering the pointer to the top reveals a drop tab with options (Home, Tasks). Keyboard/focusable with aria labels; mobile-friendly tap target. Remember last visited app if feasible.
+  - Switcher does not change URLs beyond view state unless routing is later introduced; respects session guard (unauthenticated users see login only).
+- UX/state:
+  - Home supports loading/empty/error/ready states. Empty: show helpful copy if no tasks exist. Error: retry affordance. Ready: cards for recents/stats/tags/quick actions.
+  - Tasks keep explicit states already defined; entity primitives must not remove loading/empty/error handling.
+- Acceptance:
+  - Logging in as huda or damjan lands on Home with seeded summary content; app switcher visible/usable (hover/push + click/tap + keyboard). Switching to Tasks shows full task functionality unchanged.
+  - `:entity/type` present on user/task/tag entities in seeds and migrated dev DB; no API regressions for tasks or tags.
+  - No runtime extensibility required; overrides remain code-based (per-type config/override maps), not registry-executed.
+
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
 - Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (set of tag entities via `:tag/id`), archived flag, feature flag `:task/extended?` (default false) for future fields.
 - Actions: create/edit task; change status; assign/reassign; set/clear due date; add/remove/rename/delete tags; archive/unarchive; login (auth action).
-- Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left.
+- Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left. Task app is selectable from the app switcher and may share list/detail primitives with Home.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
 
