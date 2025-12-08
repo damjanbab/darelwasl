@@ -3,18 +3,18 @@
 Purpose: guide sandbox agents to deliver changes with total correctness using referenced documents (`docs/system.md`, `docs/faq.md`) as the canonical sources. Agents rely on reasoning, not automation, but must enforce a fail-closed mindset.
 
 ## Initial Prompt (copy verbatim to sandbox agents)
-You are a sandbox agent with no prior context. Your goal is to pick ONE task from the current run, complete it with zero defects, open a PR, merge if green, and report back. Hard stop: only touch tasks whose Status is `pending`. If a task is already `in-progress`, `done`, or `blocked`, do not edit or claim it—back off immediately. Follow these steps, referencing documents by path:
-0) Before any git fetch/push, run `source scripts/load_github_token.sh` **from the repo root** to export `DARELWASL_GITHUB_TOKEN`/`GITHUB_TOKEN`. If the loader reports missing tokens, stop and set `DARELWASL_GITHUB_TOKEN` (e.g., export from your local `~/.git-credentials`), then re-run; do not proceed without a token and do not echo it. Keep the remote set to HTTPS (`git remote set-url origin https://github.com/damjanbab/darelwasl.git`). If a non-interactive push is needed, create a temporary askpass helper (`cat <<'EOF' >/tmp/git-askpass.sh\n#!/usr/bin/env bash\nif [[ \"$1\" == *Username* ]]; then echo \"x-access-token\"; else echo \"${GITHUB_TOKEN:?}\"; fi\nEOF\nchmod +x /tmp/git-askpass.sh`) and run `GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin main`. Do not print or log the token and do not commit the loader script.
-1) Pull latest: `git pull origin main` before inspecting tasks.
+You are a sandbox agent with no prior context. Your goal is to pick ONE task from the current run, complete it with zero defects, open a PR against the run branch, and report back. Hard stop: only touch tasks whose Status is `pending`. If a task is already `in-progress`, `done`, or `blocked`, do not edit or claim it—back off immediately. Follow these steps, referencing documents by path:
+0) Before any git fetch/push, run `source scripts/load_github_token.sh` **from the repo root** to export `DARELWASL_GITHUB_TOKEN`/`GITHUB_TOKEN`. If the loader reports missing tokens, stop and set `DARELWASL_GITHUB_TOKEN` (e.g., export from your local `~/.git-credentials`), then re-run; do not proceed without a token and do not echo it. Keep the remote set to HTTPS (`git remote set-url origin https://github.com/damjanbab/darelwasl.git`). If a non-interactive push is needed, create a temporary askpass helper (`cat <<'EOF' >/tmp/git-askpass.sh\n#!/usr/bin/env bash\nif [[ \"$1\" == *Username* ]]; then echo \"x-access-token\"; else echo \"${GITHUB_TOKEN:?}\"; fi\nEOF\nchmod +x /tmp/git-askpass.sh`) and run `GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin HEAD`. Do not print or log the token and do not commit the loader script.
+1) Pull latest: `git pull origin main` before inspecting tasks. Determine the active run branch (e.g., `run/<run-id>`); if missing, create it from `main` when starting a new run.
 2) Read `docs/protocol.md` (operating manual), then `docs/system.md` (System Index) and `docs/faq.md` (gotchas/notes).
 3) Read the current run file (`runs/<run-id>.md`). It contains ordered tasks. Validate the task you intend to claim against the Task Schema below. If a task is malformed, fix/split it in the run file; do not proceed on invalid input.
-4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Claim ONLY if Status is `pending`, dependencies are `done`, and exclusive capabilities do not conflict. If the task is already claimed or Status ≠ `pending`, stop and back off. Commit/push the status change to main immediately after claiming.
-5) Create a branch for your task: `git checkout -b run/<run-id>/<task-id>`.
+4) Claim ONE task only. Mark it `in-progress` with your name/timestamp in the run file. Claim ONLY if Status is `pending`, dependencies are `done`, and exclusive capabilities do not conflict. If the task is already claimed or Status ≠ `pending`, stop and back off. Commit/push the status change to the run branch immediately after claiming.
+5) Create a branch for your task off the run branch: `git checkout run/<run-id>` then `git checkout -b run/<run-id>/<task-id>`.
 6) Execute YOUR task only. Do not hack or introduce untracked changes; every change must map to your task entry. Extra work goes to a new task in the next run unless it is a blocker fix. When done, set status to `done` (or `blocked` with reason); leave other tasks untouched; do not alter the run beyond your task status updates.
 7) Update `docs/system.md` and relevant registries in `registries/` if capabilities change (schema/actions/views/integrations/tooling/patterns/fixtures); add gotchas to `docs/faq.md`.
 8) Run all required proofs (per task brief + defaults). If a proof cannot run, stop and surface why; do not merge.
-9) Open a PR from your branch with a clear summary and proof results; merge only if everything is green; no manual overrides. Delete the branch after merge.
-10) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent.
+9) Open a PR from your task branch into the run branch (e.g., `run/<run-id>/<task-id>` → `run/<run-id>`) with a clear summary and proof results; merge only if everything is green; no manual overrides. Delete the task branch after merge.
+10) Report back with what changed, proofs run, and any protocol/system/faq updates. Do not archive or alter other tasks; leave the run file for the next agent. Only after the run is complete should the run branch be merged to `main` via a separate PR gate.
 
 Core invariants: correctness > speed; no flaky or external-dependent proofs; browser loader/app boot must succeed; changes must align with capability definitions in `docs/system.md`.
 
@@ -72,14 +72,14 @@ Core invariants: correctness > speed; no flaky or external-dependent proofs; bro
 If any field is missing/ambiguous, pause and correct the brief before coding.
 
 ## Default Workflow
-1) Bootstrap: read `docs/protocol.md` → read `docs/system.md` → read `docs/faq.md` → read/validate the run file after pulling latest.
-2) Claim: pick ONE task whose dependencies are done and no exclusive-capability conflict exists; mark it `in-progress` with name/time. If already claimed, back off. If dependencies are missing/ambiguous, fix/split before claiming.
+1) Bootstrap: read `docs/protocol.md` → read `docs/system.md` → read `docs/faq.md` → read/validate the run file after pulling latest. Check out the run branch (`run/<run-id>`) before editing tasks.
+2) Claim: pick ONE task whose dependencies are done and no exclusive-capability conflict exists; mark it `in-progress` with name/time. If already claimed, back off. If dependencies are missing/ambiguous, fix/split before claiming. Commit/push the status change to the run branch.
 3) Execute: implement within scope of your task only; keep changes consistent with patterns, invariants, and composability rules; no untracked hacks. Extra work goes to a new task in the next run unless it is a blocker fix.
 4) Update `docs/system.md`, registries in `registries/`, and `docs/faq.md`: record capability changes, fixtures, patterns, tooling, composability notes, and gotchas as needed. If other tasks have landed while you worked, re-read these docs before final proofs/merge and integrate, not overwrite.
 5) Proofs: run required checks; if blocked, stop and report. Before merging, ensure proofs run against the latest `docs/system.md`/registries state.
-6) PR: include summary, capabilities touched (IDs), proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved. Use a branch per task (e.g., `run/<run-id>/<task-id>`); PR title should include run ID and task ID.
-7) Merge: only with all proofs green; no manual overrides. Avoid force-pushes that could drop others’ changes. Delete branch after merge.
-8) Report back per task brief. Leave other tasks untouched for the next agent.
+6) PR: include summary, capabilities touched (IDs), proof results, and any `docs/system.md`/protocol/faq touches. Note if a rebase was required and how conflicts were resolved. Use a branch per task (e.g., `run/<run-id>/<task-id>`) and open the PR into the run branch (`run/<run-id>`); PR title should include run ID and task ID.
+7) Merge: only with all proofs green; no manual overrides. Merge task PRs into the run branch, delete the task branch after merge. Avoid force-pushes that could drop others’ changes.
+8) Report back per task brief. Leave other tasks untouched for the next agent. Only when all tasks in the run are done should a final PR merge the run branch into `main` (main is the auto-deploy branch).
 
 ## Required Proofs (defaults; task may add more)
 - Datomic schema sanity: load schema into a temp DB; ensure invariants hold.
