@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.entity :as entity]
             [darelwasl.schema :as schema])
   (:import (java.time Instant)
            (java.time.format DateTimeFormatter)
@@ -26,6 +27,7 @@
 
 (def ^:private pull-pattern
   [:task/id
+   :entity/type
    :task/title
    :task/description
    :task/status
@@ -349,9 +351,7 @@
         (if normalized-error
           {:error normalized-error}
           (let [db (d/db conn)
-                eids (map first (d/q '[:find ?e
-                                       :where [?e :task/id _]]
-                                     db))
+                eids (entity/eids-by-type db :entity.type/task)
                 tasks (->> eids
                            (map #(pull-task db %))
                            (remove nil?)
@@ -399,6 +399,7 @@
           {:error assignee-error}
           (let [tag-ids (or value #{})
                 base {:task/id (UUID/randomUUID)
+                      :entity/type :entity.type/task
                       :task/title title
                       :task/description desc
                       :task/status status
@@ -742,6 +743,7 @@
           :else
           (let [tag-id (UUID/randomUUID)
                 tx [{:tag/id tag-id
+                     :entity/type :entity.type/tag
                      :tag/name value}]
                 tx-result (attempt-transact conn tx "create tag")]
             (if-let [tx-error (:error tx-result)]
