@@ -144,7 +144,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Describe data provided and reuse of existing APIs
 
 - Task ID: frontend-entity-primitives
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 17:20 UTC)
   - Objective: Introduce reusable `EntityList`/`EntityDetail` primitives and configuration maps, keeping overrides in code (per entity type) with no runtime DSL.
   - Scope: Add generic components/state wiring; define per-type config map (fields/renderers/actions) in code; ensure task behaviors (filters/sorts, tags, archive/delete, validation) continue to work; keep escape hatches for bespoke UI; update shell wiring as needed.
   - Out of Scope: Visual redesign; routing changes beyond component composition.

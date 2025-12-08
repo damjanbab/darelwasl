@@ -86,6 +86,19 @@
    :login default-login-state
    :tasks default-task-state})
 
+(def task-entity-config
+  {:type :entity.type/task
+   :list {:title "Tasks"
+          :key :task/id
+          :meta-fn (fn [items] (str (count items) " items"))
+          :badge "Tasks"}
+   :detail {:title "Task detail"
+            :create-title "Draft a new task"
+            :badge "Detail"
+            :create-badge "Compose"
+            :placeholder-title "Select a task"
+            :placeholder-copy "Choose a task from the list or start a fresh one. Full create/edit is available here."}}) 
+
 (defn- distinct-by
   [f coll]
   (loop [seen #{}
@@ -1226,6 +1239,44 @@
    [:strong "No tasks match these filters"]
    [:p "Adjust filters to see tasks or refresh to reload."]])
 
+(defn entity-list
+  "Generic list panel with states. render-row receives (item selected?)."
+  [{:keys [title meta items status error selected render-row key-fn]}]
+  (let [items (or items [])
+        key-fn (or key-fn :task/id)]
+    [:div.panel.task-list-panel
+     [:div.section-header
+      [:h2 title]
+      (when meta [:span.meta meta])]
+     (case status
+       :loading [loading-state]
+       :error [error-state error]
+       (if (seq items)
+         [:div.task-list
+          (for [t items]
+            ^{:key (str (key-fn t))}
+            [render-row t (= selected (key-fn t))])]
+         [empty-state]))]))
+
+(defn entity-detail
+  "Generic detail shell with header/actions and placeholder handling."
+  [{:keys [title badge meta actions error placeholder content footer]}]
+  [:div.panel.task-preview
+   [:div.section-header
+    [:div
+     (when badge [badge-pill badge])
+     [:h2 title]
+     (when meta [:div.meta meta])]
+    (when actions
+      [:div.actions actions])]
+   (cond
+     error [:div.form-error error]
+     placeholder placeholder
+     :else
+     [:<>
+      content
+      (when footer footer)])])
+
 (defn task-card
   [{:task/keys [id title description status priority tags due-date updated-at assignee archived?] :as task} selected? tag-index]
   (let [tag-list (or tags [])
@@ -1255,19 +1306,15 @@
   (let [{:keys [items status error selected]} @(rf/subscribe [::tasks])
         tag-state @(rf/subscribe [::tags])
         tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (:items tag-state)))]
-    [:div.panel.task-list-panel
-     [:div.section-header
-      [:h2 "Tasks"]
-      [:span.meta (str (count items) " items")]]
-     (case status
-       :loading [loading-state]
-       :error [error-state error]
-       (if (seq items)
-         [:div.task-list
-          (for [t items]
-            ^{:key (:task/id t)}
-            [task-card t (= selected (:task/id t)) tag-index])]
-         [empty-state]))]))
+    [entity-list {:title (get-in task-entity-config [:list :title])
+                  :meta ((get-in task-entity-config [:list :meta-fn]) items)
+                  :items items
+                  :status status
+                  :error error
+                  :selected selected
+                  :key-fn :task/id
+                  :render-row (fn [t selected?]
+                                [task-card t selected? tag-index])}]))
 
 (defn tag-selector
   [{:keys [selected-tags tag-state tag-entry]}]
@@ -1341,136 +1388,142 @@
         saving? (= detail-status :saving)
         success? (= detail-status :success)
         available-assignees (if (seq assignees) assignees fallback-assignees)]
-    [:div.panel.task-preview
-     [:div.section-header
-      [:div
-       [badge-pill (if create? "Compose" "Detail")]
-       [:h2 (if create? "Draft a new task" "Task detail")]
-       [:div.meta (if create?
-                    "Create a task with full fields and feature flag handling."
-                    (or (:task/title task) "Select a task to edit"))]]
-      [:div.actions
-       [:button.button.secondary {:type "button"
-                                  :on-click #(rf/dispatch [::start-new-task])
-                                  :disabled saving?}
-        "New task"]
-       [:button.button.secondary {:type "button"
-                                  :on-click #(rf/dispatch [::reset-detail])
-                                  :disabled saving?}
-        "Reset"]]]
-     (cond
-       (and (not create?) (nil? task))
-       [:div.placeholder-card
-        [:strong "Select a task"]
-        [:p "Choose a task from the list or start a fresh one. Full create/edit is available here."]]
-
-       :else
-       (let [{:keys [title description priority assignee due-date tags archived? extended?]} form
-             tag-state @(rf/subscribe [::tags])
-             current-assignee (or assignee (:id (first available-assignees)) "")]
-         [:form.detail-form
-          {:on-submit (fn [e]
-                        (.preventDefault e)
-                        (rf/dispatch [::save-task]))}
-          (when error
-            [:div.form-error error])
-          [:div.detail-meta
-           [status-chip {:task/status task-status :task/archived? archived?}]
-           [priority-chip priority]
-           (when archived?
-             [:span.chip.status.muted "Archived"])
-           (when extended?
-             [:span.chip.tag "Extended flag"])]
-          [:div.detail-grid
-           [:div.form-group
-            [:label.form-label {:for "task-title"} "Title"]
-            [:input.form-input {:id "task-title"
-                                :type "text"
-                                :value title
-                                :placeholder "Write a concise title"
-                                :on-change #(rf/dispatch [::update-detail-field :title (.. % -target -value)])
-                                :disabled saving?}]]
-           [:div.form-group
-            [:label.form-label {:for "task-status"} "Status"]
-            [:select.form-input {:id "task-status"
-                                 :value (name (or task-status :todo))
-                                 :on-change #(rf/dispatch [::update-detail-field :status (->keyword-or-nil (.. % -target -value))])
-                                 :disabled saving?}
-             (for [{:keys [id label]} task-status-options]
-               ^{:key (name id)}
-               [:option {:value (name id)} label])]]
-           [:div.form-group
-            [:label.form-label {:for "task-assignee"} "Assignee"]
-            [:select.form-input {:id "task-assignee"
-                                 :value current-assignee
-                                 :on-change #(rf/dispatch [::update-detail-field :assignee (.. % -target -value)])
-                                 :disabled saving?}
-             (for [{:keys [id label]} available-assignees]
-               ^{:key (str "assignee-" id)}
-               [:option {:value id} label])]]
-           [:div.form-group
-            [:label.form-label {:for "task-due"} "Due date"]
-            [:input.form-input {:id "task-due"
-                                :type "date"
-                                :value (or due-date "")
-                                :on-change #(rf/dispatch [::update-detail-field :due-date (.. % -target -value)])
-                                :disabled saving?}]]
-           [:div.form-group
-            [:label.form-label {:for "task-priority"} "Priority"]
-            [:select.form-input {:id "task-priority"
-                                 :value (name (or priority :medium))
-                                 :on-change #(rf/dispatch [::update-detail-field :priority (->keyword-or-nil (.. % -target -value))])
-                                 :disabled saving?}
-             (for [{:keys [id label]} task-priority-options]
-               ^{:key (name id)}
-               [:option {:value (name id)} label])]]
-           [:div.form-group
-            [:label.form-label "Flags"]
-            [:div.toggle-row
-             [:label.toggle
-              [:input {:type "checkbox"
-                       :checked (boolean extended?)
-                       :on-change #(rf/dispatch [::update-detail-field :extended? (.. % -target -checked)])
-                       :disabled saving?}]
-              [:span "Extended"]]
-             [:label.toggle
-              [:input {:type "checkbox"
-                       :checked (boolean archived?)
-                       :on-change #(rf/dispatch [::update-detail-field :archived? (.. % -target -checked)])
-                       :disabled saving?}]
-              [:span "Archived"]]]]]
-          [:div.form-group
-           [:label.form-label "Tags"]
-           [tag-selector {:selected-tags tags
-                          :tag-state tag-state
-                          :tag-entry (:tag-entry detail)}]]
-          [:div.form-group
-           [:label.form-label {:for "task-description"} "Description"]
-           [:textarea.form-input {:id "task-description"
-                                  :rows 5
-                                  :value description
-                                  :placeholder "Add context, acceptance, and next steps"
-                                  :on-change #(rf/dispatch [::update-detail-field :description (.. % -target -value)])
-                                  :disabled saving?}]]
-          [:div.detail-actions
-           [:button.button {:type "submit"
-                            :disabled saving?}
-            (if create? "Create task" "Save changes")]
-           [:button.button.secondary {:type "button"
-                                      :on-click #(rf/dispatch [::reset-detail])
-                                      :disabled saving?}
-            "Cancel"]
-           (when-not create?
-             [:button.button.danger {:type "button"
-                                     :disabled (= detail-status :deleting)
-                                     :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
-                                                  (rf/dispatch [::delete-task (:id form)]))}
-              (if (= detail-status :deleting) "Deleting..." "Delete")])
-           (case detail-status
-             :saving [:span.pill "Saving..."]
-             :success [:span.pill "Saved"]
-             :deleting [:span.pill "Deleting..."]
-             nil)]]))]))
+    (let [placeholder (when (and (not create?) (nil? task))
+                        [:div.placeholder-card
+                         [:strong (get-in task-entity-config [:detail :placeholder-title])]
+                         [:p (get-in task-entity-config [:detail :placeholder-copy])]])
+          title (if create?
+                  (get-in task-entity-config [:detail :create-title])
+                  (get-in task-entity-config [:detail :title]))
+          badge (if create?
+                  (get-in task-entity-config [:detail :create-badge])
+                  (get-in task-entity-config [:detail :badge]))
+          meta (if create?
+                 "Create a task with full fields and feature flag handling."
+                 (or (:task/title task) "Select a task to edit"))
+          footer (case detail-status
+                   :saving [:span.pill "Saving..."]
+                   :success [:span.pill "Saved"]
+                   :deleting [:span.pill "Deleting..."]
+                   nil)]
+      [entity-detail
+       {:title title
+        :badge badge
+        :meta meta
+        :actions [:<>
+                  [:button.button.secondary {:type "button"
+                                             :on-click #(rf/dispatch [::start-new-task])
+                                             :disabled saving?}
+                   "New task"]
+                  [:button.button.secondary {:type "button"
+                                             :on-click #(rf/dispatch [::reset-detail])
+                                             :disabled saving?}
+                   "Reset"]]
+        :placeholder placeholder
+        :content (when-not placeholder
+                   (let [{:keys [title description priority assignee due-date tags archived? extended?]} form
+                         tag-state @(rf/subscribe [::tags])
+                         current-assignee (or assignee (:id (first available-assignees)) "")]
+                     [:form.detail-form
+                      {:on-submit (fn [e]
+                                    (.preventDefault e)
+                                    (rf/dispatch [::save-task]))}
+                      (when error
+                        [:div.form-error error])
+                      [:div.detail-meta
+                       [status-chip {:task/status task-status :task/archived? archived?}]
+                       [priority-chip priority]
+                       (when archived?
+                         [:span.chip.status.muted "Archived"])
+                       (when extended?
+                         [:span.chip.tag "Extended flag"])]
+                      [:div.detail-grid
+                       [:div.form-group
+                        [:label.form-label {:for "task-title"} "Title"]
+                        [:input.form-input {:id "task-title"
+                                            :type "text"
+                                            :value title
+                                            :placeholder "Write a concise title"
+                                            :on-change #(rf/dispatch [::update-detail-field :title (.. % -target -value)])
+                                            :disabled saving?}]]
+                       [:div.form-group
+                        [:label.form-label {:for "task-status"} "Status"]
+                        [:select.form-input {:id "task-status"
+                                             :value (name (or task-status :todo))
+                                             :on-change #(rf/dispatch [::update-detail-field :status (->keyword-or-nil (.. % -target -value))])
+                                             :disabled saving?}
+                         (for [{:keys [id label]} task-status-options]
+                           ^{:key (name id)}
+                           [:option {:value (name id)} label])]]
+                       [:div.form-group
+                        [:label.form-label {:for "task-assignee"} "Assignee"]
+                        [:select.form-input {:id "task-assignee"
+                                             :value current-assignee
+                                             :on-change #(rf/dispatch [::update-detail-field :assignee (.. % -target -value)])
+                                             :disabled saving?}
+                         (for [{:keys [id label]} available-assignees]
+                           ^{:key (str "assignee-" id)}
+                           [:option {:value id} label])]]
+                       [:div.form-group
+                        [:label.form-label {:for "task-due"} "Due date"]
+                        [:input.form-input {:id "task-due"
+                                            :type "date"
+                                            :value (or due-date "")
+                                            :on-change #(rf/dispatch [::update-detail-field :due-date (.. % -target -value)])
+                                            :disabled saving?}]]
+                       [:div.form-group
+                        [:label.form-label {:for "task-priority"} "Priority"]
+                        [:select.form-input {:id "task-priority"
+                                             :value (name (or priority :medium))
+                                             :on-change #(rf/dispatch [::update-detail-field :priority (->keyword-or-nil (.. % -target -value))])
+                                             :disabled saving?}
+                         (for [{:keys [id label]} task-priority-options]
+                           ^{:key (name id)}
+                           [:option {:value (name id)} label])]]
+                       [:div.form-group
+                        [:label.form-label "Flags"]
+                        [:div.toggle-row
+                         [:label.toggle
+                          [:input {:type "checkbox"
+                                   :checked (boolean extended?)
+                                   :on-change #(rf/dispatch [::update-detail-field :extended? (.. % -target -checked)])
+                                   :disabled saving?}]
+                          [:span "Extended"]]
+                         [:label.toggle
+                          [:input {:type "checkbox"
+                                   :checked (boolean archived?)
+                                   :on-change #(rf/dispatch [::update-detail-field :archived? (.. % -target -checked)])
+                                   :disabled saving?}]
+                          [:span "Archived"]]]]]
+                      [:div.form-group
+                       [:label.form-label "Tags"]
+                       [tag-selector {:selected-tags tags
+                                      :tag-state tag-state
+                                      :tag-entry (:tag-entry detail)}]]
+                      [:div.form-group
+                       [:label.form-label {:for "task-description"} "Description"]
+                       [:textarea.form-input {:id "task-description"
+                                              :rows 5
+                                              :value description
+                                              :placeholder "Add context, acceptance, and next steps"
+                                              :on-change #(rf/dispatch [::update-detail-field :description (.. % -target -value)])
+                                              :disabled saving?}]]
+                      [:div.detail-actions
+                       [:button.button {:type "submit"
+                                        :disabled saving?}
+                        (if create? "Create task" "Save changes")]
+                       [:button.button.secondary {:type "button"
+                                                  :on-click #(rf/dispatch [::reset-detail])
+                                                  :disabled saving?}
+                        "Cancel"]
+                       (when-not create?
+                         [:button.button.danger {:type "button"
+                                                 :disabled (= detail-status :deleting)
+                                                 :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
+                                                              (rf/dispatch [::delete-task (:id form)]))}
+                          (if (= detail-status :deleting) "Deleting..." "Delete")])]]))
+        :footer footer}]))
+    )
 
 (defn top-bar []
   (let [session @(rf/subscribe [::session])
