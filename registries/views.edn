@@ -27,7 +27,8 @@
             :cap/action/task-archive
             :cap/action/tag-create
             :cap/action/tag-update
-            :cap/action/tag-delete]
+            :cap/action/tag-delete
+            :cap/action/task-delete]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 250}
        :state-model :finite

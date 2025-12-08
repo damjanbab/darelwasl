@@ -30,7 +30,7 @@
   - Reporting: summarize root cause, fixes, and proofs.
 
 - Task ID: task-delete-support
-  - Status: in-progress (Codex, 2025-12-08 11:03 UTC)
+  - Status: done (Codex, 2025-12-08 11:11 UTC)
   - Objective: Enable deleting tasks from the app (backend + UI) so tasks can be removed, not just archived.
   - Scope: Add backend support to delete tasks; expose delete affordance in the task view; ensure list updates accordingly; handle confirmations/errors.
   - Out of Scope: bulk deletes; hardening beyond existing auth/session; audit/history UI.
