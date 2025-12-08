@@ -100,6 +100,21 @@
      (tasks/list-tasks (get-in state [:db :conn])
                        (:query-params request)))))
 
+(defn- recent-tasks-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/recent-tasks (get-in state [:db :conn])
+                         {:limit (some-> (get-in request [:query-params :limit]) Integer/parseInt)
+                          :include-archived? (= "true" (get-in request [:query-params :archived]))}))))
+
+(defn- task-counts-handler
+  [state]
+  (fn [request]
+    (handle-task-result
+     (tasks/task-status-counts (get-in state [:db :conn])
+                               {:include-archived? (= "true" (get-in request [:query-params :archived]))}))))
+
 (defn- create-task-handler
   [state]
   (fn [request]
@@ -215,6 +230,8 @@
          {:middleware [require-session]}
          ["" {:get (list-tasks-handler state)
               :post (create-task-handler state)}]
+         ["/recent" {:get (recent-tasks-handler state)}]
+         ["/counts" {:get (task-counts-handler state)}]
          ["/:id" {:put (update-task-handler state)
                   :delete (delete-task-handler state)}]
          ["/:id/status" {:post (set-status-handler state)}]

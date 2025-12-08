@@ -341,6 +341,40 @@
     :updated (sort-by :task/updated-at (compare-nil-last order) tasks)
     tasks))
 
+(defn recent-tasks
+  "Return up to `limit` recent tasks sorted by updated-at desc, optional include-archived?."
+  [conn {:keys [limit include-archived?]}]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            eids (entity/eids-by-type db :entity.type/task)
+            tasks (->> eids
+                       (map #(pull-task db %))
+                       (remove nil?)
+                       (filter #(or include-archived?
+                                    (not (:task/archived? %))))
+                       (sort-tasks {:sort :updated :order :desc})
+                       (take (or limit 5))
+                       (map present-task)
+                       vec)]
+        {:tasks tasks})))
+
+(defn task-status-counts
+  "Return counts of tasks by status (optionally excluding archived unless include-archived?)."
+  [conn {:keys [include-archived?]}]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            eids (entity/eids-by-type db :entity.type/task)
+            counts (->> eids
+                        (map #(pull-task db %))
+                        (remove nil?)
+                        (filter #(or include-archived?
+                                     (not (:task/archived? %))))
+                        (map :task/status)
+                        (frequencies))]
+        {:counts {:todo (get counts :todo 0)
+                  :in-progress (get counts :in-progress 0)
+                  :done (get counts :done 0)}})))
+
 (defn list-tasks
   "List tasks with optional filters and sort/order parameters."
   [conn params]
