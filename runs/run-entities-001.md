@@ -1,0 +1,287 @@
+# Run run-entities-001
+
+Goal: land the shared entity foundation (:entity/type + helpers), keep Task app behavior intact via reusable entity primitives, add a new Home app (cross-entity summary), and introduce an app switcher tab interaction. Registries, docs, and checks must align; no scope left ambiguous.
+
+## Tasks
+- Task ID: product-spec-entities-home
+  - Status: in-progress (Codex, 2025-12-08 16:36 UTC)
+  - Objective: Document the product spec for the entity-first model and new Home app + app switcher in `docs/system.md` (capabilities, behaviors, compatibility, migration expectations).
+  - Scope: Define entities in scope (user/task/tag now, future-ready note), `:entity/type` usage expectations, Home app purpose/content (summary widgets, recent tasks, quick stats), Task app parity requirements, app switcher behavior (access pattern, discoverability), flags/compatibility/migration narrative.
+  - Out of Scope: Visual tokens; code changes; deployment changes.
+  - Capabilities Touched: docs/spec (narrative only; no registry IDs change yet).
+  - Parallel Safety:
+    - Exclusive Capabilities: system spec doc
+    - Shared/Read-only Capabilities: registries (read), existing specs
+    - Sequencing Constraints: precedes all implementation tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: documentation for schema/actions/views; establishes expectations for shared helpers and Home view
+    - New composability rules needed: document rules for `:entity/type` usage and app switcher navigation model
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add Home app + app switcher, unify entity mental model
+    - Compatibility expectation: backward compatible (additive) at product level
+    - Flag/Rollout plan: none (doc only)
+  - Breaking/Deprecation:
+    - Breaking change? No; doc-only
+  - Dependencies: none
+  - Deliverables: Updated `docs/system.md` product sections reflecting new goals/flows
+  - Proof Plan: Consistency review; no code proofs
+  - Fixtures/Data Assumptions: Existing fixtures unchanged
+  - Protocol/System Updates: Update system doc narrative; no protocol change
+  - FAQ Updates: None
+  - Tooling/Automation: None
+  - Reporting: Summarize spec additions and alignment to goal
+
+- Task ID: design-spec-entities-home
+  - Status: pending
+  - Objective: Capture UX/design for Home app, Task app reuse with entity primitives, and the app switcher (hover/push-down tab) in `docs/system.md`.
+  - Scope: Layouts/states (desktop/mobile), component blocks for Home (hero/summary cards/recent list/tag highlights/quick actions), interaction for app switcher (hover/push, keyboard/focus, aria), theme usage (reuse current tokens), error/loading/empty states for Home, responsive behavior.
+  - Out of Scope: New color/typography systems; backend changes.
+  - Capabilities Touched: docs/design (views narrative)
+  - Parallel Safety:
+    - Exclusive Capabilities: design spec doc
+    - Shared/Read-only Capabilities: theme registry (read), system doc
+    - Sequencing Constraints: after product-spec-entities-home; precedes UI impl tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view patterns, state handling, navigation affordance
+    - New composability rules needed: note reuse of shared primitives and nav pattern
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add Home/app-switcher UX; clarify entity-driven views
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No; doc-only
+  - Dependencies: product-spec-entities-home
+  - Deliverables: Updated design sections in `docs/system.md`
+  - Proof Plan: Consistency review
+  - Fixtures/Data Assumptions: None
+  - Protocol/System Updates: None
+  - FAQ Updates: None
+  - Tooling/Automation: None
+  - Reporting: Note design decisions and components defined
+
+- Task ID: schema-entity-type-migration
+  - Status: pending
+  - Objective: Add shared `:entity/type` attribute to the schema, update fixtures/seed, and provide migration/backfill helpers.
+  - Scope: Update `registries/schema.edn` with `:entity/type` (shared), set on user/task/tag entities; update fixtures (users/tags/tasks) to include type; ensure seed + temp DB helpers set it; add migration/backfill fn to populate type for existing DBs (idempotent); update `docs/system.md`/registries references.
+  - Out of Scope: New business entities beyond user/task/tag; API shape changes.
+  - Capabilities Touched: [:cap/schema/user :cap/schema/task :cap/schema/tag] (+ new shared attr, documented)
+  - Parallel Safety:
+    - Exclusive Capabilities: schema registry, fixtures
+    - Shared/Read-only Capabilities: db helpers (read)
+    - Sequencing Constraints: after design-spec-entities-home; before backend entity/helpers/tasks UI work
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: schema/fixtures, temp DB loader, migration pattern
+    - New composability rules needed: require `:entity/type` on persisted entities
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: introduce common discriminator for entities
+    - Compatibility expectation: backward compatible via migration/backfill; forward compatible
+    - Flag/Rollout plan: none (immediate backfill)
+  - Breaking/Deprecation:
+    - Breaking change? No if migration applied; document mitigation
+  - Dependencies: design-spec-entities-home
+  - Deliverables: Updated schema registry; fixtures with types; migration helper; doc updates
+  - Proof Plan: `scripts/checks.sh registries`; temp schema load; seed with `--temp`; manual migration run on temp DB
+  - Fixtures/Data Assumptions: Existing fixture IDs retained; types added
+  - Protocol/System Updates: Note schema expectations in system doc
+  - FAQ Updates: Add note if migration quirk discovered
+  - Tooling/Automation: Extend seed/migration helper for type backfill
+  - Reporting: Describe schema/fixture changes and migration outcome
+
+- Task ID: backend-entity-core-helpers
+  - Status: pending
+  - Objective: Add shared backend helpers for entity operations (pull/list by `:entity/type`, common validation) and wire Task/Tag flows to set/use `:entity/type` without changing public API contracts.
+  - Scope: New helper namespace for entity pull/list/validation; ensure task/tag creation set `:entity/type`; refactor duplicated query/pull logic in `darelwasl.tasks` to use helpers where it reduces risk; keep API shapes/filters unchanged; update docs to describe helper capability.
+  - Out of Scope: New public entity endpoints; pagination/search; behavioral changes to task contracts.
+  - Capabilities Touched: [:cap/action/task-create :cap/action/task-update :cap/action/tag-create :cap/action/tag-update :cap/action/tag-delete] plus new helper capability (documented)
+  - Parallel Safety:
+    - Exclusive Capabilities: task/tag backend actions
+    - Shared/Read-only Capabilities: schema/fixtures (read), db helpers
+    - Sequencing Constraints: after schema-entity-type-migration; before frontend entity primitives
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: backend action core, shared helper pattern
+    - New composability rules needed: encourage helper use for future entity types
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: unify backend entity handling; reduce duplication
+    - Compatibility expectation: backward compatible API responses/behavior
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No; maintain existing contract surfaces
+  - Dependencies: schema-entity-type-migration
+  - Deliverables: Helper ns; refactored task/tag code; doc note in `docs/system.md`
+  - Proof Plan: `scripts/checks.sh schema` (extended to load), manual API smoke (login + list/create/update task/tag)
+  - Fixtures/Data Assumptions: Existing fixtures
+  - Protocol/System Updates: Document helper capability in system doc
+  - FAQ Updates: Note any helper pitfalls if found
+  - Tooling/Automation: None beyond helper
+  - Reporting: Summarize helper additions and API compatibility
+
+- Task ID: backend-home-data
+  - Status: pending
+  - Objective: Provide backend support (if needed) for Home app data (summary stats, recent tasks), reusing existing actions/db where possible.
+  - Scope: Add lightweight queries for recent tasks/updated entities and status counts; optionally expose internal endpoint(s) only if Home cannot reuse existing `/api/tasks` params; ensure they honor auth/session; keep responses simple; no behavior change to task contracts.
+  - Out of Scope: Complex analytics/history timelines; pagination beyond small summaries.
+  - Capabilities Touched: [:cap/view/home (new view data)], possibly task actions (read-only)
+  - Parallel Safety:
+    - Exclusive Capabilities: new home data path (if endpoint added)
+    - Shared/Read-only Capabilities: tasks data (read)
+    - Sequencing Constraints: after backend-entity-core-helpers; before home-app-implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: reuse task queries; avoid new abstractions
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: enable Home summaries
+    - Compatibility expectation: backward compatible (additive)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: backend-entity-core-helpers
+  - Deliverables: Query helpers and/or small endpoint(s) for Home data; docs update if endpoint added
+  - Proof Plan: Manual API call for summary; `scripts/checks.sh registries` (if new view registered)
+  - Fixtures/Data Assumptions: Use existing fixtures for counts/recent
+  - Protocol/System Updates: None unless new endpoint demands pattern
+  - FAQ Updates: Add note if Home uses filtered tasks endpoint
+  - Tooling/Automation: None
+  - Reporting: Describe data provided and reuse of existing APIs
+
+- Task ID: frontend-entity-primitives
+  - Status: pending
+  - Objective: Introduce reusable `EntityList`/`EntityDetail` primitives and configuration maps, keeping overrides in code (per entity type) with no runtime DSL.
+  - Scope: Add generic components/state wiring; define per-type config map (fields/renderers/actions) in code; ensure task behaviors (filters/sorts, tags, archive/delete, validation) continue to work; keep escape hatches for bespoke UI; update shell wiring as needed.
+  - Out of Scope: Visual redesign; routing changes beyond component composition.
+  - Capabilities Touched: [:cap/view/tasks] (implementation refactor)
+  - Parallel Safety:
+    - Exclusive Capabilities: task view implementation
+    - Shared/Read-only Capabilities: theme, registries (read)
+    - Sequencing Constraints: after backend-entity-core-helpers; before task/home/app switcher UI tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view component pattern; shared list/detail primitives
+    - New composability rules needed: document per-type config pattern in code/system doc
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: unify UI plumbing while preserving expressiveness
+    - Compatibility expectation: backward compatible UI behavior
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No; ensure parity
+  - Dependencies: backend-entity-core-helpers
+  - Deliverables: New primitives + task view refactor using them; inline docs/comments as needed
+  - Proof Plan: `npm run check`; manual task flow smoke (login, list/filter/create/update/status/assign/due/tags/archive/delete)
+  - Fixtures/Data Assumptions: existing seed data
+  - Protocol/System Updates: Document component pattern in system doc if needed
+  - FAQ Updates: Note any UI gotchas
+  - Tooling/Automation: None
+  - Reporting: Parity confirmation and component overview
+
+- Task ID: frontend-task-app-refactor
+  - Status: pending
+  - Objective: Ensure the Task app fully leverages the new entity primitives with no regressions and clean config/override usage.
+  - Scope: Map task-specific config (fields, renderers, actions) onto primitives; clean up legacy code; ensure filters/sorts/search params intact; keep tag management, archive/delete flows, and state handling; adjust styling if needed to fit new components.
+  - Out of Scope: New task features beyond current spec.
+  - Capabilities Touched: [:cap/view/tasks]
+  - Parallel Safety:
+    - Exclusive Capabilities: task view implementation
+    - Shared/Read-only Capabilities: theme (read), registries (read)
+    - Sequencing Constraints: after frontend-entity-primitives
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: reuse primitives; codify overrides
+    - New composability rules needed: none beyond config pattern
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: align implementation to new primitives
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: frontend-entity-primitives
+  - Deliverables: Task UI refactored; config/override map; code comments where non-obvious
+  - Proof Plan: `npm run check`; manual task smoke as above
+  - Fixtures/Data Assumptions: existing seed data
+  - Protocol/System Updates: None
+  - FAQ Updates: Note any edge cases encountered
+  - Tooling/Automation: None
+  - Reporting: Parity status and key refactors
+
+- Task ID: home-app-implementation
+  - Status: pending
+  - Objective: Build the Home app using entity primitives/configs to surface summary bits (recent tasks, counts, tags highlights) with proper states.
+  - Scope: New Home view/page; cards for recent tasks (subset), status counts, tag highlights, quick actions (e.g., “New task” link), reuse existing APIs or new summary endpoint if provided; loading/empty/error states; responsive layout per design spec.
+  - Out of Scope: Notifications, cross-entity editing beyond tasks/tags, history timeline.
+  - Capabilities Touched: [:cap/view/home (new)], [:cap/view/tasks] (read-only reuse)
+  - Parallel Safety:
+    - Exclusive Capabilities: Home view implementation
+    - Shared/Read-only Capabilities: task data APIs (read)
+    - Sequencing Constraints: after frontend-task-app-refactor; after backend-home-data (if new endpoint)
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view primitives; shared shell
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add Home surface; additive
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: frontend-task-app-refactor, backend-home-data
+  - Deliverables: Home view CLJS; wiring into app state/routes; uses summary data
+  - Proof Plan: `npm run check`; manual Home load with seeded data; verify states (loading/empty/error)
+  - Fixtures/Data Assumptions: existing fixtures supply content
+  - Protocol/System Updates: Document new view in system doc
+  - FAQ Updates: Add usage note if needed
+  - Tooling/Automation: None
+  - Reporting: Describe Home widgets and data sources
+
+- Task ID: app-switcher-nav
+  - Status: pending
+  - Objective: Implement modern app switcher (hover/push-to-top drop tab) to switch between Home and Task apps with accessibility and responsiveness.
+  - Scope: Add switcher component to shell; interactions (hover/push to top reveals tab, click/tap to select), keyboard/focus handling, aria labels; remember last app if feasible; integrate with session guard; ensure mobile-friendly behavior.
+  - Out of Scope: Routing overhaul; multi-tenant contexts.
+  - Capabilities Touched: [:cap/view/home :cap/view/tasks] shell/navigation
+  - Parallel Safety:
+    - Exclusive Capabilities: navigation shell
+    - Shared/Read-only Capabilities: views (read)
+    - Sequencing Constraints: after home-app-implementation (or parallel coordination) and frontend-task-app-refactor
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: shell layout; nav pattern
+    - New composability rules needed: nav accessibility pattern noted in docs
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add app switching; additive
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: home-app-implementation, frontend-task-app-refactor
+  - Deliverables: Switcher UI + logic; state integration; basic persistence of last selected (if added)
+  - Proof Plan: `npm run check`; manual: switch apps via hover/tab, keyboard navigation, mobile tap; ensure login gating preserved
+  - Fixtures/Data Assumptions: N/A
+  - Protocol/System Updates: Document nav pattern in system doc
+  - FAQ Updates: Add nav gotchas if found
+  - Tooling/Automation: None
+  - Reporting: Summarize nav behavior and accessibility handling
+
+- Task ID: registries-docs-checks-sync
+  - Status: pending
+  - Objective: Align registries (`schema/actions/views/tooling`), `docs/system.md`, and `docs/faq.md` with new capabilities; modestly extend checks harness to cover schema load/migrations and register new view.
+  - Scope: Add Home view entry; update task view entry if config changes; note shared helper capability; ensure `:entity/type` documented; add FAQ notes if any; extend `scripts/checks.sh` to load schema into temp DB (using helper) and to validate registries; keep stubs for heavier checks if not implemented but document them.
+  - Out of Scope: Full test suite rewrite; CI changes.
+  - Capabilities Touched: registries + docs + tooling harness
+  - Parallel Safety:
+    - Exclusive Capabilities: registries/docs/checks
+    - Shared/Read-only Capabilities: code (read)
+    - Sequencing Constraints: last; depends on outputs of prior tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: registry/documentation consistency; check harness
+    - New composability rules needed: document helper/nav patterns if not already
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: keep canonical sources accurate; ensure checks reflect new schema
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: all prior tasks
+  - Deliverables: Updated registries; system doc; FAQ (if needed); enhanced `scripts/checks.sh`
+  - Proof Plan: `scripts/checks.sh registries` + schema load step; rerun `npm run check` if touched; manual verification of registry entries
+  - Fixtures/Data Assumptions: existing fixtures with new type fields
+  - Protocol/System Updates: None unless harness rules change
+  - FAQ Updates: Add migration/app-switcher notes if applicable
+  - Tooling/Automation: Extend checks script minimally
+  - Reporting: Detail registry/doc/checks changes and proof results
+
+## Notes
+- TBD as the run progresses; record blockers/decisions/follow-ups here.
