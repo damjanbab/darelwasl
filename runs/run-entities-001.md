@@ -228,7 +228,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Summarize cleanup and confirm behavioral parity
 
 - Task ID: home-app-implementation
-  - Status: in-progress (Codex, 2025-12-08 18:13 UTC)
+  - Status: done (Codex, 2025-12-08 18:25 UTC)
   - Objective: Build the Home app using entity primitives/configs to surface summary bits (recent tasks, counts, tags highlights) with proper states.
   - Scope: New Home view/page; cards for recent tasks (subset), status counts, tag highlights, quick actions (e.g., “New task” link), reuse existing APIs or new summary endpoint if provided; loading/empty/error states; responsive layout per design spec.
   - Out of Scope: Notifications, cross-entity editing beyond tasks/tags, history timeline.

@@ -39,4 +39,25 @@
                   :forward true
                   :flags [:task/extended?]}
   :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
+
+ {:id :cap/view/home
+  :title "Home summary"
+  :version "v1"
+  :data {:sources [{:id :tasks/recent
+                    :source :cap/schema/task
+                    :pull [:task/id :task/title :task/status :task/priority :task/due-date :task/updated-at :task/archived?
+                           {:task/assignee [:user/id :user/username :user/name]}
+                           {:task/tags [:tag/id :tag/name]}]}
+                   {:id :tasks/counts
+                    :source :cap/schema/task
+                    :pull []}]}
+  :actions [:cap/action/task-create]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 200}
+       :state-model :finite
+       :layout {:desktop "summary cards + list snippets" :mobile "stacked cards/list"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
 ]

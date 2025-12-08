@@ -204,6 +204,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left. Task app is selectable from the app switcher and may share list/detail primitives with Home.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
+- Home view: default after login; shows status counts, recent tasks (updated desc), tag highlights, and quick action to create a task. Uses `/api/tasks/recent` and `/api/tasks/counts`; loading/empty/error/ready states; simple nav buttons (Home/Tasks) in the top bar until the app switcher lands.
 
 ## Design Spec: Home + App Switcher + Entity Primitives
 - Home (default post-login):

@@ -70,6 +70,12 @@
    :assignees []
    :detail default-task-detail})
 
+(def default-home-state
+  {:status :idle
+   :error nil
+   :recent []
+   :counts {:todo 0 :in-progress 0 :done 0}})
+
 (def default-tags-state
   {:items []
    :status :idle
@@ -83,6 +89,7 @@
    :session nil
    :theme default-theme-state
    :tags default-tags-state
+   :home default-home-state
    :login default-login-state
    :tasks default-task-state})
 
@@ -236,6 +243,32 @@
   (or (get-in session [:user :id])
       (:id (first assignees))
       (:id (first fallback-assignees))))
+
+(defn- status-count-cards
+  [{:keys [todo in-progress done]}]
+  [:div.summary-cards
+   [:div.card
+    [:div.card-label "To do"]
+    [:div.card-value (or todo 0)]]
+   [:div.card
+    [:div.card-label "In progress"]
+    [:div.card-value (or in-progress 0)]]
+   [:div.card
+    [:div.card-label "Done"]
+    [:div.card-value (or done 0)]]])
+
+(declare tag-chip)
+(declare entity-list task-card)
+
+(defn- tag-highlights [tags]
+  [:div.tag-highlights
+   [:h4 "Tags"]
+   (if (seq tags)
+     [:div.tags
+      (for [t tags]
+        ^{:key (str "tag-" (:tag/id t))}
+        [tag-chip (:tag/name t)])]
+     [:span.meta "No tags yet"] )])
 
 (defn- kw
   [v]
@@ -413,6 +446,33 @@
                                          :body {:error "Network error. Please try again."}}))))))))
 
 (rf/reg-fx
+ ::home-request
+ (fn [{:keys [url on-success on-error]}]
+   (-> (js/fetch url
+                 #js {:method "GET"
+                      :headers #js {"Accept" "application/json"}
+                      :credentials "same-origin"})
+       (.then
+        (fn [resp]
+          (-> (.json resp)
+              (.then
+               (fn [data]
+                 (let [payload (js->clj data :keywordize-keys true)
+                       status (.-status resp)]
+                   (if (<= 200 status 299)
+                     (rf/dispatch (conj on-success payload))
+                     (rf/dispatch (conj on-error {:status status
+                                                  :body payload}))))))
+              (.catch
+               (fn [_]
+                 (rf/dispatch (conj on-error {:status (.-status resp)
+                                              :body {:error "Invalid response from server"}})))))))
+       (.catch
+        (fn [_]
+          (rf/dispatch (conj on-error {:status nil
+                                       :body {:error "Network error. Please try again."}})))))))
+
+(rf/reg-fx
  ::task-action
  (fn [{:keys [url method body on-success on-error]}]
    (let [opts (clj->js (cond-> {:method (or method "POST")
@@ -456,6 +516,15 @@
  ::set-view
  (fn [db [_ view]]
    (assoc db :active-view view)))
+
+(rf/reg-event-fx
+ ::navigate
+ (fn [{:keys [db]} [_ route]]
+   (let [dispatches (cond-> []
+                      (= route :home) (conj [::fetch-home])
+                      (= route :tasks) (conj [::fetch-tasks]))]
+     {:db (assoc db :route route)
+      :dispatch-n dispatches})))
 
 (rf/reg-event-fx
  ::set-theme
@@ -507,13 +576,15 @@
                  (assoc :session {:token token
                                   :user {:id user-id
                                          :username username}})
-                 (assoc :route :tasks)
+                 (assoc :route :home)
                  (assoc :tasks default-task-state)
+                 (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
                  (assoc-in [:login :error] nil))]
     {:db db'
      :dispatch-n [[::fetch-tags]
+                  [::fetch-home]
                   [::fetch-tasks]]})))
 
 (rf/reg-event-db
@@ -553,7 +624,8 @@
             (assoc :session nil
                    :route :login
                    :tasks default-task-state
-                   :tags default-tags-state)
+                   :tags default-tags-state
+                   :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
                                                                    (get-in db [:login :username])
                                                                    ""))))}))
@@ -624,6 +696,48 @@
                    :method "GET"
                    :on-success [::fetch-tags-success]
                    :on-error [::fetch-tags-failure]}}))
+
+(rf/reg-event-fx
+ ::fetch-home
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:home :status] :loading)
+            (assoc-in [:home :error] nil))
+    :fx [[:home-request {:url "/api/tasks/counts"
+                         :on-success [::fetch-home-counts-success]
+                         :on-error [::fetch-home-failure]}]
+         [:home-request {:url "/api/tasks/recent"
+                         :on-success [::fetch-home-recent-success]
+                         :on-error [::fetch-home-failure]}]]}))
+
+(rf/reg-event-db
+ ::fetch-home-counts-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:home :counts] (:counts payload))
+       (update-in [:home :status] #(if (= % :loading) :loading %))
+       (assoc-in [:home :error] nil))))
+
+(rf/reg-event-db
+ ::fetch-home-recent-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:home :recent] (:tasks payload))
+       (assoc-in [:home :status] :ready)
+       (assoc-in [:home :error] nil))))
+
+(rf/reg-event-db
+ ::fetch-home-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load home data.")]
+     (-> db
+         (assoc-in [:home :status] :error)
+         (assoc-in [:home :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
 
 (rf/reg-event-db
  ::fetch-tags-success
@@ -1041,6 +1155,8 @@
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
+(rf/reg-sub ::home (fn [db _] (:home db)))
+(rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
  (fn [db _]
@@ -1228,6 +1344,11 @@
    [:div.spinner]
    [:div "Loading tasks..."]])
 
+(defn home-loading []
+  [:div.state
+   [:div.spinner]
+   [:div "Loading overview..."]])
+
 (defn error-state [message]
   [:div.state.error
    [:div.form-error message]
@@ -1237,9 +1358,26 @@
      "Try again"]]])
 
 (defn empty-state []
+   [:div.state.empty
+    [:strong "No tasks match these filters"]
+    [:p "Adjust filters to see tasks or refresh to reload."]])
+
+(defn home-recent-list
+  [tasks]
+  (let [tag-index {}]
+    [entity-list {:title "Recent tasks"
+                  :meta (str (count tasks) " items")
+                  :items tasks
+                  :status (if (seq tasks) :ready :empty)
+                  :error nil
+                  :selected nil
+                  :key-fn :task/id
+                  :render-row (fn [t _] [task-card t false tag-index])}] ))
+
+(defn home-empty []
   [:div.state.empty
-   [:strong "No tasks match these filters"]
-   [:p "Adjust filters to see tasks or refresh to reload."]])
+   [:strong "No tasks yet"]
+   [:p "Create your first task to see summaries here."]])
 
 (defn entity-list
   "Generic list panel with states. render-row receives (item selected?)."
@@ -1529,6 +1667,7 @@
 
 (defn top-bar []
   (let [session @(rf/subscribe [::session])
+        route @(rf/subscribe [::route])
         uname (get-in session [:user :username] "")]
     [:header.top-bar
      [:div
@@ -1537,6 +1676,16 @@
                    (str "Signed in as " uname)
                    "Task workspace")]]
      [:div.top-actions
+      (when session
+        [:div.app-nav
+         [:button.button.secondary {:type "button"
+                                    :class (when (= route :home) "active")
+                                    :on-click #(rf/dispatch [::navigate :home])}
+          "Home"]
+         [:button.button.secondary {:type "button"
+                                    :class (when (= route :tasks) "active")
+                                    :on-click #(rf/dispatch [::navigate :tasks])}
+          "Tasks"]])
       (when session
         (let [initial (if (seq uname) (str/upper-case (subs uname 0 1)) "?")]
           [:div.session-chip
@@ -1576,11 +1725,55 @@
    [:footer.app-footer
     [:span "Logged in workspace · Filter and sort tasks from the API."]]])
 
+(defn home-view []
+  (let [home @(rf/subscribe [::home])
+        tags @(rf/subscribe [::tags])]
+    (when (= :idle (:status home))
+      (rf/dispatch [::fetch-home]))
+    [:div.home
+     (case (:status home)
+       :loading [home-loading]
+       :error [error-state (:error home)]
+       :ready (let [counts (:counts home)
+                    recent (:recent home)
+                    tag-items (take 6 (:items tags))]
+                [:div.home-grid
+                 [:div.home-hero
+                  [:div
+                   [:h2 "Welcome back"]
+                   [:p "Quick overview of your workspace."]]
+                  [:div.button-row
+                   [:button.button {:type "button"
+                                    :on-click #(do
+                                                 (rf/dispatch [::navigate :tasks])
+                                                 (rf/dispatch [::start-new-task]))}
+                    "New task"]]]
+                 [status-count-cards counts]
+                 [:div.home-section
+                  [:h3 "Recent"]
+                  (if (seq recent)
+                    [home-recent-list recent]
+                    [home-empty])]
+                 [:div.home-section
+                  [tag-highlights tag-items]]])
+       [home-empty])]))
+
+(defn home-shell []
+  [:div.app-shell
+   [top-bar]
+   [:main.home-layout
+    [home-view]]
+   [:footer.app-footer
+    [:span "Home overview · Quick links into your workspace."]]])
+
 (defn app-root []
-  (let [session @(rf/subscribe [::session])]
+  (let [session @(rf/subscribe [::session])
+        route @(rf/subscribe [::route])]
     [:div
      (if session
-       [task-shell]
+       (case route
+         :home [home-shell]
+         [task-shell])
        [login-page])
      [:div.theme-toggle-container
       [theme-toggle]]]))
