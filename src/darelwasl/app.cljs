@@ -993,7 +993,7 @@
   [:div.login-page
    [:div.login-panel
     [:div.login-panel__brand
-     [:h1 "Welcome back"]
+    [:h1 "Welcome back!"]
      [:p ""]]
     [login-form]]])
 
