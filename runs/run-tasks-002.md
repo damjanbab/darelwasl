@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: auth-session-refresh
-  - Status: in-progress (Codex, 2025-12-08 10:54 UTC)
+  - Status: done (Codex, 2025-12-08 11:01 UTC)
   - Objective: Stop users from being logged out after a browser refresh; keep the session alive until explicit logout.
   - Scope: Diagnose and fix the refresh-induced logout (frontend state vs. session cookie); ensure session persists across reloads and reopened tabs; keep login redirect and guarded routes consistent.
   - Out of Scope: “Remember me”/long-lived tokens; multi-user auth flows; auth UX redesign; rate limiting.
@@ -30,7 +30,7 @@
   - Reporting: summarize root cause, fixes, and proofs.
 
 - Task ID: task-delete-support
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-08 11:03 UTC)
   - Objective: Enable deleting tasks from the app (backend + UI) so tasks can be removed, not just archived.
   - Scope: Add backend support to delete tasks; expose delete affordance in the task view; ensure list updates accordingly; handle confirmations/errors.
   - Out of Scope: bulk deletes; hardening beyond existing auth/session; audit/history UI.
