@@ -116,7 +116,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Summarize helper additions and API compatibility
 
 - Task ID: backend-home-data
-  - Status: in-progress (Codex, 2025-12-08 16:58 UTC)
+  - Status: done (Codex, 2025-12-08 17:01 UTC)
   - Objective: Provide backend support (if needed) for Home app data (summary stats, recent tasks), reusing existing actions/db where possible.
   - Scope: Add lightweight queries for recent tasks/updated entities and status counts; optionally expose internal endpoint(s) only if Home cannot reuse existing `/api/tasks` params; ensure they honor auth/session; keep responses simple; no behavior change to task contracts.
   - Out of Scope: Complex analytics/history timelines; pagination beyond small summaries.
