@@ -1,5 +1,6 @@
 [
  {:task/id #uuid "10000000-0000-0000-0000-000000000001"
+  :entity/type :entity.type/task
   :task/title "Set up task app skeleton"
   :task/description "Scaffold UI and backend for tasks"
   :task/status :todo
@@ -11,6 +12,7 @@
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000002"
+  :entity/type :entity.type/task
   :task/title "Polish design system"
   :task/description "Refine theme tokens and components"
   :task/status :in-progress
@@ -21,6 +23,7 @@
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000003"
+  :entity/type :entity.type/task
   :task/title "Reconcile monthly finances"
   :task/description "Close the books and schedule payments"
   :task/status :done
@@ -31,6 +34,7 @@
   :task/archived? false
   :task/extended? false}
  {:task/id #uuid "10000000-0000-0000-0000-000000000004"
+  :entity/type :entity.type/task
   :task/title "Refresh home workspace"
   :task/description "Declutter desk, cables, and peripherals"
   :task/status :todo

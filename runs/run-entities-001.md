@@ -60,7 +60,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Note design decisions and components defined
 
 - Task ID: schema-entity-type-migration
-  - Status: in-progress (Codex, 2025-12-08 16:49 UTC)
+  - Status: done (Codex, 2025-12-08 16:53 UTC)
   - Objective: Add shared `:entity/type` attribute to the schema, update fixtures/seed, and provide migration/backfill helpers.
   - Scope: Update `registries/schema.edn` with `:entity/type` (shared), set on user/task/tag entities; update fixtures (users/tags/tasks) to include type; ensure seed + temp DB helpers set it; add migration/backfill fn to populate type for existing DBs (idempotent); update `docs/system.md`/registries references.
   - Out of Scope: New business entities beyond user/task/tag; API shape changes.

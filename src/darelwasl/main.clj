@@ -24,14 +24,20 @@
         (do
           (log/error error "Schema load failed during startup")
           (assoc db-state :error error))
-        (let [db (d/db conn)
+        (let [{bf-error :error added :added} (schema/backfill-entity-types! conn)
+              db (d/db conn)
               has-users? (seq (d/q '[:find ?e :where [?e :user/id _]] db))
               has-tasks? (seq (d/q '[:find ?e :where [?e :task/id _]] db))
               has-tags? (seq (d/q '[:find ?e :where [?e :tag/id _]] db))
-              prepared (if (and has-users? has-tasks? has-tags?)
+              prepared (cond
+                         bf-error (assoc db-state :error bf-error)
+                         (and has-users? has-tasks? has-tags?)
                          (do
+                           (when (pos? (or added 0))
+                             (log/infof "Backfilled :entity/type on %s existing entities" added))
                            (log/info "Schema loaded; skipping fixture seed (data already present)")
                            (assoc db-state :schema/tx-count tx-count))
+                         :else
                          (let [{seed-error :error users :users tags :tags tasks :tasks} (fixtures/seed-conn! conn)]
                            (if seed-error
                              (do

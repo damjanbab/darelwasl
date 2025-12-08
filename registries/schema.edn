@@ -1,5 +1,21 @@
 [
-{:id :cap/schema/user
+{:id :cap/schema/entity
+  :title "Entity Base"
+  :version "v1"
+  :attributes
+  [{:ident :entity/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Discriminator for entity type (e.g., :entity.type/task)"}]
+  :enums []
+  :invariants ["Every persisted entity must set :entity/type to its type ident"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/user
   :title "User"
   :version "v1"
   :attributes
@@ -22,7 +38,7 @@
     :cardinality :db.cardinality/one
     :doc "Local dev password (not for production)"}]
   :enums []
-  :invariants ["Username unique" "Password stored only for local dev"]
+  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -45,7 +61,7 @@
     :unique :db.unique/value
     :doc "Tag display name"}]
   :enums []
-  :invariants ["Tag names unique (case-insensitive)"]
+  :invariants ["Tag names unique (case-insensitive)" "Entity type set to :entity.type/tag"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -100,7 +116,7 @@
     :doc "Feature flag gating future fields"}]
   :enums {:task/status [:todo :in-progress :done]
           :task/priority [:low :medium :high]}
-  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities"]
+  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities" "Entity type set to :entity.type/task"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true

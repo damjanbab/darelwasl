@@ -46,9 +46,35 @@
        (d/transact conn {:tx-data tx-data})
        {:status :ok
         :tx-count (count tx-data)}
-       (catch Exception e
-         (log/error e "Failed to load Datomic schema from registry")
-         {:error e})))))
+         (catch Exception e
+           (log/error e "Failed to load Datomic schema from registry")
+           {:error e})))))
+
+(defn backfill-entity-types!
+  "Backfill :entity/type for existing entities that lack it. Uses presence of
+  identity attrs to infer type. Returns {:status :ok :added n} or {:error e}."
+  [conn]
+  (try
+    (let [db (d/db conn)
+          mapping [[:user/id :entity.type/user]
+                   [:task/id :entity.type/task]
+                   [:tag/id :entity.type/tag]]
+          tx-data (->> mapping
+                       (mapcat (fn [[ident type-kw]]
+                                 (let [eids (map first (d/q '[:find ?e
+                                                              :in $ ?attr
+                                                              :where [?e ?attr _]
+                                                                     (not [?e :entity/type _])]
+                                                            db ident))]
+                                   (map (fn [e] [:db/add e :entity/type type-kw]) eids))))
+                       vec)]
+      (when (seq tx-data)
+        (d/transact conn {:tx-data tx-data})
+        (log/infof "Backfilled :entity/type on %s entities" (count tx-data)))
+      {:status :ok :added (count tx-data)})
+    (catch Exception e
+      (log/error e "Failed to backfill :entity/type")
+      {:error e})))
 
 (defn temp-db-with-schema!
   "Spin up a temporary Datomic database (defaults to :mem storage), apply the
