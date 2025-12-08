@@ -88,7 +88,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Describe schema/fixture changes and migration outcome
 
 - Task ID: backend-entity-core-helpers
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 16:57 UTC)
   - Objective: Add shared backend helpers for entity operations (pull/list by `:entity/type`, common validation) and wire Task/Tag flows to set/use `:entity/type` without changing public API contracts.
   - Scope: New helper namespace for entity pull/list/validation; ensure task/tag creation set `:entity/type`; refactor duplicated query/pull logic in `darelwasl.tasks` to use helpers where it reduces risk; keep API shapes/filters unchanged; update docs to describe helper capability.
   - Out of Scope: New public entity endpoints; pagination/search; behavioral changes to task contracts.
