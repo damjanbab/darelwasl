@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: auth-session-refresh
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-08 10:54 UTC)
   - Objective: Stop users from being logged out after a browser refresh; keep the session alive until explicit logout.
   - Scope: Diagnose and fix the refresh-induced logout (frontend state vs. session cookie); ensure session persists across reloads and reopened tabs; keep login redirect and guarded routes consistent.
   - Out of Scope: “Remember me”/long-lived tokens; multi-user auth flows; auth UX redesign; rate limiting.
