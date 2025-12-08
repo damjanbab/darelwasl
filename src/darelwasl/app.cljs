@@ -96,6 +96,8 @@
             :create-title "Draft a new task"
             :badge "Detail"
             :create-badge "Compose"
+            :meta-create "Create a task with full fields and feature flag handling."
+            :meta-edit-default "Select a task to edit"
             :placeholder-title "Select a task"
             :placeholder-copy "Choose a task from the list or start a fresh one. Full create/edit is available here."}}) 
 
@@ -1386,7 +1388,6 @@
         task-status (:status form)
         create? (= mode :create)
         saving? (= detail-status :saving)
-        success? (= detail-status :success)
         available-assignees (if (seq assignees) assignees fallback-assignees)]
     (let [placeholder (when (and (not create?) (nil? task))
                         [:div.placeholder-card
@@ -1398,9 +1399,10 @@
           badge (if create?
                   (get-in task-entity-config [:detail :create-badge])
                   (get-in task-entity-config [:detail :badge]))
-          meta (if create?
-                 "Create a task with full fields and feature flag handling."
-                 (or (:task/title task) "Select a task to edit"))
+        meta (if create?
+               (get-in task-entity-config [:detail :meta-create])
+               (or (:task/title task)
+                   (get-in task-entity-config [:detail :meta-edit-default])))
           footer (case detail-status
                    :saving [:span.pill "Saving..."]
                    :success [:span.pill "Saved"]

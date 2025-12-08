@@ -200,7 +200,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Parity status and key refactors
 
 - Task ID: frontend-entity-cleanup
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 18:12 UTC)
   - Objective: Deepen the UI refactor to reduce duplication and tighten config-driven rendering for entities (starting with tasks), removing leftover spaghetti and aligning handlers/state with the new primitives.
   - Scope: Consolidate task list/detail handlers/state where still bespoke; move repetitive labels/field wiring into config maps where safe; remove dead code/duplicate helpers; ensure primitives cover the common paths while keeping overrides for task-specific behavior. Keep current UX/behavior intact.
   - Out of Scope: New features, routing changes, or visual redesign; changes to backend APIs.
