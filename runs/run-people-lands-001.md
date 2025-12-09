@@ -200,7 +200,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Detail registry/doc/check changes and proof results
 
 - Task ID: qa-release-people-lands
-  - Status: in-progress (Codex, 2025-12-09 15:03 UTC)
+  - Status: done (Codex, 2025-12-09 15:15 UTC)
   - Objective: Run end-to-end proofs for the new land-registry stack and record outcomes for release readiness.
   - Scope: Execute full check suite (`scripts/checks.sh all` plus any importer-specific target), run importer against a temp DB, smoke the land-registry UI (desktop/mobile nav, search, stats cards), and capture logs/screenshots/metrics. Note any remaining defects or data quality issues.
   - Out of Scope: New feature development; only fixes if needed to make checks pass.
