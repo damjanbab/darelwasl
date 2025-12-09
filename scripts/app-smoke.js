@@ -182,6 +182,58 @@ async function run() {
       throw new Error("Deleted task still present after reload");
     }
 
+    // Navigate to Land app and verify people/parcels/stats render
+    const openApp = async (label) => {
+      const tryClick = async () => {
+        const appsBtn = page.getByRole("button", { name: "Apps" });
+        if (await appsBtn.isVisible()) {
+          await appsBtn.click();
+          return true;
+        }
+        const mobileTrigger = page.locator(".app-switcher-mobile-trigger");
+        if (await mobileTrigger.isVisible()) {
+          await mobileTrigger.click();
+          return true;
+        }
+        return false;
+      };
+      let opened = false;
+      for (let i = 0; i < 3; i++) {
+        opened = await tryClick();
+        if (opened) break;
+        await page.waitForTimeout(300);
+      }
+      if (!opened) {
+        throw new Error("Unable to open app switcher");
+      }
+      const target = page.locator("button.app-switcher-item", { hasText: label });
+      await target.waitFor({ timeout: 12000 });
+      await target.click();
+    };
+
+    await openApp("Land");
+    await page.waitForSelector(".land-layout", { timeout: 15000, state: "visible" });
+    await page.waitForSelector(".summary-cards .card", { timeout: 10000 });
+    await page.waitForSelector('.panel:has-text("People") .list-row', { timeout: 10000 });
+    await page.waitForSelector('.panel:has-text("Parcels") .list-row', { timeout: 10000 });
+
+    const firstPerson = page.locator('.panel:has-text("People") .list-row').first();
+    await firstPerson.click();
+    await page.waitForSelector('.panel.task-preview:has-text("Person detail") .table-row', { timeout: 10000 });
+
+    const firstParcel = page.locator('.panel:has-text("Parcels") .list-row').first();
+    await firstParcel.click();
+    await page.waitForSelector('.panel.task-preview:has-text("Parcel detail") .table-row', { timeout: 10000 });
+
+    const wrongEmpty = await page.locator('.state.empty:has-text("No tasks match")').count();
+    if (wrongEmpty > 0) {
+      throw new Error("Land view shows task-specific empty state copy");
+    }
+
+    // Return to tasks for the remainder of the flow
+    await openApp("Tasks");
+    await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
+
     // Toggle theme (dark then back to light)
     await page.getByRole("button", { name: "Dark" }).click();
     await page.waitForSelector('[data-theme="dark"]', { timeout: 5000 });

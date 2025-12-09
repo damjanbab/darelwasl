@@ -227,6 +227,34 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Tooling/Automation: Ensure any new check commands are documented
   - Reporting: Summarize pass/fail status and outstanding issues
 
+- Task ID: land-detail-polish
+  - Status: done (Codex, 2025-12-09 15:53 UTC)
+  - Objective: Elevate the Land person/parcel detail panes with complete metadata, cross-links, and professional layout so they are readable and actionable.
+  - Scope: Add parcel/person metadata (cadastral ID/name, address, book number, share completeness, owner counts, area stats), reorder owners by list order/share, add cross-links between panes, and update empty/error/loading states specific to Land; ensure headless smoke covers Land navigation.
+  - Out of Scope: Backend contract changes; new data fields beyond what the existing API already returns.
+  - Capabilities Touched: [:cap/view/land-registry]
+  - Parallel Safety:
+    - Exclusive Capabilities: Land detail UI rendering
+    - Shared/Read-only Capabilities: Land API payloads
+    - Sequencing Constraints: after frontend-people-lands-app
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: UI detail panes and summary cards
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Improve clarity/usability of land detail panes
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: frontend-people-lands-app
+  - Deliverables: Updated Land detail UI, Land-specific empty/error/loading states, Land navigation in headless smoke
+  - Proof Plan: `npm run check` + `scripts/checks.sh app-smoke`
+  - Fixtures/Data Assumptions: Existing imported HRIB dataset
+  - Protocol/System Updates: None
+  - FAQ Updates: None
+  - Tooling/Automation: Extend smoke to exercise Land navigation
+  - Reporting: Note UI additions and smoke coverage
+
 ## Notes
 - Dataset location: `../hrib_parcele_upisane_osobe(1).csv` (ensure importer handles the filename with parentheses).
 - Open questions to resolve during specs: dedupe keys for people (name vs name+address), handling of missing/invalid share fractions, whether to expose raw cadastral IDs, and desired summary metrics (counts by cadastral unit vs municipality).

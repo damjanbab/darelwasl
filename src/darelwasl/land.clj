@@ -38,17 +38,24 @@
              db)))
 
 (defn- pull-ownerships [db]
-  (d/q '[:find ?person-id ?parcel-id ?share ?area ?order ?pos
-         :where
-         [?o :ownership/person ?person]
-         [?o :ownership/parcel ?parcel]
-         [?person :person/id ?person-id]
-         [?parcel :parcel/id ?parcel-id]
-         [?o :ownership/share ?share]
-         [(get-else $ ?o :ownership/area-share-m2 0.0) ?area]
-         [(get-else $ ?o :ownership/list-order nil) ?order]
-         [(get-else $ ?o :ownership/position-in-list nil) ?pos]]
-       db))
+  (let [ownership-ids (map first (d/q '[:find ?o
+                                        :where [?o :ownership/person _]]
+                                      db))]
+    (map (fn [oid]
+           (let [o (d/pull db '[:ownership/share
+                                :ownership/area-share-m2
+                                :ownership/list-order
+                                :ownership/position-in-list
+                                {:ownership/person [:person/id]}
+                                {:ownership/parcel [:parcel/id]}]
+                            oid)]
+             [(:person/id (:ownership/person o))
+              (:parcel/id (:ownership/parcel o))
+              (or (:ownership/share o) 0.0)
+              (or (:ownership/area-share-m2 o) 0.0)
+              (:ownership/list-order o)
+              (:ownership/position-in-list o)]))
+         ownership-ids)))
 
 (defn- attach-ownership
   [{:keys [persons parcels ownerships]}]
@@ -67,25 +74,29 @@
                                                                    :ownership/list-order order
                                                                    :ownership/position-in-list pos}))
                                      {}
-                                     ownerships)]
-    {:persons (map (fn [[pid person]]
-                     (let [owns (get ownerships-by-person pid)
-                           parcels-owned (set (map :parcel/id owns))
-                           total-area (reduce + 0 (keep :ownership/area-share-m2 owns))]
-                       (assoc person
-                              :person/parcel-count (count parcels-owned)
-                              :person/owned-area-m2 total-area
-                              :person/ownerships owns)))
-                   persons)
-     :parcels (map (fn [[parcel-id parcel]]
-                     (let [owners (get ownerships-by-parcel parcel-id)
-                           owner-count (count owners)
-                           share-total (reduce + 0 (keep :ownership/share owners))]
-                       (assoc parcel
-                              :parcel/owners owners
-                              :parcel/owner-count owner-count
-                              :parcel/share-total share-total)))
-                   parcels)}))
+                                     ownerships)
+        persons-enriched (map (fn [[pid person]]
+                                (let [owns (get ownerships-by-person pid)
+                                      parcels-owned (set (map :parcel/id owns))
+                                      total-area (reduce + 0 (keep :ownership/area-share-m2 owns))]
+                                  (assoc person
+                                         :person/parcel-count (count parcels-owned)
+                                         :person/owned-area-m2 total-area
+                                         :person/ownerships owns)))
+                              persons)
+        parcels-enriched (map (fn [[parcel-id parcel]]
+                                (let [owners (get ownerships-by-parcel parcel-id)
+                                      owner-count (count owners)
+                                      share-total (reduce + 0 (keep :ownership/share owners))]
+                                  (assoc parcel
+                                         :parcel/owners owners
+                                         :parcel/owner-count owner-count
+                                         :parcel/share-total share-total)))
+                              parcels)]
+    {:persons persons-enriched
+     :parcels parcels-enriched
+     :persons-by-id persons
+     :parcels-by-id parcels}))
 
 (defn people
   [conn {:keys [q sort]}]
@@ -117,11 +128,11 @@
         base {:persons (pull-persons db)
               :parcels (pull-parcels db)
               :ownerships (pull-ownerships db)}
-        {:keys [persons parcels]} (attach-ownership base)
+        {:keys [persons parcels-by-id]} (attach-ownership base)
         person (some #(when (= (:person/id %) person-id) %) persons)]
     (when person
       (let [owned (map (fn [o]
-                         (merge o (get parcels (:parcel/id o))))
+                         (merge o (get parcels-by-id (:parcel/id o))))
                        (:person/ownerships person))]
         (assoc person :person/ownerships owned)))))
 
@@ -156,10 +167,10 @@
         base {:persons (pull-persons db)
               :parcels (pull-parcels db)
               :ownerships (pull-ownerships db)}
-        {:keys [persons parcels]} (attach-ownership base)
+        {:keys [persons-by-id parcels]} (attach-ownership base)
         parcel (some #(when (= (:parcel/id %) parcel-id) %) parcels)]
     (when parcel
-      (let [owners (map (fn [o] (merge o (get persons (:person/id o))))
+      (let [owners (map (fn [o] (merge o (get persons-by-id (:person/id o))))
                         (:parcel/owners parcel))]
         (assoc parcel :parcel/owners owners)))))
 

@@ -223,6 +223,29 @@
     (str (subs s 0 n) "…")
     s))
 
+(defn- pct
+  [share]
+  (when (some? share)
+    (str (js/Math.round (* 100 share)) "%")))
+
+(defn- format-area
+  [m2]
+  (let [n (or m2 0)]
+    (-> n js/Math.round (.toLocaleString "en-US"))))
+
+(defn- parcel-title
+  [{:parcel/keys [cadastral-id number cadastral-name address id]}]
+  (or (when (or cadastral-id number)
+        (str (or cadastral-id "–") "/" (or number "–")))
+      cadastral-name
+      address
+      (when id (str id))
+      "Parcel"))
+
+(defn- person-title
+  [{:person/keys [name id]}]
+  (or name (when id (str id)) "Owner"))
+
 (defn- build-query
   [{:keys [status priority tag assignee archived sort order]}]
   (let [params (cond-> []
@@ -1556,28 +1579,56 @@
           :on-click #(rf/dispatch [::toggle-order])}
          (if (= order :asc) "Asc" "Desc")]]]]]))
 
-(defn loading-state []
-  [:div.state
-   [:div.spinner]
-   [:div "Loading tasks..."]])
+(defn loading-state
+  ([] (loading-state "Loading tasks..."))
+  ([message]
+   [:div.state
+    [:div.spinner]
+    [:div message]]))
 
 (defn home-loading []
   [:div.state
    [:div.spinner]
    [:div "Loading overview..."]])
 
-(defn error-state [message]
+(defn error-state
+  ([message] (error-state message #(rf/dispatch [::fetch-tasks])))
+  ([message on-retry]
+   [:div.state.error
+    [:div.form-error message]
+    [:div.button-row
+     [:button.button.secondary {:type "button"
+                                :on-click on-retry}
+      "Try again"]]]))
+
+(defn empty-state
+  ([] (empty-state "No tasks match these filters" "Adjust filters to see tasks or refresh to reload."))
+  ([title copy]
+   [:div.state.empty
+    [:strong title]
+    [:p copy]]))
+
+(defn land-loading-state [message]
+  [:div.state
+   [:div.spinner]
+   [:div (or message "Loading land data...")]])
+
+(defn land-error-state [message]
   [:div.state.error
-   [:div.form-error message]
+   [:div.form-error (or message "Unable to load land registry data.")]
    [:div.button-row
     [:button.button.secondary {:type "button"
-                               :on-click #(rf/dispatch [::fetch-tasks])}
-     "Try again"]]])
+                               :on-click #(rf/dispatch [::fetch-land])}
+     "Refresh land data"]]])
 
-(defn empty-state []
-   [:div.state.empty
-    [:strong "No tasks match these filters"]
-    [:p "Adjust filters to see tasks or refresh to reload."]])
+(defn land-empty-state [title copy]
+  [:div.state.empty
+   [:strong (or title "No land records found")]
+   [:p (or copy "Adjust filters or refresh to reload land data.")]
+   [:div.button-row
+    [:button.button.secondary {:type "button"
+                               :on-click #(rf/dispatch [::fetch-land])}
+     "Refresh"]]])
 
 (defn home-recent-list
   [tasks]
@@ -1994,11 +2045,11 @@
   (let [home @(rf/subscribe [::home])
         tags @(rf/subscribe [::tags])]
     (when (= :idle (:status home))
-      (rf/dispatch [::fetch-home]))
+     (rf/dispatch [::fetch-home]))
     [:div.home
      (case (:status home)
        :loading [home-loading]
-       :error [error-state (:error home)]
+       :error [error-state (:error home) #(rf/dispatch [::fetch-home])]
        :ready (let [counts (:counts home)
                     recent (:recent home)
                     tag-items (take 6 (:items tags))]
@@ -2065,7 +2116,7 @@
       [:span.meta "No owners yet"]) ]])
 
 (defn land-people-list []
-  (let [{:keys [people status error filters selected-person selected]} @(rf/subscribe [::land])
+  (let [{:keys [people status error filters selected]} @(rf/subscribe [::land])
         current-search (:people-search filters)
         selected-id (:person selected)]
     [:div.panel
@@ -2073,7 +2124,7 @@
       [:div
        [:h3 "People"]
        [:div.meta "Browse owners and their parcels"]]
-      [:div.controls
+     [:div.controls
        [:input.form-input {:type "search"
                            :placeholder "Search people"
                            :value current-search
@@ -2082,8 +2133,8 @@
                                   :on-click #(rf/dispatch [::fetch-land])}
         "Search"]]]
      (case status
-       :loading [loading-state]
-       :error [error-state error]
+       :loading [land-loading-state "Loading people..."]
+       :error [land-error-state error]
        (if (seq people)
          [:div.list
           (for [p people]
@@ -2098,7 +2149,7 @@
                 [:div.meta (:person/address p)]]
                [:div.meta (str (or (:person/parcel-count p) 0) " parcels · "
                                (js/Math.round (or (:person/owned-area-m2 p) 0)) " m²")]]))]
-         [empty-state]))]))
+         [land-empty-state "No people match these filters" "Adjust search or refresh to reload."]))]))
 
 (defn land-person-detail []
   (let [{:keys [selected-person status]} @(rf/subscribe [::land])]
@@ -2108,26 +2159,56 @@
        [:h3 "Person detail"]
        [:div.meta "Parcels and shares"]]]
      (cond
-       (= status :loading) [loading-state]
+       (= status :loading) [land-loading-state "Loading person detail..."]
        (nil? selected-person) [:div.placeholder-card
                                [:strong "Select a person"]
                                [:p "Choose a person to see owned parcels."]]
        :else
-       (let [{:keys [person/name person/address person/ownerships]} selected-person]
+       (let [{:keys [person/name person/address person/ownerships person/parcel-count person/owned-area-m2]} selected-person
+             ownerships (sort-by (fn [o] (- (or (:ownership/area-share-m2 o) 0))) ownerships)]
          [:div
           [:div.detail-meta
            [:h4 name]
-           [:div.meta address]]
+           [:div.meta address]
+           [:div.chip-row
+            [:span.chip (str "Parcels: " (or parcel-count 0))]
+            [:span.chip (str "Owned area: " (format-area owned-area-m2) " m²")]]]
           (if (seq ownerships)
-            [:div.table
-             [:div.table-header
-              [:span "Parcel"] [:span "Share"] [:span "Area"]]
-             (for [o ownerships]
-               ^{:key (str (:parcel/id o) "-" (:ownership/share o))}
-               [:div.table-row
-                [:div (:parcel/number o)]
-                [:div (str (js/Math.round (* 100 (:ownership/share o))) "%")]
-                [:div (str (js/Math.round (or (:ownership/area-share-m2 o) 0)) " m²")]])]
+            [:<>
+            [:div.summary-cards.narrow
+             [:div.card
+              [:div.card-label "Parcels"]
+              [:div.card-value (or parcel-count 0)]]
+             [:div.card
+              [:div.card-label "Owned area"]
+              [:div.card-value (str (format-area owned-area-m2) " m²")]]
+             [:div.card
+              [:div.card-label "Holdings"]
+              [:div.card-value (str (count ownerships) " shares")]]]
+            [:div {:style {:display "grid"
+                           :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
+                           :gap "12px"}}
+             (for [o ownerships
+                   :let [pid (:parcel/id o)
+                         share-total (:parcel/share-total o)
+                         complete? (and share-total (< (js/Math.abs (- share-total 1.0)) 1e-6))]]
+               ^{:key (str pid "-" (:ownership/share o))}
+               [:div.card
+                 [:div.card-label (parcel-title o)]
+                 [:div.card-value (or (:parcel/cadastral-name o) (:parcel/address o) "")]
+                 (when (:parcel/address o) [:div.meta (:parcel/address o)])
+                 [:div.meta (str "Book " (or (:parcel/book-number o) "–"))]
+                 [:div.chip {:class (if complete? "status success" "status warning")}
+                  (if complete? "Complete" "Incomplete")]
+                 [:div.card-row
+                  [:span "Share"]
+                  [:strong (pct (:ownership/share o))]]
+                 [:div.card-row
+                  [:span "Area"]
+                  [:strong (str (format-area (:ownership/area-share-m2 o)) " m²")]]
+                 [:button.button.secondary {:type "button"
+                                            :on-click #(rf/dispatch [::select-parcel pid])}
+                  "View parcel"]])]]
             [:div.meta "No parcels attached"])]))]))
 
 (defn land-parcel-list []
@@ -2143,18 +2224,18 @@
                            :placeholder "Parcel number"
                            :value (:parcel-number filters)
                            :on-change #(rf/dispatch [::land-update-filter :parcel-number (.. % -target -value)])}]
-       [:select.form-input {:value (name (or (:completeness filters) "")) 
+       [:select.form-input {:value (or (some-> (:completeness filters) name) "")
                             :on-change #(let [v (.. % -target -value)]
-                                          (rf/dispatch [::land-update-filter :completeness (if (str/blank? v) nil (keyword v))]))}
+                                          (rf/dispatch [::land-update-filter :completeness (when-not (str/blank? v) (keyword v))]))}
         (for [{:keys [id label]} land-completeness-options]
-          ^{:key (str "comp-" (name id))}
+          ^{:key (str "comp-" (or (some-> id name) "all"))}
           [:option {:value (or (some-> id name) "")} label])]
        [:button.button.secondary {:type "button"
                                   :on-click #(rf/dispatch [::fetch-land])}
         "Apply"]]]
      (case status
-       :loading [loading-state]
-       :error [error-state error]
+       :loading [land-loading-state "Loading parcels..."]
+       :error [land-error-state error]
        (if (seq parcels)
          [:div.list
           (for [p parcels]
@@ -2167,11 +2248,11 @@
                                  :on-click #(rf/dispatch [::select-parcel pid])}
                [:div
                 [:div.title (str (:parcel/cadastral-id p) "/" (:parcel/number p))]
-                [:div.meta (:parcel/address p)]]
-               [:div.meta (str (or (:parcel/owner-count p) 0) " owners · "
-                               (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")]
-               [:div.meta (if complete? "Complete" "Incomplete")]]))]
-         [empty-state]))]))
+                 [:div.meta (:parcel/address p)]]
+                [:div.meta (str (or (:parcel/owner-count p) 0) " owners · "
+                                (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")]
+                [:div.meta (if complete? "Complete" "Incomplete")]]))]
+          [land-empty-state "No parcels match these filters" "Adjust parcel filters or refresh."]))]))
 
 (defn land-parcel-detail []
   (let [{:keys [selected-parcel status]} @(rf/subscribe [::land])]
@@ -2181,36 +2262,65 @@
        [:h3 "Parcel detail"]
        [:div.meta "Owners and shares"]]]
      (cond
-       (= status :loading) [loading-state]
+       (= status :loading) [land-loading-state "Loading parcel detail..."]
        (nil? selected-parcel) [:div.placeholder-card
                                [:strong "Select a parcel"]
                                [:p "Choose a parcel to see ownership."]]
        :else
         (let [cadastral-id (:parcel/cadastral-id selected-parcel)
+              cadastral-name (:parcel/cadastral-name selected-parcel)
               number (:parcel/number selected-parcel)
               address (:parcel/address selected-parcel)
+              book (:parcel/book-number selected-parcel)
               area (:parcel/area-m2 selected-parcel)
               owners (:parcel/owners selected-parcel)
               share-total (:parcel/share-total selected-parcel)
-              complete? (< (js/Math.abs (- share-total 1.0)) 1e-6)]
+              complete? (and share-total (< (js/Math.abs (- share-total 1.0)) 1e-6))
+              owners-sorted (sort-by (fn [o]
+                                       [(or (:ownership/list-order o) 1e9)
+                                        (or (:ownership/position-in-list o) 1e9)
+                                        (- (or (:ownership/share o) 0))])
+                                     owners)]
           [:div
            [:div.detail-meta
             [:h4 (str cadastral-id "/" number)]
-            [:div.meta address]
-            [:div.meta (str (js/Math.round (or area 0)) " m²")]
+            [:div.meta (str (or cadastral-name "") (when (and cadastral-name address) " · ") (or address ""))]
+            [:div.meta (str "Book " (or book "–"))]
             [:div.chip {:class (if complete? "status success" "status warning")}
              (if complete? "Complete shares" "Incomplete shares")]]
-          (if (seq owners)
-            (into [:div.table
-                   [:div.table-header
-                    [:span "Owner"] [:span "Share"] [:span "Area"]]]
-                  (for [o owners]
-                    ^{:key (str (:person/id o) "-" (:ownership/share o))}
-                    [:div.table-row
-                     [:div (:person/name o)]
-                     [:div (str (js/Math.round (* 100 (:ownership/share o))) "%")]
-                     [:div (str (js/Math.round (or (:ownership/area-share-m2 o) 0)) " m²")]]))
-            [:div.meta "No owners recorded"])]))]))
+           [:div.summary-cards.narrow
+            [:div.card
+             [:div.card-label "Owners"]
+             [:div.card-value (or (count owners) 0)]]
+            [:div.card
+             [:div.card-label "Parcel area"]
+             [:div.card-value (str (format-area area) " m²")]]
+            [:div.card
+             [:div.card-label "Share total"]
+             [:div.card-value (if share-total (pct share-total) "—")]
+             [:div.meta "Expected 100% ± tolerance"]]]
+           (if (seq owners-sorted)
+             [:div {:style {:display "grid"
+                            :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
+                            :gap "12px"}}
+              (for [o owners-sorted]
+                ^{:key (str (:person/id o) "-" (:ownership/share o))}
+                [:div.card
+                 [:div.card-label (person-title o)]
+                 [:div.card-value (or (:person/address o) "")]
+                 [:div.chip-row
+                  (when (:ownership/list-order o) [:span.chip (str "List " (:ownership/list-order o))])
+                  (when (:ownership/position-in-list o) [:span.chip (str "Pos " (:ownership/position-in-list o))])]
+                 [:div.card-row
+                  [:span "Share"]
+                  [:strong (pct (:ownership/share o))]]
+                 [:div.card-row
+                  [:span "Area"]
+                  [:strong (str (format-area (:ownership/area-share-m2 o)) " m²")]]
+                 [:button.button.secondary {:type "button"
+                                            :on-click #(rf/dispatch [::select-person (:person/id o)])}
+                  "View person"]])]
+             [:div.meta "No owners recorded"])]))]))
 
 (defn land-view []
   (let [{:keys [status stats]} @(rf/subscribe [::land])]
