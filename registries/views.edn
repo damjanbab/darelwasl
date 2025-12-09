@@ -60,4 +60,35 @@
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
+
+ {:id :cap/view/land-registry
+  :title "Land Registry"
+  :version "v1"
+  :data {:sources [{:id :land/people
+                    :source :cap/schema/person
+                    :pull [:person/id :person/name :person/address]}
+                   {:id :land/parcels
+                    :source :cap/schema/parcel
+                    :pull [:parcel/id :parcel/cadastral-id :parcel/number :parcel/address :parcel/area-m2]}
+                   {:id :land/ownerships
+                    :source :cap/schema/ownership
+                    :pull [:ownership/id
+                           {:ownership/person [:person/id :person/name]}
+                           {:ownership/parcel [:parcel/id :parcel/cadastral-id :parcel/number]}
+                           :ownership/share :ownership/area-share-m2]}]}
+  :actions [:cap/action/parcel-import
+            :cap/action/person-list
+            :cap/action/person-detail
+            :cap/action/parcel-list
+            :cap/action/parcel-detail
+            :cap/action/parcel-stats]
+  :ux {:states [:loading :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "multi-column lists + detail panes + stats cards"
+                :mobile "stacked sections with sheet detail"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:land-registry/enabled]}
+  :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]}}
 ]

@@ -244,6 +244,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - People detail shows each owned parcel with share % and area contribution; parcel detail shows all owners with share %; cross-links work both ways.
   - Summary cards render (counts, area totals, share completeness, top owners) and remain responsive on desktop/mobile layouts defined in the design spec.
   - Import can be re-run safely (idempotent), reports counts and errors, and stores source refs; failures surface in logs without corrupting existing data.
+  - Feature flag `:land-registry/enabled` gates the nav entry; view registered as `:cap/view/land-registry` reuses backend read endpoints.
 
 ## Design Spec: Land Registry (People-to-Parcels + Summary Stats)
 - Navigation and gating:
