@@ -129,4 +129,149 @@
                       :cap/action/task-set-tags
                       :cap/action/task-archive]
             :views [:cap/view/tasks :cap/view/login]}}
+
+ {:id :cap/schema/person
+  :title "Person (Land Registry)"
+  :version "v1"
+  :attributes
+  [{:ident :person/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Stable person identity (deterministic from normalized name+address)"}
+   {:ident :person/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Person name as provided"}
+   {:ident :person/name-normalized
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Upper/trimmed name for dedupe"}
+   {:ident :person/address
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Address as provided"}
+   {:ident :person/address-normalized
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Upper/trimmed address for dedupe"}
+   {:ident :person/source-ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Deterministic source reference (e.g., CSV row/person key)"}]
+  :enums []
+  :invariants ["Person identity is normalized name+address" "Entity type set to :entity.type/person"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/ownership]
+            :actions [:cap/action/parcel-import :cap/action/person-list :cap/action/person-detail]
+            :views [:cap/view/land-registry]}}
+
+ {:id :cap/schema/parcel
+  :title "Parcel"
+  :version "v1"
+  :attributes
+  [{:ident :parcel/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Stable parcel identity (deterministic from cadastral-id + parcel number)"}
+   {:ident :parcel/cadastral-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Cadastral unit id (e.g., 302724)"}
+   {:ident :parcel/cadastral-name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Cadastral unit name (e.g., HRIB)"}
+   {:ident :parcel/number
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Parcel number within cadastral unit"}
+   {:ident :parcel/book-number
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Possession list / book number"}
+   {:ident :parcel/address
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Parcel address or description"}
+   {:ident :parcel/area-m2
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Parcel area in square meters"}
+   {:ident :parcel/source-ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Deterministic source reference (e.g., CSV row/parcel key)"}]
+  :enums []
+  :invariants ["Cadastral id + parcel number uniquely identify a parcel" "Area must be non-negative" "Entity type set to :entity.type/parcel"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/ownership]
+            :actions [:cap/action/parcel-import :cap/action/parcel-list :cap/action/parcel-detail :cap/action/parcel-stats]
+            :views [:cap/view/land-registry]}}
+
+ {:id :cap/schema/ownership
+  :title "Ownership Share"
+  :version "v1"
+  :attributes
+  [{:ident :ownership/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Stable ownership link identity"}
+   {:ident :ownership/person
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Owner (ref to :person/id)"}
+   {:ident :ownership/parcel
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Parcel (ref to :parcel/id)"}
+   {:ident :ownership/share-numerator
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Share numerator"}
+   {:ident :ownership/share-denominator
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Share denominator"}
+   {:ident :ownership/share
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Computed share fraction (numerator/denominator)"}
+   {:ident :ownership/area-share-m2
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Area attributed to this share"}
+   {:ident :ownership/list-order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Owner order in the parcel’s list (upisana_osoba_redni_broj)"}
+   {:ident :ownership/position-in-list
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Owner position within the list entry (upisana_osoba_pozicija_u_listi)"}
+   {:ident :ownership/source-raw
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Raw share string from source"}
+   {:ident :ownership/source-ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Deterministic source reference for this ownership row"}]
+  :enums []
+  :invariants ["Person and parcel refs required" "Share denominator > 0" "Per-parcel share totals must sum to 1.0 within tolerance" "Entity type set to :entity.type/ownership"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/person :cap/schema/parcel]
+            :actions [:cap/action/parcel-import]
+            :views [:cap/view/land-registry]}}
 ]

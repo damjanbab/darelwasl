@@ -60,7 +60,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Summarize layout/interaction decisions and styling direction
 
 - Task ID: schema-people-lands
-  - Status: in-progress (Codex, 2025-12-09 13:31 UTC)
+  - Status: done (Codex, 2025-12-09 13:36 UTC)
   - Objective: Define and register the Datomic schema for people, parcels, and ownership shares (including generated IDs) and prepare migration/backfill hooks.
   - Scope: Add schema entries for `:cap/schema/person`, `:cap/schema/parcel`, `:cap/schema/ownership` (attributes: stable UUID ids, names/addresses, cadastral/parcel numbers, municipality/cadastral fields, area, share numerator/denominator, source raw fields, timestamps), set entity/type values, uniqueness and cardinality rules, history strategy, and compatibility flags; outline migration/backfill/seed plan; update `docs/system.md` and `registries/schema.edn`.
   - Out of Scope: Import script implementation, API endpoints, UI wiring.

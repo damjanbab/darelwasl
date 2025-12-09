@@ -272,6 +272,22 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Cross-links keep filter state when moving between people and parcels (e.g., from person detail to parcel detail and back).
   - Feature flag respected for routes and app switcher entry; if data import missing, show a friendly “Data not yet loaded” empty state instead of broken lists.
 
+## Schema: Land Registry (Person/Parcel/Ownership)
+- Entities and identities:
+  - `:entity.type/person` with deterministic `:person/id` derived from normalized name+address; keeps provided `:person/name`/`:person/address` plus normalized forms and `:person/source-ref` for traceability.
+  - `:entity.type/parcel` with deterministic `:parcel/id` derived from cadastral id + parcel number; stores cadastral id/name, parcel number, book number, address/description, area in m2, and `:parcel/source-ref`.
+  - `:entity.type/ownership` linking person → parcel; carries share numerator/denominator, computed share fraction and area share, list-order fields, raw share string, and `:ownership/source-ref`.
+- Invariants:
+  - Person identity is normalized name+address; parcel identity is cadastral-id + parcel number. Entity type must be set on all three.
+  - Parcel area must be non-negative. Ownership share denominator > 0; per parcel, share totals must sum to 1.0 within tolerance.
+  - Ownership requires both person and parcel refs; source refs are required for replay/audit.
+- Compatibility and history:
+  - Additive schema; overwrite history strategy. Backward/forward compatible; no flags.
+  - Importer is responsible for setting deterministic IDs, normalized fields, and derived share/area fields; re-runs must be idempotent.
+- Fixtures and seeding:
+  - Full dataset comes from `hrib_parcele_upisane_osobe(1).csv` via the importer. For fast checks, use a trimmed fixture subset covering multiple owners per parcel and multiple parcels per person, preserving share math.
+  - Temp DB/schema checks should load these attributes and ensure share totals validate during import/backfill.
+
 ## Design Spec: Home + App Switcher + Entity Primitives
 - Home (default post-login):
   - Layout (desktop): hero row with greeting + quick actions (e.g., “New task”), summary cards (status counts), recent tasks list (subset from tasks data), tag highlights (chips/cloud), optional small “recent activity” list using updated-at. Two-column where space allows; cards align to grid; padding consistent with theme tokens.
