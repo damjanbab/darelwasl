@@ -1,319 +1,46 @@
 (ns darelwasl.http
-  (:require [clojure.tools.logging :as log]
-            [darelwasl.auth :as auth]
-            [darelwasl.db :as db]
-            [darelwasl.land :as land]
-            [darelwasl.tasks :as tasks]
+  (:require [darelwasl.http.common :as common]
+            [darelwasl.http.routes.auth :as auth-routes]
+            [darelwasl.http.routes.land :as land-routes]
+            [darelwasl.http.routes.tasks :as task-routes]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
             [reitit.ring.middleware.exception :as exception]
             [reitit.ring.middleware.muuntaja :as muuntaja]
             [reitit.ring.middleware.parameters :as parameters]
-            [ring.middleware.session :as session]
-            [ring.middleware.session.memory :refer [memory-store]])
-  (:import (java.util UUID)))
+            [ring.middleware.session :as session]))
 
-(defn- health-response
+(def default-middleware
+  [[session/wrap-session common/session-opts]
+   parameters/parameters-middleware
+   muuntaja/format-negotiate-middleware
+   muuntaja/format-response-middleware
+   muuntaja/format-request-middleware
+   exception/exception-middleware])
+
+(defn health-route
   [state]
-  {:status 200
-   :body {:service "darelwasl"
-          :status "ok"
-          :datastore (db/status (:db state))}})
+  ["/health" {:get (fn [_request] (common/health-response state))}])
 
-(def session-opts
-  {:store (memory-store)
-   :cookie-attrs {:http-only true
-                  :same-site :lax
-                  :path "/"}})
-
-(defn- error-response
-  [status message & [details]]
-  (cond-> {:status status
-           :body {:error message}}
-    details (assoc-in [:body :details] details)))
-
-(defn- login-handler
+(defn api-routes
   [state]
-  (fn [request]
-    (let [user-index (:auth/user-index state)
-          body (or (:body-params request) {})
-          username (or (:user/username body)
-                       (get body "user/username"))
-          password (or (:user/password body)
-                       (get body "user/password"))]
-      (cond
-        (or (nil? user-index) (empty? user-index))
-        (error-response 500 "Auth not configured")
-
-        :else
-        (let [{:keys [user error message]} (auth/authenticate user-index username password)]
-          (cond
-            error (if (= error :invalid-input)
-                    (error-response 400 message)
-                    (error-response 401 message))
-
-            :else
-            (let [existing-session (:session request)
-                  token (or (:session/token existing-session)
-                            (str (UUID/randomUUID)))
-                  session-data {:session/token token
-                                :user/id (:user/id user)
-                                :user/username (:user/username user)}]
-              {:status 200
-               :body {:session/token token
-                      :user/id (:user/id user)
-                      :user/username (:user/username user)}
-               :session session-data})))))))
-
-(defn- session-handler
-  [_state]
-  (fn [request]
-    (let [session (:auth/session request)]
-      {:status 200
-       :body {:session/token (:session/token session)
-              :user/id (:user/id session)
-              :user/username (:user/username session)}})))
-
-(defn- require-session
-  [handler]
-  (fn [request]
-    (let [session (:session request)]
-      (if (and session (:session/token session) (:user/id session))
-        (handler (assoc request :auth/session session))
-        (error-response 401 "Unauthorized")))))
-
-(defn- handle-task-result
-  [result & [success-status]]
-  (if-let [err (:error result)]
-    (error-response (or (:status err) 500)
-                    (:message err)
-                    (:details err))
-    {:status (or success-status 200)
-     :body result}))
-
-(defn- task-id-param
-  [request]
-  (or (get-in request [:path-params :id])
-      (get-in request [:path-params "id"])
-      (get-in request [:parameters :path :id])
-      (get-in request [:parameters :path "id"])
-      (some-> request :path-params vals first)))
-
-(defn- list-tasks-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/list-tasks (get-in state [:db :conn])
-                       (:query-params request)))))
-
-(defn- recent-tasks-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/recent-tasks (get-in state [:db :conn])
-                         {:limit (some-> (get-in request [:query-params :limit]) Integer/parseInt)
-                          :include-archived? (= "true" (get-in request [:query-params :archived]))}))))
-
-(defn- task-counts-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/task-status-counts (get-in state [:db :conn])
-                               {:include-archived? (= "true" (get-in request [:query-params :archived]))}))))
-
-(defn- create-task-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/create-task! (get-in state [:db :conn])
-                         (or (:body-params request) {})
-                         (:auth/session request))
-     201)))
-
-(defn- update-task-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/update-task! (get-in state [:db :conn])
-                         (task-id-param request)
-                         (or (:body-params request) {})
-                         (:auth/session request)))))
-
-(defn- set-status-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/set-status! (get-in state [:db :conn])
-                        (task-id-param request)
-                        (or (:body-params request) {})
-                        (:auth/session request)))))
-
-(defn- assign-task-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/assign-task! (get-in state [:db :conn])
-                         (task-id-param request)
-                         (or (:body-params request) {})
-                         (:auth/session request)))))
-
-(defn- due-date-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/set-due-date! (get-in state [:db :conn])
-                          (task-id-param request)
-                          (or (:body-params request) {})
-                          (:auth/session request)))))
-
-(defn- tags-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/set-tags! (get-in state [:db :conn])
-                      (task-id-param request)
-                      (or (:body-params request) {})
-                      (:auth/session request)))))
-
-(defn- archive-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/archive-task! (get-in state [:db :conn])
-                          (task-id-param request)
-                          (or (:body-params request) {})
-                          (:auth/session request)))))
-
-(defn- delete-task-handler
-  [state]
-  (fn [request]
-    (let [path-id (task-id-param request)]
-      (when-not path-id
-        (log/warnf "delete-task-handler: missing path id in request %s path-params=%s parameters=%s"
-                   (:uri request) (:path-params request) (:parameters request)))
-      (handle-task-result
-       (tasks/delete-task! (get-in state [:db :conn])
-                           path-id
-                           (:auth/session request))))))
-
-(defn- list-people-handler
-  [state]
-  (fn [request]
-    {:status 200
-     :body {:people (land/people (get-in state [:db :conn]) (:query-params request))}}))
-
-(defn- person-detail-handler
-  [state]
-  (fn [request]
-    (try
-      (let [id-str (task-id-param request)
-            person-id (UUID/fromString (str id-str))
-            result (land/person-detail (get-in state [:db :conn]) person-id)]
-        (if result
-          {:status 200 :body result}
-          (error-response 404 "Person not found")))
-      (catch Exception _
-        (error-response 400 "Invalid person id")))))
-
-(defn- list-parcels-handler
-  [state]
-  (fn [request]
-    {:status 200
-     :body {:parcels (land/parcels (get-in state [:db :conn]) (:query-params request))}}))
-
-(defn- parcel-detail-handler
-  [state]
-  (fn [request]
-    (try
-      (let [id-str (task-id-param request)
-            parcel-id (UUID/fromString (str id-str))
-            result (land/parcel-detail (get-in state [:db :conn]) parcel-id)]
-        (if result
-          {:status 200 :body result}
-          (error-response 404 "Parcel not found")))
-      (catch Exception _
-        (error-response 400 "Invalid parcel id")))))
-
-(defn- stats-handler
-  [state]
-  (fn [_request]
-    {:status 200
-     :body (land/stats (get-in state [:db :conn]))}))
-
-(defn- list-tags-handler
-  [state]
-  (fn [_request]
-    (handle-task-result
-     (tasks/list-tags (get-in state [:db :conn])))))
-
-(defn- create-tag-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/create-tag! (get-in state [:db :conn])
-                        (or (:body-params request) {}))
-     201)))
-
-(defn- update-tag-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/rename-tag! (get-in state [:db :conn])
-                        (task-id-param request)
-                        (or (:body-params request) {})))))
-
-(defn- delete-tag-handler
-  [state]
-  (fn [request]
-    (handle-task-result
-     (tasks/delete-tag! (get-in state [:db :conn])
-                        (task-id-param request)))))
+  (into ["/api"]
+        (concat
+         (auth-routes/routes state)
+         (task-routes/routes state)
+         (land-routes/routes state))))
 
 (defn app
-  "Build the Ring handler with shared middleware and routes."
+  "Build the Ring handler with shared middleware and domain routers."
   [state]
   (let [muuntaja-instance (m/create m/default-options)]
     (ring/ring-handler
      (ring/router
-      [["/health" {:get (fn [_request] (health-response state))}]
-       ["/api"
-        ["/login" {:post (login-handler state)}]
-        ["/session" {:middleware [require-session]
-                     :get (session-handler state)}]
-        ["/tasks"
-         {:middleware [require-session]}
-         ["" {:get (list-tasks-handler state)
-              :post (create-task-handler state)}]
-         ["/recent" {:get (recent-tasks-handler state)}]
-         ["/counts" {:get (task-counts-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}" {:put (update-task-handler state)
-                                                                                                  :delete (delete-task-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/status" {:post (set-status-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/assignee" {:post (assign-task-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/due-date" {:post (due-date-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/tags" {:post (tags-handler state)}]
-         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/archive" {:post (archive-handler state)}]]
-        ["/tags"
-         {:middleware [require-session]}
-         ["" {:get (list-tags-handler state)
-              :post (create-tag-handler state)}]
-         ["/:id" {:put (update-tag-handler state)
-                  :delete (delete-tag-handler state)}]]
-        ["/land"
-         {:middleware [require-session]}
-         ["/people" {:get (list-people-handler state)}]
-         ["/people/:id" {:get (person-detail-handler state)}]
-         ["/parcels" {:get (list-parcels-handler state)}]
-         ["/parcels/:id" {:get (parcel-detail-handler state)}]
-         ["/stats" {:get (stats-handler state)}]]]]
+      [(health-route state)
+       (api-routes state)]
       {:conflicts nil
        :data {:muuntaja muuntaja-instance
-              :middleware [[session/wrap-session session-opts]
-                           parameters/parameters-middleware
-                           muuntaja/format-negotiate-middleware
-                           muuntaja/format-response-middleware
-                           muuntaja/format-request-middleware
-                           exception/exception-middleware]}})
+              :middleware default-middleware}})
      (ring/routes
       (ring/create-file-handler {:path "/"
                                  :root "public"})

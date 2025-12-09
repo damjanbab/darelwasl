@@ -30,7 +30,7 @@
   - Reporting: Summaries of module splits and proof outcomes.
 
 - Task ID: backend-route-modularity
-  - Status: in-progress (Codex, 2025-12-09 18:39 UTC)
+  - Status: done (Codex, 2025-12-09 18:57 UTC)
   - Objective: Extract `src/darelwasl/http.clj` into domain routers/middleware helpers while keeping endpoints and behavior identical.
   - Scope: Shared error/response helpers; per-domain routers (auth, tasks, land); session middleware reuse; preserve contracts.
   - Out of Scope: New endpoints or features; schema/action changes.
@@ -51,6 +51,7 @@
   - Dependencies: None.
   - Deliverables: Modularized HTTP namespaces with unchanged route contracts.
   - Proof Plan: `clojure -M:dev` health check; curl smoke for login/tasks/land; `scripts/checks.sh actions import`.
+  - Proofs: `clojure -M -e "(require 'darelwasl.http)"`; `./scripts/checks.sh actions import` ✅ (backfill fixed to include system seed marker).
   - Fixtures/Data Assumptions: Existing seeds/imported data.
   - Protocol/System Updates: Note router pattern in `docs/system.md` if needed.
   - FAQ Updates: Middleware ordering gotchas if discovered.
@@ -366,4 +367,4 @@
   - Reporting: Proof results and follow-ups.
 
 ## Notes
-- None yet.
+No open issues from this task. Migration backfill check is green after including :system/id in entity type backfill.
