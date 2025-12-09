@@ -87,7 +87,7 @@
   - Reporting: Component list, consumers migrated, proof results.
 
 - Task ID: shared-state-http-layer
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-09 19:54 UTC)
   - Objective: Create a reusable state/HTTP/effects layer for CLJS (fetch helpers, finite state transitions) to avoid ad-hoc event/FX duplication.
   - Scope: Extract HTTP/fetch wrappers, error normalization, loading/empty/error/ready state helpers; ensure login/session and feature flows keep semantics; document pattern.
   - Out of Scope: API contract changes; new endpoints.
