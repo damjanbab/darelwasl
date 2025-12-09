@@ -1,0 +1,369 @@
+# Run run-refactor-foundation-001
+
+## Tasks
+- Task ID: frontend-shell-decomposition
+  - Status: in-progress (Codex, 2025-12-09 18:20 UTC)
+  - Objective: Split monolithic `src/darelwasl/app.cljs` into feature modules (shell, login, tasks, home, land, shared UI/state/http) without changing behavior.
+  - Scope: Define module boundaries; extract shared components/state helpers; preserve event names, routes, UX states, theme toggle, and app switcher; keep CSS tokens usage intact.
+  - Out of Scope: New features or visual redesign; backend/API changes.
+  - Capabilities Touched: :cap/view/tasks, :cap/view/home, :cap/view/land-registry (view layer only), theme consumption.
+  - Parallel Safety:
+    - Exclusive Capabilities: CLJS view/state modules.
+    - Shared/Read-only Capabilities: Theme registry consumption.
+    - Sequencing Constraints: Precedes registry/doc alignment and proof task.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared UI primitives and HTTP/state wrappers for all views.
+    - New composability rules needed: Document module pattern if introduced.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (refactor only).
+    - Compatibility expectation (backward/forward/none): Backward and forward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: None.
+  - Deliverables: Modularized CLJS files with unchanged UX/API contracts.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`; manual view-switch smoke.
+  - Fixtures/Data Assumptions: Existing fixtures only.
+  - Protocol/System Updates: Update `docs/system.md` if new module pattern needs codifying.
+  - FAQ Updates: Note CLJS dev gotchas only if encountered.
+  - Tooling/Automation: None beyond existing scripts.
+  - Reporting: Summaries of module splits and proof outcomes.
+
+- Task ID: backend-route-modularity
+  - Status: pending
+  - Objective: Extract `src/darelwasl/http.clj` into domain routers/middleware helpers while keeping endpoints and behavior identical.
+  - Scope: Shared error/response helpers; per-domain routers (auth, tasks, land); session middleware reuse; preserve contracts.
+  - Out of Scope: New endpoints or features; schema/action changes.
+  - Capabilities Touched: :cap/action/auth-login, task actions, land actions (structure only).
+  - Parallel Safety:
+    - Exclusive Capabilities: HTTP routing module.
+    - Shared/Read-only Capabilities: Actions/schema registries (read).
+    - Sequencing Constraints: Can run parallel to frontend task; precedes registry/doc alignment and proofs.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Router/adaptor layering for future domains.
+    - New composability rules needed: Document router pattern if added.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (refactor only).
+    - Compatibility expectation (backward/forward/none): Backward and forward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: None.
+  - Deliverables: Modularized HTTP namespaces with unchanged route contracts.
+  - Proof Plan: `clojure -M:dev` health check; curl smoke for login/tasks/land; `scripts/checks.sh actions import`.
+  - Fixtures/Data Assumptions: Existing seeds/imported data.
+  - Protocol/System Updates: Note router pattern in `docs/system.md` if needed.
+  - FAQ Updates: Middleware ordering gotchas if discovered.
+  - Tooling/Automation: None.
+  - Reporting: Routing structure summary and smoke outcomes.
+
+- Task ID: shared-ui-library
+  - Status: pending
+  - Objective: Establish a reusable UI component library (cards, lists, chips, badges, skeletons, form controls) that consumes theme tokens and powers Home/Tasks/Land without altering behavior.
+  - Scope: Extract reusable components from `app.cljs` into a shared namespace; ensure components handle loading/empty/error states; keep styling aligned with `public/css/main.css` and theme vars; document usage.
+  - Out of Scope: New visual themes or UX changes beyond componentization; backend changes.
+  - Capabilities Touched: :cap/view/home, :cap/view/tasks, :cap/view/land-registry (view layer only), theme consumption.
+  - Parallel Safety:
+    - Exclusive Capabilities: Shared CLJS UI components and CSS hooks.
+    - Shared/Read-only Capabilities: Theme registry consumption.
+    - Sequencing Constraints: Parallel with frontend-shell-decomposition; coordinate to avoid merge conflicts.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: UI primitives + stateful shells; standardize loading/empty/error handling.
+    - New composability rules needed: Component reuse guidelines (tokens only, no hardcoded colors).
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (refactor only).
+    - Compatibility expectation (backward/forward/none): Backward and forward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: None (but coordinate with frontend-shell-decomposition).
+  - Deliverables: Shared UI namespace(s), updated consumers, docs snippet on usage.
+  - Proof Plan: `npm run check`; targeted UI smoke (Home/Tasks/Land states) using fixtures.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Add UI component pattern to `docs/system.md`.
+  - FAQ Updates: Add notes if component usage has caveats.
+  - Tooling/Automation: None beyond existing scripts.
+  - Reporting: Component list, consumers migrated, proof results.
+
+- Task ID: shared-state-http-layer
+  - Status: pending
+  - Objective: Create a reusable state/HTTP/effects layer for CLJS (fetch helpers, finite state transitions) to avoid ad-hoc event/FX duplication.
+  - Scope: Extract HTTP/fetch wrappers, error normalization, loading/empty/error/ready state helpers; ensure login/session and feature flows keep semantics; document pattern.
+  - Out of Scope: API contract changes; new endpoints.
+  - Capabilities Touched: :cap/view/home, :cap/view/tasks, :cap/view/land-registry (state/effects layer only).
+  - Parallel Safety:
+    - Exclusive Capabilities: State/effects CLJS layer.
+    - Shared/Read-only Capabilities: Backend APIs.
+    - Sequencing Constraints: Parallel with frontend-shell-decomposition; align with shared-ui-library.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: State mgmt, HTTP FX; standardize finite state model.
+    - New composability rules needed: State/FX helper usage documented.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None.
+    - Compatibility expectation (backward/forward/none): Backward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: None (coordinate with frontend-shell-decomposition).
+  - Deliverables: Shared HTTP/state helpers; updated view modules to use them.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Add state/FX pattern to `docs/system.md`.
+  - FAQ Updates: Note any fetch/state gotchas.
+  - Tooling/Automation: None.
+  - Reporting: Helper API summary and adoption status.
+
+- Task ID: entity-view-primitives
+  - Status: pending
+  - Objective: Codify configurable entity list/detail primitives (fields, renderers, actions) usable across Tasks/Home/Land and future entities.
+  - Scope: Define config maps per `:entity/type` for list/detail rendering; adapt existing views to consume configs; keep UX/behavior unchanged; document extension pattern.
+  - Out of Scope: New entities or data fields; backend changes.
+  - Capabilities Touched: :cap/view/tasks, :cap/view/home, :cap/view/land-registry (view composition).
+  - Parallel Safety:
+    - Exclusive Capabilities: Entity primitive configs + adapters.
+    - Shared/Read-only Capabilities: Schemas/actions (read).
+    - Sequencing Constraints: After shared-ui-library and shared-state-http-layer to reuse them cleanly.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: View composition via config; promotes reuse.
+    - New composability rules needed: Document config pattern and override rules.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None.
+    - Compatibility expectation (backward/forward/none): Backward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: shared-ui-library, shared-state-http-layer.
+  - Deliverables: Configurable primitives, migrated views, documentation.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`; manual spot-check of list/detail flows.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Update `docs/system.md` composability section.
+  - FAQ Updates: Note extension points.
+  - Tooling/Automation: None.
+  - Reporting: Config pattern description and adoption coverage.
+
+- Task ID: perf-and-pagination-guardrails
+  - Status: pending
+  - Objective: Enforce pagination/limits and add lightweight performance guardrails for task/land endpoints and UI lists.
+  - Scope: Server-side defaults/limits for list endpoints (tasks, land people/parcels); frontend respects limits and surfaces paging controls; add simple timing/log hooks for slow requests (dev); document budgets from system doc.
+  - Out of Scope: Full observability stack; heavy analytics.
+  - Capabilities Touched: :cap/action/* list endpoints, :cap/view/tasks, :cap/view/land-registry (pagination UX).
+  - Parallel Safety:
+    - Exclusive Capabilities: Endpoint parameter handling and list rendering.
+    - Shared/Read-only Capabilities: Existing schemas.
+    - Sequencing Constraints: After backend-route-modularity; coordinate with UI tasks to add paging controls.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: List contract pattern; perf budgets.
+    - New composability rules needed: Pagination defaults/limits documented.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Add paging/limits for scalability.
+    - Compatibility expectation (backward/forward/none): Backward compatible with defaults; forward compatible via documented params.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change (keep sensible defaults).
+  - Dependencies: backend-route-modularity; frontend shell/UI/state tasks for UI changes.
+  - Deliverables: Paginated endpoints (with caps), UI paging controls, perf logging hooks, docs updates.
+  - Proof Plan: Endpoint curl checks with paging; `scripts/checks.sh actions import`; UI smoke on paginated data.
+  - Fixtures/Data Assumptions: Existing fixtures/importer; may add larger temp set for paging proof.
+  - Protocol/System Updates: Document pagination/perf budgets in `docs/system.md`.
+  - FAQ Updates: Paging parameter notes if needed.
+  - Tooling/Automation: Optional small perf log helper.
+  - Reporting: Paging defaults, perf guard outcomes.
+
+- Task ID: reliability-idempotency-proofing
+  - Status: pending
+  - Objective: Strengthen idempotency/concurrency proofs for importer and task mutations; add tests covering retries/dedup invariants.
+  - Scope: Tests for importer reruns (same counts/ids); tests for task/tag operations under duplicate/retry; doc idempotency guarantees; ensure action handlers enforce rules.
+  - Out of Scope: New business logic.
+  - Capabilities Touched: :cap/action/parcel-import, task/tag actions.
+  - Parallel Safety:
+    - Exclusive Capabilities: Test additions and minor action tweaks for idempotency enforcement.
+    - Shared/Read-only Capabilities: Schema/import data.
+    - Sequencing Constraints: After importer/backend refactors; before proofs task.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Idempotency pattern documentation.
+    - New composability rules needed: Retry/idempotency guidance recorded.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (proof hardening).
+    - Compatibility expectation (backward/forward/none): Backward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: data import and backend actions in place.
+  - Deliverables: Tests/fixtures, minor code fixes if gaps found, doc notes on guarantees.
+  - Proof Plan: Targeted clojure tests; importer dry-run vs full-run; `scripts/checks.sh import` validation.
+  - Fixtures/Data Assumptions: Existing CSV + fixture subset.
+  - Protocol/System Updates: Note idempotency guarantees in `docs/system.md`.
+  - FAQ Updates: Add retry/idempotency guidance.
+  - Tooling/Automation: Extend checks harness if needed.
+  - Reporting: Proof results and fixes applied.
+
+- Task ID: always-correct-docs-and-gating
+  - Status: pending
+  - Objective: Make the “always correct” invariant explicit in `docs/system.md` and protocol (task/run schema), and encode proof expectations (tests/checks) per capability.
+  - Scope: Update invariants + patterns sections with required proofs for changes (schema/actions/views/importer/frontend); add task/run checklist items for proofs; document mandatory scripts (`scripts/checks.sh` targets) before merge; clarify fixtures/temporary DB usage to avoid flaky checks.
+  - Out of Scope: Implementing new features.
+  - Capabilities Touched: Documentation/protocol; all capabilities (policy only).
+  - Parallel Safety:
+    - Exclusive Capabilities: Docs/protocol invariants.
+    - Shared/Read-only Capabilities: Codebase for references.
+    - Sequencing Constraints: None; ideally before proof-and-smoke.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Proof pattern for all layers.
+    - New composability rules needed: Proof-first rule, required test plan per capability change.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Stronger proof bar; rationale is reliability.
+    - Compatibility expectation (backward/forward/none): Backward compatible; process-only.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: None.
+  - Deliverables: Updated `docs/system.md` and protocol/task schema with proof requirements and checklists.
+  - Proof Plan: Review updated docs; ensure registries/checks references included.
+  - Fixtures/Data Assumptions: N/A.
+  - Protocol/System Updates: Yes—protocol/task schema checklist additions.
+  - FAQ Updates: Add proof expectations entry.
+  - Tooling/Automation: None (policy/documentation only).
+  - Reporting: Summary of invariant clarifications and checklist updates.
+
+- Task ID: test-harness-and-ci-enforcement
+  - Status: pending
+  - Objective: Strengthen automated proof execution so every change runs the right tests/checks by default (local + CI).
+  - Scope: Ensure `scripts/checks.sh all` (or equivalent matrix) is runnable locally and in CI; wire a CI workflow to run registries, schema, actions, import, and app-smoke; add lightweight a11y/snapshot hooks if available; optional pre-push helper script for local enforcement.
+  - Out of Scope: New feature work; heavy infra.
+  - Capabilities Touched: Tooling/automation (checks harness), all capabilities (validation).
+  - Parallel Safety:
+    - Exclusive Capabilities: CI workflow and check harness wiring.
+    - Shared/Read-only Capabilities: Existing code/tests (read).
+    - Sequencing Constraints: After shared UI/state tasks stabilize enough for app-smoke; before proof-and-smoke completion.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Test harness; proof automation pattern.
+    - New composability rules needed: Require checks in PR gate; document required commands in run protocol.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Enforce proof execution; rationale reliability.
+    - Compatibility expectation (backward/forward/none): Backward compatible; automation only.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: always-correct-docs-and-gating (for policy); shared UI/state tasks (for stable app-smoke).
+  - Deliverables: CI workflow or script updates; documented local command; any small harness fixes to keep checks green.
+  - Proof Plan: Run full `scripts/checks.sh all`; confirm CI workflow passes; document results.
+  - Fixtures/Data Assumptions: Existing fixtures/importer; Playwright installed in CI.
+  - Protocol/System Updates: Update docs/run protocol with enforced checks.
+  - FAQ Updates: Add note on required checks and troubleshooting.
+  - Tooling/Automation: CI workflow addition/update; optional pre-push helper.
+  - Reporting: Proof matrix and CI setup summary.
+
+- Task ID: accessibility-and-regression-coverage
+  - Status: pending
+  - Objective: Add lightweight a11y smoke and UI regression coverage for shared components and key flows (login, Home, Tasks, Land).
+  - Scope: Integrate an a11y checker in Playwright smoke or add a small a11y script; add snapshot/smoke cases for shared UI components; document accessibility expectations.
+  - Out of Scope: Full WCAG audit; redesigns.
+  - Capabilities Touched: :cap/view/login, :cap/view/home, :cap/view/tasks, :cap/view/land-registry (test coverage).
+  - Parallel Safety:
+    - Exclusive Capabilities: Test harness additions.
+    - Shared/Read-only Capabilities: UI code (read).
+    - Sequencing Constraints: After shared UI/state refactors so coverage targets stabilized.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Test harness reuse for views.
+    - New composability rules needed: A11y checklist referenced in docs.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (quality).
+    - Compatibility expectation (backward/forward/none): Backward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: shared-ui-library, shared-state-http-layer, entity-view-primitives (stabilize UI); app smoke harness.
+  - Deliverables: A11y/snapshot tests, doc note on coverage, updated smoke script if needed.
+  - Proof Plan: Run app-smoke with a11y hook; review snapshots.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Add a11y test expectation to `docs/system.md`/FAQ.
+  - FAQ Updates: A11y checklist link.
+  - Tooling/Automation: Extend `scripts/checks.sh app-smoke` or add a11y script.
+  - Reporting: Coverage additions and results.
+
+- Task ID: observability-and-logging
+  - Status: pending
+  - Objective: Add minimal observability hooks (structured logs and basic metrics counters/timers) for HTTP routes and importer to aid scalability/debugging without changing behavior.
+  - Scope: Structured logs for key actions (auth, task mutations, land queries, importer runs); lightweight timing around handler/queries; optional counters in dev; document what’s logged and where.
+  - Out of Scope: External monitoring stack; persistent metrics store.
+  - Capabilities Touched: :cap/action/* handlers; :cap/action/parcel-import.
+  - Parallel Safety:
+    - Exclusive Capabilities: Logging/metrics hooks.
+    - Shared/Read-only Capabilities: Existing actions/importer.
+    - Sequencing Constraints: After backend-route-modularity; may follow reliability task for clarity.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Logging pattern; timing helpers.
+    - New composability rules needed: Logging/metrics guidelines in docs.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None (diagnostic).
+    - Compatibility expectation (backward/forward/none): Backward compatible; ensure defaults no-op/low noise.
+    - Flag/Rollout plan: Toggle-able logging level if needed.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: backend-route-modularity; reliability-idempotency-proofing (for context).
+  - Deliverables: Logging/timing helpers, integrated in handlers/importer, docs on fields emitted.
+  - Proof Plan: Manual smoke (inspect logs), `scripts/checks.sh` to ensure no regressions.
+  - Fixtures/Data Assumptions: Existing fixtures/import runs.
+  - Protocol/System Updates: Add observability note to `docs/system.md`.
+  - FAQ Updates: Logging verbosity/fields.
+  - Tooling/Automation: Optional log formatter helper.
+  - Reporting: Logging additions and validation notes.
+
+- Task ID: registries-docs-alignment-refactor
+  - Status: pending
+  - Objective: Reflect refactor patterns in `docs/system.md` and confirm registries remain accurate (no contract changes).
+  - Scope: Update patterns/composability sections if new shared UI/router rules emerge; validate `registries/*.edn` entries.
+  - Out of Scope: New capabilities or version bumps.
+  - Capabilities Touched: Registries (schema/actions/views/tooling) and system doc alignment.
+  - Parallel Safety:
+    - Exclusive Capabilities: Docs/registries.
+    - Shared/Read-only Capabilities: Codebase for reference.
+    - Sequencing Constraints: After frontend and backend refactors settle.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Documentation of shared patterns.
+    - New composability rules needed: Capture any newly established module/router rules.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: None.
+    - Compatibility expectation (backward/forward/none): Backward compatible.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
+  - Dependencies: frontend-shell-decomposition, backend-route-modularity.
+  - Deliverables: Updated `docs/system.md` narrative and registry confirmation (no deltas unless required).
+  - Proof Plan: `scripts/checks.sh registries`; doc diff review.
+  - Fixtures/Data Assumptions: N/A.
+  - Protocol/System Updates: Add module/router notes if created.
+  - FAQ Updates: Only if new caveats surface.
+  - Tooling/Automation: None.
+  - Reporting: Doc/registry alignment summary.
+
+- Task ID: proof-and-smoke
+  - Status: pending
+  - Objective: Run and record proofs after refactor.
+  - Scope: `scripts/checks.sh registries schema actions import app-smoke`; manual curls for `/health`, `/api/login`, `/api/tasks`, `/api/land/people`.
+  - Out of Scope: Fixing unrelated pre-existing issues (log and defer).
+  - Capabilities Touched: None (validation only).
+  - Parallel Safety:
+    - Exclusive Capabilities: Test harness execution.
+    - Shared/Read-only Capabilities: All capabilities under validation.
+    - Sequencing Constraints: After refactor tasks complete.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: None.
+    - New composability rules needed: None.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: N/A.
+    - Compatibility expectation (backward/forward/none): N/A.
+    - Flag/Rollout plan: N/A.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: N/A.
+  - Dependencies: frontend-shell-decomposition, backend-route-modularity, registries-docs-alignment-refactor.
+  - Deliverables: Proof matrix with outcomes; list of any failures and follow-ups.
+  - Proof Plan: As stated above.
+  - Fixtures/Data Assumptions: Use existing seeds/importer (temp DB as in checks).
+  - Protocol/System Updates: Note any new proof steps if added.
+  - FAQ Updates: Only if new recurring issues surface.
+  - Tooling/Automation: None beyond existing scripts.
+  - Reporting: Proof results and follow-ups.
+
+## Notes
+- None yet.
