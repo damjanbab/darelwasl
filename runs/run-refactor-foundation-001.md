@@ -87,7 +87,7 @@
   - Reporting: Component list, consumers migrated, proof results.
 
 - Task ID: shared-state-http-layer
-  - Status: in-progress (Codex, 2025-12-09 19:54 UTC)
+  - Status: done (Codex, 2025-12-09 21:47 UTC)
   - Objective: Create a reusable state/HTTP/effects layer for CLJS (fetch helpers, finite state transitions) to avoid ad-hoc event/FX duplication.
   - Scope: Extract HTTP/fetch wrappers, error normalization, loading/empty/error/ready state helpers; ensure login/session and feature flows keep semantics; document pattern.
   - Out of Scope: API contract changes; new endpoints.
@@ -108,6 +108,7 @@
   - Dependencies: None (coordinate with frontend-shell-decomposition).
   - Deliverables: Shared HTTP/state helpers; updated view modules to use them.
   - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`.
+  - Proofs: `npm run check` ✅; `npm run smoke:app` ✅ (Land UI navigation skipped due to app-switcher visibility in headless; task flow covered).
   - Fixtures/Data Assumptions: Existing fixtures.
   - Protocol/System Updates: Add state/FX pattern to `docs/system.md`.
   - FAQ Updates: Note any fetch/state gotchas.

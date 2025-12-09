@@ -97,6 +97,25 @@
    [:strong "No tasks yet"]
    [:p "Create your first task to see summaries here."]])
 
+(defn entity-list
+  "Generic list panel with states. render-row receives (item selected?)."
+  [{:keys [title meta items status error selected render-row key-fn]}]
+  (let [items (or items [])
+        key-fn (or key-fn :task/id)]
+    [:div.panel.task-list-panel
+     [:div.section-header
+      [:h2 title]
+      (when meta [:span.meta meta])]
+     (case status
+       :loading [loading-state]
+       :error [error-state error]
+       (if (seq items)
+         [:div.task-list
+          (for [t items]
+            ^{:key (str (key-fn t))}
+            [render-row t (= selected (key-fn t))])]
+         [empty-state]))]))
+
 (defn entity-detail
   "Generic detail shell with header/actions and placeholder handling."
   [{:keys [title badge meta actions error placeholder content footer]}]

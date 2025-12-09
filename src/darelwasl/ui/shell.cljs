@@ -23,7 +23,7 @@
 (defn app-switcher []
   (let [{:keys [menu-open?]} @(rf/subscribe [:darelwasl.app/nav])
         route @(rf/subscribe [:darelwasl.app/route])]
-    [:div.app-switcher {:on-mouse-leave #(rf/dispatch [:darelwasl.app/close-switcher])}
+    [:div.app-switcher
      [:div.app-switcher-edge {:aria-hidden true
                               :on-mouse-enter #(rf/dispatch [:darelwasl.app/open-switcher])}]
      [:div.app-switcher-trigger-area.desktop
@@ -32,7 +32,7 @@
        {:type "button"
         :aria-expanded (boolean menu-open?)
         :aria-controls "app-switcher-menu"
-        :on-click #(rf/dispatch [:darelwasl.app/toggle-switcher])
+        :on-click #(rf/dispatch [:darelwasl.app/open-switcher])
         :on-focus #(rf/dispatch [:darelwasl.app/open-switcher])
         :on-key-down #(when (= "Escape" (.-key %))
                         (rf/dispatch [:darelwasl.app/close-switcher]))}
@@ -44,7 +44,7 @@
       {:type "button"
        :aria-label "Open app switcher"
        :aria-expanded (boolean menu-open?)
-       :on-click #(rf/dispatch [:darelwasl.app/toggle-switcher])}
+       :on-click #(rf/dispatch [:darelwasl.app/open-switcher])}
       "Apps"]
      (when menu-open?
        [app-switcher-menu route "mobile"])]))

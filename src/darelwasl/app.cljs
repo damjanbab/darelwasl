@@ -316,8 +316,10 @@
    (let [token (:session/token payload)
          user-id (:user/id payload)
          username (:user/username payload)
-         preferred-route (let [cand (get-in db [:nav :last-route])]
-                           (if (#{:home :tasks} cand) cand :home))
+         preferred-route (let [cand (get-in db [:nav :last-route])
+                               allowed (cond-> #{:home :tasks}
+                                          land-enabled? (conj :land))]
+                           (if (contains? allowed cand) cand :home))
          db' (-> db
                  (assoc :session {:token token
                                   :user {:id user-id
