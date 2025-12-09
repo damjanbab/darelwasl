@@ -30,7 +30,7 @@
   - Reporting: Summaries of module splits and proof outcomes.
 
 - Task ID: backend-route-modularity
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-09 18:39 UTC)
   - Objective: Extract `src/darelwasl/http.clj` into domain routers/middleware helpers while keeping endpoints and behavior identical.
   - Scope: Shared error/response helpers; per-domain routers (auth, tasks, land); session middleware reuse; preserve contracts.
   - Out of Scope: New endpoints or features; schema/action changes.
