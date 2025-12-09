@@ -111,10 +111,31 @@
        :error [error-state error]
        (if (seq items)
          [:div.task-list
-          (for [t items]
-            ^{:key (str (key-fn t))}
-            [render-row t (= selected (key-fn t))])]
+         (for [t items]
+           ^{:key (str (key-fn t))}
+           [render-row t (= selected (key-fn t))])]
          [empty-state]))]))
+
+(defn stat-card
+  [{:keys [label value meta content tone class]}]
+  [:div.card {:class (str (when class class) " " (when tone (name tone)))}
+   [:div.card-label label]
+   (when value [:div.card-value value])
+   (when content content)
+   (when meta [:div.meta meta])])
+
+(defn stat-group
+  "Render a group of stat cards. variant can be :wide or :narrow to reuse existing layout classes."
+  [{:keys [cards variant class]}]
+  (let [variant-class (case variant
+                        :wide "wide"
+                        :narrow "narrow"
+                        nil)]
+    [:div.summary-cards {:class (str variant-class " " class)}
+     (for [{:keys [label] :as card} cards
+           :when label]
+       ^{:key (str label)}
+       [stat-card card])]))
 
 (defn entity-detail
   "Generic detail shell with header/actions and placeholder handling."

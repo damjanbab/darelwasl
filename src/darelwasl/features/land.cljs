@@ -11,32 +11,24 @@
    {:id :incomplete :label "Incomplete shares"}])
 
 (defn land-stats-cards [{:keys [persons parcels total-area-m2 share-complete share-complete-pct top-owners]}]
-  [:div.summary-cards.wide
-   [:div.card
-    [:div.card-label "Parcels"]
-    [:div.card-value (or parcels 0)]]
-   [:div.card
-    [:div.card-label "People"]
-    [:div.card-value (or persons 0)]]
-   [:div.card
-    [:div.card-label "Total area (m²)"]
-    [:div.card-value (or (.toLocaleString (or total-area-m2 0) "en-US") 0)]]
-   [:div.card
-    [:div.card-label "Share completeness"]
-    [:div.card-value (str (or (some-> share-complete-pct js/Math.round) 0) "%")]
-    [:div.meta (str (or share-complete 0) " parcels balanced")]]
-   [:div.card
-    [:div.card-label "Top owners by area"]
-    (if (seq top-owners)
-      [:ul.mini-list
-       (for [o top-owners
-             :let [owner-name (:person/name o)
-                   area (:person/owned-area-m2 o)]]
-         ^{:key (str "top-" (:person/id o))}
-         [:li
-          [:div owner-name]
-          [:span.meta (str (js/Math.round (or area 0)) " m²")]])]
-      [:span.meta "No owners yet"])]])
+  [ui/stat-group {:variant :wide
+                  :cards [{:label "Parcels" :value (or parcels 0)}
+                          {:label "People" :value (or persons 0)}
+                          {:label "Total area (m²)" :value (or (.toLocaleString (or total-area-m2 0) "en-US") 0)}
+                          {:label "Share completeness"
+                           :value (str (or (some-> share-complete-pct js/Math.round) 0) "%")
+                           :meta (str (or share-complete 0) " parcels balanced")}
+                          {:label "Top owners by area"
+                           :content (if (seq top-owners)
+                                      [:ul.mini-list
+                                       (for [o top-owners
+                                             :let [owner-name (:person/name o)
+                                                   area (:person/owned-area-m2 o)]]
+                                         ^{:key (str "top-" (:person/id o))}
+                                         [:li
+                                          [:div owner-name]
+                                          [:span.meta (str (js/Math.round (or area 0)) " m²")]])]
+                                      [:span.meta "No owners yet"])}]}])
 
 (defn land-people-list []
   (let [{:keys [people status error filters selected]} @(rf/subscribe [:darelwasl.app/land])
@@ -98,16 +90,10 @@
             [:span.chip (str "Owned area: " (util/format-area owned-area-m2) " m²")]]]
           (if (seq ownerships)
             [:<>
-             [:div.summary-cards.narrow
-              [:div.card
-               [:div.card-label "Parcels"]
-               [:div.card-value (or parcel-count 0)]]
-              [:div.card
-               [:div.card-label "Owned area"]
-               [:div.card-value (str (util/format-area owned-area-m2) " m²")]]
-              [:div.card
-               [:div.card-label "Holdings"]
-               [:div.card-value (str (count ownerships) " shares")]]]
+             [ui/stat-group {:variant :narrow
+                             :cards [{:label "Parcels" :value (or parcel-count 0)}
+                                     {:label "Owned area" :value (str (util/format-area owned-area-m2) " m²")}
+                                     {:label "Holdings" :value (str (count ownerships) " shares")}]}]
              [:div {:style {:display "grid"
                             :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
                             :gap "12px"}}
@@ -207,21 +193,16 @@
          [:div
           [:div.detail-meta
            [:h4 (str cadastral-id "/" number)]
-           [:div.meta (str (or cadastral-name "") (when (and cadastral-name address) " · ") (or address ""))]
+          [:div.meta (str (or cadastral-name "") (when (and cadastral-name address) " · ") (or address ""))]
            [:div.meta (str "Book " (or book "–"))]
            [:div.chip {:class (if complete? "status success" "status warning")}
             (if complete? "Complete shares" "Incomplete shares")]]
-          [:div.summary-cards.narrow
-           [:div.card
-            [:div.card-label "Owners"]
-            [:div.card-value (or (count owners) 0)]]
-           [:div.card
-            [:div.card-label "Parcel area"]
-            [:div.card-value (str (util/format-area area) " m²")]]
-           [:div.card
-            [:div.card-label "Share total"]
-            [:div.card-value (if share-total (util/pct share-total) "—")]
-            [:div.meta "Expected 100% ± tolerance"]]]
+          [ui/stat-group {:variant :narrow
+                          :cards [{:label "Owners" :value (or (count owners) 0)}
+                                  {:label "Parcel area" :value (str (util/format-area area) " m²")}
+                                  {:label "Share total"
+                                   :value (if share-total (util/pct share-total) "—")
+                                   :meta "Expected 100% ± tolerance"}]}]
           (if (seq owners-sorted)
             [:div {:style {:display "grid"
                            :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
