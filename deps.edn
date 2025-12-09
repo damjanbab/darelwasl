@@ -6,9 +6,12 @@
         ring/ring-jetty-adapter {:mvn/version "1.12.1"}
         com.datomic/local {:mvn/version "1.0.291"}
         org.clojure/tools.logging {:mvn/version "1.3.0"}
+        org.clojure/data.csv {:mvn/version "1.0.1"}
         ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}
  :aliases {:dev {:main-opts ["-m" "darelwasl.main"]
                  :jvm-opts ["-Dclojure.main.report=stderr"]
                  :exec-fn darelwasl.main/-main}
            :seed {:main-opts ["-m" "darelwasl.fixtures"]
-                  :jvm-opts ["-Dclojure.main.report=stderr"]}}}
+                  :jvm-opts ["-Dclojure.main.report=stderr"]}
+           :import {:main-opts ["-m" "darelwasl.importer"]
+                    :jvm-opts ["-Dclojure.main.report=stderr"]}}}

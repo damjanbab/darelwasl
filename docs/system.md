@@ -125,8 +125,9 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
 - Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
 - Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
+- Land registry importer: `clojure -M:import --file data/land/hrib_parcele_upisane_osobe.csv [--temp] [--dry-run]` loads schema, normalizes/dedupes the CSV (deterministic IDs), and transacts person/parcel/ownership into Datomic. `--temp` uses a :mem DB and cleans up; `--dry-run` parses/validates only.
 - Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
-- Checks: `scripts/checks.sh registries|schema|actions|app-smoke|all` (registry presence + EDN parse, schema load, action contracts, headless app smoke). Use `all` before merging.
+- Checks: `scripts/checks.sh registries|schema|actions|import|app-smoke|all` (registry presence + EDN parse, schema load, importer, action contracts, headless app smoke). Use `all` before merging.
 - Schema/migration check: `scripts/checks.sh schema` also runs a backfill check that strips `:entity/type` in a temp DB seeded with fixtures and ensures the migration repopulates it.
 - App smoke run: `scripts/checks.sh app-smoke` (or `all`) seeds fixtures into a temp Datomic storage under `.cpcache/datomic-smoke-*`, builds the frontend (`npm run check`), starts the backend on `APP_PORT` (default 3100), and runs Playwright headless login + task rendering. Requires Node/npm and initial Playwright browser download.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
@@ -287,6 +288,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Fixtures and seeding:
   - Full dataset comes from `hrib_parcele_upisane_osobe(1).csv` via the importer. For fast checks, use a trimmed fixture subset covering multiple owners per parcel and multiple parcels per person, preserving share math.
   - Temp DB/schema checks should load these attributes and ensure share totals validate during import/backfill.
+  - Files: dataset copied to `data/land/hrib_parcele_upisane_osobe.csv`; sample subset for tests at `fixtures/land_registry_sample.csv` (one parcel with nine ownership rows).
 
 ## Design Spec: Home + App Switcher + Entity Primitives
 - Home (default post-login):
@@ -330,6 +332,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Determinism: fixture UUIDs and timestamps are fixed; loaders insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
+- :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.

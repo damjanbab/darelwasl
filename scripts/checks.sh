@@ -7,13 +7,14 @@ DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts]
+Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts|import]
 
 Commands:
   registries       Registry presence + field checks + EDN/fixture parse
   schema           Registries + schema load into temp Datomic
   actions          Registries + schema + action contract harness
   app-smoke|views  Full stack smoke: registries + schema + actions + headless UI flow
+  import           Run land-registry importer against the provided CSV in a temp DB
   all              Runs registries, schema, actions, and app smoke
 EOF
 }
@@ -196,10 +197,10 @@ check_edn_parse() {
   (when duplicate-usernames
     (println "Duplicate usernames in fixtures:" duplicate-usernames)
     (System/exit 1))
-  (when invalid-users
-    (doseq [u invalid-users]
-      (println "Invalid user fixture" u))
-    (System/exit 1))
+      (when invalid-users
+        (doseq [u invalid-users]
+          (println "Invalid user fixture" u))
+        (System/exit 1))
   (when tag-missing
     (doseq [m tag-missing]
       (println "Tag fixture missing keys" m))
@@ -314,17 +315,30 @@ check_app_smoke() {
   trap - EXIT
 }
 
+check_import() {
+  check_clojure_available
+  local file="${IMPORT_FILE:-$ROOT/data/land/hrib_parcele_upisane_osobe.csv}"
+  if [ ! -f "$file" ]; then
+    echo "Import data file not found at $file"
+    exit 1
+  fi
+  echo "Running land registry import against $file (temp DB)..."
+  (cd "$ROOT" && clojure -M:import --file "$file" --temp)
+}
+
 target="${1:-all}"
 case "$target" in
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
   app-smoke|views) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions; check_app_smoke ;;
+  import) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_import ;;
   all)
     check_registries
     check_registry_fields
     check_edn_parse
     check_schema_load
+    check_import
     check_actions
     check_app_smoke
     ;;

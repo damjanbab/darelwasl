@@ -63,7 +63,7 @@
  :scope :shared
  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
  :enforces [:ui-boot]
-  :related {:capabilities [:cap/view/login :cap/view/tasks :cap/view/home]}
+ :related {:capabilities [:cap/view/login :cap/view/tasks :cap/view/home]}
   :gotchas ["Requires Playwright Chromium download (handled by scripts/checks.sh); needs outbound network on first run."
             "Seeds a temp Datomic storage under .cpcache/datomic-smoke-*; uses APP_PORT 3100 by default and will kill anything listening there during the smoke run."]}
 
@@ -76,4 +76,18 @@
   :enforces [:theme-vars]
   :related {:capabilities [:theme/default]}
   :gotchas []}
+
+ {:id :cap/tooling/import-check
+  :title "Land registry import check"
+  :version "v1"
+  :invocation "scripts/checks.sh import"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/land-registry-sample]}
+  :enforces [:import :schema]
+  :related {:capabilities [:cap/action/parcel-import
+                           :cap/schema/person
+                           :cap/schema/parcel
+                           :cap/schema/ownership]}
+  :gotchas ["Runs importer against data/land/hrib_parcele_upisane_osobe.csv into a temp Datomic (:mem); dataset must be present."
+            "Uses deterministic IDs; reruns are safe. Add --dry-run when calling manually to skip transact."]}
 ]

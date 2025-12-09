@@ -247,4 +247,27 @@
   :related {:schema [:cap/schema/task]
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/parcel-import
+  :title "Import land registry CSV"
+  :version "v1"
+  :inputs {:file/path :string
+           :mode :keyword
+           :dry-run? :boolean?}
+  :outputs {:import/persons :long
+            :import/parcels :long
+            :import/ownerships :long}
+  :side-effects ["Transact person/parcel/ownership entities into Datomic"]
+  :adapter {:integration :local/db}
+  :audit {:records [:import/run]
+          :fields [:file/path]}
+  :idempotency {:strategy :deterministic-ids
+                :keys [:file/path]}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]
+            :views [:cap/view/land-registry]}
+  :tooling [:cap/tooling/import-check]}
 ]

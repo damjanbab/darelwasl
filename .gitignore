@@ -10,7 +10,10 @@ target/
 classes/
 .cpcache/
 .nrepl-port
-data/
+data/*
+!data/land/
+data/land/*
+!data/land/hrib_parcele_upisane_osobe.csv
 node_modules/
 .shadow-cljs/
 .cljs_node_repl/

@@ -88,7 +88,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Summarize attributes, invariants, and compatibility story
 
 - Task ID: data-import-people-lands
-  - Status: in-progress (Codex, 2025-12-09 13:37 UTC)
+  - Status: done (Codex, 2025-12-09 13:31 UTC)
   - Objective: Build an idempotent importer that maps `hrib_parcele_upisane_osobe(1).csv` into the new schema with generated/stable IDs and usable seeds/fixtures.
   - Scope: Implement parsing/normalization of the CSV (handle quoting, encoding, whitespace), map to person/parcel/ownership entities with stable UUIDs (deterministic hash or stored mapping), dedupe people across rows, capture source raw refs, write temp DB loader/CLI entry point, integrate with seeds/fixtures for checks, and document how to run/verify the import. Ensure retry safety and logging of counts/errors.
   - Out of Scope: Backend query endpoints, frontend rendering, heavy data cleaning beyond pragmatic normalization.
