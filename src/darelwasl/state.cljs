@@ -110,9 +110,9 @@
    :nav default-nav-state
    :tags default-tags-state
   :home default-home-state
-  :login default-login-state
-  :tasks default-task-state
-  :land default-land-state})
+   :login default-login-state
+   :tasks default-task-state
+   :land default-land-state})
 
 (def app-options
   (cond-> [{:id :home
@@ -124,6 +124,16 @@
     land-enabled? (conj {:id :land
                          :label "Land"
                          :desc "People ↔ parcels"})))
+
+(defn mark-loading [db path]
+  (-> db
+      (assoc-in (conj path :status) :loading)
+      (assoc-in (conj path :error) nil)))
+
+(defn mark-error [db path message]
+  (-> db
+      (assoc-in (conj path :status) :error)
+      (assoc-in (conj path :error) message)))
 
 (def task-entity-config
   {:type :entity.type/task
