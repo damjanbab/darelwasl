@@ -1,5 +1,6 @@
 (ns darelwasl.http
-  (:require [darelwasl.auth :as auth]
+  (:require [clojure.tools.logging :as log]
+            [darelwasl.auth :as auth]
             [darelwasl.db :as db]
             [darelwasl.tasks :as tasks]
             [muuntaja.core :as m]
@@ -91,7 +92,11 @@
 
 (defn- task-id-param
   [request]
-  (get-in request [:path-params :id]))
+  (or (get-in request [:path-params :id])
+      (get-in request [:path-params "id"])
+      (get-in request [:parameters :path :id])
+      (get-in request [:parameters :path "id"])
+      (some-> request :path-params vals first)))
 
 (defn- list-tasks-handler
   [state]
@@ -181,10 +186,14 @@
 (defn- delete-task-handler
   [state]
   (fn [request]
-    (handle-task-result
-     (tasks/delete-task! (get-in state [:db :conn])
-                         (task-id-param request)
-                         (:auth/session request)))))
+    (let [path-id (task-id-param request)]
+      (when-not path-id
+        (log/warnf "delete-task-handler: missing path id in request %s path-params=%s parameters=%s"
+                   (:uri request) (:path-params request) (:parameters request)))
+      (handle-task-result
+       (tasks/delete-task! (get-in state [:db :conn])
+                           path-id
+                           (:auth/session request))))))
 
 (defn- list-tags-handler
   [state]
@@ -232,26 +241,27 @@
               :post (create-task-handler state)}]
          ["/recent" {:get (recent-tasks-handler state)}]
          ["/counts" {:get (task-counts-handler state)}]
-         ["/:id" {:put (update-task-handler state)
-                  :delete (delete-task-handler state)}]
-         ["/:id/status" {:post (set-status-handler state)}]
-         ["/:id/assignee" {:post (assign-task-handler state)}]
-         ["/:id/due-date" {:post (due-date-handler state)}]
-         ["/:id/tags" {:post (tags-handler state)}]
-         ["/:id/archive" {:post (archive-handler state)}]]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}" {:put (update-task-handler state)
+                                                                                                  :delete (delete-task-handler state)}]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/status" {:post (set-status-handler state)}]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/assignee" {:post (assign-task-handler state)}]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/due-date" {:post (due-date-handler state)}]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/tags" {:post (tags-handler state)}]
+         ["/:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}/archive" {:post (archive-handler state)}]]
         ["/tags"
          {:middleware [require-session]}
          ["" {:get (list-tags-handler state)
               :post (create-tag-handler state)}]
          ["/:id" {:put (update-tag-handler state)
                   :delete (delete-tag-handler state)}]]]]
-     {:data {:muuntaja muuntaja-instance
-             :middleware [[session/wrap-session session-opts]
-                          parameters/parameters-middleware
-                          muuntaja/format-negotiate-middleware
-                          muuntaja/format-response-middleware
-                          muuntaja/format-request-middleware
-                          exception/exception-middleware]}})
+      {:conflicts nil
+       :data {:muuntaja muuntaja-instance
+              :middleware [[session/wrap-session session-opts]
+                           parameters/parameters-middleware
+                           muuntaja/format-negotiate-middleware
+                           muuntaja/format-response-middleware
+                           muuntaja/format-request-middleware
+                           exception/exception-middleware]}})
      (ring/routes
       (ring/create-file-handler {:path "/"
                                  :root "public"})

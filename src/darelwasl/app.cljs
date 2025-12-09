@@ -1,9 +1,10 @@
 (ns darelwasl.app
   (:require [clojure.string :as str]
             [re-frame.core :as rf]
-            [reagent.dom :as rdom]))
+            [reagent.dom.client :as rdom]))
 
 (def theme-storage-key "darelwasl/theme")
+(def nav-storage-key "darelwasl/last-app")
 (def theme-options
   [{:id :theme/default :label "Light" :icon :sun}
   {:id :theme/dark :label "Dark" :icon :moon}])
@@ -84,10 +85,15 @@
 (def default-theme-state
   {:id :theme/default})
 
+(def default-nav-state
+  {:menu-open? false
+   :last-route :home})
+
 (def default-db
   {:route :login
    :session nil
    :theme default-theme-state
+   :nav default-nav-state
    :tags default-tags-state
    :home default-home-state
    :login default-login-state
@@ -329,6 +335,14 @@
      (apply-theme! theme-id))))
 
 (rf/reg-fx
+ ::persist-last-route
+ (fn [route]
+   (when route
+     (try
+       (.setItem js/localStorage nav-storage-key (name route))
+       (catch :default _)))))
+
+(rf/reg-fx
  ::login-request
  (fn [{:keys [username password on-success on-error]}]
    (let [body (js/JSON.stringify (clj->js {"user/username" username
@@ -507,8 +521,16 @@
    (let [stored (try
                   (.getItem js/localStorage theme-storage-key)
                   (catch :default _ nil))
+         stored-route (try
+                        (.getItem js/localStorage nav-storage-key)
+                        (catch :default _ nil))
+         allowed-routes #{:home :tasks}
+         last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
+                      (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
          theme-id (resolve-theme-id stored)]
-     {:db (assoc-in default-db [:theme :id] theme-id)
+     {:db (-> default-db
+              (assoc :nav (assoc default-nav-state :last-route last-route))
+              (assoc-in [:theme :id] theme-id))
       ::apply-theme theme-id
       :dispatch [::restore-session]})))
 
@@ -517,14 +539,34 @@
  (fn [db [_ view]]
    (assoc db :active-view view)))
 
+(rf/reg-event-db
+ ::open-switcher
+ (fn [db _]
+   (assoc-in db [:nav :menu-open?] true)))
+
+(rf/reg-event-db
+ ::close-switcher
+ (fn [db _]
+   (assoc-in db [:nav :menu-open?] false)))
+
+(rf/reg-event-db
+ ::toggle-switcher
+ (fn [db _]
+   (update-in db [:nav :menu-open?] not)))
+
 (rf/reg-event-fx
  ::navigate
  (fn [{:keys [db]} [_ route]]
-   (let [dispatches (cond-> []
-                      (= route :home) (conj [::fetch-home])
-                      (= route :tasks) (conj [::fetch-tasks]))]
-     {:db (assoc db :route route)
-      :dispatch-n dispatches})))
+   (let [safe-route (if (#{:home :tasks} route) route :home)
+         dispatches (cond-> []
+                       (= safe-route :home) (conj [::fetch-home])
+                       (= safe-route :tasks) (conj [::fetch-tasks]))]
+     {:db (-> db
+              (assoc :route safe-route)
+              (assoc-in [:nav :menu-open?] false)
+              (assoc-in [:nav :last-route] safe-route))
+      :dispatch-n dispatches
+      ::persist-last-route safe-route})))
 
 (rf/reg-event-fx
  ::set-theme
@@ -572,17 +614,21 @@
    (let [token (:session/token payload)
          user-id (:user/id payload)
          username (:user/username payload)
+         preferred-route (let [cand (get-in db [:nav :last-route])]
+                           (if (#{:home :tasks} cand) cand :home))
          db' (-> db
                  (assoc :session {:token token
                                   :user {:id user-id
                                          :username username}})
-                 (assoc :route :home)
+                 (assoc :route preferred-route)
+                 (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
                  (assoc-in [:login :error] nil))]
     {:db db'
+     ::persist-last-route preferred-route
      :dispatch-n [[::fetch-tags]
                   [::fetch-home]
                   [::fetch-tasks]]})))
@@ -623,6 +669,7 @@
    {:db (-> db
             (assoc :session nil
                    :route :login
+                   :nav default-nav-state
                    :tasks default-task-state
                    :tags default-tags-state
                    :home default-home-state)
@@ -703,12 +750,12 @@
    {:db (-> db
             (assoc-in [:home :status] :loading)
             (assoc-in [:home :error] nil))
-    :fx [[:home-request {:url "/api/tasks/counts"
-                         :on-success [::fetch-home-counts-success]
-                         :on-error [::fetch-home-failure]}]
-         [:home-request {:url "/api/tasks/recent"
-                         :on-success [::fetch-home-recent-success]
-                         :on-error [::fetch-home-failure]}]]}))
+    :fx [[::home-request {:url "/api/tasks/counts"
+                          :on-success [::fetch-home-counts-success]
+                          :on-error [::fetch-home-failure]}]
+         [::home-request {:url "/api/tasks/recent"
+                          :on-success [::fetch-home-recent-success]
+                          :on-error [::fetch-home-failure]}]]}))
 
 (rf/reg-event-db
  ::fetch-home-counts-success
@@ -1152,6 +1199,7 @@
 
 (rf/reg-sub ::login-state (fn [db _] (:login db)))
 (rf/reg-sub ::session (fn [db _] (:session db)))
+(rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
@@ -1657,17 +1705,70 @@
                                                   :disabled saving?}
                         "Cancel"]
                        (when-not create?
-                         [:button.button.danger {:type "button"
-                                                 :disabled (= detail-status :deleting)
-                                                 :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
-                                                              (rf/dispatch [::delete-task (:id form)]))}
+                       [:button.button.danger {:type "button"
+                                               :disabled (= detail-status :deleting)
+                                               :on-click #(when (js/confirm "Delete this task? This cannot be undone.")
+                                                            (rf/dispatch [::delete-task (:id form)]))}
                           (if (= detail-status :deleting) "Deleting..." "Delete")])]]))
         :footer footer}]))
     )
 
+(def app-options
+  [{:id :home
+    :label "Home"
+    :desc "Summary surface"}
+   {:id :tasks
+    :label "Tasks"
+    :desc "Workboard"}])
+
+(defn app-switcher-menu
+  [route extra-class]
+  [:div.app-switcher-menu {:id (when-not (= extra-class "mobile") "app-switcher-menu")
+                           :class extra-class
+                           :role "menu"}
+   (for [{:keys [id label desc]} app-options]
+     ^{:key (name id)}
+     [:button.app-switcher-item
+      {:type "button"
+       :class (when (= route id) "active")
+       :role "menuitem"
+       :on-click #(do
+                    (rf/dispatch [::navigate id])
+                    (rf/dispatch [::close-switcher]))}
+      [:div.item-label label]
+      [:div.item-desc desc]])])
+
+(defn app-switcher []
+  (let [{:keys [menu-open?]} @(rf/subscribe [::nav])
+        route @(rf/subscribe [::route])]
+    [:div.app-switcher {:on-mouse-leave #(rf/dispatch [::close-switcher])}
+     [:div.app-switcher-edge {:aria-hidden true
+                              :on-mouse-enter #(rf/dispatch [::open-switcher])}]
+     [:div.app-switcher-trigger-area.desktop
+      {:on-mouse-enter #(rf/dispatch [::open-switcher])}
+      [:button.app-switcher-trigger
+       {:type "button"
+        :aria-expanded (boolean menu-open?)
+        :aria-controls "app-switcher-menu"
+        :on-click #(rf/dispatch [::toggle-switcher])
+        :on-focus #(rf/dispatch [::open-switcher])
+        :on-key-down #(when (= "Escape" (.-key %))
+                        (rf/dispatch [::close-switcher]))}
+       [:span "Apps"]
+       [:span.caret "▾"]]
+      (when menu-open?
+        [app-switcher-menu route "desktop"])]
+     [:button.app-switcher-mobile-trigger
+      {:type "button"
+       :aria-label "Open app switcher"
+       :aria-expanded (boolean menu-open?)
+       :on-click #(rf/dispatch [::toggle-switcher])}
+      "Apps"]
+     (when menu-open?
+       [app-switcher-menu route "mobile"])]))
+
 (defn top-bar []
   (let [session @(rf/subscribe [::session])
-        route @(rf/subscribe [::route])
         uname (get-in session [:user :username] "")]
     [:header.top-bar
      [:div
@@ -1675,22 +1776,14 @@
       [:div.meta (if session
                    (str "Signed in as " uname)
                    "Task workspace")]]
-     [:div.top-actions
-      (when session
-        [:div.app-nav
-         [:button.button.secondary {:type "button"
-                                    :class (when (= route :home) "active")
-                                    :on-click #(rf/dispatch [::navigate :home])}
-          "Home"]
-         [:button.button.secondary {:type "button"
-                                    :class (when (= route :tasks) "active")
-                                    :on-click #(rf/dispatch [::navigate :tasks])}
-          "Tasks"]])
-      (when session
-        (let [initial (if (seq uname) (str/upper-case (subs uname 0 1)) "?")]
-          [:div.session-chip
-           [:div.avatar-circle initial]
-           [:div
+    [:div.top-actions
+     (when session
+       [app-switcher])
+     (when session
+       (let [initial (if (seq uname) (str/upper-case (subs uname 0 1)) "?")]
+         [:div.session-chip
+          [:div.avatar-circle initial]
+          [:div
             [:div.session-label "Session active"]
             [:div.session-name uname]]
            [:button.button.secondary
@@ -1780,7 +1873,9 @@
 
 (defn mount-root []
   (when-let [root (.getElementById js/document "app")]
-    (rdom/render [app-root] root)))
+    (-> root
+        (rdom/create-root)
+        (rdom/render [app-root]))))
 
 (defn ^:export init []
   (rf/dispatch-sync [::initialize])

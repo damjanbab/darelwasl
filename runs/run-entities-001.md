@@ -256,7 +256,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Describe Home widgets and data sources
 
 - Task ID: app-switcher-nav
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 18:55 UTC)
   - Objective: Implement modern app switcher (hover/push-to-top drop tab) to switch between Home and Task apps with accessibility and responsiveness.
   - Scope: Add switcher component to shell; interactions (hover/push to top reveals tab, click/tap to select), keyboard/focus handling, aria labels; remember last app if feasible; integrate with session guard. Mobile-specific: provide an explicit tap target (e.g., top bar button/sheet trigger) since hover/push isn’t available; ensure it’s reachable and obvious on touch devices.
   - Out of Scope: Routing overhaul; multi-tenant contexts.
@@ -284,7 +284,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Reporting: Summarize nav behavior and accessibility handling
 
 - Task ID: registries-docs-checks-sync
-  - Status: pending
+  - Status: done (Codex, 2025-12-08 19:05 UTC)
   - Objective: Align registries (`schema/actions/views/tooling`), `docs/system.md`, and `docs/faq.md` with new capabilities; modestly extend checks harness to cover schema load/migrations and register new view.
   - Scope: Add Home view entry; update task view entry if config changes; note shared helper capability; ensure `:entity/type` documented; add FAQ notes if any; extend `scripts/checks.sh` to load schema into temp DB (using helper) and to validate registries; keep stubs for heavier checks if not implemented but document them.
   - Out of Scope: Full test suite rewrite; CI changes.
@@ -310,6 +310,26 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - FAQ Updates: Add migration/app-switcher notes if applicable
   - Tooling/Automation: Extend checks script minimally
   - Reporting: Detail registry/doc/checks changes and proof results
+
+- Task ID: qa-collect-failures
+  - Status: pending
+  - Objective: Run the full check harness and enumerate all current failures (with logs/screenshots/paths) to inform fixes.
+  - Scope: Execute `scripts/checks.sh all`; capture failing steps (currently app-smoke times out waiting for `.tasks-layout` because default route is Home/app switcher); collect artifacts (`.cpcache/app-smoke.png`, `.cpcache/app-smoke.log` if present); note regression causes vs design.
+  - Out of Scope: Fixing the failures.
+  - Capabilities Touched: tooling/checks (read), views/app smoke (observed)
+  - Dependencies: all prior implementation tasks
+  - Deliverables: Updated run notes with failure list and pointers to logs/screenshots.
+  - Proof Plan: Attach outputs and summarize failures.
+
+- Task ID: qa-fix-failures
+  - Status: pending
+  - Objective: Resolve all failures collected in `qa-collect-failures` cleanly, aligned with system design (no hacks), including updating smoke expectations/navigation.
+  - Scope: Fix app-smoke wait for `.tasks-layout` (navigate via app switcher or adjust smoke harness), any additional failures surfaced; keep specs/registries consistent; rerun full harness to green.
+  - Out of Scope: New features beyond fixing the failing checks.
+  - Capabilities Touched: views/app smoke harness, potentially navigation defaults
+  - Dependencies: qa-collect-failures
+  - Deliverables: Passing `scripts/checks.sh all`; notes on fixes; updated docs if harness behavior changes.
+  - Proof Plan: Rerun `scripts/checks.sh all` to green; manual sanity if needed.
 
 ## Notes
 - TBD as the run progresses; record blockers/decisions/follow-ups here.

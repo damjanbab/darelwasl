@@ -13,11 +13,21 @@
   :title "Schema load check"
   :version "v1"
   :invocation "scripts/checks.sh schema"
-  :scope :shared
-  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
-  :enforces [:schema]
-  :related {:capabilities [:cap/schema/task :cap/schema/user]}
+ :scope :shared
+ :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
+ :enforces [:schema]
+  :related {:capabilities [:cap/schema/entity :cap/schema/task :cap/schema/user :cap/schema/tag]}
   :gotchas ["Runs against a temp Datomic dev-local DB with :mem storage; run via scripts/checks.sh schema from the repo root."]}
+
+ {:id :cap/tooling/migration-backfill
+  :title "Schema migration/backfill check"
+  :version "v1"
+  :invocation "scripts/checks.sh schema"
+  :scope :shared
+  :determinism {:fixtures [:fixtures/tasks :fixtures/users :fixtures/tags]}
+  :enforces [:schema :migration]
+  :related {:capabilities [:cap/schema/entity :cap/schema/task :cap/schema/tag :cap/schema/user]}
+  :gotchas ["Runs a temp DB with fixtures, strips :entity/type, then backfills to ensure migration code remains valid."]}
 
  {:id :cap/tooling/action-contract
   :title "Action contract harness"
@@ -50,10 +60,10 @@
   :title "Headless app smoke"
   :version "v1"
   :invocation "scripts/checks.sh app-smoke"
-  :scope :shared
+ :scope :shared
  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
  :enforces [:ui-boot]
-  :related {:capabilities [:cap/view/login :cap/view/tasks]}
+  :related {:capabilities [:cap/view/login :cap/view/tasks :cap/view/home]}
   :gotchas ["Requires Playwright Chromium download (handled by scripts/checks.sh); needs outbound network on first run."
             "Seeds a temp Datomic storage under .cpcache/datomic-smoke-*; uses APP_PORT 3100 by default and will kill anything listening there during the smoke run."]}
 

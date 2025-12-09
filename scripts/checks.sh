@@ -227,6 +227,8 @@ check_schema_load() {
   check_clojure_available
   echo "Loading schema into temp Datomic..."
   (cd "$ROOT" && clojure -M -m darelwasl.checks.schema)
+  echo "Running migration/backfill check..."
+  (cd "$ROOT" && clojure -M -m darelwasl.checks.migration)
 }
 
 check_actions() {

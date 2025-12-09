@@ -196,7 +196,17 @@
                  list-after (ensure-success failures "List after archive" post-archive)]
              (when list-after
                (when-not (= 3 (count (:tasks list-after)))
-                 (fail! failures "Archived task should not appear in default list after archiving" (:tasks list-after))))))))))
+                 (fail! failures "Archived task should not appear in default list after archiving" (:tasks list-after)))))
+           (let [deleted (tasks/delete-task! conn task-id actor)
+                 deleted-task (some-> (ensure-success failures "Delete task" deleted) :task)]
+             (when deleted-task
+               (when-not (= task-id (:task/id deleted-task))
+                 (fail! failures "Delete response should echo task id" deleted-task)))
+             (let [list-after-delete (tasks/list-tasks conn {:archived :all})
+                   after (ensure-success failures "List after delete" list-after-delete)]
+               (when after
+                 (when (some #(= task-id (:task/id %)) (:tasks after))
+                   (fail! failures "Deleted task should not appear in listings" (:tasks after)))))))))))
 
 (defn run-check!
   []

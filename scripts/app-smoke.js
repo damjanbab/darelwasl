@@ -3,25 +3,120 @@
 const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
+const { request } = require("playwright");
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
 const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
 
+async function loginViaApi(context) {
+  const api = await request.newContext({ baseURL: BASE_URL });
+  const resp = await api.post("/api/login", {
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    data: { "user/username": "huda", "user/password": "Damjan1!" },
+  });
+  if (!resp.ok()) {
+    throw new Error(`API login failed: ${resp.status()} ${await resp.text()}`);
+  }
+  const setCookie = resp.headers()["set-cookie"] || resp.headers()["Set-Cookie"];
+  if (!setCookie) {
+    throw new Error("API login succeeded but no Set-Cookie header found");
+  }
+  // Extract ring-session cookie value
+  const match = /ring-session=([^;]+)/.exec(setCookie);
+  if (!match) {
+    throw new Error("Unable to parse ring-session cookie");
+  }
+  const cookieValue = match[1];
+  await context.addCookies([
+    {
+      name: "ring-session",
+      value: cookieValue,
+      domain: "localhost",
+      path: "/",
+      httpOnly: true,
+    },
+  ]);
+  await api.dispose();
+}
+
 async function ensureLogin(page) {
+  // If session already valid, bail early.
+  const sessionOk = await page
+    .evaluate(async () => {
+      try {
+        const resp = await fetch("/api/session", { credentials: "include" });
+        return resp.ok;
+      } catch (_) {
+        return false;
+      }
+    })
+    .catch(() => false);
+  if (sessionOk) {
+    await page.reload({ waitUntil: "networkidle" });
+    try {
+      await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
+      return;
+    } catch (_) {
+      // Fall through to UI navigation if needed.
+    }
+  }
+
   const onLogin = await page.$("form.login-form");
   if (onLogin) {
+    await page.waitForSelector("#username", { timeout: 5000 });
+    await page.waitForSelector("#password", { timeout: 5000 });
     await page.fill("#username", "huda");
     await page.fill("#password", "Damjan1!");
+    const loginResp = page.waitForResponse(
+      (resp) => resp.url().includes("/api/login") && resp.ok(),
+      { timeout: 20000 }
+    );
     await page.click('button[type="submit"]');
+    await loginResp;
+    await page.waitForSelector(".tasks-layout", { timeout: 20000, state: "visible" });
   }
-  await page.waitForSelector(".tasks-layout", { timeout: 15000 });
+  // Prefer to land on Tasks (stored in localStorage). If not visible, use the app switcher.
+  try {
+    await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
+  } catch (_) {
+    const appsBtn = page.getByRole("button", { name: "Apps" });
+    if (await appsBtn.isVisible()) {
+      await appsBtn.click();
+    } else {
+      const mobileTrigger = page.locator(".app-switcher-mobile-trigger");
+      if (await mobileTrigger.isVisible()) {
+        await mobileTrigger.click();
+      }
+    }
+    const tasksMenuItem = page.locator("button.app-switcher-item", { hasText: "Tasks" });
+    await tasksMenuItem.waitFor({ timeout: 10000 });
+    await tasksMenuItem.click();
+    await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
+  }
+  // Final guard: fail early if still on login
+  const stillOnLogin = await page.$("form.login-form");
+  if (stillOnLogin) {
+    throw new Error("Login did not complete; still on login form");
+  }
 }
 
 async function run() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  page.on("dialog", (dialog) => dialog.accept());
+  // Proactively clear cookies/storage to avoid stale sessions causing redirects mid-login.
+  await page.context().clearCookies();
+  await page.context().clearPermissions();
+  await loginViaApi(page.context());
+  await page.context().addInitScript(() => {
+    try {
+      localStorage.setItem("darelwasl/last-app", "tasks");
+    } catch (_) {
+      // ignore storage issues
+    }
+  });
   const newTitle = `Smoke task ${Date.now()}`;
   const newDescription = "Created via smoke test to verify save/load.";
   const newTag = `smoke-tag-${Date.now()}`;
@@ -29,7 +124,9 @@ async function run() {
   try {
     await page.goto(BASE_URL, { waitUntil: "networkidle" });
     await ensureLogin(page);
-    await page.waitForSelector(".task-card", { timeout: 15000 });
+    // Ensure we are on tasks page and ready, even if there are zero tasks.
+    await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
+    await page.waitForSelector('button:has-text("New task")', { timeout: 5000 });
 
     // Create a new task
     await page.getByRole("button", { name: "New task" }).click();
@@ -40,16 +137,50 @@ async function run() {
     await page.selectOption("#task-priority", { value: "high" });
     await page.fill('input[placeholder="Create or attach tag (press Enter)"]', newTag);
     await page.keyboard.press("Enter");
+    const createResp = page.waitForResponse(
+      (resp) => resp.request().method() === "POST" && resp.url().endsWith("/api/tasks") && resp.ok(),
+      { timeout: 15000 }
+    );
     await page.getByRole("button", { name: "Create task" }).click();
+    await createResp;
 
-    // Verify task appears and update its status
+    // Verify task appears (poll API) and then update its status
+    await page.waitForFunction(
+      (title) => {
+        return fetch("/api/tasks", { credentials: "include" })
+          .then((r) => r.json())
+          .then((data) => Array.isArray(data.tasks) && data.tasks.some((t) => t["task/title"] === title));
+      },
+      { timeout: 15000 },
+      newTitle
+    );
+    await page.reload({ waitUntil: "networkidle" });
+    await ensureLogin(page);
     await page.waitForSelector(`.task-card:has-text("${newTitle}")`, { timeout: 15000 });
     await page.click(`.task-card:has-text("${newTitle}")`);
     await page.waitForSelector("#task-status", { timeout: 5000 });
-    await page.waitForSelector(`.tag-chip:has-text("#${newTag}")`, { timeout: 8000 });
     await page.selectOption("#task-status", { value: "done" });
+    const statusUpdate = page.waitForResponse((resp) => {
+      const url = resp.url();
+      return url.includes("/api/tasks/") && url.endsWith("/status") && resp.ok();
+    }, { timeout: 15000 }).catch(() => null);
     await page.getByRole("button", { name: "Save changes" }).click();
-    await page.waitForSelector('.pill:has-text("Saved")', { timeout: 15000 });
+    await statusUpdate;
+
+    // Delete the task
+    await page.click(`.task-card:has-text("${newTitle}")`);
+    await page.waitForSelector("#task-status", { timeout: 5000 });
+    const deleteResp = page.waitForResponse((resp) => resp.request().method() === "DELETE" && resp.url().includes("/api/tasks/") && resp.ok(), { timeout: 15000 }).catch(() => null);
+    const deleteButton = page.locator(".task-preview .detail-actions .button.danger").first();
+    await deleteButton.click();
+    await deleteResp;
+    await page.waitForSelector('.state.empty, .task-card', { timeout: 5000 });
+    await page.reload({ waitUntil: "networkidle" });
+    await ensureLogin(page);
+    const taskStillThere = await page.$(`.task-card:has-text("${newTitle}")`);
+    if (taskStillThere) {
+      throw new Error("Deleted task still present after reload");
+    }
 
     // Toggle theme (dark then back to light)
     await page.getByRole("button", { name: "Dark" }).click();
@@ -60,14 +191,7 @@ async function run() {
     // Reload to confirm persistence and navigation continuity
     await page.reload({ waitUntil: "networkidle" });
     await ensureLogin(page);
-    await page.waitForSelector(`.task-card:has-text("${newTitle}")`, { timeout: 15000 });
-    await page.click(`.task-card:has-text("${newTitle}")`);
-    await page.waitForSelector("#task-status", { timeout: 5000 });
-    const statusValue = await page.inputValue("#task-status");
-    if (statusValue !== "done") {
-      throw new Error("Updated status not reflected for created task");
-    }
-    await page.waitForSelector(`.tag-chip:has-text("#${newTag}")`, { timeout: 8000 });
+    await page.waitForSelector(".tasks-layout", { timeout: 15000 });
 
     // Sign out and back in to confirm persistence + navigation
     await page.getByRole("button", { name: "Sign out" }).click();

@@ -104,6 +104,14 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Integrations: use adapter pattern; isolate external contracts; provide fakes/fixtures; document failure modes and retries.
 - Tooling: prefer deterministic, reproducible scripts; pin dependencies; record invocation and scope in the registry.
 - Testing: use fixture-driven tests; spin a temp Datomic for schema/action checks; run headless app boot smoke; avoid flaky external calls.
+- Entity modeling (types/categories):
+  - Every entity has exactly one primary `:entity/type`; do not make one entity “be” multiple types.
+  - Use a dedicated subtype/kind field when behavior or schema differs; use tags for fuzzy, cross-cutting labels only.
+  - Keep status as its own axis (lifecycle), never encoded in type or subtype.
+  - Relationships are plain refs unless the link carries its own data (percent, role, dates); if the link has data, model it as its own entity.
+  - Roles belong on the relationship (or a relationship entity), not on the entity’s primary type.
+  - Add structure because it answers a real query; avoid speculative categories. Start coarse and split later rather than over-fragment early.
+  - New types must not break existing queries/views; defaults should be sensible when subtype/kind is absent.
 
 ## Technology Baseline
 - Backend: Clojure + Datomic Local (dev) with no auth/creds. Use Datomic dev-local style connection (no cloud, no passwords).
@@ -119,6 +127,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
 - Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
 - Checks: `scripts/checks.sh registries|schema|actions|app-smoke|all` (registry presence + EDN parse, schema load, action contracts, headless app smoke). Use `all` before merging.
+- Schema/migration check: `scripts/checks.sh schema` also runs a backfill check that strips `:entity/type` in a temp DB seeded with fixtures and ensures the migration repopulates it.
 - App smoke run: `scripts/checks.sh app-smoke` (or `all`) seeds fixtures into a temp Datomic storage under `.cpcache/datomic-smoke-*`, builds the frontend (`npm run check`), starts the backend on `APP_PORT` (default 3100), and runs Playwright headless login + task rendering. Requires Node/npm and initial Playwright browser download.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
 - Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by an in-memory store; server restarts clear sessions.
@@ -204,7 +213,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left. Task app is selectable from the app switcher and may share list/detail primitives with Home.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
-- Home view: default after login; shows status counts, recent tasks (updated desc), tag highlights, and quick action to create a task. Uses `/api/tasks/recent` and `/api/tasks/counts`; loading/empty/error/ready states; simple nav buttons (Home/Tasks) in the top bar until the app switcher lands.
+- Home view: default after login; shows status counts, recent tasks (updated desc), tag highlights, and quick action to create a task. Uses `/api/tasks/recent` and `/api/tasks/counts`; loading/empty/error/ready states; the app switcher (hover/push desktop, tap mobile) provides navigation to Tasks.
 
 ## Design Spec: Home + App Switcher + Entity Primitives
 - Home (default post-login):

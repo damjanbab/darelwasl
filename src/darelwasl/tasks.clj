@@ -193,11 +193,27 @@
 (defn- task-eid
   [db task-id]
   (when task-id
-    (-> (d/q '[:find ?e
-               :in $ ?id
-               :where [?e :task/id ?id]]
-             db task-id)
-        ffirst)))
+    (let [lookup (fn [id]
+                   (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]] db id)))
+          primary (lookup task-id)
+          fallback (when (and (nil? primary) (uuid? task-id))
+                     (lookup (str task-id)))
+          scanned (when (nil? (or primary fallback))
+                    (let [eids (entity/eids-by-type db :entity.type/task)]
+                      (some (fn [eid]
+                              (let [tid (:task/id (d/pull db [:task/id] eid))]
+                                (when (= (str tid) (str task-id))
+                                  eid)))
+                            eids)))]
+      (or primary
+          fallback
+          scanned
+          (let [available (->> (d/q '[:find ?id :where [_ :task/id ?id]] db)
+                               (map first)
+                               (take 5))]
+            (log/warnf "task-eid: no entity found for task-id=%s (uuid? %s). Example ids in DB: %s"
+                       task-id (uuid? task-id) available)
+            nil)))))
 
 (defn- updated-at
   [db eid]
@@ -215,14 +231,15 @@
 
 (defn- present-task
   [task]
-  (-> task
-      (update :task/due-date format-inst)
-      (update :task/updated-at format-inst)
-      (update :task/tags (fn [tags]
-                           (when tags
-                             (->> tags
-                                  (sort-by (comp str/lower-case :tag/name))
-                                  vec))))))
+  (when (map? task)
+    (-> task
+        (update :task/due-date format-inst)
+        (update :task/updated-at format-inst)
+        (update :task/tags (fn [tags]
+                             (when tags
+                               (->> tags
+                                    (sort-by (comp str/lower-case :tag/name))
+                                    vec)))))))
 
 (defn- existing-tag-by-name
   [db tag-name]
@@ -345,18 +362,24 @@
   "Return up to `limit` recent tasks sorted by updated-at desc, optional include-archived?."
   [conn {:keys [limit include-archived?]}]
   (or (ensure-conn conn)
-      (let [db (d/db conn)
-            eids (entity/eids-by-type db :entity.type/task)
-            tasks (->> eids
-                       (map #(pull-task db %))
-                       (remove nil?)
-                       (filter #(or include-archived?
-                                    (not (:task/archived? %))))
-                       (sort-tasks {:sort :updated :order :desc})
-                       (take (or limit 5))
-                       (map present-task)
-                       vec)]
-        {:tasks tasks})))
+      (try
+        (let [db (d/db conn)
+              eids (entity/eids-by-type db :entity.type/task)
+              tasks (->> eids
+                         (map #(pull-task db %))
+                         (remove nil?)
+                         (filter #(or include-archived?
+                                      (not (:task/archived? %))))
+                         (sort-tasks {:sort :updated :order :desc})
+                         (take (or limit 5))
+                         (map present-task)
+                         (remove nil?)
+                         vec)]
+          {:tasks tasks})
+        (catch Exception e
+          (log/error e "Failed to compute recent tasks")
+          {:error {:status 500
+                   :message "Unable to fetch recent tasks"}}))))
 
 (defn task-status-counts
   "Return counts of tasks by status (optionally excluding archived unless include-archived?)."
@@ -752,7 +775,13 @@
                   {:task {:task/id parsed-id
                           :task/title (:task/title task)
                           :deleted true}})))
-            (error 404 "Task not found"))))))
+            (do
+              (log/warnf "Delete failed: task-id %s not found. Available task ids=%s"
+                         parsed-id
+                         (->> (d/q '[:find ?id :where [_ :task/id ?id]] db)
+                              (map first)
+                              (take 10)))
+              (error 404 "Task not found")))))))
 
 (defn list-tags
   [conn]
