@@ -98,25 +98,6 @@
           :on-click #(rf/dispatch [:darelwasl.app/toggle-order])}
          (if (= order :asc) "Asc" "Desc")]]]]]))
 
-(defn entity-list
-  "Generic list panel with states. render-row receives (item selected?)."
-  [{:keys [title meta items status error selected render-row key-fn]}]
-  (let [items (or items [])
-        key-fn (or key-fn :task/id)]
-    [:div.panel.task-list-panel
-     [:div.section-header
-      [:h2 title]
-      (when meta [:span.meta meta])]
-     (case status
-       :loading [ui/loading-state]
-       :error [ui/error-state error]
-       (if (seq items)
-         [:div.task-list
-          (for [t items]
-            ^{:key (str (key-fn t))}
-            [render-row t (= selected (key-fn t))])]
-         [ui/empty-state]))]))
-
 (defn task-card
   [{:task/keys [id title description status priority tags due-date updated-at assignee archived?] :as task} selected? tag-index]
   (let [tag-list (or tags [])
@@ -146,15 +127,15 @@
   (let [{:keys [items status error selected]} @(rf/subscribe [:darelwasl.app/tasks])
         tag-state @(rf/subscribe [:darelwasl.app/tags])
         tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (:items tag-state)))]
-    [entity-list {:title (get-in state/task-entity-config [:list :title])
-                  :meta ((get-in state/task-entity-config [:list :meta-fn]) items)
-                  :items items
-                  :status status
-                  :error error
-                  :selected selected
-                  :key-fn :task/id
-                  :render-row (fn [t selected?]
-                                [task-card t selected? tag-index])}]))
+    [ui/entity-list {:title (get-in state/task-entity-config [:list :title])
+                     :meta ((get-in state/task-entity-config [:list :meta-fn]) items)
+                     :items items
+                     :status status
+                     :error error
+                     :selected selected
+                     :key-fn :task/id
+                     :render-row (fn [t selected?]
+                                   [task-card t selected? tag-index])}]))
 
 (defn tag-selector
   [{:keys [selected-tags tag-state tag-entry]}]

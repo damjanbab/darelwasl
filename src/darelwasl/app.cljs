@@ -4,6 +4,7 @@
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
             [darelwasl.features.tasks :as tasks-ui]
+            [darelwasl.fx :as fx]
             [darelwasl.state :as state]
             [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
@@ -210,224 +211,24 @@
        (.setItem js/localStorage nav-storage-key (name route))
        (catch :default _)))))
 
-(rf/reg-fx
- ::login-request
- (fn [{:keys [username password on-success on-error]}]
-   (let [body (js/JSON.stringify (clj->js {"user/username" username
-                                           "user/password" password}))]
-     (-> (js/fetch "/api/login"
-                   #js {:method "POST"
-                        :headers #js {"Content-Type" "application/json"
-                                      "Accept" "application/json"}
-                        :credentials "same-origin"
-                        :body body})
-         (.then
-          (fn [resp]
-            (-> (.json resp)
-                (.then
-                 (fn [data]
-                   (let [payload (js->clj data :keywordize-keys true)
-                         status (.-status resp)]
-                     (if (<= 200 status 299)
-                       (rf/dispatch (conj on-success payload))
-                       (rf/dispatch (conj on-error {:status status
-                                                    :body payload}))))))
-                (.catch
-                 (fn [_]
-                   (rf/dispatch (conj on-error {:status (.-status resp)
-                                                :body {:error "Invalid response from server"}})))))))
-         (.catch
-         (fn [_]
-            (rf/dispatch (conj on-error {:status nil
-                                         :body {:error "Network error. Please try again."}}))))))))
-
-(rf/reg-fx
- ::session-request
- (fn [{:keys [on-success on-error]}]
-   (-> (js/fetch "/api/session"
-                 #js {:method "GET"
-                      :headers #js {"Accept" "application/json"}
-                      :credentials "same-origin"})
-       (.then
-        (fn [resp]
-          (-> (.json resp)
-              (.then
-               (fn [data]
-                 (let [payload (js->clj data :keywordize-keys true)
-                       status (.-status resp)]
-                   (if (<= 200 status 299)
-                     (rf/dispatch (conj on-success payload))
-                     (rf/dispatch (conj on-error {:status status
-                                                  :body payload}))))))
-              (.catch
-               (fn [_]
-                 (rf/dispatch (conj on-error {:status (.-status resp)
-                                              :body {:error "Invalid response from server"}})))))))
-       (.catch
-        (fn [_]
-          (rf/dispatch (conj on-error {:status nil
-                                       :body {:error "Network error. Please try again."}})))))))
-
-(rf/reg-fx
- ::tag-request
- (fn [{:keys [url method body on-success on-error]}]
-   (let [opts (clj->js (cond-> {:method (or method "GET")
-                                :headers {"Accept" "application/json"}
-                                :credentials "same-origin"}
-                         body (assoc :headers {"Content-Type" "application/json"
-                                               "Accept" "application/json"}
-                                     :body (js/JSON.stringify (clj->js body)))))]
-     (-> (js/fetch url opts)
-         (.then
-          (fn [resp]
-            (-> (.json resp)
-                (.then
-                 (fn [data]
-                   (let [payload (js->clj data :keywordize-keys true)
-                         status (.-status resp)]
-                     (if (<= 200 status 299)
-                       (rf/dispatch (conj on-success payload))
-                       (rf/dispatch (conj on-error {:status status
-                                                    :body payload}))))))
-                (.catch
-                 (fn [_]
-                   (rf/dispatch (conj on-error {:status (.-status resp)
-                                                :body {:error "Invalid response from server"}})))))))
-         (.catch
-          (fn [_]
-            (rf/dispatch (conj on-error {:status nil
-                                         :body {:error "Network error. Please try again."}}))))))))
-
-(rf/reg-fx
- ::tasks-request
- (fn [{:keys [filters on-success on-error]}]
-   (let [qs (build-query filters)
-         url (str "/api/tasks" (when qs (str "?" qs)))]
-     (-> (js/fetch url
-                   #js {:method "GET"
-                        :headers #js {"Accept" "application/json"}
-                        :credentials "same-origin"})
-         (.then
-          (fn [resp]
-            (-> (.json resp)
-                (.then
-                 (fn [data]
-                   (let [payload (js->clj data :keywordize-keys true)
-                         status (.-status resp)]
-                     (if (<= 200 status 299)
-                       (rf/dispatch (conj on-success payload))
-                       (rf/dispatch (conj on-error {:status status
-                                                    :body payload}))))))
-                (.catch
-                 (fn [_]
-                   (rf/dispatch (conj on-error {:status (.-status resp)
-                                                :body {:error "Invalid response from server"}})))))))
-         (.catch
-         (fn [_]
-            (rf/dispatch (conj on-error {:status nil
-                                         :body {:error "Network error. Please try again."}}))))))))
-
-(rf/reg-fx
- ::home-request
- (fn [{:keys [url on-success on-error]}]
-   (-> (js/fetch url
-                 #js {:method "GET"
-                      :headers #js {"Accept" "application/json"}
-                      :credentials "same-origin"})
-       (.then
-        (fn [resp]
-          (-> (.json resp)
-              (.then
-               (fn [data]
-                 (let [payload (js->clj data :keywordize-keys true)
-                       status (.-status resp)]
-                   (if (<= 200 status 299)
-                     (rf/dispatch (conj on-success payload))
-                     (rf/dispatch (conj on-error {:status status
-                                                  :body payload}))))))
-              (.catch
-               (fn [_]
-                 (rf/dispatch (conj on-error {:status (.-status resp)
-                                              :body {:error "Invalid response from server"}})))))))
-       (.catch
-        (fn [_]
-          (rf/dispatch (conj on-error {:status nil
-                                       :body {:error "Network error. Please try again."}})))))))
-
-(rf/reg-fx
- ::land-request
- (fn [{:keys [url on-success on-error]}]
-   (-> (js/fetch url
-                 #js {:method "GET"
-                      :headers #js {"Accept" "application/json"}
-                      :credentials "same-origin"})
-       (.then
-        (fn [resp]
-          (-> (.json resp)
-              (.then
-               (fn [data]
-                 (let [payload (js->clj data :keywordize-keys true)
-                       status (.-status resp)]
-                   (if (<= 200 status 299)
-                     (rf/dispatch (conj on-success payload))
-                     (rf/dispatch (conj on-error {:status status
-                                                  :body payload}))))))
-              (.catch
-               (fn [_]
-                 (rf/dispatch (conj on-error {:status (.-status resp)
-                                              :body {:error "Invalid response from server"}})))))))
-       (.catch
-        (fn [_]
-          (rf/dispatch (conj on-error {:status nil
-                                       :body {:error "Network error. Please try again."}})))))))
-
-(rf/reg-fx
- ::task-action
- (fn [{:keys [url method body on-success on-error]}]
-   (let [opts (clj->js (cond-> {:method (or method "POST")
-                                :headers {"Content-Type" "application/json"
-                                          "Accept" "application/json"}
-                                :credentials "same-origin"}
-                         body (assoc :body (js/JSON.stringify (clj->js body)))))]
-     (-> (js/fetch url opts)
-         (.then
-          (fn [resp]
-            (-> (.json resp)
-                (.then
-                 (fn [data]
-                   (let [payload (js->clj data :keywordize-keys true)
-                         status (.-status resp)]
-                     (if (<= 200 status 299)
-                       (rf/dispatch (conj on-success payload))
-                       (rf/dispatch (conj on-error {:status status
-                                                    :body payload}))))))
-                (.catch
-                 (fn [_]
-                   (rf/dispatch (conj on-error {:status (.-status resp)
-                                                :body {:error "Invalid response from server"}})))))))
-         (.catch
-          (fn [_]
-            (rf/dispatch (conj on-error {:status nil
-                                         :body {:error "Network error. Please try again."}}))))))))
-
 (rf/reg-event-fx
  ::initialize
  (fn [_ _]
    (let [stored (try
-                  (.getItem js/localStorage theme-storage-key)
-                  (catch :default _ nil))
-         stored-route (try
-                        (.getItem js/localStorage nav-storage-key)
-                        (catch :default _ nil))
-        allowed-routes (cond-> #{:home :tasks}
-                          land-enabled? (conj :land))
-         last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
-                      (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
-         theme-id (resolve-theme-id stored)]
-     {:db (-> default-db
-              (assoc :nav (assoc default-nav-state :last-route last-route))
-              (assoc-in [:theme :id] theme-id))
-      ::apply-theme theme-id
+                 (.getItem js/localStorage theme-storage-key)
+                 (catch :default _ nil))
+        stored-route (try
+                       (.getItem js/localStorage nav-storage-key)
+                       (catch :default _ nil))
+       allowed-routes (cond-> #{:home :tasks}
+                         land-enabled? (conj :land))
+        last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
+                     (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
+        theme-id (resolve-theme-id stored)]
+    {:db (-> default-db
+             (assoc :nav (assoc default-nav-state :last-route last-route))
+             (assoc-in [:theme :id] theme-id))
+     ::apply-theme theme-id
       :dispatch [::restore-session]})))
 
 (rf/reg-event-db
@@ -486,26 +287,28 @@
  (fn [{:keys [db]} _]
    (let [username (str/trim (get-in db [:login :username] ""))
          password (get-in db [:login :password] "")]
-     (cond
-       (str/blank? username)
-       {:db (-> db
-                (assoc-in [:login :status] :error)
+      (cond
+        (str/blank? username)
+        {:db (-> db
+                 (assoc-in [:login :status] :error)
                 (assoc-in [:login :error] "Username is required"))}
 
-       (str/blank? password)
-       {:db (-> db
-                (assoc-in [:login :status] :error)
+        (str/blank? password)
+        {:db (-> db
+                 (assoc-in [:login :status] :error)
                 (assoc-in [:login :error] "Password is required"))}
 
-       :else
-       {:db (-> db
-                (assoc-in [:login :username] username)
-                (assoc-in [:login :status] :loading)
-                (assoc-in [:login :error] nil))
-        ::login-request {:username username
-                         :password password
-                         :on-success [::login-success]
-                         :on-error [::login-failure]}}))))
+        :else
+        {:db (-> db
+                 (assoc-in [:login :username] username)
+                 (assoc-in [:login :status] :loading)
+                 (assoc-in [:login :error] nil))
+        ::fx/http {:url "/api/login"
+                   :method "POST"
+                   :body {"user/username" username
+                          "user/password" password}
+                   :on-success [::login-success]
+                   :on-error [::login-failure]}}))))
 
 (rf/reg-event-fx
  ::login-success
@@ -513,8 +316,10 @@
    (let [token (:session/token payload)
          user-id (:user/id payload)
          username (:user/username payload)
-         preferred-route (let [cand (get-in db [:nav :last-route])]
-                           (if (#{:home :tasks} cand) cand :home))
+         preferred-route (let [cand (get-in db [:nav :last-route])
+                               allowed (cond-> #{:home :tasks}
+                                          land-enabled? (conj :land))]
+                           (if (contains? allowed cand) cand :home))
          db' (-> db
                  (assoc :session {:token token
                                   :user {:id user-id
@@ -546,8 +351,10 @@
  ::restore-session
  (fn [{:keys [db]} _]
    {:db db
-    ::session-request {:on-success [::session-restored]
-                       :on-error [::session-restore-failed]}}))
+    ::fx/http {:url "/api/session"
+               :method "GET"
+               :on-success [::session-restored]
+               :on-error [::session-restore-failed]}}))
 
 (rf/reg-event-fx
  ::session-restored
@@ -580,12 +387,11 @@
  ::fetch-tasks
  (fn [{:keys [db]} _]
    (let [filters (get-in db [:tasks :filters])]
-     {:db (-> db
-              (assoc-in [:tasks :status] :loading)
-              (assoc-in [:tasks :error] nil))
-      ::tasks-request {:filters filters
-                       :on-success [::fetch-success]
-                       :on-error [::fetch-failure]}})))
+     {:db (state/mark-loading db [:tasks])
+      ::fx/http {:url (str "/api/tasks" (when-let [qs (build-query filters)] (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-success]
+                 :on-error [::fetch-failure]}})))
 
 (rf/reg-event-db
  ::fetch-success
@@ -625,9 +431,7 @@
    (let [message (or (:error body)
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load tasks.")]
-     (-> db
-         (assoc-in [:tasks :status] :error)
-         (assoc-in [:tasks :error] message)
+     (-> (state/mark-error db [:tasks] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -638,10 +442,10 @@
    {:db (-> db
             (assoc-in [:tags :status] :loading)
             (assoc-in [:tags :error] nil))
-    ::tag-request {:url "/api/tags"
-                   :method "GET"
-                   :on-success [::fetch-tags-success]
-                   :on-error [::fetch-tags-failure]}}))
+    ::fx/http {:url "/api/tags"
+               :method "GET"
+               :on-success [::fetch-tags-success]
+               :on-error [::fetch-tags-failure]}}))
 
 (rf/reg-event-fx
  ::fetch-home
@@ -649,12 +453,14 @@
    {:db (-> db
             (assoc-in [:home :status] :loading)
             (assoc-in [:home :error] nil))
-    :fx [[::home-request {:url "/api/tasks/counts"
-                          :on-success [::fetch-home-counts-success]
-                          :on-error [::fetch-home-failure]}]
-         [::home-request {:url "/api/tasks/recent"
-                          :on-success [::fetch-home-recent-success]
-                          :on-error [::fetch-home-failure]}]]}))
+    :fx [[::fx/http {:url "/api/tasks/counts"
+                     :method "GET"
+                     :on-success [::fetch-home-counts-success]
+                     :on-error [::fetch-home-failure]}]
+         [::fx/http {:url "/api/tasks/recent"
+                     :method "GET"
+                     :on-success [::fetch-home-recent-success]
+                     :on-error [::fetch-home-failure]}]]}))
 
 (rf/reg-event-db
  ::fetch-home-counts-success
@@ -678,9 +484,7 @@
    (let [message (or (:error body)
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load home data.")]
-     (-> db
-         (assoc-in [:home :status] :error)
-         (assoc-in [:home :error] message)
+     (-> (state/mark-error db [:home] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -690,9 +494,7 @@
  ::fetch-land
  (fn [{:keys [db]} _]
    (let [filters (get-in db [:land :filters])]
-     {:db (-> db
-              (assoc-in [:land :status] :loading)
-              (assoc-in [:land :error] nil))
+     {:db (state/mark-loading db [:land])
       :dispatch-n [[::fetch-land-stats]
                    [::fetch-land-people filters]
                    [::fetch-land-parcels filters]]})))
@@ -700,10 +502,11 @@
 (rf/reg-event-fx
  ::fetch-land-stats
  (fn [{:keys [db]} _]
-   {:db (assoc-in db [:land :status] :loading)
-    ::land-request {:url "/api/land/stats"
-                    :on-success [::land-stats-success]
-                    :on-error [::land-failure]}}))
+   {:db (state/mark-loading db [:land])
+    ::fx/http {:url "/api/land/stats"
+               :method "GET"
+               :on-success [::land-stats-success]
+               :on-error [::land-failure]}}))
 
 (rf/reg-event-fx
  ::fetch-land-people
@@ -715,10 +518,11 @@
               (let [sp (js/URLSearchParams.)]
                 (doseq [[k v] params] (.append sp k v))
                 (.toString sp)))]
-     {:db (assoc-in db [:land :status] :loading)
-      ::land-request {:url (str "/api/land/people" (when qs (str "?" qs)))
-                      :on-success [::land-people-success]
-                      :on-error [::land-failure]}})))
+     {:db (state/mark-loading db [:land])
+      ::fx/http {:url (str "/api/land/people" (when qs (str "?" qs)))
+                 :method "GET"
+                 :on-success [::land-people-success]
+                 :on-error [::land-failure]}})))
 
 (rf/reg-event-fx
  ::fetch-land-parcels
@@ -731,26 +535,29 @@
               (let [sp (js/URLSearchParams.)]
                 (doseq [[k v] params] (.append sp k v))
                 (.toString sp)))]
-     {:db (assoc-in db [:land :status] :loading)
-      ::land-request {:url (str "/api/land/parcels" (when qs (str "?" qs)))
-                      :on-success [::land-parcels-success]
-                      :on-error [::land-failure]}})))
+     {:db (state/mark-loading db [:land])
+      ::fx/http {:url (str "/api/land/parcels" (when qs (str "?" qs)))
+                 :method "GET"
+                 :on-success [::land-parcels-success]
+                 :on-error [::land-failure]}})))
 
 (rf/reg-event-fx
  ::select-person
  (fn [{:keys [db]} [_ person-id]]
    {:db (assoc-in db [:land :selected :person] person-id)
-    ::land-request {:url (str "/api/land/people/" person-id)
-                    :on-success [::land-person-detail-success]
-                    :on-error [::land-failure]}}))
+    ::fx/http {:url (str "/api/land/people/" person-id)
+               :method "GET"
+               :on-success [::land-person-detail-success]
+               :on-error [::land-failure]}}))
 
 (rf/reg-event-fx
  ::select-parcel
  (fn [{:keys [db]} [_ parcel-id]]
    {:db (assoc-in db [:land :selected :parcel] parcel-id)
-    ::land-request {:url (str "/api/land/parcels/" parcel-id)
-                    :on-success [::land-parcel-detail-success]
-                    :on-error [::land-failure]}}))
+    ::fx/http {:url (str "/api/land/parcels/" parcel-id)
+               :method "GET"
+               :on-success [::land-parcel-detail-success]
+               :on-error [::land-failure]}}))
 
 (rf/reg-event-db
  ::land-people-success
@@ -792,9 +599,7 @@
    (let [message (or (:error body)
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load land registry data.")]
-     (-> db
-         (assoc-in [:land :status] :error)
-         (assoc-in [:land :error] message)
+     (-> (state/mark-error db [:land] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -858,11 +663,11 @@
        {:db (-> db
                 (assoc-in [:tags :status] :saving)
                 (assoc-in [:tags :error] nil))
-        ::tag-request {:url "/api/tags"
-                       :method "POST"
-                       :body {:tag/name name}
-                       :on-success [::create-tag-success {:attach? true}]
-                       :on-error [::tag-operation-failure]}}))))
+        ::fx/http {:url "/api/tags"
+                   :method "POST"
+                   :body {:tag/name name}
+                   :on-success [::create-tag-success {:attach? true}]
+                   :on-error [::tag-operation-failure]}}))))
 
 (rf/reg-event-fx
  ::create-tag-success
@@ -896,11 +701,11 @@
        {:db (-> db
                 (assoc-in [:tags :status] :saving)
                 (assoc-in [:tags :error] nil))
-        ::tag-request {:url (str "/api/tags/" tag-id)
-                       :method "PUT"
-                       :body {:tag/name name}
-                       :on-success [::rename-tag-success]
-                       :on-error [::tag-operation-failure]}}))))
+        ::fx/http {:url (str "/api/tags/" tag-id)
+                   :method "PUT"
+                   :body {:tag/name name}
+                   :on-success [::rename-tag-success]
+                   :on-error [::tag-operation-failure]}}))))
 
 (rf/reg-event-fx
  ::rename-tag-success
@@ -928,10 +733,10 @@
      {:db (-> db
               (assoc-in [:tags :status] :saving)
               (assoc-in [:tags :error] nil))
-      ::tag-request {:url (str "/api/tags/" tag-id)
-                     :method "DELETE"
-                     :on-success [::delete-tag-success]
-                     :on-error [::tag-operation-failure]}})))
+      ::fx/http {:url (str "/api/tags/" tag-id)
+                 :method "DELETE"
+                 :on-success [::delete-tag-success]
+                 :on-error [::tag-operation-failure]}})))
 
 (rf/reg-event-fx
  ::delete-tag-success
@@ -954,9 +759,7 @@
  ::tag-operation-failure
  (fn [db [_ {:keys [status body]}]]
    (let [message (or (:error body) "Tag action failed.")]
-     (-> db
-         (assoc-in [:tags :status] :error)
-         (assoc-in [:tags :error] message)
+     (-> (state/mark-error db [:tags] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -1132,11 +935,11 @@
          {:db (-> db
                   (assoc-in [:tasks :detail :status] :saving)
                   (assoc-in [:tasks :detail :error] nil))
-          ::task-action {:url "/api/tasks"
-                         :method "POST"
-                         :body body
-                         :on-success [::op-success [] {:mode :create}]
-                         :on-error [::save-failure]}})
+          ::fx/http {:url "/api/tasks"
+                     :method "POST"
+                     :body body
+                     :on-success [::op-success [] {:mode :create}]
+                     :on-error [::save-failure]}})
        :else
        (let [ops (build-update-ops form current-task)]
          (if (empty? ops)
@@ -1146,9 +949,9 @@
            {:db (-> db
                     (assoc-in [:tasks :detail :status] :saving)
                     (assoc-in [:tasks :detail :error] nil))
-            ::task-action (assoc (first ops)
-                                 :on-success [::op-success (vec (rest ops)) {:mode :update}]
-                                 :on-error [::save-failure])})))))) 
+            ::fx/http (assoc (first ops)
+                             :on-success [::op-success (vec (rest ops)) {:mode :update}]
+                             :on-error [::save-failure])})))))) 
 
 (rf/reg-event-fx
  ::delete-task
@@ -1158,10 +961,10 @@
      {:db (-> db
               (assoc-in [:tasks :detail :status] :deleting)
               (assoc-in [:tasks :detail :error] nil))
-      ::task-action {:url (str "/api/tasks/" task-id)
-                     :method "DELETE"
-                     :on-success [::delete-task-success task-id]
-                     :on-error [::save-failure]}})))
+      ::fx/http {:url (str "/api/tasks/" task-id)
+                 :method "DELETE"
+                 :on-success [::delete-task-success task-id]
+                 :on-error [::save-failure]}})))
 
 (rf/reg-event-fx
  ::delete-task-success
@@ -1191,13 +994,13 @@
                       true (-> (assoc-in [:tasks :detail :error] nil)
                                (assoc-in [:tasks :detail :mode] (if (= (:mode context) :create) :edit (get-in db [:tasks :detail :mode])))
                                (assoc-in [:tasks :detail :status] (if next-op :saving :success))))]
-     (if next-op
-       {:db updated-db
-        ::task-action (assoc next-op
-                             :on-success [::op-success rest-ops context]
-                             :on-error [::save-failure])}
-       {:db updated-db
-        :dispatch-n [[::fetch-tasks]]}))))
+    (if next-op
+      {:db updated-db
+       ::fx/http (assoc next-op
+                        :on-success [::op-success rest-ops context]
+                        :on-error [::save-failure])}
+      {:db updated-db
+       :dispatch-n [[::fetch-tasks]]}))))
 
 (rf/reg-event-db
  ::save-failure

@@ -30,14 +30,14 @@
 (defn home-recent-list
   [tasks]
   (let [tag-index {}]
-    [tasks-ui/entity-list {:title "Recent tasks"
-                           :meta (str (count tasks) " items")
-                           :items tasks
-                           :status (if (seq tasks) :ready :empty)
-                           :error nil
-                           :selected nil
-                           :key-fn :task/id
-                           :render-row (fn [t _] [tasks-ui/task-card t false tag-index])}]))
+    [ui/entity-list {:title "Recent tasks"
+                     :meta (str (count tasks) " items")
+                     :items tasks
+                     :status (if (seq tasks) :ready :empty)
+                     :error nil
+                     :selected nil
+                     :key-fn :task/id
+                     :render-row (fn [t _] [tasks-ui/task-card t false tag-index])}]))
 
 (defn home-view []
   (let [home @(rf/subscribe [:darelwasl.app/home])
