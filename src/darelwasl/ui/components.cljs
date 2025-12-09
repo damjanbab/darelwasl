@@ -99,22 +99,41 @@
 
 (defn entity-list
   "Generic list panel with states. render-row receives (item selected?)."
-  [{:keys [title meta items status error selected render-row key-fn]}]
+  [{:keys [title meta items status error selected render-row key-fn panel-class list-class header-actions loading-node error-node empty-node]}]
   (let [items (or items [])
-        key-fn (or key-fn :task/id)]
-    [:div.panel.task-list-panel
+        key-fn (or key-fn :task/id)
+        panel-class (or panel-class "task-list-panel")
+        list-class (or list-class "task-list")
+        loading-node (or loading-node [loading-state])
+        error-node (or error-node [error-state error])
+        empty-node (or empty-node [empty-state])]
+    [:div.panel {:class panel-class}
      [:div.section-header
-      [:h2 title]
-      (when meta [:span.meta meta])]
+      [:div
+       [:h2 title]
+       (when meta [:span.meta meta])]
+      (when header-actions
+        [:div.controls header-actions])]
      (case status
-       :loading [loading-state]
-       :error [error-state error]
+       :loading loading-node
+       :error error-node
        (if (seq items)
-         [:div.task-list
-         (for [t items]
-           ^{:key (str (key-fn t))}
-           [render-row t (= selected (key-fn t))])]
-         [empty-state]))]))
+         [:div {:class list-class}
+          (for [t items]
+            ^{:key (str (key-fn t))}
+            [render-row t (= selected (key-fn t))])]
+         empty-node))]))
+
+(defn list-row
+  [{:keys [title meta selected? on-click trailing description]}]
+  [:button.list-row {:type "button"
+                     :class (when selected? "selected")
+                     :on-click on-click}
+   [:div
+    [:div.title title]
+    (when meta [:div.meta meta])
+    (when description [:div.meta description])]
+   (when trailing [:div.meta trailing])])
 
 (defn stat-card
   [{:keys [label value meta content tone class]}]

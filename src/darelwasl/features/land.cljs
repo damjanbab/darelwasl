@@ -122,46 +122,42 @@
 
 (defn land-parcel-list []
   (let [{:keys [parcels status error filters selected]} @(rf/subscribe [:darelwasl.app/land])
-        selected-id (:parcel selected)]
-    [:div.panel
-     [:div.section-header
-      [:div
-       [:h3 "Parcels"]
-       [:div.meta "Cadastral lots and owners"]]
-      [:div.controls
-       [:input.form-input {:type "search"
-                           :placeholder "Parcel number"
-                           :value (:parcel-number filters)
-                           :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :parcel-number (.. % -target -value)])}]
-       [:select.form-input {:value (or (some-> (:completeness filters) name) "")
-                            :on-change #(let [v (.. % -target -value)]
-                                          (rf/dispatch [:darelwasl.app/land-update-filter :completeness (when-not (str/blank? v) (keyword v))]))}
-        (for [{:keys [id label]} land-completeness-options]
-          ^{:key (str "comp-" (or (some-> id name) "all"))}
-          [:option {:value (or (some-> id name) "")} label])]
-       [:button.button.secondary {:type "button"
-                                  :on-click #(rf/dispatch [:darelwasl.app/fetch-land])}
-        "Apply"]]]
-     (case status
-       :loading [ui/land-loading-state "Loading parcels..."]
-       :error [ui/land-error-state error]
-       (if (seq parcels)
-         [:div.list
-          (for [p parcels]
-            (let [pid (:parcel/id p)
-                  selected? (= selected-id pid)
-                  complete? (< (js/Math.abs (- (:parcel/share-total p 0.0) 1.0)) 1e-6)]
-              ^{:key (str pid)}
-              [:button.list-row {:type "button"
-                                 :class (str (when selected? "selected") (when (not complete?) " warn"))
-                                 :on-click #(rf/dispatch [:darelwasl.app/select-parcel pid])}
-               [:div
-                [:div.title (str (:parcel/cadastral-id p) "/" (:parcel/number p))]
-                [:div.meta (:parcel/address p)]]
-               [:div.meta (str (or (:parcel/owner-count p) 0) " owners · "
-                               (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")]
-               [:div.meta (if complete? "Complete" "Incomplete")]]))]
-         [ui/land-empty-state "No parcels match these filters" "Adjust parcel filters or refresh."]))]))
+        selected-id (:parcel selected)
+        {:keys [parcel-number completeness]} filters]
+    [ui/entity-list {:title "Parcels"
+                     :meta "Cadastral lots and owners"
+                     :items parcels
+                     :status status
+                     :error error
+                     :selected selected-id
+                     :panel-class "list-panel"
+                     :list-class "list"
+                     :header-actions [[:input.form-input {:type "search"
+                                                          :placeholder "Parcel number"
+                                                          :value parcel-number
+                                                          :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :parcel-number (.. % -target -value)])}]
+                                      [:select.form-input {:value (or (some-> completeness name) "")
+                                                           :on-change #(let [v (.. % -target -value)]
+                                                                         (rf/dispatch [:darelwasl.app/land-update-filter :completeness (when-not (str/blank? v) (keyword v))]))}
+                                       (for [{:keys [id label]} land-completeness-options]
+                                         ^{:key (str "comp-" (or (some-> id name) "all"))}
+                                         [:option {:value (or (some-> id name) "")} label])]
+                                      [:button.button.secondary {:type "button"
+                                                                 :on-click #(rf/dispatch [:darelwasl.app/fetch-land])}
+                                       "Apply"]]
+                     :loading-node [ui/land-loading-state "Loading parcels..."]
+                     :error-node [ui/land-error-state error]
+                     :empty-node [ui/land-empty-state "No parcels match these filters" "Adjust parcel filters or refresh."]
+                     :render-row (fn [p selected?]
+                                   (let [pid (:parcel/id p)
+                                         complete? (< (js/Math.abs (- (:parcel/share-total p 0.0) 1.0)) 1e-6)]
+                                     [ui/list-row {:title (str (:parcel/cadastral-id p) "/" (:parcel/number p))
+                                                   :meta (:parcel/address p)
+                                                   :description (if complete? "Complete" "Incomplete")
+                                                   :trailing (str (or (:parcel/owner-count p) 0) " owners · "
+                                                                  (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")
+                                                   :selected? selected?
+                                                   :on-click #(rf/dispatch [:darelwasl.app/select-parcel pid])}]))}]))
 
 (defn land-parcel-detail []
   (let [{:keys [selected-parcel status]} @(rf/subscribe [:darelwasl.app/land])]
