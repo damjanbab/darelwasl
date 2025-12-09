@@ -263,11 +263,86 @@
           :fields [:file/path]}
   :idempotency {:strategy :deterministic-ids
                 :keys [:file/path]}
-  :contracts {:fixtures [:fixtures/land-registry-sample]}
+ :contracts {:fixtures [:fixtures/land-registry-sample]}
   :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]
             :views [:cap/view/land-registry]}
   :tooling [:cap/tooling/import-check]}
+
+ {:id :cap/action/person-list
+  :title "List people (land registry)"
+  :version "v1"
+  :inputs {:q :string? :sort :keyword?}
+  :outputs {:people :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/person :cap/schema/ownership]
+            :views [:cap/view/land-registry]}
+  :tooling []}
+
+ {:id :cap/action/person-detail
+  :title "Person detail (land registry)"
+  :version "v1"
+  :inputs {:person/id :uuid}
+  :outputs {:person/id :uuid}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/person :cap/schema/ownership :cap/schema/parcel]
+            :views [:cap/view/land-registry]}
+  :tooling []}
+
+ {:id :cap/action/parcel-list
+  :title "List parcels"
+  :version "v1"
+  :inputs {:cadastral-id :string? :parcel-number :string? :min-area :string? :max-area :string? :completeness :keyword? :sort :keyword?}
+  :outputs {:parcels :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/parcel :cap/schema/ownership :cap/schema/person]
+            :views [:cap/view/land-registry]}
+  :tooling []}
+
+ {:id :cap/action/parcel-detail
+  :title "Parcel detail"
+  :version "v1"
+  :inputs {:parcel/id :uuid}
+  :outputs {:parcel/id :uuid}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/parcel :cap/schema/ownership :cap/schema/person]
+            :views [:cap/view/land-registry]}
+  :tooling []}
+
+ {:id :cap/action/parcel-stats
+  :title "Parcel/person summary stats"
+  :version "v1"
+  :inputs {}
+  :outputs {:persons :long :parcels :long :total-area-m2 :double}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/land-registry-sample]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/parcel :cap/schema/person :cap/schema/ownership]
+            :views [:cap/view/land-registry]}
+  :tooling []}
 ]

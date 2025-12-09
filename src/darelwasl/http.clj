@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [darelwasl.auth :as auth]
             [darelwasl.db :as db]
+            [darelwasl.land :as land]
             [darelwasl.tasks :as tasks]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
@@ -195,6 +196,50 @@
                            path-id
                            (:auth/session request))))))
 
+(defn- list-people-handler
+  [state]
+  (fn [request]
+    {:status 200
+     :body {:people (land/people (get-in state [:db :conn]) (:query-params request))}}))
+
+(defn- person-detail-handler
+  [state]
+  (fn [request]
+    (try
+      (let [id-str (task-id-param request)
+            person-id (UUID/fromString (str id-str))
+            result (land/person-detail (get-in state [:db :conn]) person-id)]
+        (if result
+          {:status 200 :body result}
+          (error-response 404 "Person not found")))
+      (catch Exception _
+        (error-response 400 "Invalid person id")))))
+
+(defn- list-parcels-handler
+  [state]
+  (fn [request]
+    {:status 200
+     :body {:parcels (land/parcels (get-in state [:db :conn]) (:query-params request))}}))
+
+(defn- parcel-detail-handler
+  [state]
+  (fn [request]
+    (try
+      (let [id-str (task-id-param request)
+            parcel-id (UUID/fromString (str id-str))
+            result (land/parcel-detail (get-in state [:db :conn]) parcel-id)]
+        (if result
+          {:status 200 :body result}
+          (error-response 404 "Parcel not found")))
+      (catch Exception _
+        (error-response 400 "Invalid parcel id")))))
+
+(defn- stats-handler
+  [state]
+  (fn [_request]
+    {:status 200
+     :body (land/stats (get-in state [:db :conn]))}))
+
 (defn- list-tags-handler
   [state]
   (fn [_request]
@@ -253,7 +298,14 @@
          ["" {:get (list-tags-handler state)
               :post (create-tag-handler state)}]
          ["/:id" {:put (update-tag-handler state)
-                  :delete (delete-tag-handler state)}]]]]
+                  :delete (delete-tag-handler state)}]]
+        ["/land"
+         {:middleware [require-session]}
+         ["/people" {:get (list-people-handler state)}]
+         ["/people/:id" {:get (person-detail-handler state)}]
+         ["/parcels" {:get (list-parcels-handler state)}]
+         ["/parcels/:id" {:get (parcel-detail-handler state)}]
+         ["/stats" {:get (stats-handler state)}]]]]
       {:conflicts nil
        :data {:muuntaja muuntaja-instance
               :middleware [[session/wrap-session session-opts]

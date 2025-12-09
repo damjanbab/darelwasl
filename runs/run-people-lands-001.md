@@ -116,7 +116,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Summarize import strategy, counts, and any data caveats
 
 - Task ID: backend-people-lands-api
-  - Status: pending
+  - Status: done (Codex, 2025-12-09 13:45 UTC)
   - Objective: Expose backend actions/endpoints to browse people-to-parcels and summary stats, backed by imported data.
   - Scope: Add read-only actions/endpoints for person list/detail (with parcels/shares), parcel list/detail (with owners/shares), search/filter params (name, cadastral info, area ranges), summary stats (counts, total area, top owners/municipalities), auth/session enforcement, pagination/sorting defaults, and contract docs. Reuse Datomic queries/helpers; keep responses lean; avoid mutations.
   - Out of Scope: Data edits/mutations; non-essential analytics; offline sync.
