@@ -144,7 +144,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Describe endpoints, parameters, and proof results
 
 - Task ID: frontend-people-lands-app
-  - Status: in-progress (Codex, 2025-12-09 14:47 UTC)
+  - Status: done (Codex, 2025-12-09 14:58 UTC)
   - Objective: Implement the land-registry view/app with professional styling, enabling people-to-parcel navigation and summary stats.
   - Scope: Build `:cap/view/land-registry` (routes + shell entry), people-first and parcel-first browsing surfaces with linked detail panes, search/filter UI, ownership share display, summary stats cards/charts, responsive layouts (desktop dual-pane, mobile stack/sheets), loading/empty/error states, accessibility (keyboard/focus/aria), and theme updates to achieve a professional look. Ensure it coexists with Home/Tasks and respects auth.
   - Out of Scope: Data mutation flows; unrelated app navigation changes; offline caching.

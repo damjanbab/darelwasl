@@ -89,6 +89,23 @@
   {:menu-open? false
    :last-route :home})
 
+(def land-enabled? true)
+
+(def default-land-filters
+  {:people-search ""
+   :parcel-number ""
+   :completeness nil
+   :sort :area})
+
+(def default-land-state
+  {:status :idle
+   :error nil
+   :people []
+   :parcels []
+   :stats nil
+   :selected {:person nil :parcel nil}
+   :filters default-land-filters})
+
 (def default-db
   {:route :login
    :session nil
@@ -97,7 +114,8 @@
    :tags default-tags-state
    :home default-home-state
    :login default-login-state
-   :tasks default-task-state})
+   :tasks default-task-state
+   :land default-land-state})
 
 (def task-entity-config
   {:type :entity.type/task
@@ -487,6 +505,33 @@
                                        :body {:error "Network error. Please try again."}})))))))
 
 (rf/reg-fx
+ ::land-request
+ (fn [{:keys [url on-success on-error]}]
+   (-> (js/fetch url
+                 #js {:method "GET"
+                      :headers #js {"Accept" "application/json"}
+                      :credentials "same-origin"})
+       (.then
+        (fn [resp]
+          (-> (.json resp)
+              (.then
+               (fn [data]
+                 (let [payload (js->clj data :keywordize-keys true)
+                       status (.-status resp)]
+                   (if (<= 200 status 299)
+                     (rf/dispatch (conj on-success payload))
+                     (rf/dispatch (conj on-error {:status status
+                                                  :body payload}))))))
+              (.catch
+               (fn [_]
+                 (rf/dispatch (conj on-error {:status (.-status resp)
+                                              :body {:error "Invalid response from server"}})))))))
+       (.catch
+        (fn [_]
+          (rf/dispatch (conj on-error {:status nil
+                                       :body {:error "Network error. Please try again."}})))))))
+
+(rf/reg-fx
  ::task-action
  (fn [{:keys [url method body on-success on-error]}]
    (let [opts (clj->js (cond-> {:method (or method "POST")
@@ -524,7 +569,8 @@
          stored-route (try
                         (.getItem js/localStorage nav-storage-key)
                         (catch :default _ nil))
-         allowed-routes #{:home :tasks}
+        allowed-routes (cond-> #{:home :tasks}
+                          land-enabled? (conj :land))
          last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
                       (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
          theme-id (resolve-theme-id stored)]
@@ -557,10 +603,13 @@
 (rf/reg-event-fx
  ::navigate
  (fn [{:keys [db]} [_ route]]
-   (let [safe-route (if (#{:home :tasks} route) route :home)
+   (let [allowed (cond-> #{:home :tasks}
+                   land-enabled? (conj :land))
+         safe-route (if (contains? allowed route) route :home)
          dispatches (cond-> []
                        (= safe-route :home) (conj [::fetch-home])
-                       (= safe-route :tasks) (conj [::fetch-tasks]))]
+                       (= safe-route :tasks) (conj [::fetch-tasks])
+                       (= safe-route :land) (conj [::fetch-land]))]
      {:db (-> db
               (assoc :route safe-route)
               (assoc-in [:nav :menu-open?] false)
@@ -785,6 +834,125 @@
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
+
+;; Land registry events
+(rf/reg-event-fx
+ ::fetch-land
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:land :filters])]
+     {:db (-> db
+              (assoc-in [:land :status] :loading)
+              (assoc-in [:land :error] nil))
+      :dispatch-n [[::fetch-land-stats]
+                   [::fetch-land-people filters]
+                   [::fetch-land-parcels filters]]})))
+
+(rf/reg-event-fx
+ ::fetch-land-stats
+ (fn [{:keys [db]} _]
+   {:db (assoc-in db [:land :status] :loading)
+    ::land-request {:url "/api/land/stats"
+                    :on-success [::land-stats-success]
+                    :on-error [::land-failure]}}))
+
+(rf/reg-event-fx
+ ::fetch-land-people
+ (fn [{:keys [db]} [_ {:keys [people-search sort]}]]
+   (let [params (cond-> []
+                  (seq people-search) (conj ["q" people-search])
+                  sort (conj ["sort" (name sort)]))
+         qs (when (seq params)
+              (let [sp (js/URLSearchParams.)]
+                (doseq [[k v] params] (.append sp k v))
+                (.toString sp)))]
+     {:db (assoc-in db [:land :status] :loading)
+      ::land-request {:url (str "/api/land/people" (when qs (str "?" qs)))
+                      :on-success [::land-people-success]
+                      :on-error [::land-failure]}})))
+
+(rf/reg-event-fx
+ ::fetch-land-parcels
+ (fn [{:keys [db]} [_ {:keys [parcel-number completeness sort]}]]
+   (let [params (cond-> []
+                  (seq parcel-number) (conj ["parcel-number" parcel-number])
+                  completeness (conj ["completeness" (name completeness)])
+                  sort (conj ["sort" (name sort)]))
+         qs (when (seq params)
+              (let [sp (js/URLSearchParams.)]
+                (doseq [[k v] params] (.append sp k v))
+                (.toString sp)))]
+     {:db (assoc-in db [:land :status] :loading)
+      ::land-request {:url (str "/api/land/parcels" (when qs (str "?" qs)))
+                      :on-success [::land-parcels-success]
+                      :on-error [::land-failure]}})))
+
+(rf/reg-event-fx
+ ::select-person
+ (fn [{:keys [db]} [_ person-id]]
+   {:db (assoc-in db [:land :selected :person] person-id)
+    ::land-request {:url (str "/api/land/people/" person-id)
+                    :on-success [::land-person-detail-success]
+                    :on-error [::land-failure]}}))
+
+(rf/reg-event-fx
+ ::select-parcel
+ (fn [{:keys [db]} [_ parcel-id]]
+   {:db (assoc-in db [:land :selected :parcel] parcel-id)
+    ::land-request {:url (str "/api/land/parcels/" parcel-id)
+                    :on-success [::land-parcel-detail-success]
+                    :on-error [::land-failure]}}))
+
+(rf/reg-event-db
+ ::land-people-success
+ (fn [db [_ payload]]
+   (assoc-in db [:land :people] (:people payload))))
+
+(rf/reg-event-db
+ ::land-parcels-success
+ (fn [db [_ payload]]
+   (assoc-in db [:land :parcels] (:parcels payload))))
+
+(rf/reg-event-db
+ ::land-person-detail-success
+ (fn [db [_ person]]
+   (assoc db :land (-> (:land db)
+                       (assoc :selected-person person)
+                       (assoc :status :ready)
+                       (assoc :error nil)))))
+
+(rf/reg-event-db
+ ::land-parcel-detail-success
+ (fn [db [_ parcel]]
+   (assoc db :land (-> (:land db)
+                       (assoc :selected-parcel parcel)
+                       (assoc :status :ready)
+                       (assoc :error nil)))))
+
+(rf/reg-event-db
+ ::land-stats-success
+ (fn [db [_ stats]]
+   (-> db
+       (assoc-in [:land :stats] stats)
+       (assoc-in [:land :status] :ready)
+       (assoc-in [:land :error] nil))))
+
+(rf/reg-event-db
+ ::land-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load land registry data.")]
+     (-> db
+         (assoc-in [:land :status] :error)
+         (assoc-in [:land :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::land-update-filter
+ (fn [db [_ k v]]
+   (assoc-in db [:land :filters k] v)))
 
 (rf/reg-event-db
  ::fetch-tags-success
@@ -1204,6 +1372,7 @@
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
 (rf/reg-sub ::home (fn [db _] (:home db)))
+(rf/reg-sub ::land (fn [db _] (:land db)))
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
@@ -1714,12 +1883,15 @@
     )
 
 (def app-options
-  [{:id :home
-    :label "Home"
-    :desc "Summary surface"}
-   {:id :tasks
-    :label "Tasks"
-    :desc "Workboard"}])
+  (cond-> [{:id :home
+            :label "Home"
+            :desc "Summary surface"}
+           {:id :tasks
+            :label "Tasks"
+            :desc "Workboard"}]
+    land-enabled? (conj {:id :land
+                         :label "Land"
+                         :desc "People ↔ parcels"})))
 
 (defn app-switcher-menu
   [route extra-class]
@@ -1859,6 +2031,216 @@
    [:footer.app-footer
     [:span "Home overview · Quick links into your workspace."]]])
 
+(def land-completeness-options
+  [{:id nil :label "All"}
+   {:id :complete :label "Complete shares"}
+   {:id :incomplete :label "Incomplete shares"}])
+
+(defn land-stats-cards [{:keys [persons parcels total-area-m2 share-complete share-complete-pct top-owners]}]
+  [:div.summary-cards.wide
+   [:div.card
+    [:div.card-label "Parcels"]
+    [:div.card-value (or parcels 0)]]
+   [:div.card
+    [:div.card-label "People"]
+    [:div.card-value (or persons 0)]]
+   [:div.card
+    [:div.card-label "Total area (m²)"]
+    [:div.card-value (or (.toLocaleString (or total-area-m2 0) "en-US") 0)]]
+   [:div.card
+    [:div.card-label "Share completeness"]
+    [:div.card-value (str (or (some-> share-complete-pct js/Math.round) 0) "%")]
+    [:div.meta (str (or share-complete 0) " parcels balanced")]]
+   [:div.card
+    [:div.card-label "Top owners by area"]
+    (if (seq top-owners)
+      [:ul.mini-list
+       (for [o top-owners
+             :let [owner-name (:person/name o)
+                   area (:person/owned-area-m2 o)]]
+         ^{:key (str "top-" (:person/id o))}
+         [:li
+          [:div owner-name]
+          [:span.meta (str (js/Math.round (or area 0)) " m²")]])]
+      [:span.meta "No owners yet"]) ]])
+
+(defn land-people-list []
+  (let [{:keys [people status error filters selected-person selected]} @(rf/subscribe [::land])
+        current-search (:people-search filters)
+        selected-id (:person selected)]
+    [:div.panel
+     [:div.section-header
+      [:div
+       [:h3 "People"]
+       [:div.meta "Browse owners and their parcels"]]
+      [:div.controls
+       [:input.form-input {:type "search"
+                           :placeholder "Search people"
+                           :value current-search
+                           :on-change #(rf/dispatch [::land-update-filter :people-search (.. % -target -value)])}]
+       [:button.button.secondary {:type "button"
+                                  :on-click #(rf/dispatch [::fetch-land])}
+        "Search"]]]
+     (case status
+       :loading [loading-state]
+       :error [error-state error]
+       (if (seq people)
+         [:div.list
+          (for [p people]
+            (let [pid (:person/id p)
+                  selected? (= selected-id pid)]
+              ^{:key (str pid)}
+              [:button.list-row {:type "button"
+                                 :class (when selected? "selected")
+                                 :on-click #(rf/dispatch [::select-person pid])}
+               [:div
+                [:div.title (:person/name p)]
+                [:div.meta (:person/address p)]]
+               [:div.meta (str (or (:person/parcel-count p) 0) " parcels · "
+                               (js/Math.round (or (:person/owned-area-m2 p) 0)) " m²")]]))]
+         [empty-state]))]))
+
+(defn land-person-detail []
+  (let [{:keys [selected-person status]} @(rf/subscribe [::land])]
+    [:div.panel.task-preview
+     [:div.section-header
+      [:div
+       [:h3 "Person detail"]
+       [:div.meta "Parcels and shares"]]]
+     (cond
+       (= status :loading) [loading-state]
+       (nil? selected-person) [:div.placeholder-card
+                               [:strong "Select a person"]
+                               [:p "Choose a person to see owned parcels."]]
+       :else
+       (let [{:keys [person/name person/address person/ownerships]} selected-person]
+         [:div
+          [:div.detail-meta
+           [:h4 name]
+           [:div.meta address]]
+          (if (seq ownerships)
+            [:div.table
+             [:div.table-header
+              [:span "Parcel"] [:span "Share"] [:span "Area"]]
+             (for [o ownerships]
+               ^{:key (str (:parcel/id o) "-" (:ownership/share o))}
+               [:div.table-row
+                [:div (:parcel/number o)]
+                [:div (str (js/Math.round (* 100 (:ownership/share o))) "%")]
+                [:div (str (js/Math.round (or (:ownership/area-share-m2 o) 0)) " m²")]])]
+            [:div.meta "No parcels attached"])]))]))
+
+(defn land-parcel-list []
+  (let [{:keys [parcels status error filters selected]} @(rf/subscribe [::land])
+        selected-id (:parcel selected)]
+    [:div.panel
+     [:div.section-header
+      [:div
+       [:h3 "Parcels"]
+       [:div.meta "Cadastral lots and owners"]]
+      [:div.controls
+       [:input.form-input {:type "search"
+                           :placeholder "Parcel number"
+                           :value (:parcel-number filters)
+                           :on-change #(rf/dispatch [::land-update-filter :parcel-number (.. % -target -value)])}]
+       [:select.form-input {:value (name (or (:completeness filters) "")) 
+                            :on-change #(let [v (.. % -target -value)]
+                                          (rf/dispatch [::land-update-filter :completeness (if (str/blank? v) nil (keyword v))]))}
+        (for [{:keys [id label]} land-completeness-options]
+          ^{:key (str "comp-" (name id))}
+          [:option {:value (or (some-> id name) "")} label])]
+       [:button.button.secondary {:type "button"
+                                  :on-click #(rf/dispatch [::fetch-land])}
+        "Apply"]]]
+     (case status
+       :loading [loading-state]
+       :error [error-state error]
+       (if (seq parcels)
+         [:div.list
+          (for [p parcels]
+            (let [pid (:parcel/id p)
+                  selected? (= selected-id pid)
+                  complete? (< (js/Math.abs (- (:parcel/share-total p 0.0) 1.0)) 1e-6)]
+              ^{:key (str pid)}
+              [:button.list-row {:type "button"
+                                 :class (str (when selected? "selected") (when (not complete?) " warn"))
+                                 :on-click #(rf/dispatch [::select-parcel pid])}
+               [:div
+                [:div.title (str (:parcel/cadastral-id p) "/" (:parcel/number p))]
+                [:div.meta (:parcel/address p)]]
+               [:div.meta (str (or (:parcel/owner-count p) 0) " owners · "
+                               (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")]
+               [:div.meta (if complete? "Complete" "Incomplete")]]))]
+         [empty-state]))]))
+
+(defn land-parcel-detail []
+  (let [{:keys [selected-parcel status]} @(rf/subscribe [::land])]
+    [:div.panel.task-preview
+     [:div.section-header
+      [:div
+       [:h3 "Parcel detail"]
+       [:div.meta "Owners and shares"]]]
+     (cond
+       (= status :loading) [loading-state]
+       (nil? selected-parcel) [:div.placeholder-card
+                               [:strong "Select a parcel"]
+                               [:p "Choose a parcel to see ownership."]]
+       :else
+        (let [cadastral-id (:parcel/cadastral-id selected-parcel)
+              number (:parcel/number selected-parcel)
+              address (:parcel/address selected-parcel)
+              area (:parcel/area-m2 selected-parcel)
+              owners (:parcel/owners selected-parcel)
+              share-total (:parcel/share-total selected-parcel)
+              complete? (< (js/Math.abs (- share-total 1.0)) 1e-6)]
+          [:div
+           [:div.detail-meta
+            [:h4 (str cadastral-id "/" number)]
+            [:div.meta address]
+            [:div.meta (str (js/Math.round (or area 0)) " m²")]
+            [:div.chip {:class (if complete? "status success" "status warning")}
+             (if complete? "Complete shares" "Incomplete shares")]]
+          (if (seq owners)
+            (into [:div.table
+                   [:div.table-header
+                    [:span "Owner"] [:span "Share"] [:span "Area"]]]
+                  (for [o owners]
+                    ^{:key (str (:person/id o) "-" (:ownership/share o))}
+                    [:div.table-row
+                     [:div (:person/name o)]
+                     [:div (str (js/Math.round (* 100 (:ownership/share o))) "%")]
+                     [:div (str (js/Math.round (or (:ownership/area-share-m2 o) 0)) " m²")]]))
+            [:div.meta "No owners recorded"])]))]))
+
+(defn land-view []
+  (let [{:keys [status stats]} @(rf/subscribe [::land])]
+    (when (= status :idle)
+      (rf/dispatch [::fetch-land]))
+    [:div.home
+     [:div.section-header
+      [:div
+       [:h2 "Land registry"]
+       [:p "Browse people, parcels, and ownership shares."]]]
+     (when stats
+       [land-stats-cards stats])
+     [:div.land-layout
+      [:div.land-column
+       [land-people-list]]
+      [:div.land-column
+       [land-parcel-list]]
+      [:div.land-column.narrow
+       [land-person-detail]]
+      [:div.land-column.narrow
+       [land-parcel-detail]]]]))
+
+(defn land-shell []
+  [:div.app-shell
+   [top-bar]
+   [:main.home-layout
+    [land-view]]
+   [:footer.app-footer
+    [:span "Land registry · People ↔ parcels with summary stats."]]])
+
 (defn app-root []
   (let [session @(rf/subscribe [::session])
         route @(rf/subscribe [::route])]
@@ -1866,6 +2248,7 @@
      (if session
        (case route
          :home [home-shell]
+         :land (if land-enabled? [land-shell] [home-shell])
          [task-shell])
        [login-page])
      [:div.theme-toggle-container
