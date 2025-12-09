@@ -15,7 +15,7 @@
                   :flags []}
   :related {:schema []}}
 
- {:id :cap/schema/user
+{:id :cap/schema/user
   :title "User"
   :version "v1"
   :attributes
@@ -45,6 +45,28 @@
                   :flags []}
   :related {:actions [:cap/action/auth-login]
             :views [:cap/view/login]}}
+
+ {:id :cap/schema/system
+  :title "System Meta"
+  :version "v1"
+  :attributes
+  [{:ident :system/id
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "System identity (seed marker/upsert target)"}
+   {:ident :system/seeded-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Timestamp when fixtures were first seeded"}]
+  :enums []
+  :invariants ["System metadata uses a single identity" "Seed marker persists even if app data is changed"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]
+            :tooling []}}
 
  {:id :cap/schema/tag
   :title "Tag"

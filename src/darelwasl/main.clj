@@ -14,23 +14,38 @@
 (defonce system-state (atom nil))
 
 (defn- prepare-db!
-  "Load schema and seed fixtures when the database is empty. Returns the db
-  state map with any schema/fixture metadata or errors attached."
-  [{:keys [conn] :as db-state}]
+  "Load schema and seed fixtures when allowed and when the DB has never been
+  seeded. Returns the db state map with any schema/fixture metadata or errors
+  attached."
+  [{:keys [conn] :as db-state} {:keys [fixtures] :as _cfg}]
   (if-not conn
     db-state
-    (let [{:keys [error tx-count]} (schema/load-schema! conn)]
+    (let [{:keys [error tx-count]} (schema/load-schema! conn)
+          auto-seed? (get fixtures :auto-seed? true)]
       (if error
         (do
           (log/error error "Schema load failed during startup")
           (assoc db-state :error error))
         (let [{bf-error :error added :added} (schema/backfill-entity-types! conn)
               db (d/db conn)
+              seeded? (fixtures/seeded? db)
               has-users? (seq (d/q '[:find ?e :where [?e :user/id _]] db))
               has-tasks? (seq (d/q '[:find ?e :where [?e :task/id _]] db))
               has-tags? (seq (d/q '[:find ?e :where [?e :tag/id _]] db))
               prepared (cond
                          bf-error (assoc db-state :error bf-error)
+                         seeded?
+                         (do
+                           (when (pos? (or added 0))
+                             (log/infof "Backfilled :entity/type on %s existing entities" added))
+                           (log/info "Schema loaded; seed marker present, skipping fixture seed")
+                           (assoc db-state :schema/tx-count tx-count))
+                         (not auto-seed?)
+                         (do
+                           (when (pos? (or added 0))
+                             (log/infof "Backfilled :entity/type on %s existing entities" added))
+                           (log/info "Schema loaded; fixture seeding disabled via ALLOW_FIXTURE_SEED")
+                           (assoc db-state :schema/tx-count tx-count))
                          (and has-users? has-tasks? has-tags?)
                          (do
                            (when (pos? (or added 0))
@@ -63,19 +78,19 @@
 (defn- initialize-db!
   "Connect to Datomic, load schema/fixtures, and attempt a one-time recovery if
   schema load fails due to incompatible existing schema (unsupported alter)."
-  [datomic-cfg]
+  [cfg]
   (loop [attempt 1
-         state (db/connect! datomic-cfg)]
+         state (db/connect! (:datomic cfg))]
     (cond
       (:error state) state
       :else
-      (let [prepared (prepare-db! state)]
+      (let [prepared (prepare-db! state cfg)]
         (if-let [err (:error prepared)]
           (if (and (= attempt 1) (unsupported-alter-schema? err))
             (do
               (log/warn err "Schema load failed due to incompatible existing DB; recreating database")
               (db/delete-database! state)
-              (recur 2 (db/connect! datomic-cfg)))
+              (recur 2 (db/connect! (:datomic cfg))))
             prepared)
           prepared)))))
 
@@ -83,7 +98,7 @@
   "Start the application with optional config override."
   ([] (start! (config/load-config)))
   ([cfg]
-   (let [db-state (initialize-db! (:datomic cfg))
+   (let [db-state (initialize-db! cfg)
          users (auth/load-users!)
          user-index (auth/user-index-by-username users)
          _ (when (:error db-state)

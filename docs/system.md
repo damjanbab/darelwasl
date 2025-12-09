@@ -124,6 +124,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Frontend build/check: `npm run check` for compile-only smoke; `npm run build` for a release bundle to `public/js`.
 - Backend start: `clojure -M:dev` from repo root starts Jetty + Datomic dev-local helper (host `0.0.0.0`, port `3000` by default). Override via `APP_HOST`/`APP_PORT`.
 - Datomic dev-local config: defaults to absolute `data/datomic` storage under the repo, system `darelwasl`, db `darelwasl`; accepts `DATOMIC_STORAGE_DIR=:mem` for ephemeral storage. Override with `DATOMIC_STORAGE_DIR`/`DATOMIC_SYSTEM`/`DATOMIC_DB_NAME`.
+- Fixture seeding guard: startup seeds fixtures only when the seed marker is absent and `ALLOW_FIXTURE_SEED` is true (defaults to true for dev). Set `ALLOW_FIXTURE_SEED=false` in prod to prevent reseeding even if app data is empty.
 - Temp schema DB: use `darelwasl.schema/temp-db-with-schema!` with `(:datomic (darelwasl.config/load-config))` (override `:storage-dir` to `:mem`) to spin an ephemeral DB preloaded from `registries/schema.edn`; prefer `darelwasl.schema/with-temp-db` to ensure cleanup after checks.
 - Land registry importer: `clojure -M:import --file data/land/hrib_parcele_upisane_osobe.csv [--temp] [--dry-run]` loads schema, normalizes/dedupes the CSV (deterministic IDs), and transacts person/parcel/ownership into Datomic. `--temp` uses a :mem DB and cleans up; `--dry-run` parses/validates only.
 - Fixture seed: `clojure -M:seed` loads schema + fixtures into the configured dev-local DB; `clojure -M:seed --temp` seeds a temp Datomic (:mem by default). Use `darelwasl.fixtures/with-temp-fixtures` for tests/headless checks that need isolated data.
@@ -159,6 +160,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
   - `DATOMIC_SYSTEM=darelwasl`
   - `DATOMIC_DB_NAME=darelwasl`
+  - `ALLOW_FIXTURE_SEED=false` (prod: disable fixture reseed)
   - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
 - Systemd unit (`/etc/systemd/system/darelwasl.service`):
   ```

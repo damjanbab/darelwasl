@@ -6,11 +6,13 @@
             [darelwasl.config :as config]
             [darelwasl.db :as db]
             [darelwasl.schema :as schema])
-  (:import (java.io PushbackReader)))
+  (:import (java.io PushbackReader)
+           (java.util Date)))
 
 (def default-users-path "fixtures/users.edn")
 (def default-tags-path "fixtures/tags.edn")
 (def default-tasks-path "fixtures/tasks.edn")
+(def seed-marker-id :darelwasl/system)
 
 (defn- read-fixture
   [path]
@@ -36,11 +38,27 @@
   [task]
   (update task :task/assignee (fn [user-id] [:user/id user-id])))
 
+(defn seeded?
+  "Return true when the fixture seed marker is present."
+  [db]
+  (boolean (seq (d/q '[:find ?e
+                       :in $ ?id
+                       :where [?e :system/id ?id]]
+                     db seed-marker-id))))
+
+(defn- seed-marker-tx
+  "Seed marker entity; upserts on :system/id so reruns are idempotent."
+  []
+  {:system/id seed-marker-id
+   :system/seeded-at (Date.)
+   :entity/type :entity.type/system})
+
 (defn seed-conn!
   "Transact fixtures into an existing Datomic connection. Returns {:status :ok
   :users n :tags n :tasks n} or {:error e} on failure."
-  ([conn] (seed-conn! conn (load-fixtures)))
-  ([conn {:keys [users tags tasks]}]
+  ([conn] (seed-conn! conn (load-fixtures) {}))
+  ([conn fixtures] (seed-conn! conn fixtures {}))
+  ([conn {:keys [users tags tasks]} {:keys [add-marker?] :or {add-marker? true}}]
    (try
      (when (seq users)
        (d/transact conn {:tx-data users}))
@@ -48,6 +66,8 @@
        (d/transact conn {:tx-data tags}))
      (when (seq tasks)
        (d/transact conn {:tx-data (map task->tx tasks)}))
+     (when add-marker?
+       (d/transact conn {:tx-data [(seed-marker-tx)]}))
      {:status :ok
       :users (count users)
       :tags (count tags)
