@@ -215,6 +215,63 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
 - Home view: default after login; shows status counts, recent tasks (updated desc), tag highlights, and quick action to create a task. Uses `/api/tasks/recent` and `/api/tasks/counts`; loading/empty/error/ready states; the app switcher (hover/push desktop, tap mobile) provides navigation to Tasks.
 
+## Product Spec: Land Registry (People-to-Parcels + Summary Stats)
+- Goal: let authenticated users browse people and parcels (land lots) with cross-links and trustworthy summary stats, sourced from `hrib_parcele_upisane_osobe(1).csv`, without regressing existing apps.
+- Entities and identity:
+  - New entities: person, parcel, ownership share. Each uses `:entity/type` (`:entity.type/person`, `:entity.type/parcel`, `:entity.type/ownership`) plus stable UUIDs generated deterministically from source keys.
+  - Person identity: normalize name and address (trim/upper, collapse whitespace, remove commas/punctuation except separators) to form a deterministic key; store raw name/address and list position fields for traceability.
+  - Parcel identity: composite of `katastarska_opcina_id` + `k_c_br` (cadastral unit + parcel number). Persist cadastral name, parcel area (m2), parcel address/description, book number `broj_posjedovnog_lista`, and raw strings.
+  - Ownership: link person to parcel with share numerator/denominator (also keep raw string), record ordering fields (`upisana_osoba_redni_broj`, `upisana_osoba_pozicija_u_listi`), and effective area share (derived).
+- Import/refresh requirements (applies to `:cap/action/parcel-import` and fixtures):
+  - Idempotent importer that parses the CSV, validates headers, handles quoted/UTF-8 content, and logs counts. Deterministic IDs are based on normalized keys so re-runs do not duplicate data; a dry-run mode surfaces counts without writes.
+  - Dedupe rules: persons deduped by normalized name+address; parcels deduped by cadastral ID + parcel number; ownership deduped by (person, parcel, share fraction, list position).
+  - Integrity checks: per-parcel share totals must equal 1.0 +/- tolerance; rows with missing numerators/denominators are rejected with clear logs; invalid rows do not block the whole import if the share set stays consistent.
+  - Baseline expectations from the provided CSV: ~582 rows, ~65 parcels, ~7 people, total parcel area ~56,075 m2, 100% share coverage. Import should emit these counts (or differences) in the summary.
+  - Traceability: store source filename, load timestamp, and a `:source/ref` per row (e.g., CSV row hash) to allow replays and auditing; keep raw share string and address text.
+- Core user flows (land-registry app, gated behind a feature flag/nav entry):
+  - People-first: list/search people (name substring, normalized), sortable by parcel count and total owned area. Selecting a person shows their parcels with share %, area contribution, parcel address/cadastral info, and a jump to parcel detail.
+  - Parcel-first: list/filter parcels by cadastral number, parcel number, book number, area range, and ownership completeness; sortable by area and owner count. Selecting a parcel shows owners with share %, inferred area share, and a jump to person detail.
+  - Summary stats: cards for parcel count, person count, total area, share completeness, and top owners by area share; optional small chart/table for top parcels by area and counts by cadastral unit (single unit now but future-proof).
+  - Navigation: exposed via app switcher/nav only when `land-registry` flag is on and data import succeeded; cross-links between people and parcels stay within the land-registry context.
+- Performance and UX expectations:
+  - Lists are paginated/sliced (default 25–50 items) with server-side filters; target backend responses under 500ms for default queries; frontend renders under 250ms on seeded data.
+  - Explicit loading/empty/error states for people, parcels, and stats; errors should hint at data freshness or ingestion problems.
+  - Session/auth required; no public access. Feature flag keeps the view hidden until data and importer checks pass.
+- Acceptance criteria:
+  - After importing the provided CSV into a temp/dev DB, land-registry app shows all people and parcels with accurate share math (parcel share totals within tolerance) and summary stats matching importer counts (about 65 parcels, 7 people, ~56k m2).
+  - People detail shows each owned parcel with share % and area contribution; parcel detail shows all owners with share %; cross-links work both ways.
+  - Summary cards render (counts, area totals, share completeness, top owners) and remain responsive on desktop/mobile layouts defined in the design spec.
+  - Import can be re-run safely (idempotent), reports counts and errors, and stores source refs; failures surface in logs without corrupting existing data.
+
+## Design Spec: Land Registry (People-to-Parcels + Summary Stats)
+- Navigation and gating:
+  - Land Registry appears in the app switcher/nav only when the `land-registry` flag is on and data import has completed; otherwise it remains hidden. Within the view, cross-links between people and parcels do not leave the land-registry context.
+  - Keyboard/focus flow mirrors other apps: switcher trigger is focusable, menu items reachable by arrow/tab, Escape closes; land-registry lists and detail panes support tab order and visible focus.
+- Layouts and structure:
+  - Desktop: dual-pane shell with a left rail for primary list (toggle between People and Parcels tabs) and a right pane for detail + secondary content. Summary stats live in a top strip of cards; a compact filter bar sits above the list. Detail pane contains ownership tables and quick links.
+  - Mobile: stacked sections with a top summary card row (scrollable chips/cards), then list, then a slide-up detail sheet for selections. Filters collapse into a drawer/sheet; tabs remain visible for switching People/Parcels.
+- People-first view:
+  - List: dense cards with name, normalized address, parcel count, and total owned area; supports search (name substring, normalized) and sort (parcel count, area). Pagination or infinite scroll with clear page size; loading skeletons match card shapes.
+  - Detail: shows person header (name + address), summary chips (parcel count, total area share), table/grid of owned parcels with parcel number, cadastral id/name, book number, parcel address, area, share % and area contribution; each parcel row links to parcel detail.
+  - States: loading skeletons, empty copy (“No people found”), error with retry. Long lists keep sticky filter/search bar on scroll.
+- Parcel-first view:
+  - List: cards/rows showing parcel number, cadastral id/name, area, owner count, ownership completeness badge (complete/incomplete), and book number. Filters for cadastral number, parcel number, book number, area range, ownership completeness; sorts for area and owner count.
+  - Detail: parcel header with key identifiers and area; map placeholder slot (optional, not implemented now) plus ownership table with person name/address, share %, area share, list position/order fields. Each owner entry links to person detail.
+  - States: loading skeletons, empty copy (“No parcels match these filters”), error with retry.
+- Summary stats surface:
+  - Cards for parcel count, person count, total area, share completeness (percent of parcels summing to 1.0), and top owners by area share (mini list). Optional small chart/table for top parcels by area and counts by cadastral unit (future-proof even though single unit now).
+  - Cards show loading shimmer; empty gracefully hides charts if data absent; error state shows inline message and retry.
+- Styling and tone:
+  - Professional, data-forward styling using existing theme tokens (neutral surfaces, teal accent). Use subtle borders and shadows for cards; avoid playful colors. Typography sticks to current sans stack; emphasize numeric alignment for stats.
+  - Density: compact rows with clear spacing; truncate long names/addresses with tooltips where needed. Use badges for completeness and list positions.
+- Responsiveness and accessibility:
+  - Desktop supports 1200px+ with two columns; medium screens collapse stats into a single row and keep detail pane toggleable; mobile uses stacked cards and a slide-up detail sheet.
+  - All controls have aria-labels; tables are keyboard-navigable; focus states visible; contrasts meet WCAG AA using existing tokens.
+- Interactions and affordances:
+  - Filters and search debounce inputs to avoid excessive queries; clear-all filter control present. Clicking a list row selects and scrolls detail into view; detail has back/close affordance on mobile.
+  - Cross-links keep filter state when moving between people and parcels (e.g., from person detail to parcel detail and back).
+  - Feature flag respected for routes and app switcher entry; if data import missing, show a friendly “Data not yet loaded” empty state instead of broken lists.
+
 ## Design Spec: Home + App Switcher + Entity Primitives
 - Home (default post-login):
   - Layout (desktop): hero row with greeting + quick actions (e.g., “New task”), summary cards (status counts), recent tasks list (subset from tasks data), tag highlights (chips/cloud), optional small “recent activity” list using updated-at. Two-column where space allows; cards align to grid; padding consistent with theme tokens.

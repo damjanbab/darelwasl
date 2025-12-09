@@ -1,0 +1,232 @@
+# Run run-people-lands-001
+
+Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable IDs, and ship a professional people-to-lands browsing experience with summary stats, keeping specs/registries/checks aligned.
+
+## Tasks
+- Task ID: product-spec-people-lands
+  - Status: done (Codex, 2025-12-09 13:10 UTC)
+  - Objective: Capture the full product spec for land/people browsing and CSV ingestion (behaviors, success criteria, and guardrails) in `docs/system.md`.
+  - Scope: Define user journeys (search/filter people, navigate to their parcels/shares; start from parcel and see owners; jump between both), summary metrics required (e.g., parcel/owner counts, area totals, share completeness, per-municipality rollups), ingestion/refresh expectations for `hrib_parcele_upisane_osobe(1).csv` (dedupe/person identity rules, stable ID generation, idempotency, error handling), access/auth expectations, performance budgets, and acceptance criteria for launch.
+  - Out of Scope: Visual styling and component choices; implementation details for schema/import/backend/frontend.
+  - Capabilities Touched: Product spec for upcoming `:cap/schema/person`, `:cap/schema/parcel`, `:cap/schema/ownership`, `:cap/action/parcel-import`, `:cap/action/person-list`, `:cap/action/parcel-list`, `:cap/action/parcel-stats`, and `:cap/view/land-registry` (definition only).
+  - Parallel Safety:
+    - Exclusive Capabilities: system/product spec doc
+    - Shared/Read-only Capabilities: registries, existing specs
+    - Sequencing Constraints: precedes all implementation/design tasks in this run
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: schema/actions/views narrative; importer expectations; reuse entity/type discriminator
+    - New composability rules needed: document rule for generated IDs for external data and idempotent imports
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add land/people data surface and ingest external dataset
+    - Compatibility expectation: backward compatible (additive)
+    - Flag/Rollout plan: feature flag or route guard for new view until data/import validated
+  - Breaking/Deprecation:
+    - Breaking change? No (spec only)
+  - Dependencies: none
+  - Deliverables: Updated product spec section in `docs/system.md` covering flows, success metrics, ingestion rules, and gating/compatibility notes
+  - Proof Plan: Consistency review against dataset fields and existing app patterns
+  - Fixtures/Data Assumptions: Uses `hrib_parcele_upisane_osobe(1).csv` as the canonical source; call out open questions on data quality/dedup keys
+  - Protocol/System Updates: None beyond spec content
+  - FAQ Updates: Note any ingestion gotchas discovered during spec
+  - Tooling/Automation: None
+  - Reporting: Summarize product goals, flows, and acceptance criteria
+
+- Task ID: design-spec-people-lands
+  - Status: done (Codex, 2025-12-09 13:17 UTC)
+  - Objective: Define the UX/visual design for the people-to-lands experience (professional styling, navigation, responsive behavior) in `docs/system.md`.
+  - Scope: Layouts/states for people-first and parcel-first browsing (lists + detail panes), cross-link navigation, summary stats surface (cards/charts), search/filter affordances, data density choices, typography/color direction for a professional look, loading/empty/error/skeleton states, accessibility/responsive expectations (desktop/mobile), and integration into the existing shell/app switcher.
+  - Out of Scope: Backend contracts, data modeling, importer logic.
+  - Capabilities Touched: Design spec for `:cap/view/land-registry` (and related summary components) only.
+  - Parallel Safety:
+    - Exclusive Capabilities: design spec doc
+    - Shared/Read-only Capabilities: product spec, theme registry (read)
+    - Sequencing Constraints: after product-spec-people-lands; precedes frontend implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view/app layer; reuse entity primitives if suitable; add summary/stat card pattern if needed
+    - New composability rules needed: note any new visual pattern (e.g., stat cards, dual-pane nav) to encode in system doc
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: introduce new land registry UI
+    - Compatibility expectation: backward compatible with existing apps; additive
+    - Flag/Rollout plan: gate new view via feature flag/nav entry until ready
+  - Breaking/Deprecation:
+    - Breaking change? No (spec only)
+  - Dependencies: product-spec-people-lands
+  - Deliverables: Design narrative and component/state definitions in `docs/system.md` for land-registry view
+  - Proof Plan: Internal review for completeness and alignment to product spec
+  - Fixtures/Data Assumptions: Use sample slices of the HRIB dataset to ground layouts (people with multiple parcels, shared ownership)
+  - Protocol/System Updates: None
+  - FAQ Updates: Capture any design-time usability/accessibility gotchas
+  - Tooling/Automation: None
+  - Reporting: Summarize layout/interaction decisions and styling direction
+
+- Task ID: schema-people-lands
+  - Status: pending
+  - Objective: Define and register the Datomic schema for people, parcels, and ownership shares (including generated IDs) and prepare migration/backfill hooks.
+  - Scope: Add schema entries for `:cap/schema/person`, `:cap/schema/parcel`, `:cap/schema/ownership` (attributes: stable UUID ids, names/addresses, cadastral/parcel numbers, municipality/cadastral fields, area, share numerator/denominator, source raw fields, timestamps), set entity/type values, uniqueness and cardinality rules, history strategy, and compatibility flags; outline migration/backfill/seed plan; update `docs/system.md` and `registries/schema.edn`.
+  - Out of Scope: Import script implementation, API endpoints, UI wiring.
+  - Capabilities Touched: [:cap/schema/person :cap/schema/parcel :cap/schema/ownership] (new) plus entity base
+  - Parallel Safety:
+    - Exclusive Capabilities: schema registry and fixtures for new entities
+    - Shared/Read-only Capabilities: docs/system (read), existing seed helpers
+    - Sequencing Constraints: after product-spec-people-lands; before importer/backend/frontend tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: schema layer; reuse entity/type pattern and seed/migration helpers
+    - New composability rules needed: encode rule for external-source ids (store both stable UUID and source refs) if introduced
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add new entities for land registry data
+    - Compatibility expectation: backward and forward compatible (additive)
+    - Flag/Rollout plan: gate new schema usage to new features only
+  - Breaking/Deprecation:
+    - Breaking change? No; additive schema
+  - Dependencies: product-spec-people-lands
+  - Deliverables: Updated schema registry entries, system doc schema section, migration/backfill/seed note for new entities
+  - Proof Plan: Load schema into temp DB (per checks harness) and run `scripts/checks.sh registries` or equivalent schema validation
+  - Fixtures/Data Assumptions: Define fixture/sample rows that reflect CSV structure and shared ownership
+  - Protocol/System Updates: Note any new schema handling rule in `docs/system.md`
+  - FAQ Updates: Call out schema/uniqueness quirks if needed
+  - Tooling/Automation: Extend schema check harness if gaps appear
+  - Reporting: Summarize attributes, invariants, and compatibility story
+
+- Task ID: data-import-people-lands
+  - Status: pending
+  - Objective: Build an idempotent importer that maps `hrib_parcele_upisane_osobe(1).csv` into the new schema with generated/stable IDs and usable seeds/fixtures.
+  - Scope: Implement parsing/normalization of the CSV (handle quoting, encoding, whitespace), map to person/parcel/ownership entities with stable UUIDs (deterministic hash or stored mapping), dedupe people across rows, capture source raw refs, write temp DB loader/CLI entry point, integrate with seeds/fixtures for checks, and document how to run/verify the import. Ensure retry safety and logging of counts/errors.
+  - Out of Scope: Backend query endpoints, frontend rendering, heavy data cleaning beyond pragmatic normalization.
+  - Capabilities Touched: [:cap/action/parcel-import :cap/tooling/import-check] plus fixtures for new entities
+  - Parallel Safety:
+    - Exclusive Capabilities: import pipeline/tooling and fixture generation
+    - Shared/Read-only Capabilities: schema (read), docs (read)
+    - Sequencing Constraints: after schema-people-lands; before backend/frontend tasks that rely on data
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: actions/tooling; reuse seed/migration helpers
+    - New composability rules needed: importer must be idempotent and persist source reference fields for traceability
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: ingest external dataset
+    - Compatibility expectation: backward compatible (new data only)
+    - Flag/Rollout plan: run importer behind explicit command/flag; only enable new view once data present
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: schema-people-lands
+  - Deliverables: Import script/CLI, seed/temp DB support, mapping documentation, and logged sample run outputs
+  - Proof Plan: Run importer against temp DB using the provided CSV; verify record counts, dedupe behavior, and referential integrity; add check harness entry (e.g., `scripts/checks.sh import`)
+  - Fixtures/Data Assumptions: Uses `hrib_parcele_upisane_osobe(1).csv`; may add trimmed fixture subset for fast checks
+  - Protocol/System Updates: None unless new import pattern needs documenting
+  - FAQ Updates: Note normalization/dedupe rules and CSV quirks
+  - Tooling/Automation: Add import command and optional validation script
+  - Reporting: Summarize import strategy, counts, and any data caveats
+
+- Task ID: backend-people-lands-api
+  - Status: pending
+  - Objective: Expose backend actions/endpoints to browse people-to-parcels and summary stats, backed by imported data.
+  - Scope: Add read-only actions/endpoints for person list/detail (with parcels/shares), parcel list/detail (with owners/shares), search/filter params (name, cadastral info, area ranges), summary stats (counts, total area, top owners/municipalities), auth/session enforcement, pagination/sorting defaults, and contract docs. Reuse Datomic queries/helpers; keep responses lean; avoid mutations.
+  - Out of Scope: Data edits/mutations; non-essential analytics; offline sync.
+  - Capabilities Touched: [:cap/action/person-list :cap/action/person-detail :cap/action/parcel-list :cap/action/parcel-detail :cap/action/parcel-stats] (new) with integration to local DB
+  - Parallel Safety:
+    - Exclusive Capabilities: new backend actions/queries for land registry
+    - Shared/Read-only Capabilities: schema/imported data
+    - Sequencing Constraints: after data-import-people-lands; before frontend implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: actions layer; reuse existing action contract/test pattern and entity helpers
+    - New composability rules needed: maybe add guidance for read-only analytical endpoints if required
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: provide data access for new view
+    - Compatibility expectation: backward compatible (new endpoints only)
+    - Flag/Rollout plan: gate routes behind feature flag/nav entry
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: data-import-people-lands
+  - Deliverables: Backend routes/actions, registry updates, contract docs/tests, and sample queries
+  - Proof Plan: Action contract tests (fixtures), manual API smoke against imported temp DB, `scripts/checks.sh` subset covering actions
+  - Fixtures/Data Assumptions: Uses imported dataset or trimmed fixture subset
+  - Protocol/System Updates: None unless new action pattern emerges
+  - FAQ Updates: Record query/performance pitfalls if found
+  - Tooling/Automation: Extend checks to cover new endpoints if missing
+  - Reporting: Describe endpoints, parameters, and proof results
+
+- Task ID: frontend-people-lands-app
+  - Status: pending
+  - Objective: Implement the land-registry view/app with professional styling, enabling people-to-parcel navigation and summary stats.
+  - Scope: Build `:cap/view/land-registry` (routes + shell entry), people-first and parcel-first browsing surfaces with linked detail panes, search/filter UI, ownership share display, summary stats cards/charts, responsive layouts (desktop dual-pane, mobile stack/sheets), loading/empty/error states, accessibility (keyboard/focus/aria), and theme updates to achieve a professional look. Ensure it coexists with Home/Tasks and respects auth.
+  - Out of Scope: Data mutation flows; unrelated app navigation changes; offline caching.
+  - Capabilities Touched: [:cap/view/land-registry] (new) plus shared shell/theme (read)
+  - Parallel Safety:
+    - Exclusive Capabilities: land-registry view implementation and related theme tweaks
+    - Shared/Read-only Capabilities: backend endpoints (read), theme registry (read), shell nav (read)
+    - Sequencing Constraints: after design-spec-people-lands and backend-people-lands-api
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view/app layer; reuse entity primitives/state patterns; add stat card/chart pattern if needed
+    - New composability rules needed: document any new UI pattern introduced
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: add new browsing experience
+    - Compatibility expectation: backward compatible; existing apps unchanged
+    - Flag/Rollout plan: hide behind feature flag/app switcher entry until ready
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: design-spec-people-lands, backend-people-lands-api
+  - Deliverables: CLJS view/components, routes/nav wiring, styling/theme tokens, and inline docs where non-obvious
+  - Proof Plan: `npm run check`; UI smoke for people-to-parcel navigation and summary stats on imported data; visual spot-check against design spec
+  - Fixtures/Data Assumptions: Relies on imported dataset or seeded subset
+  - Protocol/System Updates: None
+  - FAQ Updates: Add notes for UI quirks/responsiveness if any
+  - Tooling/Automation: Optional stories/snapshots if helpful; otherwise reuse existing checks
+  - Reporting: Summarize UX coverage and proof outcomes
+
+- Task ID: registries-docs-checks-sync-people-lands
+  - Status: pending
+  - Objective: Align registries, system doc, FAQ, and checks with the new land-registry capabilities and importer.
+  - Scope: Add/update entries in `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, and `registries/tooling.edn`; ensure `docs/system.md` reflects final capabilities/patterns; add FAQ entries for importer/data quirks; extend `scripts/checks.sh` to cover schema load, importer validation, and land-registry view smokes (or document stubs if not feasible yet).
+  - Out of Scope: New feature work beyond alignment.
+  - Capabilities Touched: registries/docs/tooling for the new capabilities listed above
+  - Parallel Safety:
+    - Exclusive Capabilities: registries, system doc, FAQ, check harness
+    - Shared/Read-only Capabilities: codebase (read)
+    - Sequencing Constraints: after backend-people-lands-api and frontend-people-lands-app outputs are known
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: documentation/registry completeness; check harness patterns
+    - New composability rules needed: encode any new importer/view rule into `docs/system.md`
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: keep canonical sources accurate
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: backend-people-lands-api, frontend-people-lands-app
+  - Deliverables: Updated registries/system doc/FAQ and extended checks harness (or documented gaps)
+  - Proof Plan: `scripts/checks.sh registries` + importer/view checks; manual verification of registry entries
+  - Fixtures/Data Assumptions: Uses imported dataset or fixture subset for checks
+  - Protocol/System Updates: Add check harness expectations if expanded
+  - FAQ Updates: Yes—import/data gotchas and view access notes
+  - Tooling/Automation: Update checks harness; add any helper scripts registered in tooling
+  - Reporting: Detail registry/doc/check changes and proof results
+
+- Task ID: qa-release-people-lands
+  - Status: pending
+  - Objective: Run end-to-end proofs for the new land-registry stack and record outcomes for release readiness.
+  - Scope: Execute full check suite (`scripts/checks.sh all` plus any importer-specific target), run importer against a temp DB, smoke the land-registry UI (desktop/mobile nav, search, stats cards), and capture logs/screenshots/metrics. Note any remaining defects or data quality issues.
+  - Out of Scope: New feature development; only fixes if needed to make checks pass.
+  - Capabilities Touched: tooling/checks (read/execute) for new endpoints/view/importer
+  - Parallel Safety:
+    - Exclusive Capabilities: check harness runs and resulting artifacts
+    - Shared/Read-only Capabilities: registries/docs (read)
+    - Sequencing Constraints: after registries-docs-checks-sync-people-lands
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: proof/QA layer; reuse checks harness
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: confirm readiness of new capabilities
+    - Compatibility expectation: N/A (validation task)
+    - Flag/Rollout plan: confirm feature flag/default state per prior tasks
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: registries-docs-checks-sync-people-lands
+  - Deliverables: Proof results with links to logs/screenshots and noted defects (if any)
+  - Proof Plan: Run `scripts/checks.sh all` (with importer data in place) and manual UI smoke for land-registry flows
+  - Fixtures/Data Assumptions: Imported dataset or representative subset loaded before checks
+  - Protocol/System Updates: None
+  - FAQ Updates: Add QA findings that become gotchas
+  - Tooling/Automation: Ensure any new check commands are documented
+  - Reporting: Summarize pass/fail status and outstanding issues
+
+## Notes
+- Dataset location: `../hrib_parcele_upisane_osobe(1).csv` (ensure importer handles the filename with parentheses).
+- Open questions to resolve during specs: dedupe keys for people (name vs name+address), handling of missing/invalid share fractions, whether to expose raw cadastral IDs, and desired summary metrics (counts by cadastral unit vs municipality).
