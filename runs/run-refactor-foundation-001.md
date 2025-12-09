@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: frontend-shell-decomposition
-  - Status: in-progress (Codex, 2025-12-09 18:20 UTC)
+  - Status: done (Codex, 2025-12-09 18:57 UTC)
   - Objective: Split monolithic `src/darelwasl/app.cljs` into feature modules (shell, login, tasks, home, land, shared UI/state/http) without changing behavior.
   - Scope: Define module boundaries; extract shared components/state helpers; preserve event names, routes, UX states, theme toggle, and app switcher; keep CSS tokens usage intact.
   - Out of Scope: New features or visual redesign; backend/API changes.
