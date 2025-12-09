@@ -58,7 +58,8 @@
     (let [db (d/db conn)
           mapping [[:user/id :entity.type/user]
                    [:task/id :entity.type/task]
-                   [:tag/id :entity.type/tag]]
+                   [:tag/id :entity.type/tag]
+                   [:system/id :entity.type/system]]
           tx-data (->> mapping
                        (mapcat (fn [[ident type-kw]]
                                  (let [eids (map first (d/q '[:find ?e

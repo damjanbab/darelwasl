@@ -51,7 +51,7 @@
   - Dependencies: None.
   - Deliverables: Modularized HTTP namespaces with unchanged route contracts.
   - Proof Plan: `clojure -M:dev` health check; curl smoke for login/tasks/land; `scripts/checks.sh actions import`.
-  - Proofs: `clojure -M -e "(require 'darelwasl.http)"`; `./scripts/checks.sh actions import` (migration backfill check still failing: expected 11 types, added 10 — preexisting fixture/schema mismatch).
+  - Proofs: `clojure -M -e "(require 'darelwasl.http)"`; `./scripts/checks.sh actions import` ✅ (backfill fixed to include system seed marker).
   - Fixtures/Data Assumptions: Existing seeds/imported data.
   - Protocol/System Updates: Note router pattern in `docs/system.md` if needed.
   - FAQ Updates: Middleware ordering gotchas if discovered.
@@ -367,4 +367,4 @@
   - Reporting: Proof results and follow-ups.
 
 ## Notes
-- `./scripts/checks.sh actions import` currently fails migration backfill check (expected 11 types, observed 10) — preexisting delta between fixtures and :entity/type backfill.
+No open issues from this task. Migration backfill check is green after including :system/id in entity type backfill.
