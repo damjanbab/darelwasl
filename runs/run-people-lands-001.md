@@ -172,7 +172,7 @@ Goal: import the HRIB parcel ownership CSV into Datomic with generated/stable ID
   - Reporting: Summarize UX coverage and proof outcomes
 
 - Task ID: registries-docs-checks-sync-people-lands
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-09 14:59 UTC)
   - Objective: Align registries, system doc, FAQ, and checks with the new land-registry capabilities and importer.
   - Scope: Add/update entries in `registries/schema.edn`, `registries/actions.edn`, `registries/views.edn`, and `registries/tooling.edn`; ensure `docs/system.md` reflects final capabilities/patterns; add FAQ entries for importer/data quirks; extend `scripts/checks.sh` to cover schema load, importer validation, and land-registry view smokes (or document stubs if not feasible yet).
   - Out of Scope: New feature work beyond alignment.
