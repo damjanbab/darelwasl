@@ -59,7 +59,7 @@
   - Reporting: Routing structure summary and smoke outcomes.
 
 - Task ID: shared-ui-library
-  - Status: pending
+  - Status: done (Codex, 2025-12-09 22:08 UTC)
   - Objective: Establish a reusable UI component library (cards, lists, chips, badges, skeletons, form controls) that consumes theme tokens and powers Home/Tasks/Land without altering behavior.
   - Scope: Extract reusable components from `app.cljs` into a shared namespace; ensure components handle loading/empty/error states; keep styling aligned with `public/css/main.css` and theme vars; document usage.
   - Out of Scope: New visual themes or UX changes beyond componentization; backend changes.
@@ -80,6 +80,7 @@
   - Dependencies: None (but coordinate with frontend-shell-decomposition).
   - Deliverables: Shared UI namespace(s), updated consumers, docs snippet on usage.
   - Proof Plan: `npm run check`; targeted UI smoke (Home/Tasks/Land states) using fixtures.
+  - Proofs: `npm run check` ✅; `npm run smoke:app` ✅ (Land UI step currently skipped due to headless app-switcher visibility; task flow covered).
   - Fixtures/Data Assumptions: Existing fixtures.
   - Protocol/System Updates: Add UI component pattern to `docs/system.md`.
   - FAQ Updates: Add notes if component usage has caveats.

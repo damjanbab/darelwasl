@@ -6,6 +6,7 @@
             [darelwasl.features.tasks :as tasks-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
+            [darelwasl.ui.components :as ui]
             [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
             [re-frame.core :as rf]
@@ -121,16 +122,9 @@
 
 (defn- status-count-cards
   [{:keys [todo in-progress done]}]
-  [:div.summary-cards
-   [:div.card
-    [:div.card-label "To do"]
-    [:div.card-value (or todo 0)]]
-   [:div.card
-    [:div.card-label "In progress"]
-    [:div.card-value (or in-progress 0)]]
-   [:div.card
-    [:div.card-label "Done"]
-    [:div.card-value (or done 0)]]])
+  [ui/stat-group {:cards [{:label "To do" :value (or todo 0)}
+                          {:label "In progress" :value (or in-progress 0)}
+                          {:label "Done" :value (or done 0)}]}])
 
 (declare tag-chip)
 (declare entity-list task-card)
