@@ -24,6 +24,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Tooling/Checks Registry: `registries/tooling.edn`
 - Theme Registry: `registries/theme.edn`
 - Each entry should use a stable `:id` and the fields outlined below; keep registries in sync with the narrative sections.
+- Pending/new capabilities for site control: `:cap/view/control-panel`, `:cap/schema/content-page`, `:cap/schema/content-block`, `:cap/schema/content-tag`, `:cap/action/content-pages`, `:cap/action/content-blocks`, `:cap/action/content-tags` (stubs added).
 
 ### Schema (Datomic)
 - ID:

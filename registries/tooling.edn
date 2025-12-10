@@ -91,3 +91,12 @@
   :gotchas ["Runs importer against data/land/hrib_parcele_upisane_osobe.csv into a temp Datomic (:mem); dataset must be present."
             "Uses deterministic IDs; reruns are safe. Add --dry-run when calling manually to skip transact."]}
 ]
+
+ {:id :cap/tooling/site-process
+  :title "Public Site Process"
+  :version "v0"
+  :invocation {:dev "scripts/run-site.sh" :prod "systemd unit (site)"}
+  :scope {:writes? false :reads [:datomic]}
+  :determinism :high
+  :enforces {:capabilities [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}
+  :compatibility {:backward true :forward true :flags []}}

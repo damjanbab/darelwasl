@@ -96,3 +96,18 @@
                   :flags [:land-registry/enabled]}
   :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]}}
 ]
+
+ {:id :cap/view/control-panel
+  :title "Website Control Panel"
+  :version "v0"
+  :data {:sources [{:id :content/pages :source :cap/schema/content-page :pull [:content.page/id :content.page/title :content.page/path :content.page/visible? {:content.page/blocks [:content.block/id :content.block/title]}]}
+                   {:id :content/blocks :source :cap/schema/content-block :pull [:content.block/id :content.block/title :content.block/type :content.block/slug :content.block/order :content.block/visible? {:content.block/tag [:content.tag/id :content.tag/name]}]}
+                   {:id :content/tags :source :cap/schema/content-tag :pull [:content.tag/id :content.tag/name]}]}
+  :actions [:cap/action/content-pages :cap/action/content-blocks :cap/action/content-tags]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300 :pagination {:default-limit 25 :max-limit 200}}
+       :state-model :finite
+       :layout {:desktop "list + detail" :mobile "stacked"}
+       :toggles [:light-dark-switch]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}

@@ -352,3 +352,48 @@
             :views [:cap/view/land-registry]}
   :tooling []}
 ]
+
+ {:id :cap/action/content-blocks
+  :title "Content Blocks CRUD"
+  :version "v0"
+  :inputs {:content.block/id :uuid? :content.block/type :keyword? :content.block/title :string? :content.block/body :string? :content.block/slug :string? :content.block/order :long? :content.block/visible? :boolean? :content.block/tag :uuid-set?}
+  :outputs {:content.block/id :uuid}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:content.block/id :content.block/type]}
+  :idempotency {:strategy :dedupe-on :keys [:content.block/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/content-block :cap/schema/content-tag]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/content-pages
+  :title "Content Pages CRUD"
+  :version "v0"
+  :inputs {:content.page/id :uuid? :content.page/title :string? :content.page/path :string? :content.page/blocks :uuid-set? :content.page/visible? :boolean? :content.page/tag :uuid-set?}
+  :outputs {:content.page/id :uuid}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:content.page/id :content.page/path]}
+  :idempotency {:strategy :dedupe-on :keys [:content.page/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/content-tags
+  :title "Content Tags CRUD"
+  :version "v0"
+  :inputs {:content.tag/id :uuid? :content.tag/name :string?}
+  :outputs {:content.tag/id :uuid}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:content.tag/id :content.tag/name]}
+  :idempotency {:strategy :dedupe-on :keys [:content.tag/id :content.tag/name]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/content-tag]
+            :views [:cap/view/control-panel]}
+  :tooling []}

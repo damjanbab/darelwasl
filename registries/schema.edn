@@ -297,3 +297,48 @@
             :actions [:cap/action/parcel-import]
             :views [:cap/view/land-registry]}}
 ]
+
+ {:id :cap/schema/content-block
+  :title "Content Block"
+  :version "v0"
+  :attributes [{:ident :content.block/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Content block ID"}
+               {:ident :content.block/type :type :keyword :cardinality :one :doc "Block type (hero, section, card, etc.)"}
+               {:ident :content.block/title :type :string :cardinality :one :doc "Block title"}
+               {:ident :content.block/body :type :string :cardinality :one :doc "Block body/markdown"}
+               {:ident :content.block/slug :type :string :cardinality :one :unique :db.unique/value :doc "Slug for targeting/anchors"}
+               {:ident :content.block/order :type :long :cardinality :one :doc "Ordering within a page/section"}
+               {:ident :content.block/visible? :type :boolean :cardinality :one :doc "Visibility toggle"}
+               {:ident :content.block/tag :type :ref :cardinality :many :doc "Tags/categories"}]
+  :invariants {:require [:content.block/id :content.block/type]
+               :visibility-default true}
+  :history {:expect [:db.cardinality/one] :backfill []}
+  :compatibility {:backward true :forward true}
+  :related {:actions [:cap/action/content-blocks]
+            :views [:cap/view/control-panel]}}
+
+ {:id :cap/schema/content-page
+  :title "Content Page"
+  :version "v0"
+  :attributes [{:ident :content.page/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Page ID"}
+               {:ident :content.page/title :type :string :cardinality :one :doc "Page title"}
+               {:ident :content.page/path :type :string :cardinality :one :unique :db.unique/value :doc "Route path or slug"}
+               {:ident :content.page/blocks :type :ref :cardinality :many :doc "Ordered refs to blocks"}
+               {:ident :content.page/visible? :type :boolean :cardinality :one :doc "Visibility toggle"}
+               {:ident :content.page/tag :type :ref :cardinality :many :doc "Tags/categories"}]
+  :invariants {:require [:content.page/id :content.page/title :content.page/path]
+               :path-unique true}
+  :history {:expect [:db.cardinality/one] :backfill []}
+  :compatibility {:backward true :forward true}
+  :related {:actions [:cap/action/content-pages]
+            :views [:cap/view/control-panel]}}
+
+ {:id :cap/schema/content-tag
+  :title "Content Tag"
+  :version "v0"
+  :attributes [{:ident :content.tag/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Tag ID"}
+               {:ident :content.tag/name :type :string :cardinality :one :unique :db.unique/value :doc "Display name"}]
+  :invariants {:require [:content.tag/id :content.tag/name]}
+  :history {:expect [:db.cardinality/one] :backfill []}
+  :compatibility {:backward true :forward true}
+  :related {:actions [:cap/action/content-tags]
+            :views [:cap/view/control-panel]}}
