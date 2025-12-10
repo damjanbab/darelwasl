@@ -274,8 +274,11 @@
  {:id :cap/action/person-list
   :title "List people (land registry)"
   :version "v1"
-  :inputs {:q :string? :sort :keyword?}
-  :outputs {:people :vector}
+  :inputs {:q :string? :sort :keyword? :limit :long? :offset :long?}
+  :outputs {:people :vector
+            :pagination {:total :long
+                         :limit :long
+                         :offset :long}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [] :fields []}
@@ -304,8 +307,11 @@
  {:id :cap/action/parcel-list
   :title "List parcels"
   :version "v1"
-  :inputs {:cadastral-id :string? :parcel-number :string? :min-area :string? :max-area :string? :completeness :keyword? :sort :keyword?}
-  :outputs {:parcels :vector}
+  :inputs {:cadastral-id :string? :parcel-number :string? :min-area :string? :max-area :string? :completeness :keyword? :sort :keyword? :limit :long? :offset :long?}
+  :outputs {:parcels :vector
+            :pagination {:total :long
+                         :limit :long
+                         :offset :long}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [] :fields []}

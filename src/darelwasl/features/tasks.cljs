@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [darelwasl.state :as state]
             [darelwasl.ui.components :as ui]
+            [darelwasl.ui.entity :as entity]
             [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
             [re-frame.core :as rf]))
@@ -31,7 +32,7 @@
   (let [{:keys [filters status assignees]} @(rf/subscribe [:darelwasl.app/tasks])
         {:keys [items]} @(rf/subscribe [:darelwasl.app/tags])
         task-status status
-        {:keys [status priority tag assignee archived sort order]} filters
+        {:keys [status priority tag assignee archived sort order page-size]} filters
         available-assignees (if (seq assignees) assignees state/fallback-assignees)
         tag-options (cons {:id nil :label "All tags"}
                           (map (fn [t] {:id (str (:tag/id t)) :label (:tag/name t)}) items))]
@@ -70,72 +71,82 @@
       [:div.filter-group
        [:span.filter-label "Archived"]
        [:div.chip-row
-        [:button.button.secondary {:type "button"
-                                   :class (when (= archived false) "active")
-                                   :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived false])}
+        [ui/button {:variant :secondary
+                    :class (when (= archived false) "active")
+                    :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived false])}
          "Active"]
-        [:button.button.secondary {:type "button"
-                                   :class (when (= archived :all) "active")
-                                   :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived :all])}
+        [ui/button {:variant :secondary
+                    :class (when (= archived :all) "active")
+                    :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived :all])}
          "All"]
-        [:button.button.secondary {:type "button"
-                                   :class (when (= archived true) "active")
-                                   :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived true])}
+        [ui/button {:variant :secondary
+                    :class (when (= archived true) "active")
+                    :on-click #(rf/dispatch [:darelwasl.app/update-filter :archived true])}
          "Archived only"]]]
       [:div.filter-group
        [:span.filter-label "Sort"]
        [:div.sort-row
         [:select.filter-select
          {:value (name sort)
-          :on-change #(rf/dispatch [:darelwasl.app/set-sort (util/->keyword-or-nil (.. % -target -value))])}
+          :aria-label "Sort"
+         :on-change #(rf/dispatch [:darelwasl.app/set-sort (util/->keyword-or-nil (.. % -target -value))])}
          (for [opt [{:id :updated :label "Updated"}
                     {:id :due :label "Due date"}
                     {:id :priority :label "Priority"}]]
            ^{:key (name (:id opt))}
            [:option {:value (name (:id opt))} (:label opt)])]
-        [:button.button.secondary
-         {:type "button"
-          :on-click #(rf/dispatch [:darelwasl.app/toggle-order])}
-         (if (= order :asc) "Asc" "Desc")]]]]]))
-
-(defn task-card
-  [{:task/keys [id title description status priority tags due-date updated-at assignee archived?] :as task} selected? tag-index]
-  (let [tag-list (or tags [])
-        tag-names (map (fn [t] (or (:tag/name t) (get tag-index (:tag/id t)) "Tag")) tag-list)]
-    [:div.task-card {:class (when selected? "selected")
-                     :on-click #(rf/dispatch [:darelwasl.app/select-task id])}
-     [:div.task-card__header
-      [:div
-       [:div.title-row
-        [:h3 title]
-        [ui/status-chip {:task/status status :task/archived? archived?}]]
-       [:div.meta-row
-        (when due-date
-          [:span.meta (str "Due " (util/format-date due-date))])
-        (when updated-at
-          [:span.meta (str "Updated " (util/format-date updated-at))])]]
-      [ui/priority-chip priority]]
-     [:p.description (or (util/truncate description 140) "No description")]
-     [:div.task-card__footer
-      [ui/assignee-pill assignee]
-      [:div.tags
-       (for [t tag-names]
-         ^{:key (str id "-" t)}
-         [ui/tag-chip t])]]]))
+        [ui/button {:variant :secondary
+                    :on-click #(rf/dispatch [:darelwasl.app/toggle-order])}
+         (if (= order :asc) "Asc" "Desc")]]]
+      [:div.filter-group
+       [:span.filter-label "Page size"]
+       [:select.filter-select
+        {:value (or page-size 25)
+         :aria-label "Page size"
+         :on-change #(rf/dispatch [:darelwasl.app/set-task-page-size (js/parseInt (.. % -target -value) 10)])}
+        (for [n [10 25 50 100]]
+          ^{:key (str "page-size-" n)}
+          [:option {:value n} (str n " rows")])]]]]))
 
 (defn task-list []
-  (let [{:keys [items status error selected]} @(rf/subscribe [:darelwasl.app/tasks])
+  (let [tasks-state @(rf/subscribe [:darelwasl.app/tasks])
+        {:keys [items status error selected pagination]} tasks-state
         tag-state @(rf/subscribe [:darelwasl.app/tags])
-        tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (:items tag-state)))]
-    [ui/entity-list {:title (get-in state/task-entity-config [:list :title])
-                     :meta ((get-in state/task-entity-config [:list :meta-fn]) items)
-                     :items items
-                     :status status
-                     :error error
-                     :selected selected
-                     :key-fn :task/id
-                     :render-row (fn [t selected?]
-                                   [task-card t selected? tag-index])}]))
+        tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (:items tag-state)))
+        list-config (entity/list-config :entity.type/task)
+        limit (or (:limit pagination) (count items))
+        offset (or (:offset pagination) 0)
+        total (or (:total pagination) (count items))
+        page (or (:page pagination) 1)
+        pages (or (:pages pagination) (max 1 (int (Math/ceil (/ (max total 1) (double (max limit 1)))))))
+        current-count (count items)
+        start (if (pos? current-count) (inc offset) 0)
+        end (if (pos? current-count) (+ offset current-count) offset)
+        meta-str (str "Showing "
+                      (if (zero? total) 0 start)
+                      (when (pos? total) (str "–" end))
+                      " of "
+                      total
+                      " · Page "
+                      page
+                      " of "
+                      pages)]
+    [:<>
+     [ui/entity-list {:title (:title list-config)
+                      :meta meta-str
+                      :items items
+                      :status status
+                      :error error
+                      :selected selected
+                      :key-fn (or (:key list-config) :task/id)
+                      :render-row (entity/render-row :entity.type/task {:tag-index tag-index
+                                                                        :on-select #(rf/dispatch [:darelwasl.app/select-task (:task/id %)])})}]
+     [ui/pagination-controls {:limit limit
+                              :offset offset
+                              :total total
+                              :current-count current-count
+                              :on-prev #(rf/dispatch [:darelwasl.app/set-task-page (dec page)])
+                              :on-next #(rf/dispatch [:darelwasl.app/set-task-page (inc page)])}]]))
 
 (defn tag-selector
   [{:keys [selected-tags tag-state tag-entry]}]
@@ -202,6 +213,7 @@
   (let [{:keys [assignees]} @(rf/subscribe [:darelwasl.app/tasks])
         detail @(rf/subscribe [:darelwasl.app/task-detail])
         task @(rf/subscribe [:darelwasl.app/selected-task])
+        task-config (entity/detail-config :entity.type/task)
         {:keys [form mode status error]} detail
         detail-status status
         task-status (:status form)
@@ -210,18 +222,18 @@
         available-assignees (if (seq assignees) assignees state/fallback-assignees)]
     (let [placeholder (when (and (not create?) (nil? task))
                         [:div.placeholder-card
-                         [:strong (get-in state/task-entity-config [:detail :placeholder-title])]
-                         [:p (get-in state/task-entity-config [:detail :placeholder-copy])]])
+                         [:strong (:placeholder-title task-config)]
+                         [:p (:placeholder-copy task-config)]])
           title (if create?
-                  (get-in state/task-entity-config [:detail :create-title])
-                  (get-in state/task-entity-config [:detail :title]))
+                  (:create-title task-config)
+                  (:title task-config))
           badge (if create?
-                  (get-in state/task-entity-config [:detail :create-badge])
-                  (get-in state/task-entity-config [:detail :badge]))
+                  (:create-badge task-config)
+                  (:badge task-config))
           meta (if create?
-                 (get-in state/task-entity-config [:detail :meta-create])
+                 (:meta-create task-config)
                  (or (:task/title task)
-                     (get-in state/task-entity-config [:detail :meta-edit-default])))
+                     (:meta-edit-default task-config)))
           footer (case detail-status
                    :saving [:span.pill "Saving..."]
                    :success [:span.pill "Saved"]

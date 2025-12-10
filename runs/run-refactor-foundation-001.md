@@ -117,7 +117,7 @@
   - Reporting: Helper API summary and adoption status.
 
 - Task ID: entity-view-primitives
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 10:38 UTC)
   - Objective: Codify configurable entity list/detail primitives (fields, renderers, actions) usable across Tasks/Home/Land and future entities.
   - Scope: Define config maps per `:entity/type` for list/detail rendering; adapt existing views to consume configs; keep UX/behavior unchanged; document extension pattern.
   - Out of Scope: New entities or data fields; backend changes.
@@ -145,7 +145,7 @@
   - Reporting: Config pattern description and adoption coverage.
 
 - Task ID: perf-and-pagination-guardrails
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 11:29 UTC)
   - Objective: Enforce pagination/limits and add lightweight performance guardrails for task/land endpoints and UI lists.
   - Scope: Server-side defaults/limits for list endpoints (tasks, land people/parcels); frontend respects limits and surfaces paging controls; add simple timing/log hooks for slow requests (dev); document budgets from system doc.
   - Out of Scope: Full observability stack; heavy analytics.
@@ -173,7 +173,7 @@
   - Reporting: Paging defaults, perf guard outcomes.
 
 - Task ID: reliability-idempotency-proofing
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 11:52 UTC)
   - Objective: Strengthen idempotency/concurrency proofs for importer and task mutations; add tests covering retries/dedup invariants.
   - Scope: Tests for importer reruns (same counts/ids); tests for task/tag operations under duplicate/retry; doc idempotency guarantees; ensure action handlers enforce rules.
   - Out of Scope: New business logic.
@@ -201,7 +201,7 @@
   - Reporting: Proof results and fixes applied.
 
 - Task ID: always-correct-docs-and-gating
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 10:25 UTC)
   - Objective: Make the “always correct” invariant explicit in `docs/system.md` and protocol (task/run schema), and encode proof expectations (tests/checks) per capability.
   - Scope: Update invariants + patterns sections with required proofs for changes (schema/actions/views/importer/frontend); add task/run checklist items for proofs; document mandatory scripts (`scripts/checks.sh` targets) before merge; clarify fixtures/temporary DB usage to avoid flaky checks.
   - Out of Scope: Implementing new features.
@@ -229,7 +229,7 @@
   - Reporting: Summary of invariant clarifications and checklist updates.
 
 - Task ID: test-harness-and-ci-enforcement
-  - Status: pending
+  - Status: done (Codex, 2025-12-10)
   - Objective: Strengthen automated proof execution so every change runs the right tests/checks by default (local + CI).
   - Scope: Ensure `scripts/checks.sh all` (or equivalent matrix) is runnable locally and in CI; wire a CI workflow to run registries, schema, actions, import, and app-smoke; add lightweight a11y/snapshot hooks if available; optional pre-push helper script for local enforcement.
   - Out of Scope: New feature work; heavy infra.
@@ -257,7 +257,7 @@
   - Reporting: Proof matrix and CI setup summary.
 
 - Task ID: accessibility-and-regression-coverage
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 12:02 UTC)
   - Objective: Add lightweight a11y smoke and UI regression coverage for shared components and key flows (login, Home, Tasks, Land).
   - Scope: Integrate an a11y checker in Playwright smoke or add a small a11y script; add snapshot/smoke cases for shared UI components; document accessibility expectations.
   - Out of Scope: Full WCAG audit; redesigns.
@@ -285,7 +285,7 @@
   - Reporting: Coverage additions and results.
 
 - Task ID: observability-and-logging
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 12:02 UTC)
   - Objective: Add minimal observability hooks (structured logs and basic metrics counters/timers) for HTTP routes and importer to aid scalability/debugging without changing behavior.
   - Scope: Structured logs for key actions (auth, task mutations, land queries, importer runs); lightweight timing around handler/queries; optional counters in dev; document what’s logged and where.
   - Out of Scope: External monitoring stack; persistent metrics store.
@@ -313,7 +313,7 @@
   - Reporting: Logging additions and validation notes.
 
 - Task ID: registries-docs-alignment-refactor
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 11:49 UTC)
   - Objective: Reflect refactor patterns in `docs/system.md` and confirm registries remain accurate (no contract changes).
   - Scope: Update patterns/composability sections if new shared UI/router rules emerge; validate `registries/*.edn` entries.
   - Out of Scope: New capabilities or version bumps.
@@ -341,7 +341,7 @@
   - Reporting: Doc/registry alignment summary.
 
 - Task ID: proof-and-smoke
-  - Status: pending
+  - Status: done (Codex, 2025-12-10 12:13 UTC)
   - Objective: Run and record proofs after refactor.
   - Scope: `scripts/checks.sh registries schema actions import app-smoke`; manual curls for `/health`, `/api/login`, `/api/tasks`, `/api/land/people`.
   - Out of Scope: Fixing unrelated pre-existing issues (log and defer).
@@ -367,6 +367,34 @@
   - FAQ Updates: Only if new recurring issues surface.
   - Tooling/Automation: None beyond existing scripts.
   - Reporting: Proof results and follow-ups.
+
+- Task ID: ui-standards-hardening
+  - Status: pending
+  - Objective: Fully align Home, Tasks, and Land apps to the documented design standards (responsive, tokens-only, shared primitives, state handling, touch/keyboard, density/scroll minimization) and fix any UX gaps found.
+  - Scope: Audit each app against the new design checklist; implement required layout/styling/interaction changes using shared components and theme tokens; ensure mobile ≤768px single-column with no horizontal scroll, sticky headers where needed, tap targets ≥44px, stable keys, explicit loading/empty/error states, and preserved context (list/detail side-by-side desktop, stacked mobile). Update smoke/QA checklist if needed.
+  - Out of Scope: New features or backend changes.
+  - Capabilities Touched: :cap/view/home, :cap/view/tasks, :cap/view/land-registry (UI/UX only).
+  - Parallel Safety:
+    - Exclusive Capabilities: Frontend view/layout/styling for Home/Tasks/Land.
+    - Shared/Read-only Capabilities: Theme tokens and shared components.
+    - Sequencing Constraints: After shared-ui-library baseline; before proof-and-smoke signoff.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared UI primitives, layout shells, state handling; enforces tokens-only styling.
+    - New composability rules needed: None beyond the documented design standards.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: UX quality bar raised per design standards; rationale is consistency and usability across devices.
+    - Compatibility expectation (backward/forward/none): Backward compatible; visual refinements only.
+    - Flag/Rollout plan: N/A.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No breaking changes expected.
+  - Dependencies: shared-ui-library; design standards added to `docs/system.md`.
+  - Deliverables: Updated Home/Tasks/Land UIs meeting standards; checklist/result of audit; optional minor smoke script adjustments if needed for layout assertions.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`; manual mobile-width and desktop-width spot checks against checklist.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Add audit notes/checklist if adjusted; ensure standards remain referenced in `docs/system.md`.
+  - FAQ Updates: Add any recurring gotchas from the hardening pass.
+  - Tooling/Automation: Optional small Playwright assertions for horizontal scroll avoidance/tap-target presence if feasible.
+  - Reporting: Summary of gaps found/fixed per app; proof results.
 
 ## Notes
 No open issues from this task. Migration backfill check is green after including :system/id in entity type backfill.

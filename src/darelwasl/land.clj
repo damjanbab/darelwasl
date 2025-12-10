@@ -2,6 +2,37 @@
   (:require [clojure.string :as str]
             [datomic.client.api :as d]))
 
+(def ^:private default-list-limit 25)
+(def ^:private max-list-limit 200)
+
+(defn- parse-int
+  [v]
+  (cond
+    (nil? v) nil
+    (integer? v) v
+    (number? v) (int v)
+    (string? v) (try
+                  (Integer/parseInt (str/trim v))
+                  (catch Exception _ nil))
+    :else nil))
+
+(defn normalize-pagination
+  "Normalize limit/offset from params; returns {:limit ... :offset ...} or {:error {:status 400 :message ...}}."
+  [params]
+  (let [limit-raw (or (get params :limit) (get params "limit"))
+        offset-raw (or (get params :offset) (get params "offset"))
+        limit (or (parse-int limit-raw) default-list-limit)
+        offset (or (parse-int offset-raw) 0)]
+    (cond
+      (or (nil? limit) (<= limit 0)) {:error {:status 400
+                                              :message (str "Invalid limit; must be between 1 and " max-list-limit)}}
+      (> limit max-list-limit) {:error {:status 400
+                                        :message (str "Limit too high; max " max-list-limit)}}
+      (or (nil? offset) (neg? offset)) {:error {:status 400
+                                                :message "Invalid offset; must be 0 or greater"}}
+      :else {:limit limit
+             :offset offset})))
+
 (defn- normalize-search [s]
   (some-> s str/lower-case str/trim))
 
@@ -99,7 +130,7 @@
      :parcels-by-id parcels}))
 
 (defn people
-  [conn {:keys [q sort]}]
+  [conn {:keys [q sort limit offset]}]
   (let [db (d/db conn)
         base {:persons (pull-persons db)
               :parcels (pull-parcels db)
@@ -109,18 +140,24 @@
         filtered (cond->> persons
                    qn (filter (fn [{:keys [person/name person/address]}]
                                 (let [haystack (str/lower-case (str name " " address))]
-                                  (str/includes? haystack qn)))))
-        sorter (case (keyword sort)
-                 :area (fn [a b] (> (:person/owned-area-m2 a) (:person/owned-area-m2 b)))
-                 :parcels (fn [a b] (> (:person/parcel-count a) (:person/parcel-count b)))
-                 nil)]
-    (->> filtered
-         (sort-by (fn [p]
-                    (case (keyword sort)
-                      :area (- (:person/owned-area-m2 p))
-                      :parcels (- (:person/parcel-count p))
-                      (:person/name p))))
-         vec)))
+                                  (str/includes? haystack qn))))) 
+        sorted (->> filtered
+                    (sort-by (fn [p]
+                               (case (keyword sort)
+                                 :area (- (:person/owned-area-m2 p))
+                                 :parcels (- (:person/parcel-count p))
+                                 (:person/name p))))
+                    vec)
+        total (count sorted)
+        bounded-offset (min (or offset 0) (max 0 (- total (or limit default-list-limit))))
+        paged (->> sorted
+                   (drop bounded-offset)
+                   (take (or limit default-list-limit))
+                   vec)]
+    {:people paged
+     :pagination {:total total
+                  :limit (or limit default-list-limit)
+                  :offset bounded-offset}}))
 
 (defn person-detail
   [conn person-id]
@@ -137,7 +174,7 @@
         (assoc person :person/ownerships owned)))))
 
 (defn parcels
-  [conn {:keys [cadastral-id parcel-number min-area max-area completeness sort]}]
+  [conn {:keys [cadastral-id parcel-number min-area max-area completeness sort limit offset]}]
   (let [db (d/db conn)
         base {:persons (pull-persons db)
               :parcels (pull-parcels db)
@@ -158,8 +195,16 @@
         sorted (case (keyword sort)
                  :area (sort-by (comp - :parcel/area-m2) filtered)
                  :owners (sort-by (comp - :parcel/owner-count) filtered)
-                 filtered)]
-    (vec sorted)))
+                 filtered)
+        total (count sorted)
+        bounded-offset (min (or offset 0) (max 0 (- total (or limit default-list-limit))))
+        paged (->> sorted
+                   (drop bounded-offset)
+                   (take (or limit default-list-limit)))]
+    {:parcels (vec paged)
+     :pagination {:total total
+                  :limit (or limit default-list-limit)
+                  :offset bounded-offset}}))
 
 (defn parcel-detail
   [conn parcel-id]

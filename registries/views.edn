@@ -30,7 +30,9 @@
             :cap/action/tag-delete
             :cap/action/task-delete]
   :ux {:states [:loading :empty :ready :error]
-       :performance {:budget_ms 250}
+       :performance {:budget_ms 250
+                     :pagination {:default-limit 25
+                                  :max-limit 200}}
        :state-model :finite
        :layout {:desktop "list + side panel" :mobile "stacked with sheet"}
        :theme [:theme/default :theme/dark]
@@ -82,11 +84,13 @@
             :cap/action/parcel-list
             :cap/action/parcel-detail
             :cap/action/parcel-stats]
-  :ux {:states [:loading :ready :error]
-       :performance {:budget_ms 300}
-       :state-model :finite
-       :layout {:desktop "multi-column lists + detail panes + stats cards"
-                :mobile "stacked sections with sheet detail"}}
+ :ux {:states [:loading :ready :error]
+      :performance {:budget_ms 300
+                    :pagination {:default-limit 25
+                                 :max-limit 200}}
+      :state-model :finite
+      :layout {:desktop "multi-column lists + detail panes + stats cards"
+               :mobile "stacked sections with sheet detail"}}
   :compatibility {:backward true
                   :forward true
                   :flags [:land-registry/enabled]}

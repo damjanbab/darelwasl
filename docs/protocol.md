@@ -63,6 +63,7 @@ Core invariants: correctness > speed; no flaky or external-dependent proofs; bro
 - Dependencies (upstream tasks/capabilities; if missing, spawn/fix before proceeding)
 - Deliverables (artifacts/code changes expected)
 - Proof Plan (required checks to run; defaults apply)
+- Proof Plan must cite specific commands per capability touched (see `docs/system.md` Proof/Gating Expectations); default to `scripts/checks.sh all` if multiple layers change or there is uncertainty.
 - Fixtures/Data Assumptions (test data to use or add)
 - Protocol/System Updates (any required updates to `docs/protocol.md` or `docs/system.md`)
 - FAQ Updates (gotchas/notes to add to `docs/faq.md`)
@@ -89,7 +90,15 @@ If any field is missing/ambiguous, pause and correct the brief before coding.
 - Hermeticity: no external flakiness; use fixtures and pinned deps.
 - Registry completeness: required fields present (IDs, versions, compatibility/flags, adapters/contracts where relevant).
 - Use `scripts/checks.sh` as the entry point; extend stubs as needed.
+- Capability-driven gating (minimums; see `docs/system.md` for detail):
+  - Registries/docs-only: `scripts/checks.sh registries`.
+  - Schema changes: `scripts/checks.sh schema`; if importer/fixtures depend, also `scripts/checks.sh import` and `clojure -M:seed --temp`.
+  - Actions: `scripts/checks.sh actions`; if user-visible, add `scripts/checks.sh app-smoke`.
+  - Importer: `scripts/checks.sh import` (with `DATOMIC_STORAGE_DIR=:mem` or `--temp`); include `scripts/checks.sh schema` for attribute coverage.
+  - Views/CLJS/shared UI/state: `npm run check` + `scripts/checks.sh app-smoke`; if new API usage, add `scripts/checks.sh actions`.
+  - Tooling/check harness: `scripts/checks.sh all`.
 - Composability adherence: verify changes follow composability rules in `docs/system.md`; if new rules are needed, add them in the same PR/run.
+- Fixture/DB hygiene: prefer temp Datomic (`DATOMIC_STORAGE_DIR=:mem`, `--temp`, or `with-temp-db/with-temp-fixtures`) for checks to avoid leaking state across runs; never reuse a dirty dev DB for proofs.
 
 If a proof cannot run, do not bypass it; surface the blocker and stop.
 

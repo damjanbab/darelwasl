@@ -282,8 +282,12 @@ check_app_smoke() {
     exit 1
   fi
 
-  echo "Installing npm dependencies..."
-  (cd "$ROOT" && npm install --no-progress --no-audit)
+  if [[ "${SKIP_NPM_INSTALL:-}" = "1" ]]; then
+    echo "Skipping npm install (SKIP_NPM_INSTALL=1)..."
+  else
+    echo "Installing npm dependencies..."
+    (cd "$ROOT" && npm install --no-progress --no-audit)
+  fi
 
   echo "Ensuring Playwright Chromium is installed..."
   ensure_playwright_browser
@@ -324,6 +328,8 @@ check_import() {
   fi
   echo "Running land registry import against $file (temp DB)..."
   (cd "$ROOT" && clojure -M:import --file "$file" --temp)
+  echo "Checking importer idempotency..."
+  (cd "$ROOT" && clojure -M -m darelwasl.checks.idempotency)
 }
 
 target="${1:-all}"

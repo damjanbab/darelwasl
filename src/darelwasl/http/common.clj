@@ -1,5 +1,6 @@
 (ns darelwasl.http.common
-  (:require [darelwasl.db :as db]
+  (:require [clojure.tools.logging :as log]
+            [darelwasl.db :as db]
             [ring.middleware.session.memory :refer [memory-store]]))
 
 (def session-opts
@@ -37,6 +38,24 @@
                     (:details err))
     {:status (or success-status 200)
      :body result}))
+
+(defn wrap-logging
+  "Middleware to log request method/path, status, duration, and user id when present."
+  [handler]
+  (fn [request]
+    (let [start (System/nanoTime)
+          resp (handler request)
+          dur-ms (/ (double (- (System/nanoTime) start)) 1e6)
+          status (:status resp)
+          user-id (or (get-in request [:auth/session :user/id])
+                      (get-in request [:session :user/id]))]
+      (log/infof "http %s %s status=%s user=%s dur=%.1fms"
+                 (-> request :request-method name)
+                 (:uri request)
+                 status
+                 (or user-id "-")
+                 dur-ms)
+      resp)))
 
 (defn task-id-param
   [request]

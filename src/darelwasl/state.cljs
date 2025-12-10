@@ -38,7 +38,9 @@
    :assignee nil
    :archived false
    :sort :updated
-   :order :desc})
+   :order :desc
+   :page 1
+   :page-size 25})
 
 (def default-task-form
   {:id nil
@@ -92,14 +94,20 @@
   {:people-search ""
    :parcel-number ""
    :completeness nil
-   :sort :area})
+   :sort :area
+   :people-page 1
+   :people-page-size 25
+   :parcels-page 1
+   :parcels-page-size 25})
 
 (def default-land-state
   {:status :idle
-   :error nil
+  :error nil
    :people []
    :parcels []
    :stats nil
+   :pagination {:people {:total nil :limit (:people-page-size default-land-filters) :offset 0}
+                :parcels {:total nil :limit (:parcels-page-size default-land-filters) :offset 0}}
    :selected {:person nil :parcel nil}
    :filters default-land-filters})
 
@@ -134,18 +142,3 @@
   (-> db
       (assoc-in (conj path :status) :error)
       (assoc-in (conj path :error) message)))
-
-(def task-entity-config
-  {:type :entity.type/task
-   :list {:title "Tasks"
-          :key :task/id
-          :meta-fn (fn [items] (str (count items) " items"))
-          :badge "Tasks"}
-   :detail {:title "Task detail"
-            :create-title "Draft a new task"
-            :badge "Detail"
-            :create-badge "Compose"
-            :meta-create "Create a task with full fields and feature flag handling."
-            :meta-edit-default "Select a task to edit"
-            :placeholder-title "Select a task"
-            :placeholder-copy "Choose a task from the list or start a fresh one. Full create/edit is available here."}})

@@ -1,6 +1,7 @@
 (ns darelwasl.features.land
   (:require [clojure.string :as str]
             [darelwasl.ui.components :as ui]
+            [darelwasl.ui.entity :as entity]
             [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
             [re-frame.core :as rf]))
@@ -31,107 +32,102 @@
                                       [:span.meta "No owners yet"])}]}])
 
 (defn land-people-list []
-  (let [{:keys [people status error filters selected]} @(rf/subscribe [:darelwasl.app/land])
+  (let [{:keys [people status error filters selected pagination]} @(rf/subscribe [:darelwasl.app/land])
         current-search (:people-search filters)
-        selected-id (:person selected)]
-    [:div.panel
-     [:div.section-header
-      [:div
-       [:h3 "People"]
-       [:div.meta "Browse owners and their parcels"]]
-      [:div.controls
-       [:input.form-input {:type "search"
-                           :placeholder "Search people"
-                           :value current-search
-                           :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :people-search (.. % -target -value)])}]
-       [:button.button.secondary {:type "button"
-                                  :on-click #(rf/dispatch [:darelwasl.app/fetch-land])}
-        "Search"]]]
-     (case status
-       :loading [ui/land-loading-state "Loading people..."]
-       :error [ui/land-error-state error]
-       (if (seq people)
-         [:div.list
-          (for [p people]
-            (let [pid (:person/id p)
-                  selected? (= selected-id pid)]
-              ^{:key (str pid)}
-              [:button.list-row {:type "button"
-                                 :class (when selected? "selected")
-                                 :on-click #(rf/dispatch [:darelwasl.app/select-person pid])}
-               [:div
-                [:div.title (:person/name p)]
-                [:div.meta (:person/address p)]]
-               [:div.meta (str (or (:person/parcel-count p) 0) " parcels · "
-                               (js/Math.round (or (:person/owned-area-m2 p) 0)) " m²")]]))]
-         [ui/land-empty-state "No people match these filters" "Adjust search or refresh to reload."]))]))
+        selected-id (:person selected)
+        list-config (entity/list-config :entity.type/person)
+        pagination-state (or (:people pagination) {})
+        limit (or (:limit pagination-state) (:people-page-size filters) (count people))
+        offset (or (:offset pagination-state) 0)
+        total (or (:total pagination-state) (count people))
+        page (or (:page pagination-state) (:people-page filters) 1)
+        pages (or (:pages pagination-state) (max 1 (int (Math/ceil (/ (max total 1) (double (max limit 1)))))))
+        current-count (count people)
+        start (if (pos? current-count) (inc offset) 0)
+        end (if (pos? current-count) (+ offset current-count) offset)
+        meta-str (str "Showing "
+                      (if (zero? total) 0 start)
+                      (when (pos? total) (str "–" end))
+                      " of "
+                      total
+                      " · Page "
+                      page
+                      " of "
+                      pages)]
+    [:<>
+     [ui/entity-list {:title (:title list-config)
+                      :meta meta-str
+                      :items people
+                      :status status
+                      :error error
+                      :selected selected-id
+                      :panel-class "list-panel"
+                      :list-class "list"
+                      :key-fn (or (:key list-config) :person/id)
+                     :header-actions [[:input.form-input {:type "search"
+                                                          :placeholder "Search people"
+                                                          :value current-search
+                                                          :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :people-search (.. % -target -value)])}]
+                                      [:select.form-input {:value (or (:people-page-size filters) 25)
+                                                           :aria-label "People page size"
+                                                           :on-change #(rf/dispatch [:darelwasl.app/set-land-people-page-size (js/parseInt (.. % -target -value) 10)])}
+                                       (for [n [25 50 100]]
+                                         ^{:key (str "people-page-size-" n)}
+                                         [:option {:value n} (str n " rows")])]
+                                      [:button.button.secondary {:type "button"
+                                                                 :on-click #(rf/dispatch [:darelwasl.app/fetch-land])}
+                                       "Search"]]
+                      :loading-node [ui/land-loading-state "Loading people..."]
+                      :error-node [ui/land-error-state error]
+                      :empty-node [ui/land-empty-state "No people match these filters" "Adjust search or refresh to reload."]
+                      :render-row (entity/render-row :entity.type/person {:on-select #(rf/dispatch [:darelwasl.app/select-person %])})}]
+     [ui/pagination-controls {:limit limit
+                              :offset offset
+                              :total total
+                              :current-count current-count
+                              :on-prev #(rf/dispatch [:darelwasl.app/set-land-people-page (dec page)])
+                              :on-next #(rf/dispatch [:darelwasl.app/set-land-people-page (inc page)])}]]))
 
 (defn land-person-detail []
   (let [{:keys [selected-person status]} @(rf/subscribe [:darelwasl.app/land])]
-    [:div.panel.task-preview
-     [:div.section-header
-      [:div
-       [:h3 "Person detail"]
-       [:div.meta "Parcels and shares"]]]
-     (cond
-       (= status :loading) [ui/land-loading-state "Loading person detail..."]
-       (nil? selected-person) [:div.placeholder-card
-                               [:strong "Select a person"]
-                               [:p "Choose a person to see owned parcels."]]
-       :else
-       (let [{:keys [person/name person/address person/ownerships person/parcel-count person/owned-area-m2]} selected-person
-             ownerships (sort-by (fn [o] (- (or (:ownership/area-share-m2 o) 0))) ownerships)]
-         [:div
-          [:div.detail-meta
-           [:h4 name]
-           [:div.meta address]
-           [:div.chip-row
-            [:span.chip (str "Parcels: " (or parcel-count 0))]
-            [:span.chip (str "Owned area: " (util/format-area owned-area-m2) " m²")]]]
-          (if (seq ownerships)
-            [:<>
-             [ui/stat-group {:variant :narrow
-                             :cards [{:label "Parcels" :value (or parcel-count 0)}
-                                     {:label "Owned area" :value (str (util/format-area owned-area-m2) " m²")}
-                                     {:label "Holdings" :value (str (count ownerships) " shares")}]}]
-             [:div {:style {:display "grid"
-                            :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
-                            :gap "12px"}}
-              (for [o ownerships
-                    :let [pid (:parcel/id o)
-                          share-total (:parcel/share-total o)
-                          complete? (and share-total (< (js/Math.abs (- share-total 1.0)) 1e-6))]]
-                ^{:key (str pid "-" (:ownership/share o))}
-                [:div.card
-                 [:div.card-label (util/parcel-title o)]
-                 [:div.card-value (or (:parcel/cadastral-name o) (:parcel/address o) "")]
-                 (when (:parcel/address o) [:div.meta (:parcel/address o)])
-                 [:div.meta (str "Book " (or (:parcel/book-number o) "–"))]
-                 [:div.chip {:class (if complete? "status success" "status warning")}
-                  (if complete? "Complete" "Incomplete")]
-                 [:div.card-row
-                  [:span "Share"]
-                  [:strong (util/pct (:ownership/share o))]]
-                 [:div.card-row
-                  [:span "Area"]
-                  [:strong (str (util/format-area (:ownership/area-share-m2 o)) " m²")]]
-                 [:button.button.secondary {:type "button"
-                                            :on-click #(rf/dispatch [:darelwasl.app/select-parcel pid])}
-                  "View parcel"]])]]
-            [:div.meta "No parcels attached"])]))]))
+    (when-let [component (entity/detail-component :entity.type/person)]
+      [component {:selected-person selected-person
+                  :status status
+                  :on-select-parcel #(rf/dispatch [:darelwasl.app/select-parcel %])}])))
 
 (defn land-parcel-list []
-  (let [{:keys [parcels status error filters selected]} @(rf/subscribe [:darelwasl.app/land])
+  (let [{:keys [parcels status error filters selected pagination]} @(rf/subscribe [:darelwasl.app/land])
         selected-id (:parcel selected)
-        {:keys [parcel-number completeness]} filters]
-    [ui/entity-list {:title "Parcels"
-                     :meta "Cadastral lots and owners"
-                     :items parcels
-                     :status status
-                     :error error
-                     :selected selected-id
-                     :panel-class "list-panel"
-                     :list-class "list"
+        {:keys [parcel-number completeness]} filters
+        list-config (entity/list-config :entity.type/parcel)
+        pagination-state (or (:parcels pagination) {})
+        limit (or (:limit pagination-state) (:parcels-page-size filters) (count parcels))
+        offset (or (:offset pagination-state) 0)
+        total (or (:total pagination-state) (count parcels))
+        page (or (:page pagination-state) (:parcels-page filters) 1)
+        pages (or (:pages pagination-state) (max 1 (int (Math/ceil (/ (max total 1) (double (max limit 1)))))))
+        current-count (count parcels)
+        start (if (pos? current-count) (inc offset) 0)
+        end (if (pos? current-count) (+ offset current-count) offset)
+        meta-str (str "Showing "
+                      (if (zero? total) 0 start)
+                      (when (pos? total) (str "–" end))
+                      " of "
+                      total
+                      " · Page "
+                      page
+                      " of "
+                      pages)]
+    [:<>
+     [ui/entity-list {:title (:title list-config)
+                      :meta meta-str
+                      :items parcels
+                      :status status
+                      :error error
+                      :selected selected-id
+                      :panel-class "list-panel"
+                      :list-class "list"
+                      :key-fn (or (:key list-config) :parcel/id)
                      :header-actions [[:input.form-input {:type "search"
                                                           :placeholder "Parcel number"
                                                           :value parcel-number
@@ -142,85 +138,32 @@
                                        (for [{:keys [id label]} land-completeness-options]
                                          ^{:key (str "comp-" (or (some-> id name) "all"))}
                                          [:option {:value (or (some-> id name) "")} label])]
+                                      [:select.form-input {:value (or (:parcels-page-size filters) 25)
+                                                           :aria-label "Parcels page size"
+                                                           :on-change #(rf/dispatch [:darelwasl.app/set-land-parcels-page-size (js/parseInt (.. % -target -value) 10)])}
+                                       (for [n [25 50 100]]
+                                         ^{:key (str "parcels-page-size-" n)}
+                                         [:option {:value n} (str n " rows")])]
                                       [:button.button.secondary {:type "button"
                                                                  :on-click #(rf/dispatch [:darelwasl.app/fetch-land])}
                                        "Apply"]]
-                     :loading-node [ui/land-loading-state "Loading parcels..."]
-                     :error-node [ui/land-error-state error]
-                     :empty-node [ui/land-empty-state "No parcels match these filters" "Adjust parcel filters or refresh."]
-                     :render-row (fn [p selected?]
-                                   (let [pid (:parcel/id p)
-                                         complete? (< (js/Math.abs (- (:parcel/share-total p 0.0) 1.0)) 1e-6)]
-                                     [ui/list-row {:title (str (:parcel/cadastral-id p) "/" (:parcel/number p))
-                                                   :meta (:parcel/address p)
-                                                   :description (if complete? "Complete" "Incomplete")
-                                                   :trailing (str (or (:parcel/owner-count p) 0) " owners · "
-                                                                  (js/Math.round (or (:parcel/area-m2 p) 0)) " m²")
-                                                   :selected? selected?
-                                                   :on-click #(rf/dispatch [:darelwasl.app/select-parcel pid])}]))}]))
+                      :loading-node [ui/land-loading-state "Loading parcels..."]
+                      :error-node [ui/land-error-state error]
+                      :empty-node [ui/land-empty-state "No parcels match these filters" "Adjust parcel filters or refresh."]
+                      :render-row (entity/render-row :entity.type/parcel {:on-select #(rf/dispatch [:darelwasl.app/select-parcel %])})}]
+     [ui/pagination-controls {:limit limit
+                              :offset offset
+                              :total total
+                              :current-count current-count
+                              :on-prev #(rf/dispatch [:darelwasl.app/set-land-parcels-page (dec page)])
+                              :on-next #(rf/dispatch [:darelwasl.app/set-land-parcels-page (inc page)])}]]))
 
 (defn land-parcel-detail []
   (let [{:keys [selected-parcel status]} @(rf/subscribe [:darelwasl.app/land])]
-    [:div.panel.task-preview
-     [:div.section-header
-      [:div
-       [:h3 "Parcel detail"]
-       [:div.meta "Owners and shares"]]]
-     (cond
-       (= status :loading) [ui/land-loading-state "Loading parcel detail..."]
-       (nil? selected-parcel) [:div.placeholder-card
-                               [:strong "Select a parcel"]
-                               [:p "Choose a parcel to see ownership."]]
-       :else
-       (let [cadastral-id (:parcel/cadastral-id selected-parcel)
-             cadastral-name (:parcel/cadastral-name selected-parcel)
-             number (:parcel/number selected-parcel)
-             address (:parcel/address selected-parcel)
-             book (:parcel/book-number selected-parcel)
-             area (:parcel/area-m2 selected-parcel)
-             owners (:parcel/owners selected-parcel)
-             share-total (:parcel/share-total selected-parcel)
-             complete? (and share-total (< (js/Math.abs (- share-total 1.0)) 1e-6))
-             owners-sorted (sort-by (fn [o]
-                                      [(or (:ownership/list-order o) 1e9)
-                                       (or (:ownership/position-in-list o) 1e9)
-                                       (- (or (:ownership/share o) 0))])
-                                    owners)]
-         [:div
-          [:div.detail-meta
-           [:h4 (str cadastral-id "/" number)]
-          [:div.meta (str (or cadastral-name "") (when (and cadastral-name address) " · ") (or address ""))]
-           [:div.meta (str "Book " (or book "–"))]
-           [:div.chip {:class (if complete? "status success" "status warning")}
-            (if complete? "Complete shares" "Incomplete shares")]]
-          [ui/stat-group {:variant :narrow
-                          :cards [{:label "Owners" :value (or (count owners) 0)}
-                                  {:label "Parcel area" :value (str (util/format-area area) " m²")}
-                                  {:label "Share total"
-                                   :value (if share-total (util/pct share-total) "—")
-                                   :meta "Expected 100% ± tolerance"}]}]
-          (if (seq owners-sorted)
-            [:div {:style {:display "grid"
-                           :gridTemplateColumns "repeat(auto-fill,minmax(260px,1fr))"
-                           :gap "12px"}}
-             (for [o owners-sorted]
-               ^{:key (str (:person/id o) "-" (:ownership/share o))}
-               [:div.card
-                [:div.card-label (util/person-title o)]
-                [:div.card-value (or (:person/address o) "")]
-                [:div.chip-row
-                 (when (:ownership/list-order o) [:span.chip (str "List " (:ownership/list-order o))])
-                 (when (:ownership/position-in-list o) [:span.chip (str "Pos " (:ownership/position-in-list o))])]
-                [:div.card-row
-                 [:span "Share"]
-                 [:strong (util/pct (:ownership/share o))]]
-                [:div.card-row
-                 [:span "Area"]
-                 [:strong (str (util/format-area (:ownership/area-share-m2 o)) " m²")]]
-                [:button.button.secondary {:type "button"
-                                           :on-click #(rf/dispatch [:darelwasl.app/select-person (:person/id o)])}
-                 "View person"]])]
-            [:div.meta "No owners recorded"])]))]))
+    (when-let [component (entity/detail-component :entity.type/parcel)]
+      [component {:selected-parcel selected-parcel
+                  :status status
+                  :on-select-person #(rf/dispatch [:darelwasl.app/select-person %])}])))
 
 (defn land-view []
   (let [{:keys [status stats]} @(rf/subscribe [:darelwasl.app/land])]

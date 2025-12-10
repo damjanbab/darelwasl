@@ -104,6 +104,10 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Integrations: use adapter pattern; isolate external contracts; provide fakes/fixtures; document failure modes and retries.
 - Tooling: prefer deterministic, reproducible scripts; pin dependencies; record invocation and scope in the registry.
 - Testing: use fixture-driven tests; spin a temp Datomic for schema/action checks; run headless app boot smoke; avoid flaky external calls.
+- Entity view primitives: define list/detail render configs per `:entity/type` in `src/darelwasl/ui/entity.cljs` (title/meta/key + render-row + detail shells). Home/Tasks/Land must consume these instead of ad-hoc list/detail code; add new entity configs rather than hard-coding UI per feature. Stable keys come from the config `:key`; row renderers must be pure and state-free.
+- Pagination/perf guardrails: list endpoints (tasks; land people/parcels) default to `limit=25`, `offset=0`, with a max limit of 200 and server-side bounding. Clients must send limit/offset (or page/page-size in filters) and render pagination controls (shared `pagination-controls` UI). Responses return `:pagination {:total :limit :offset :page :returned}`; update UI state from these fields.
+- Importer idempotency: land importer uses deterministic IDs for person/parcel/ownership rows; re-running the same CSV against the same DB must not change counts or create duplicates. Proof is enforced via `scripts/checks.sh import` (runs importer twice in a temp DB and compares counts).
+- Observability: HTTP handlers emit structured logs with method/path/status/user-id/duration; importer logs duration and counts. Keep logs low-noise and deterministic; timing is best-effort for local diagnosis, not SLOs.
 - Entity modeling (types/categories):
   - Every entity has exactly one primary `:entity/type`; do not make one entity “be” multiple types.
   - Use a dedicated subtype/kind field when behavior or schema differs; use tags for fuzzy, cross-cutting labels only.
@@ -112,6 +116,32 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Roles belong on the relationship (or a relationship entity), not on the entity’s primary type.
   - Add structure because it answers a real query; avoid speculative categories. Start coarse and split later rather than over-fragment early.
   - New types must not break existing queries/views; defaults should be sensible when subtype/kind is absent.
+- Design standards (UI):
+  - Use shared primitives: `form-input`/`select-field`/`button`, `entity-list` + `list-row`, `task-card`, `stat-group`/`stat-card`, `tag-highlights`, `assignee-pill`, land detail shells (`land-person-detail-view`, `land-parcel-detail-view`), and loading/empty/error states (`home-loading`, `loading-state`, `land-*`). Do not hand-roll new variants without extending the shared component lib.
+  - Tokens only: colors, spacing, radius, and typography must come from the theme CSS variables; no hardcoded hex/rgb/px outside the spacing/typography scale. Reuse existing classes (`panel`, `card`, `summary-cards`, `chip`, `badge`, `button`, `list-row`) instead of custom styling.
+  - Layout defaults: two/three-column shells use the existing CSS grid (`home-layout`, `tasks-layout`, `land-layout`) and stack to single column on narrow screens; avoid horizontal scroll and fixed widths. Controls live in `.section-header` with right-aligned actions; footers via `app-shell`.
+  - State handling: every view/list/detail renders explicit loading/empty/error UI (shared components) and must be resilient to empty collections. Keys for list items must be stable (entity IDs) with a deterministic fallback.
+  - Accessibility & interaction: keep focusable controls as `<button>/<input>/<select>` with existing classes; ensure app switcher remains keyboard/focus friendly; avoid side effects in render (no async work in component bodies—dispatch effects in events/subs).
+  - Responsive layout: ≤768px stacks to single column; >768px can use 2–3 columns. No horizontal scroll; cards wrap. Primary list/detail sit side-by-side on desktop, stack on mobile.
+  - Navigation & context: app switcher/top bar always present; detail stays in-place (no route change). Filters persist when switching routes. Mobile detail offers “Back to list.”
+  - Scrolling & density: keep filters/controls in headers (no full-page drawers); paginate or chunk long lists; keep rows compact (one title + one meta line; truncate long text).
+  - Touch & keyboard: tap targets ≥44px height; 12px spacing between controls. All controls tab-focusable; ESC closes menus; Enter/Space activates. Hover-only affordances must have visible touch equivalents.
+  - Forms: inline where possible; labels above inputs; show inline validation; prefill sensible defaults to reduce friction.
+  - Lists & detail: `entity-list`/`list-row` for lists; `stat-group` for key metrics; detail actions near the top, with critical actions repeated near the bottom if the panel is long.
+  - Performance & feedback: avoid blocking spinners for quick toggles; use optimistic UI when safe; show progress text for long operations.
+  - Content hierarchy: section title + meta + actions, then content. Icons optional; never the sole label.
+
+## Proof/Gating Expectations (Always-Correct)
+- Always document proofs (command + result) in the task run file/PR. No merge without green proofs for the capabilities you touched. If multiple layers change, default to `scripts/checks.sh all`.
+- Capability-specific minimum proofs:
+  - Registries/docs-only: `scripts/checks.sh registries`.
+  - Schema changes (new attrs/enums/migrations): update `registries/schema.edn` + this doc; run `scripts/checks.sh schema`. If importer/fixtures rely on the change, also run `scripts/checks.sh import` and `clojure -M:seed --temp`.
+  - Actions (contracts/side effects): update `registries/actions.edn`; run `scripts/checks.sh actions`. If user-facing flows call the action, also run `scripts/checks.sh app-smoke`.
+  - Importer changes: `scripts/checks.sh import` (use `DATOMIC_STORAGE_DIR=:mem` or `--temp`), plus `scripts/checks.sh schema` to confirm attribute coverage.
+  - Views/CLJS/shared UI/state: `npm run check` and `scripts/checks.sh app-smoke`. If new API usage was added, include `scripts/checks.sh actions`.
+  - Tooling/check harness updates: `scripts/checks.sh all`.
+- Fixtures/temp DB discipline: prefer ephemeral DBs for checks (`DATOMIC_STORAGE_DIR=:mem` or `--temp` flags). Do not reuse a dev-local DB between checks. For Clojure tests, use `darelwasl.fixtures/with-temp-fixtures` or `darelwasl.schema/with-temp-db` helpers.
+- Port hygiene: smoke checks bind the backend to `APP_PORT` (default 3100) and front-end dev to 3000; free these ports or override before running proofs.
 
 ## Technology Baseline
 - Backend: Clojure + Datomic Local (dev) with no auth/creds. Use Datomic dev-local style connection (no cloud, no passwords).

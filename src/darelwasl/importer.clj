@@ -130,7 +130,8 @@
   [{:keys [conn dry-run? file]}]
   (let [rows (read-rows file)
         {:keys [persons parcels ownerships stats]} (prepare-import rows)
-        tx-persons-parcels (concat persons parcels)]
+        tx-persons-parcels (concat persons parcels)
+        start (System/nanoTime)]
     (log/infof "Prepared import (persons=%s parcels=%s ownerships=%s) from %s"
                (:persons stats) (:parcels stats) (:ownerships stats) file)
     (when-not dry-run?
@@ -138,8 +139,10 @@
       (d/transact conn {:tx-data tx-persons-parcels})
       (log/info "Transacting ownerships...")
       (d/transact conn {:tx-data ownerships})
-      (log/info "Import transaction complete"))
-    (merge stats {:status :ok})))
+      (let [dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
+        (log/infof "Import transaction complete dur=%.1fms" dur-ms)))
+    (merge stats {:status :ok
+                  :duration-ms (/ (double (- (System/nanoTime) start)) 1e6)})))
 
 (defn run-import
   "Entry point for the importer. Options:

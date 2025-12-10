@@ -1,0 +1,61 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Clojure CLI
+        uses: DeLaGuardo/setup-clojure@11.1
+        with:
+          cli: '1.11.1.1435'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ hashFiles('**/deps.edn') }}
+          restore-keys: |
+            maven-
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            npm-
+
+      - name: Install npm deps
+        run: npm ci --no-audit --no-progress
+
+      - name: Install Playwright deps
+        run: npx playwright install-deps chromium
+
+      - name: Run full checks
+        env:
+          DATOMIC_STORAGE_DIR: :mem
+          SKIP_NPM_INSTALL: "1"
+        run: |
+          scripts/checks.sh all

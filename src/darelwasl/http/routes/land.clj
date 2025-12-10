@@ -6,8 +6,13 @@
 (defn list-people-handler
   [state]
   (fn [request]
-    {:status 200
-     :body {:people (land/people (get-in state [:db :conn]) (:query-params request))}}))
+    (let [{:keys [error] :as pagination} (land/normalize-pagination (:query-params request))]
+      (if error
+        (common/error-response (get-in error [:status] 400) (:message error))
+        {:status 200
+         :body (land/people (get-in state [:db :conn])
+                            (merge (:query-params request)
+                                   (select-keys pagination [:limit :offset])))}))))
 
 (defn person-detail-handler
   [state]
@@ -25,8 +30,13 @@
 (defn list-parcels-handler
   [state]
   (fn [request]
-    {:status 200
-     :body {:parcels (land/parcels (get-in state [:db :conn]) (:query-params request))}}))
+    (let [{:keys [error] :as pagination} (land/normalize-pagination (:query-params request))]
+      (if error
+        (common/error-response (get-in error [:status] 400) (:message error))
+        {:status 200
+         :body (land/parcels (get-in state [:db :conn])
+                             (merge (:query-params request)
+                                    (select-keys pagination [:limit :offset])))}))))
 
 (defn parcel-detail-handler
   [state]

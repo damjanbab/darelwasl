@@ -8,6 +8,7 @@ const { request } = require("playwright");
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
 const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
+const A11Y_REPORT_PATH = path.join(ARTIFACT_DIR, "app-a11y.json");
 
 async function loginViaApi(context) {
   const api = await request.newContext({ baseURL: BASE_URL });
@@ -121,12 +122,40 @@ async function run() {
   const newDescription = "Created via smoke test to verify save/load.";
   const newTag = `smoke-tag-${Date.now()}`;
 
+  async function a11ySmoke() {
+    try {
+      const tree = await page.accessibility.snapshot({ interestingOnly: true });
+      const missing = [];
+      const walk = (node) => {
+        if (!node) return;
+        const role = node.role;
+        const name = (node.name || "").trim();
+        if (["button", "link", "textbox", "combobox", "checkbox"].includes(role)) {
+          if (!name) {
+            missing.push({ role, snippet: node.html || node.name || "(unnamed)" });
+          }
+        }
+        if (node.children) {
+          node.children.forEach(walk);
+        }
+      };
+      walk(tree);
+      fs.writeFileSync(A11Y_REPORT_PATH, JSON.stringify(tree, null, 2));
+      if (missing.length) {
+        throw new Error(`A11y smoke found unnamed controls: ${JSON.stringify(missing.slice(0, 5))}`);
+      }
+    } catch (err) {
+      throw new Error(`Accessibility snapshot failed: ${err.message || err}`);
+    }
+  }
+
   try {
     await page.goto(BASE_URL, { waitUntil: "networkidle" });
     await ensureLogin(page);
     // Ensure we are on tasks page and ready, even if there are zero tasks.
     await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
     await page.waitForSelector('button:has-text("New task")', { timeout: 5000 });
+    await a11ySmoke();
 
     // Create a new task
     await page.getByRole("button", { name: "New task" }).click();

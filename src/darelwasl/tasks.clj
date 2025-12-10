@@ -25,6 +25,9 @@
 (def ^:private priority-rank
   {:high 3 :medium 2 :low 1})
 
+(def ^:private default-list-limit 25)
+(def ^:private max-list-limit 200)
+
 (def ^:private pull-pattern
   [:task/id
    :entity/type
@@ -267,6 +270,17 @@
   (when-not conn
     (error 500 "Database not ready")))
 
+(defn- parse-int
+  [v]
+  (cond
+    (nil? v) nil
+    (integer? v) v
+    (number? v) (int v)
+    (string? v) (try
+                  (Integer/parseInt (str/trim v))
+                  (catch Exception _ nil))
+    :else nil))
+
 (defn- attempt-transact
   [conn tx-data context]
   (try
@@ -287,6 +301,10 @@
         {assignee :value assignee-err :error} (normalize-uuid (param-value params :assignee) "assignee")
         {archived :value archived-err :error} (normalize-boolean (param-value params :archived) "archived" {:default false
                                                                                                           :allow-all? true})
+        limit-raw (param-value params :limit)
+        offset-raw (param-value params :offset)
+        limit (or (parse-int limit-raw) default-list-limit)
+        offset (or (parse-int offset-raw) 0)
         raw-sort (param-value params :sort)
         sort-key (cond
                    (nil? raw-sort) :updated
@@ -309,6 +327,9 @@
       tag-err (error 400 tag-err)
       assignee-err (error 400 assignee-err)
       archived-err (error 400 archived-err)
+      (or (nil? limit) (<= limit 0)) (error 400 (str "Invalid limit; must be between 1 and " max-list-limit))
+      (> limit max-list-limit) (error 400 (str "Limit too high; max " max-list-limit))
+      (or (nil? offset) (neg? offset)) (error 400 "Invalid offset; must be 0 or greater")
       (and raw-sort (nil? sort-key)) (error 400 "Invalid sort; expected due, priority, or updated")
       (and raw-order (nil? order-key)) (error 400 "Invalid order; expected asc or desc")
       :else {:filters {:status status
@@ -317,7 +338,9 @@
                        :assignee assignee
                        :archived archived
                        :sort sort-key
-                       :order order-key}})))
+                       :order order-key}
+             :limit limit
+             :offset offset})))
 
 (defn- filter-task
   [{:task/keys [status assignee tags priority archived?]}
@@ -402,21 +425,29 @@
   "List tasks with optional filters and sort/order parameters."
   [conn params]
   (or (ensure-conn conn)
-      (let [normalized (normalize-list-params params)
-            filters (:filters normalized)
-            normalized-error (:error normalized)]
-        (if normalized-error
-          {:error normalized-error}
+      (let [{:keys [filters error limit offset]} (normalize-list-params params)]
+        (if error
+          {:error error}
           (let [db (d/db conn)
                 eids (entity/eids-by-type db :entity.type/task)
                 tasks (->> eids
                            (map #(pull-task db %))
                            (remove nil?)
                            (filter #(filter-task % filters)))
-                sorted (sort-tasks tasks filters)]
-            {:tasks (->> sorted
-                         (map present-task)
-                         vec)})))))
+                sorted (sort-tasks tasks filters)
+                total (count sorted)
+                bounded-offset (min offset (max 0 (- total limit)))
+                paged (->> sorted
+                           (drop bounded-offset)
+                           (take limit)
+                           (map present-task)
+                           vec)]
+            {:tasks paged
+             :pagination {:total total
+                          :limit limit
+                          :offset bounded-offset
+                          :page (inc (quot bounded-offset limit))
+                          :returned (count paged)}}))))) 
 
 (defn- validate-assignee!
   [db assignee-id]

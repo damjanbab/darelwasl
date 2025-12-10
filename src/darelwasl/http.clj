@@ -11,7 +11,8 @@
             [ring.middleware.session :as session]))
 
 (def default-middleware
-  [[session/wrap-session common/session-opts]
+  [[common/wrap-logging]
+   [session/wrap-session common/session-opts]
    parameters/parameters-middleware
    muuntaja/format-negotiate-middleware
    muuntaja/format-response-middleware

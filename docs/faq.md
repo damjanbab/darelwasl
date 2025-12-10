@@ -4,6 +4,7 @@ Use this document to capture recurring gotchas, clarifications, and instructions
 
 ## Entries
 - Headless CLJS smoke: use shadow-cljs with Karma/ChromeHeadless or Playwright. Wire the command into `scripts/checks.sh app-smoke` when implemented.
+- Proof gating: pick `scripts/checks.sh` targets by capability (registries/schema/actions/import/app-smoke/all) and favor `DATOMIC_STORAGE_DIR=:mem`/`--temp` for importer/seed runs to avoid dirty dev DBs; default to `scripts/checks.sh all` if multiple layers change.
 - Auth sessions: session cookie uses ring in-memory store (http-only, SameSite=Lax); server restarts clear sessions, so re-login before calling protected APIs.
 - Playwright smoke: first run downloads Chromium/FFmpeg (network required). The harness seeds a temp Datomic under `.cpcache/datomic-smoke-*` and starts the backend on `APP_PORT` (default 3100), killing any process on that port during the check.
 - `scripts/checks.sh app-smoke|all` installs npm deps (no-progress), ensures Playwright Chromium, and writes backend logs to `.cpcache/app-smoke.log`; requires both Node/npm and the Clojure CLI.

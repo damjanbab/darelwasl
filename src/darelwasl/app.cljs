@@ -33,7 +33,6 @@
 (def default-land-filters state/default-land-filters)
 (def default-land-state state/default-land-state)
 (def default-db state/default-db)
-(def task-entity-config state/task-entity-config)
 
 (def distinct-by util/distinct-by)
 
@@ -76,8 +75,13 @@
 (def person-title util/person-title)
 
 (defn- build-query
-  [{:keys [status priority tag assignee archived sort order]}]
-  (let [params (cond-> []
+  [{:keys [status priority tag assignee archived sort order page page-size limit offset]}]
+  (let [limit-val (max 1 (or page-size limit 25))
+        page-val (max 1 (or page 1))
+        offset-val (max 0 (if page-size
+                            (* (dec page-val) limit-val)
+                            (or offset 0)))
+        params (cond-> []
                  status (conj ["status" (name status)])
                  priority (conj ["priority" (name priority)])
                  tag (conj ["tag" (str tag)])
@@ -85,7 +89,9 @@
                  (true? archived) (conj ["archived" "true"])
                  (= archived :all) (conj ["archived" "all"])
                  sort (conj ["sort" (name sort)])
-                 order (conj ["order" (name order)]))]
+                 order (conj ["order" (name order)])
+                 limit-val (conj ["limit" limit-val])
+                 true (conj ["offset" offset-val]))]
     (when (seq params)
       (let [sp (js/URLSearchParams.)]
         (doseq [[k v] params]
@@ -397,11 +403,26 @@
                         current
                         (:task/id (first tasks)))))
          assignees (let [opts (assignees-from-tasks tasks)]
-                     (if (seq opts) opts fallback-assignees))]
+                     (if (seq opts) opts fallback-assignees))
+         pagination-raw (:pagination payload)
+         fallback-limit (or (get-in db [:tasks :filters :page-size]) 25)
+         fallback-page (or (get-in db [:tasks :filters :page]) 1)
+         limit (max 1 (or (:limit pagination-raw) fallback-limit))
+         offset (max 0 (or (:offset pagination-raw) (* (dec fallback-page) fallback-limit)))
+         total (max (count tasks) (or (:total pagination-raw) (count tasks)))
+         page (max 1 (or (:page pagination-raw) (inc (quot offset limit))))
+         pages (max 1 (int (Math/ceil (/ total (double limit)))))]
      (-> db
          (assoc-in [:tasks :items] tasks)
          (assoc-in [:tasks :selected] selected)
           (assoc-in [:tasks :assignees] assignees)
+         (assoc-in [:tasks :filters :page] page)
+         (assoc-in [:tasks :filters :page-size] limit)
+         (assoc-in [:tasks :pagination] {:limit limit
+                                         :offset offset
+                                         :total total
+                                         :page page
+                                         :pages pages})
          (assoc-in [:tasks :detail]
                    (let [current-detail (get-in db [:tasks :detail])
                          selected-task (some #(when (= (:task/id %) selected) %) tasks)
@@ -504,10 +525,13 @@
 
 (rf/reg-event-fx
  ::fetch-land-people
- (fn [{:keys [db]} [_ {:keys [people-search sort]}]]
+ (fn [{:keys [db]} [_ {:keys [people-search sort people-page people-page-size]}]]
    (let [params (cond-> []
                   (seq people-search) (conj ["q" people-search])
-                  sort (conj ["sort" (name sort)]))
+                  sort (conj ["sort" (name sort)])
+                  true (conj ["limit" (or people-page-size 25)])
+                  true (conj ["offset" (* (max 0 (dec (or people-page 1)))
+                                          (or people-page-size 25))]))
          qs (when (seq params)
               (let [sp (js/URLSearchParams.)]
                 (doseq [[k v] params] (.append sp k v))
@@ -520,11 +544,14 @@
 
 (rf/reg-event-fx
  ::fetch-land-parcels
- (fn [{:keys [db]} [_ {:keys [parcel-number completeness sort]}]]
+ (fn [{:keys [db]} [_ {:keys [parcel-number completeness sort parcels-page parcels-page-size]}]]
    (let [params (cond-> []
                   (seq parcel-number) (conj ["parcel-number" parcel-number])
                   completeness (conj ["completeness" (name completeness)])
-                  sort (conj ["sort" (name sort)]))
+                  sort (conj ["sort" (name sort)])
+                  true (conj ["limit" (or parcels-page-size 25)])
+                  true (conj ["offset" (* (max 0 (dec (or parcels-page 1)))
+                                          (or parcels-page-size 25))]))
          qs (when (seq params)
               (let [sp (js/URLSearchParams.)]
                 (doseq [[k v] params] (.append sp k v))
@@ -556,12 +583,44 @@
 (rf/reg-event-db
  ::land-people-success
  (fn [db [_ payload]]
-   (assoc-in db [:land :people] (:people payload))))
+   (let [{:keys [pagination]} payload
+         limit (max 1 (or (:limit pagination) (get-in db [:land :filters :people-page-size]) 25))
+         offset (max 0 (or (:offset pagination) 0))
+         total (max (count (:people payload)) (or (:total pagination) (count (:people payload))))
+         page (max 1 (or (:page pagination) (inc (quot offset limit))))
+         pages (max 1 (int (Math/ceil (/ (max total 1) (double limit)))))]
+     (-> db
+         (assoc-in [:land :people] (:people payload))
+         (assoc-in [:land :status] :ready)
+         (assoc-in [:land :error] nil)
+         (assoc-in [:land :filters :people-page] page)
+         (assoc-in [:land :filters :people-page-size] limit)
+         (assoc-in [:land :pagination :people] {:limit limit
+                                                :offset offset
+                                                :total total
+                                                :page page
+                                                :pages pages})))))
 
 (rf/reg-event-db
  ::land-parcels-success
  (fn [db [_ payload]]
-   (assoc-in db [:land :parcels] (:parcels payload))))
+   (let [{:keys [pagination]} payload
+         limit (max 1 (or (:limit pagination) (get-in db [:land :filters :parcels-page-size]) 25))
+         offset (max 0 (or (:offset pagination) 0))
+         total (max (count (:parcels payload)) (or (:total pagination) (count (:parcels payload))))
+         page (max 1 (or (:page pagination) (inc (quot offset limit))))
+         pages (max 1 (int (Math/ceil (/ (max total 1) (double limit)))))]
+     (-> db
+         (assoc-in [:land :parcels] (:parcels payload))
+         (assoc-in [:land :status] :ready)
+         (assoc-in [:land :error] nil)
+         (assoc-in [:land :filters :parcels-page] page)
+         (assoc-in [:land :filters :parcels-page-size] limit)
+         (assoc-in [:land :pagination :parcels] {:limit limit
+                                                 :offset offset
+                                                 :total total
+                                                 :page page
+                                                 :pages pages})))))
 
 (rf/reg-event-db
  ::land-person-detail-success
@@ -601,7 +660,56 @@
 (rf/reg-event-db
  ::land-update-filter
  (fn [db [_ k v]]
-   (assoc-in db [:land :filters k] v)))
+   (let [updated (assoc-in db [:land :filters k] v)]
+     (cond-> updated
+       (#{:people-search :sort} k) (assoc-in [:land :filters :people-page] 1)
+       (#{:parcel-number :completeness :sort} k) (assoc-in [:land :filters :parcels-page] 1)))))
+
+(rf/reg-event-fx
+ ::set-land-people-page
+ (fn [{:keys [db]} [_ page]]
+   (let [pagination (get-in db [:land :pagination :people])
+         pages (max 1 (or (:pages pagination) 1))
+         page' (-> page (or 1) int (max 1) (min pages))
+         filters (-> (get-in db [:land :filters])
+                     (assoc :people-page page'))]
+     {:db (assoc-in db [:land :filters :people-page] page')
+      :dispatch [::fetch-land-people filters]})))
+
+(rf/reg-event-fx
+ ::set-land-people-page-size
+ (fn [{:keys [db]} [_ size]]
+   (let [size' (max 1 (or size 25))
+         filters (-> (get-in db [:land :filters])
+                     (assoc :people-page-size size'
+                            :people-page 1))]
+     {:db (-> db
+              (assoc-in [:land :filters :people-page-size] size')
+              (assoc-in [:land :filters :people-page] 1))
+      :dispatch [::fetch-land-people filters]})))
+
+(rf/reg-event-fx
+ ::set-land-parcels-page
+ (fn [{:keys [db]} [_ page]]
+   (let [pagination (get-in db [:land :pagination :parcels])
+         pages (max 1 (or (:pages pagination) 1))
+         page' (-> page (or 1) int (max 1) (min pages))
+         filters (-> (get-in db [:land :filters])
+                     (assoc :parcels-page page'))]
+     {:db (assoc-in db [:land :filters :parcels-page] page')
+      :dispatch [::fetch-land-parcels filters]})))
+
+(rf/reg-event-fx
+ ::set-land-parcels-page-size
+ (fn [{:keys [db]} [_ size]]
+   (let [size' (max 1 (or size 25))
+         filters (-> (get-in db [:land :filters])
+                     (assoc :parcels-page-size size'
+                            :parcels-page 1))]
+     {:db (-> db
+              (assoc-in [:land :filters :parcels-page-size] size')
+              (assoc-in [:land :filters :parcels-page] 1))
+      :dispatch [::fetch-land-parcels filters]})))
 
 (rf/reg-event-db
  ::fetch-tags-success
@@ -763,7 +871,9 @@
 (rf/reg-event-fx
  ::update-filter
  (fn [{:keys [db]} [_ field value]]
-   (let [updated (assoc-in db [:tasks :filters field] value)]
+   (let [updated (-> db
+                     (assoc-in [:tasks :filters field] value)
+                     (assoc-in [:tasks :filters :page] 1))]
      {:db updated
       :dispatch [::fetch-tasks]})))
 
@@ -773,7 +883,8 @@
    (let [default-order (if (= sort-key :due) :asc :desc)
          db' (-> db
                  (assoc-in [:tasks :filters :sort] sort-key)
-                 (assoc-in [:tasks :filters :order] default-order))]
+                 (assoc-in [:tasks :filters :order] default-order)
+                 (assoc-in [:tasks :filters :page] 1))]
      {:db db'
       :dispatch [::fetch-tasks]})))
 
@@ -782,7 +893,9 @@
  (fn [{:keys [db]} _]
    (let [current (get-in db [:tasks :filters :order] :desc)
          next (if (= current :asc) :desc :asc)]
-     {:db (assoc-in db [:tasks :filters :order] next)
+     {:db (-> db
+              (assoc-in [:tasks :filters :order] next)
+              (assoc-in [:tasks :filters :page] 1))
       :dispatch [::fetch-tasks]})))
 
 (rf/reg-event-fx
@@ -793,7 +906,9 @@
                 false :all
                 :all true
                 false)]
-     {:db (assoc-in db [:tasks :filters :archived] next)
+     {:db (-> db
+              (assoc-in [:tasks :filters :archived] next)
+              (assoc-in [:tasks :filters :page] 1))
       :dispatch [::fetch-tasks]})))
 
 (rf/reg-event-fx
@@ -812,6 +927,24 @@
          (assoc-in [:tasks :detail] (if task
                                       (detail-from-task task)
                                       (blank-detail assignees (:session db))))))))
+
+(rf/reg-event-fx
+ ::set-task-page
+ (fn [{:keys [db]} [_ page]]
+   (let [pagination (get-in db [:tasks :pagination])
+         pages (max 1 (or (:pages pagination) 1))
+         page' (-> page (or 1) int (max 1) (min pages))]
+     {:db (assoc-in db [:tasks :filters :page] page')
+      :dispatch [::fetch-tasks]})))
+
+(rf/reg-event-fx
+ ::set-task-page-size
+ (fn [{:keys [db]} [_ size]]
+   (let [size' (max 1 (or size 25))]
+     {:db (-> db
+              (assoc-in [:tasks :filters :page-size] size')
+              (assoc-in [:tasks :filters :page] 1))
+      :dispatch [::fetch-tasks]})))
 
 (defn- validate-task-form
   [{:keys [title description status priority assignee]}]
