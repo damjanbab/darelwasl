@@ -1,4 +1,5 @@
-(ns darelwasl.state)
+(ns darelwasl.state
+  (:require [clojure.string :as str]))
 
 (def theme-storage-key "darelwasl/theme")
 (def nav-storage-key "darelwasl/last-app")
@@ -81,6 +82,51 @@
    :status :idle
    :error nil})
 
+(def default-content-list-state
+  {:items []
+   :status :idle
+   :error nil
+   :selected nil})
+
+(def default-page-form
+  {:id nil
+   :title ""
+   :path ""
+   :summary ""
+   :navigation-order ""
+   :visible? true
+   :tags #{}
+   :blocks []})
+
+(def default-block-form
+  {:id nil
+   :page nil
+   :type :hero
+   :title ""
+   :body ""
+   :media-ref ""
+   :slug ""
+   :order 0
+   :visible? true
+   :tags #{}})
+
+(def default-tag-form
+  {:id nil
+   :name ""
+   :slug ""
+   :description ""})
+
+(def default-content-detail
+  {:form default-page-form
+   :mode :create
+   :status :idle
+   :error nil})
+
+(def default-control-state
+  {:pages (assoc default-content-list-state :detail default-content-detail)
+   :blocks (assoc default-content-list-state :detail (assoc default-content-detail :form default-block-form))
+   :tags (assoc default-content-list-state :detail (assoc default-content-detail :form default-tag-form))})
+
 (def default-theme-state
   {:id :theme/default})
 
@@ -117,21 +163,50 @@
    :theme default-theme-state
    :nav default-nav-state
    :tags default-tags-state
-  :home default-home-state
+   :home default-home-state
    :login default-login-state
    :tasks default-task-state
-   :land default-land-state})
+   :land default-land-state
+   :control default-control-state})
 
-(def app-options
+(def base-app-options
   (cond-> [{:id :home
             :label "Home"
             :desc "Summary surface"}
            {:id :tasks
             :label "Tasks"
-            :desc "Workboard"}]
+            :desc "Workboard"}
+           {:id :control-panel
+            :label "Control panel"
+            :desc "Website content"}]
     land-enabled? (conj {:id :land
                          :label "Land"
                          :desc "People ↔ parcels"})))
+
+(defn control-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (boolean (some #{:role/content-editor :role/admin} roles))))
+
+(defn app-options
+  "Return available app options filtered by session roles/flags."
+  [session]
+  (cond->> base-app-options
+    (not (control-enabled? session))
+    (remove #(= (:id %) :control-panel))))
+
+(defn allowed-routes
+  "Allowed route keywords for current session."
+  [session]
+  (into #{}
+        (map :id)
+        (app-options session)))
 
 (defn mark-loading [db path]
   (-> db

@@ -1,23 +1,26 @@
-(ns darelwasl.main
+(ns darelwasl.site.main
   (:gen-class)
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [darelwasl.auth :as auth]
             [darelwasl.config :as config]
             [darelwasl.db :as db]
             [darelwasl.fixtures :as fixtures]
             [darelwasl.schema :as schema]
             [darelwasl.site.server :as site-server]
             [darelwasl.tasks :as tasks]
-            [datomic.client.api :as d]
-            [darelwasl.server :as server]))
+            [datomic.client.api :as d]))
 
-(defonce system-state (atom nil))
+(defonce site-state (atom nil))
+
+(defn- unsupported-alter-schema?
+  [e]
+  (let [data (ex-data e)
+        msg (when e (.getMessage ^Exception e))]
+    (or (= (:db/error data) :db.error/unsupported-alter-schema)
+        (and msg (str/includes? msg "unsupported-alter-schema")))))
 
 (defn- prepare-db!
-  "Load schema and seed fixtures when allowed and when the DB has never been
-  seeded. Returns the db state map with any schema/fixture metadata or errors
-  attached."
+  "Load schema, backfill, and seed fixtures when appropriate."
   [{:keys [conn] :as db-state} {:keys [fixtures] :as _cfg}]
   (if-not conn
     db-state
@@ -25,7 +28,7 @@
           auto-seed? (get fixtures :auto-seed? true)]
       (if error
         (do
-          (log/error error "Schema load failed during startup")
+          (log/error error "Schema load failed during site startup")
           (assoc db-state :error error))
         (let [{bf-error :error added :added} (schema/backfill-entity-types! conn)
               db (d/db conn)
@@ -57,7 +60,7 @@
                          (let [{seed-error :error users :users tags :tags tasks :tasks} (fixtures/seed-conn! conn)]
                            (if seed-error
                              (do
-                               (log/error seed-error "Fixture seed failed during startup")
+                               (log/error seed-error "Fixture seed failed during site startup")
                                (assoc db-state :error seed-error))
                              (do
                                (log/infof "Schema loaded (%s attrs). Seeded fixtures (users=%s tags=%s tasks=%s)." tx-count users tags tasks)
@@ -69,16 +72,8 @@
           (tasks/migrate-tags! conn)
           prepared)))))
 
-(defn- unsupported-alter-schema?
-  [e]
-  (let [data (ex-data e)
-        msg (when e (.getMessage ^Exception e))]
-    (or (= (:db/error data) :db.error/unsupported-alter-schema)
-        (and msg (str/includes? msg "unsupported-alter-schema")))))
-
 (defn- initialize-db!
-  "Connect to Datomic, load schema/fixtures, and attempt a one-time recovery if
-  schema load fails due to incompatible existing schema (unsupported alter)."
+  "Connect to Datomic, load schema/fixtures, and retry once if incompatible schema is detected."
   [cfg]
   (loop [attempt 1
          state (db/connect! (:datomic cfg))]
@@ -89,48 +84,50 @@
         (if-let [err (:error prepared)]
           (if (and (= attempt 1) (unsupported-alter-schema? err))
             (do
-              (log/warn err "Schema load failed due to incompatible existing DB; recreating database")
+              (log/warn err "Schema load failed; recreating database for site process")
               (db/delete-database! state)
               (recur 2 (db/connect! (:datomic cfg))))
             prepared)
           prepared)))))
 
 (defn start!
-  "Start the application with optional config override."
-  ([] (start! (config/load-config)))
-  ([cfg]
-   (let [db-state (initialize-db! cfg)
-         users (auth/load-users!)
-         user-index (auth/user-index-by-username users)
-         _ (when (:error db-state)
-             (log/warn (:error db-state) "Datomic dev-local not ready; health endpoint will report error"))
-         base {:config cfg
-               :db db-state
-               :auth/users users
-               :auth/user-index user-index}
-         started (-> base
-                     (server/start-http)
-                     (site-server/start))]
-     (reset! system-state started)
-     started)))
+  "Start the public site process. Pass {:start-server? false} for a dry-run."
+  ([]
+   (start! {}))
+  ([{:keys [start-server?] :or {start-server? true}}]
+   (let [cfg (config/load-config)
+         db-state (initialize-db! cfg)
+         base-state {:config cfg
+                     :db db-state}]
+     (if-not (:conn db-state)
+       (do
+         (log/warn "Public site not started; Datomic connection unavailable")
+         (reset! site-state base-state)
+         base-state)
+       (let [started (if start-server?
+                       (site-server/start base-state)
+                       base-state)]
+         (reset! site-state started)
+         started)))))
 
 (defn stop!
-  "Stop the running application."
+  "Stop the public site process."
   []
-  (when-let [state @system-state]
-    (-> state
-        (site-server/stop)
-        (server/stop-http))
-    (reset! system-state nil)))
+  (when-let [state @site-state]
+    (reset! site-state (site-server/stop state))))
 
 (defn -main
-  "Entry point for `clojure -M:dev`."
-  [& _args]
-  (log/info "Starting darelwasl service")
-  (start!)
-  (.addShutdownHook (Runtime/getRuntime)
-                    (Thread. (fn []
-                               (log/info "Shutting down darelwasl service")
-                               (stop!))))
-  (when-let [server (get-in @system-state [:http/server])]
-    (.join ^org.eclipse.jetty.server.Server server)))
+  [& args]
+  (let [dry-run? (some #{"--dry-run"} args)]
+    (log/info "Starting public site process")
+    (start! {:start-server? (not dry-run?)})
+    (when dry-run?
+      (log/info "Public site dry-run completed")
+      (stop!)
+      (System/exit 0))
+    (.addShutdownHook (Runtime/getRuntime)
+                      (Thread. (fn []
+                                 (log/info "Shutting down public site process")
+                                 (stop!))))
+    (when-let [server (:site/server @site-state)]
+      (.join ^org.eclipse.jetty.server.Server server))))

@@ -112,6 +112,14 @@ check_edn_parse() {
       (println "Failed" path ":" (.getMessage e))
       (System/exit 1))))
 
+(defn uuid? [x] (instance? java.util.UUID x))
+(defn present-str? [s] (and (string? s) (not (str/blank? s))))
+(defn lookup-id [ref expected-ident]
+  (cond
+    (and (vector? ref) (= (first ref) expected-ident)) (second ref)
+    (uuid? ref) ref
+    :else ref))
+
 (let [root (System/getenv "ROOT_DIR")
       registry-paths [(str root "/registries/schema.edn")
                       (str root "/registries/actions.edn")
@@ -120,12 +128,17 @@ check_edn_parse() {
                       (str root "/registries/theme.edn")]
       fixture-paths {:users (str root "/fixtures/users.edn")
                      :tasks (str root "/fixtures/tasks.edn")
-                     :tags (str root "/fixtures/tags.edn")}
+                     :tags (str root "/fixtures/tags.edn")
+                     :content (str root "/fixtures/content.edn")}
       _ (doseq [f registry-paths] (read-edn! f))
       fixtures (into {} (for [[k path] fixture-paths] [k (read-edn! path)]))
       users (:users fixtures)
       tasks (:tasks fixtures)
       tags (:tags fixtures)
+      content (or (:content fixtures) {})
+      content-tags (or (:tags content) [])
+      content-pages (or (:pages content) [])
+      content-blocks (or (:blocks content) [])
       required-user-keys #{:user/id :user/username :user/name :user/password}
       missing-keys (seq (for [u users
                               :let [missing (set/difference required-user-keys (set (keys u)))]
@@ -143,7 +156,7 @@ check_edn_parse() {
                                :let [id (:user/id u)
                                      uname (:user/username u)
                                      pwd (:user/password u)]
-                               :when (or (not (instance? java.util.UUID id))
+                               :when (or (not (uuid? id))
                                          (not (string? uname))
                                          (str/blank? uname)
                                          (not (string? pwd))
@@ -162,7 +175,7 @@ check_edn_parse() {
       invalid-tags (seq (for [t tags
                               :let [tid (:tag/id t)
                                     name (:tag/name t)]
-                              :when (or (not (instance? java.util.UUID tid))
+                              :when (or (not (uuid? tid))
                                         (not (string? name))
                                         (str/blank? name))]
                          {:tag/id tid :reason "Invalid id/name"}))
@@ -186,7 +199,81 @@ check_edn_parse() {
                          :tag tid
                           :reason (if (not valid?)
                                     "Tag is not a UUID"
-                                    "Tag not present in fixtures/tags.edn")}))]
+                                    "Tag not present in fixtures/tags.edn")}))
+      content-tag-ids (map :content.tag/id content-tags)
+      duplicate-content-tag-ids (seq (for [[id freq] (frequencies content-tag-ids)
+                                           :when (> freq 1)]
+                                       id))
+      content-tag-id-set (set content-tag-ids)
+      content-tag-slugs (remove str/blank? (map :content.tag/slug content-tags))
+      duplicate-content-tag-slugs (seq (for [[slug freq] (frequencies content-tag-slugs)
+                                             :when (> freq 1)]
+                                         slug))
+      invalid-content-tags (seq (for [t content-tags
+                                      :let [tid (:content.tag/id t)
+                                            name (:content.tag/name t)
+                                            slug (:content.tag/slug t)]
+                                      :when (or (not (uuid? tid))
+                                                (not (present-str? name))
+                                                (and slug (not (present-str? slug))))]
+                                  {:content.tag/id tid :reason "Invalid id/name/slug"}))
+      required-page-keys #{:content.page/id :content.page/title :content.page/path}
+      page-ids (map :content.page/id content-pages)
+      page-id-set (set page-ids)
+      duplicate-page-ids (seq (for [[id freq] (frequencies page-ids)
+                                    :when (> freq 1)]
+                                id))
+      invalid-pages (seq (for [p content-pages
+                               :let [pid (:content.page/id p)
+                                     path (:content.page/path p)
+                                     nav (:content.page/navigation-order p)
+                                     page-tags (:content.page/tag p)]
+                               :when (or (not (uuid? pid))
+                                         (not (present-str? path))
+                                         (and nav (not (number? nav)))
+                                         (some #(not (contains? content-tag-id-set (lookup-id % :content.tag/id))) page-tags))]
+                           {:content.page/id (:content.page/id p)
+                            :reason "Invalid id/path/nav/tag"}))
+      block-ids (map :content.block/id content-blocks)
+      block-id-set (set block-ids)
+      duplicate-block-ids (seq (for [[id freq] (frequencies block-ids)
+                                     :when (> freq 1)]
+                                 id))
+      allowed-block-types #{:hero :section :rich-text :feature :cta :list}
+      invalid-blocks (seq (for [b content-blocks
+                                :let [bid (:content.block/id b)
+                                      btype (:content.block/type b)
+                                      page-ref (:content.block/page b)
+                                      page-id (lookup-id page-ref :content.page/id)
+                                      order (:content.block/order b)
+                                      slug (:content.block/slug b)]
+                                :when (or (not (uuid? bid))
+                                          (not (keyword? btype))
+                                          (not (contains? allowed-block-types btype))
+                                          (and page-ref (not (contains? page-id-set page-id)))
+                                          (and slug (not (present-str? slug)))
+                                          (and order (not (number? order))))]
+                            {:content.block/id (:content.block/id b)
+                             :reason "Invalid id/type/page/order/slug"}))
+      block-tag-errors (seq (for [b content-blocks
+                                  tag-ref (:content.block/tag b)
+                                  :let [tid (lookup-id tag-ref :content.tag/id)]
+                                  :when (and tid (not (contains? content-tag-id-set tid)))]
+                              {:content.block/id (:content.block/id b)
+                               :tag tag-ref
+                               :reason "Tag ref missing from content tag fixtures"}))
+      page-block-ref-errors (seq
+                             (for [p content-pages
+                                   block-ref (:content.page/blocks p)
+                                   :let [bid (lookup-id block-ref :content.block/id)
+                                         block (some #(when (= (:content.block/id %) bid) %) content-blocks)
+                                         block-page (lookup-id (:content.block/page block) :content.page/id)]
+                                   :when (or (not (uuid? bid))
+                                             (nil? block)
+                                             (and block-page (not= block-page (:content.page/id p))))]
+                               {:content.page/id (:content.page/id p)
+                                :block block-ref
+                                :reason "Block ref invalid or assigned to different page"}))]
   (when missing-keys
     (doseq [m missing-keys]
       (println "User fixture missing keys" m))
@@ -219,8 +306,41 @@ check_edn_parse() {
     (doseq [err task-tag-errors]
       (println "Task tag reference invalid" err))
     (System/exit 1))
+  (when duplicate-content-tag-ids
+    (println "Duplicate content tag IDs in fixtures:" duplicate-content-tag-ids)
+    (System/exit 1))
+  (when duplicate-content-tag-slugs
+    (println "Duplicate content tag slugs in fixtures:" duplicate-content-tag-slugs)
+    (System/exit 1))
+  (when invalid-content-tags
+    (doseq [err invalid-content-tags]
+      (println "Invalid content tag fixture" err))
+    (System/exit 1))
+  (when duplicate-page-ids
+    (println "Duplicate content page IDs in fixtures:" duplicate-page-ids)
+    (System/exit 1))
+  (when invalid-pages
+    (doseq [err invalid-pages]
+      (println "Invalid content page fixture" err))
+    (System/exit 1))
+  (when duplicate-block-ids
+    (println "Duplicate content block IDs in fixtures:" duplicate-block-ids)
+    (System/exit 1))
+  (when invalid-blocks
+    (doseq [err invalid-blocks]
+      (println "Invalid content block fixture" err))
+    (System/exit 1))
+  (when block-tag-errors
+    (doseq [err block-tag-errors]
+      (println "Content block tag reference invalid" err))
+    (System/exit 1))
+  (when page-block-ref-errors
+    (doseq [err page-block-ref-errors]
+      (println "Content page block reference invalid" err))
+    (System/exit 1))
   (println "User fixtures validated (count" (count users) ") and referenced by tasks.")
-  (println "Tag fixtures validated (count" (count tags) ") and referenced by tasks."))
+  (println "Tag fixtures validated (count" (count tags) ") and referenced by tasks.")
+  (println "Content fixtures validated (tags" (count content-tags) ", pages" (count content-pages) ", blocks" (count content-blocks) ")."))
 CLJ
 }
 

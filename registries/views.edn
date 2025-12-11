@@ -95,7 +95,6 @@
                   :forward true
                   :flags [:land-registry/enabled]}
   :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]}}
-]
 
  {:id :cap/view/control-panel
   :title "Website Control Panel"
@@ -110,4 +109,4 @@
        :layout {:desktop "list + detail" :mobile "stacked"}
        :toggles [:light-dark-switch]}
   :compatibility {:backward true :forward true :flags []}
-  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}
+  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}]

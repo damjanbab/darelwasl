@@ -1,6 +1,7 @@
 (ns darelwasl.http
   (:require [darelwasl.http.common :as common]
             [darelwasl.http.routes.auth :as auth-routes]
+            [darelwasl.http.routes.content :as content-routes]
             [darelwasl.http.routes.land :as land-routes]
             [darelwasl.http.routes.tasks :as task-routes]
             [muuntaja.core :as m]
@@ -29,6 +30,7 @@
         (concat
          (auth-routes/routes state)
          (task-routes/routes state)
+         (content-routes/routes state)
          (land-routes/routes state))))
 
 (defn app

@@ -1,0 +1,96 @@
+{:tags [
+  {:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/content-tag
+   :content.tag/name "Marketing"
+   :content.tag/slug "marketing"
+   :content.tag/description "Marketing-facing content grouping"}
+  {:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/content-tag
+   :content.tag/name "Product"
+   :content.tag/slug "product"
+   :content.tag/description "Product highlights and value props"}
+  {:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"
+   :entity/type :entity.type/content-tag
+   :content.tag/name "Support"
+   :content.tag/slug "support"
+   :content.tag/description "Support and contact touchpoints"}]
+ :pages [
+  {:content.page/id #uuid "60000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/content-page
+   :content.page/title "Home"
+   :content.page/path "/"
+   :content.page/summary "Public site landing page"
+   :content.page/navigation-order 0
+   :content.page/visible? true
+   :content.page/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"]
+                      [:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]
+   :content.page/blocks [[:content.block/id #uuid "70000000-0000-0000-0000-000000000001"]
+                         [:content.block/id #uuid "70000000-0000-0000-0000-000000000002"]
+                         [:content.block/id #uuid "70000000-0000-0000-0000-000000000003"]]}
+  {:content.page/id #uuid "60000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/content-page
+   :content.page/title "About"
+   :content.page/path "/about"
+   :content.page/summary "About the team and mission"
+   :content.page/navigation-order 1
+   :content.page/visible? true
+   :content.page/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]
+   :content.page/blocks [[:content.block/id #uuid "70000000-0000-0000-0000-000000000004"]
+                         [:content.block/id #uuid "70000000-0000-0000-0000-000000000005"]]}]
+ :blocks [
+  {:content.block/id #uuid "70000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/content-block
+   :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
+   :content.block/type :hero
+   :content.block/title "Welcome to DarelWASL"
+   :content.block/body "Editable hero block controlled via the control panel."
+   :content.block/media-ref "hero-img"
+   :content.block/slug "home-hero"
+   :content.block/order 0
+   :content.block/visible? true
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"]
+                      [:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]}
+  {:content.block/id #uuid "70000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/content-block
+   :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
+   :content.block/type :feature
+   :content.block/title "Highlights"
+   :content.block/body "Three feature bullets or cards sourced from the CMS."
+   :content.block/media-ref "features"
+   :content.block/slug "home-highlights"
+   :content.block/order 1
+   :content.block/visible? true
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]}
+  {:content.block/id #uuid "70000000-0000-0000-0000-000000000003"
+   :entity/type :entity.type/content-block
+   :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
+   :content.block/type :cta
+   :content.block/title "Get in touch"
+   :content.block/body "CTA block with contact details and a button."
+   :content.block/media-ref "cta"
+   :content.block/slug "home-cta"
+   :content.block/order 2
+   :content.block/visible? true
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}
+  {:content.block/id #uuid "70000000-0000-0000-0000-000000000004"
+   :entity/type :entity.type/content-block
+   :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000002"]
+   :content.block/type :section
+   :content.block/title "Who we are"
+   :content.block/body "Overview of the team and mission."
+   :content.block/media-ref "about-section"
+   :content.block/slug "about-team"
+   :content.block/order 0
+   :content.block/visible? true
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}
+  {:content.block/id #uuid "70000000-0000-0000-0000-000000000005"
+   :entity/type :entity.type/content-block
+   :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000002"]
+   :content.block/type :rich-text
+   :content.block/title "Our approach"
+   :content.block/body "Detailed narrative content managed through the CMS."
+   :content.block/media-ref "about-rich-text"
+   :content.block/slug "about-approach"
+   :content.block/order 1
+   :content.block/visible? true
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}]}

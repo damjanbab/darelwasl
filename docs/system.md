@@ -97,6 +97,13 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Compatibility/Flags:
 - Related Views/Tools:
 
+## Content Model (Control Panel + Public Site)
+- Entities: content tags (`:content.tag/id|name|slug|description`), content pages (`:content.page/id|title|path|summary|navigation-order|visible?` plus tags + blocks), content blocks (`:content.block/id|page|type|title|body|media-ref|slug|order|visible?` plus tags). Block types enum: `:hero`, `:section`, `:rich-text`, `:feature`, `:cta`, `:list`.
+- Storage: Datomic schema added (`:cap/schema/content-tag`, `:cap/schema/content-page`, `:cap/schema/content-block`) with :entity/type on all content entities; slugs and IDs are unique; order fields are longs.
+- Fixtures: `fixtures/content.edn` seeds Home and About pages with ordered blocks and tags; seeding wires block→page refs and page→block refs after blocks exist.
+- Invariants: Paths/slugs non-empty and unique; blocks that reference a page must point at that page; tags referenced by pages/blocks must exist; visibility toggles default to true in fixtures.
+- Actions/API: Authenticated CRUD under `/api/content/{tags|pages|blocks}`; create/update validate slugs, paths, block types, refs, and unique constraints; mutations audit log under `darelwasl.content`.
+
 ## Patterns and Guidelines
 - Data modeling: fact-first; prefer attributes over blobs; model history intentionally (use :db.cardinality/one with upserts for identity, or time-indexed facts for history); avoid duplicating derived data unless cached with clear invalidation rules; use enums/idents instead of ad-hoc strings.
 - Naming: use stable, descriptive idents; keep capability IDs aligned with registry IDs; avoid abbreviations that hide meaning.
@@ -180,10 +187,10 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Deployment (Hetzner plan)
 - Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); `haloeddepth.com` points here; no reverse proxy/SSL yet—serve on the raw IP/domain for now (port 3000).
-- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env file at `/etc/darelwasl/app.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
-- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; reserve 80/443 for a future reverse proxy/SSL front.
-- Ports/firewall: allow inbound 22 (SSH) and 3000 (app); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
-- Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
+- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env files at `/etc/darelwasl/app.env` and `/etc/darelwasl/site.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
+- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; site on `SITE_HOST=0.0.0.0`, `SITE_PORT=3200` (configurable). Reserve 80/443 for a future reverse proxy/SSL front.
+- Ports/firewall: allow inbound 22 (SSH) and 3000 (app) + 3200 (site); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
+- Logging: systemd journal for both services (no separate log files initially); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
 - Env file template (`/etc/darelwasl/app.env`):
   - `APP_HOST=0.0.0.0`
@@ -193,6 +200,13 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `DATOMIC_DB_NAME=darelwasl`
   - `ALLOW_FIXTURE_SEED=false` (prod: disable fixture reseed)
   - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
+- Site env file template (`/etc/darelwasl/site.env`):
+  - `SITE_HOST=0.0.0.0`
+  - `SITE_PORT=3200`
+  - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
+  - `DATOMIC_SYSTEM=darelwasl`
+  - `DATOMIC_DB_NAME=darelwasl`
+  - `ALLOW_FIXTURE_SEED=false`
 - Systemd unit (`/etc/systemd/system/darelwasl.service`):
   ```
   [Unit]
@@ -214,11 +228,32 @@ Maintain stable IDs; reference them in tasks/PRs.
   WantedBy=multi-user.target
   ```
   Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl`.
-- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
+- Site Systemd unit (`/etc/systemd/system/darelwasl-site.service`):
+  ```
+  [Unit]
+  Description=DarelWasl public site
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=darelwasl
+  WorkingDirectory=/opt/darelwasl
+  EnvironmentFile=/etc/darelwasl/site.env
+  ExecStart=/opt/darelwasl/scripts/run-site.sh
+  Restart=on-failure
+  RestartSec=5
+  StandardOutput=journal
+  StandardError=journal
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-site`.
+- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl darelwasl-site`.
 - Service ops (Hetzner):
-  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl`.
-  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`.
-  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed).
+  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl darelwasl-site`.
+  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`; same for `darelwasl-site`.
+  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed) and `curl http://127.0.0.1:3200/` (site).
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
 ## Product Spec: Entity Foundation + App Suite (Home + Tasks)
@@ -360,6 +395,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Process: when a change affects composability rules, update this section and the relevant registry entries in the same run; tasks must declare their composability impact.
 ## Fixtures and Test Data
 - :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
+-   Roles: fixtures carry `:user/roles` (huda = `:role/admin` + `:role/content-editor`, damjan = `:role/content-editor`) to gate the control panel and content actions.
 - :fixtures/tags (`fixtures/tags.edn`): tag entities with fixed IDs and names (`Ops`, `Home`, `Finance`, `Urgent`) used by tasks and exposed via `/api/tags`.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tag references (lookup refs to `:tag/id`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
 - All fixtures include `:entity/type` (`:entity.type/user`, `:entity.type/task`, `:entity.type/tag`). A backfill helper sets this on existing DBs lacking it (inferred from identity attrs).
@@ -368,6 +404,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
 - :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
+- Public site skeleton: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve a simple read-only site backed by content pages/blocks.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.

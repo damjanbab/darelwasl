@@ -36,9 +36,13 @@
    {:ident :user/password
     :type :db.type/string
     :cardinality :db.cardinality/one
-    :doc "Local dev password (not for production)"}]
+    :doc "Local dev password (not for production)"}
+   {:ident :user/roles
+    :type :db.type/keyword
+    :cardinality :db.cardinality/many
+    :doc "User roles for authorization (e.g., :role/content-editor, :role/admin)"}]
   :enums []
-  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user"]
+  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -296,49 +300,147 @@
   :related {:schema [:cap/schema/person :cap/schema/parcel]
             :actions [:cap/action/parcel-import]
             :views [:cap/view/land-registry]}}
-]
 
  {:id :cap/schema/content-block
   :title "Content Block"
-  :version "v0"
-  :attributes [{:ident :content.block/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Content block ID"}
-               {:ident :content.block/type :type :keyword :cardinality :one :doc "Block type (hero, section, card, etc.)"}
-               {:ident :content.block/title :type :string :cardinality :one :doc "Block title"}
-               {:ident :content.block/body :type :string :cardinality :one :doc "Block body/markdown"}
-               {:ident :content.block/slug :type :string :cardinality :one :unique :db.unique/value :doc "Slug for targeting/anchors"}
-               {:ident :content.block/order :type :long :cardinality :one :doc "Ordering within a page/section"}
-               {:ident :content.block/visible? :type :boolean :cardinality :one :doc "Visibility toggle"}
-               {:ident :content.block/tag :type :ref :cardinality :many :doc "Tags/categories"}]
-  :invariants {:require [:content.block/id :content.block/type]
-               :visibility-default true}
-  :history {:expect [:db.cardinality/one] :backfill []}
-  :compatibility {:backward true :forward true}
+  :version "v1"
+  :attributes
+  [{:ident :content.block/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Content block identity"}
+   {:ident :content.block/page
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Parent page ref (optional for reusable blocks)"}
+   {:ident :content.block/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Block type (hero, section, list, card, CTA, etc.)"}
+   {:ident :content.block/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Block title/heading"}
+   {:ident :content.block/body
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Block body/markdown content"}
+   {:ident :content.block/media-ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Placeholder media reference (URL/key)"}
+   {:ident :content.block/slug
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Slug/anchor for linking or targeting"}
+   {:ident :content.block/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering within a page/section"}
+   {:ident :content.block/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}
+   {:ident :content.block/tag
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Tags/categories"}]
+  :enums {:content.block/type [:hero :section :rich-text :feature :cta :list]}
+  :invariants ["Block id and type required"
+               "Order is non-negative when set"
+               "Slug unique when present"
+               "Blocks associated to a page must reference that page"
+               "Entity type set to :entity.type/content-block"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:actions [:cap/action/content-blocks]
             :views [:cap/view/control-panel]}}
 
  {:id :cap/schema/content-page
   :title "Content Page"
-  :version "v0"
-  :attributes [{:ident :content.page/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Page ID"}
-               {:ident :content.page/title :type :string :cardinality :one :doc "Page title"}
-               {:ident :content.page/path :type :string :cardinality :one :unique :db.unique/value :doc "Route path or slug"}
-               {:ident :content.page/blocks :type :ref :cardinality :many :doc "Ordered refs to blocks"}
-               {:ident :content.page/visible? :type :boolean :cardinality :one :doc "Visibility toggle"}
-               {:ident :content.page/tag :type :ref :cardinality :many :doc "Tags/categories"}]
-  :invariants {:require [:content.page/id :content.page/title :content.page/path]
-               :path-unique true}
-  :history {:expect [:db.cardinality/one] :backfill []}
-  :compatibility {:backward true :forward true}
+  :version "v1"
+  :attributes
+  [{:ident :content.page/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Page identity"}
+   {:ident :content.page/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Page title"}
+   {:ident :content.page/path
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Route path or slug (leading slash preferred)"}
+   {:ident :content.page/summary
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Short description/metadata"}
+   {:ident :content.page/blocks
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Refs to blocks for this page (ordering via :content.block/order)"}
+   {:ident :content.page/navigation-order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering for nav/sitemap"}
+   {:ident :content.page/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}
+   {:ident :content.page/tag
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Tags/categories"}]
+  :enums []
+  :invariants ["Path unique and non-empty"
+               "Id, title, and path required"
+               "Blocks referenced belong to this page"
+               "Entity type set to :entity.type/content-page"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:actions [:cap/action/content-pages]
             :views [:cap/view/control-panel]}}
 
  {:id :cap/schema/content-tag
   :title "Content Tag"
-  :version "v0"
-  :attributes [{:ident :content.tag/id :type :uuid :cardinality :one :unique :db.unique/identity :doc "Tag ID"}
-               {:ident :content.tag/name :type :string :cardinality :one :unique :db.unique/value :doc "Display name"}]
-  :invariants {:require [:content.tag/id :content.tag/name]}
-  :history {:expect [:db.cardinality/one] :backfill []}
-  :compatibility {:backward true :forward true}
+  :version "v1"
+  :attributes
+  [{:ident :content.tag/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Content tag identity"}
+   {:ident :content.tag/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Display name"}
+   {:ident :content.tag/slug
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Slug for routing/anchors"}
+   {:ident :content.tag/description
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Optional description"}]
+  :enums []
+  :invariants ["Name required and unique"
+               "Slug unique when present"
+               "Entity type set to :entity.type/content-tag"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:actions [:cap/action/content-tags]
             :views [:cap/view/control-panel]}}
+]

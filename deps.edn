@@ -14,4 +14,6 @@
            :seed {:main-opts ["-m" "darelwasl.fixtures"]
                   :jvm-opts ["-Dclojure.main.report=stderr"]}
            :import {:main-opts ["-m" "darelwasl.importer"]
-                    :jvm-opts ["-Dclojure.main.report=stderr"]}}}
+                    :jvm-opts ["-Dclojure.main.report=stderr"]}
+           :site {:main-opts ["-m" "darelwasl.site.main"]
+                  :jvm-opts ["-Dclojure.main.report=stderr"]}}}

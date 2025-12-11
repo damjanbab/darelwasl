@@ -5,7 +5,8 @@
   :inputs {:user/username :string
            :user/password :string}
   :outputs {:session/token :string
-            :user/id :uuid}
+            :user/id :uuid
+            :user/roles [:set :keyword]}
   :side-effects ["Create session for user"]
   :adapter {:integration :cap/integration/local-session}
   :audit {:records [:auth/login]
@@ -355,9 +356,20 @@
 
  {:id :cap/action/content-blocks
   :title "Content Blocks CRUD"
-  :version "v0"
-  :inputs {:content.block/id :uuid? :content.block/type :keyword? :content.block/title :string? :content.block/body :string? :content.block/slug :string? :content.block/order :long? :content.block/visible? :boolean? :content.block/tag :uuid-set?}
-  :outputs {:content.block/id :uuid}
+  :version "v1"
+  :inputs {:content.block/id :uuid?
+           :content.block/page :uuid?
+           :content.block/type :keyword?
+           :content.block/title :string?
+           :content.block/body :string?
+           :content.block/media-ref :string?
+           :content.block/slug :string?
+           :content.block/order :long?
+           :content.block/visible? :boolean?
+           :content.block/tag :uuid-set?}
+  :outputs {:content.block {:content.block/id :uuid
+                            :content.block/type :keyword
+                            :content.block/slug :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.block/id :content.block/type]}
@@ -370,9 +382,17 @@
 
  {:id :cap/action/content-pages
   :title "Content Pages CRUD"
-  :version "v0"
-  :inputs {:content.page/id :uuid? :content.page/title :string? :content.page/path :string? :content.page/blocks :uuid-set? :content.page/visible? :boolean? :content.page/tag :uuid-set?}
-  :outputs {:content.page/id :uuid}
+  :version "v1"
+  :inputs {:content.page/id :uuid?
+           :content.page/title :string?
+           :content.page/path :string?
+           :content.page/summary :string?
+           :content.page/navigation-order :long?
+           :content.page/blocks :uuid-set?
+           :content.page/visible? :boolean?
+           :content.page/tag :uuid-set?}
+  :outputs {:content.page {:content.page/id :uuid
+                           :content.page/path :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.page/id :content.page/path]}
@@ -385,9 +405,13 @@
 
  {:id :cap/action/content-tags
   :title "Content Tags CRUD"
-  :version "v0"
-  :inputs {:content.tag/id :uuid? :content.tag/name :string?}
-  :outputs {:content.tag/id :uuid}
+  :version "v1"
+  :inputs {:content.tag/id :uuid?
+           :content.tag/name :string?
+           :content.tag/slug :string?
+           :content.tag/description :string?}
+  :outputs {:content.tag {:content.tag/id :uuid
+                          :content.tag/name :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.tag/id :content.tag/name]}

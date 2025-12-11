@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 usage() {
   cat <<'EOF'
-Deploys the daralwasl app.
+Deploys the daralwasl app and public site.
 
 Usage: scripts/deploy.sh [--no-build]
 
@@ -15,6 +15,7 @@ Steps:
   - npm run theme:css-vars
   - npm run build (skip with --no-build)
   - clojure -M:seed --temp (to validate fixtures; does not affect prod data)
+  - (ops) restart darelwasl.service and darelwasl-site.service if present
 EOF
 }
 

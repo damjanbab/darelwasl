@@ -1,5 +1,6 @@
 (ns darelwasl.http.common
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :as log]
             [darelwasl.db :as db]
             [ring.middleware.session.memory :refer [memory-store]]))
 
@@ -29,6 +30,18 @@
       (if (and session (:session/token session) (:user/id session))
         (handler (assoc request :auth/session session))
         (error-response 401 "Unauthorized")))))
+
+(defn require-roles
+  "Middleware to enforce role membership. `roles` should be a set of keywords.
+  Attaches :auth/session to request (using require-session before this)."
+  [roles]
+  (fn [handler]
+    (fn [request]
+      (let [session (:auth/session request)
+            user-roles (set (:user/roles session))]
+        (if (seq (clojure.set/intersection roles user-roles))
+          (handler request)
+          (error-response 403 "Forbidden: insufficient role"))))))
 
 (defn handle-task-result
   [result & [success-status]]

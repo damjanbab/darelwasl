@@ -49,7 +49,7 @@
 (defn sanitize-user
   "Return user map without sensitive fields."
   [user]
-  (select-keys user [:user/id :user/username :user/name]))
+  (select-keys user [:user/id :user/username :user/name :user/roles]))
 
 (defn authenticate
   "Validate username/password against a prepared user index. Returns

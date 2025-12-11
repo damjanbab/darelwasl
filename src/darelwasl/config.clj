@@ -5,6 +5,8 @@
 (def ^:private default-config
   {:http {:port 3000
           :host "0.0.0.0"}
+   :site {:port 3200
+          :host "0.0.0.0"}
    :datomic {:storage-dir "data/datomic"
              :system "darelwasl"
              :db-name "darelwasl"}
@@ -49,6 +51,12 @@
         (assoc-in [:http :host]
                   (env-str (get env "APP_HOST")
                            (get-in default-config [:http :host])))
+        (assoc-in [:site :port]
+                  (parse-int (get env "SITE_PORT")
+                             (get-in default-config [:site :port])))
+        (assoc-in [:site :host]
+                  (env-str (get env "SITE_HOST")
+                           (get-in default-config [:site :host])))
         (assoc-in [:datomic :storage-dir]
                   (normalize-storage-dir (get env "DATOMIC_STORAGE_DIR")
                                          (get-in default-config [:datomic :storage-dir])))

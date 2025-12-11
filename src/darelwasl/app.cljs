@@ -3,6 +3,7 @@
             [darelwasl.features.home :as home]
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
+            [darelwasl.features.control-panel :as control-panel]
             [darelwasl.features.tasks :as tasks-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
@@ -32,6 +33,10 @@
 (def land-enabled? state/land-enabled?)
 (def default-land-filters state/default-land-filters)
 (def default-land-state state/default-land-state)
+(def default-page-form state/default-page-form)
+(def default-block-form state/default-block-form)
+(def default-tag-form state/default-tag-form)
+(def default-control-state state/default-control-state)
 (def default-db state/default-db)
 
 (def distinct-by util/distinct-by)
@@ -97,6 +102,142 @@
         (doseq [[k v] params]
           (.append sp k v))
         (.toString sp)))))
+
+(def allowed-block-types [:hero :section :rich-text :feature :cta :list])
+
+(defn- ref-id
+  [entry kw]
+  (cond
+    (map? entry) (get entry kw)
+    (vector? entry) (second entry)
+    :else entry))
+
+(defn- present-str
+  [s]
+  (let [trimmed (str/trim (or s ""))]
+    (when-not (str/blank? trimmed) trimmed)))
+
+(defn- parse-long-safe
+  [v]
+  (cond
+    (number? v) (long v)
+    (string? v) (let [s (str/trim v)
+                      n (js/parseInt s 10)]
+                  (when-not (js/isNaN n) n))
+    :else nil))
+
+(defn- page->form
+  [page]
+  (if-not page
+    default-page-form
+    {:id (:content.page/id page)
+     :title (or (:content.page/title page) "")
+     :path (or (:content.page/path page) "")
+     :summary (or (:content.page/summary page) "")
+     :navigation-order (or (:content.page/navigation-order page) "")
+     :visible? (not= false (:content.page/visible? page))
+     :tags (set (map #(ref-id % :content.tag/id) (:content.page/tag page)))
+     :blocks (vec (map #(ref-id % :content.block/id) (:content.page/blocks page)))}))
+
+(defn- block->form
+  [block]
+  (if-not block
+    default-block-form
+    {:id (:content.block/id block)
+     :page (ref-id (:content.block/page block) :content.page/id)
+     :type (:content.block/type block)
+     :title (or (:content.block/title block) "")
+     :body (or (:content.block/body block) "")
+     :media-ref (or (:content.block/media-ref block) "")
+     :slug (or (:content.block/slug block) "")
+     :order (or (:content.block/order block) 0)
+     :visible? (not= false (:content.block/visible? block))
+     :tags (set (map #(ref-id % :content.tag/id) (:content.block/tag block)))}))
+
+(defn- tag->form
+  [tag]
+  (if-not tag
+    default-tag-form
+    {:id (:content.tag/id tag)
+     :name (or (:content.tag/name tag) "")
+     :slug (or (:content.tag/slug tag) "")
+     :description (or (:content.tag/description tag) "")}))
+
+(defn- page-detail
+  [page]
+  {:form (page->form page)
+   :mode (if page :edit :create)
+   :status :idle
+   :error nil})
+
+(defn- block-detail
+  [block]
+  {:form (block->form block)
+   :mode (if block :edit :create)
+   :status :idle
+   :error nil})
+
+(defn- tag-detail
+  [tag]
+  {:form (tag->form tag)
+   :mode (if tag :edit :create)
+   :status :idle
+   :error nil})
+
+(defn- validate-page-form
+  [{:keys [title path]}]
+  (cond
+    (str/blank? title) "Title is required"
+    (str/blank? path) "Path is required"
+    :else nil))
+
+(defn- page-form->payload
+  [{:keys [title path summary navigation-order visible? tags blocks]}]
+  (let [nav (parse-long-safe navigation-order)
+        title' (present-str title)
+        path' (present-str path)
+        summary' (present-str summary)]
+    (cond-> {:content.page/title title'
+             :content.page/path path'
+             :content.page/visible? (boolean visible?)}
+      summary' (assoc :content.page/summary summary')
+      (some? nav) (assoc :content.page/navigation-order nav)
+      (seq tags) (assoc :content.page/tag (vec tags))
+      (seq blocks) (assoc :content.page/blocks (vec blocks)))))
+
+(defn- validate-block-form
+  [{:keys [type]}]
+  (when (nil? type) "Type is required"))
+
+(defn- block-form->payload
+  [{:keys [page type title body media-ref slug order visible? tags]}]
+  (let [order' (parse-long-safe order)
+        slug' (present-str slug)
+        title' (present-str title)
+        body' (present-str body)
+        media' (present-str media-ref)]
+    (cond-> {:content.block/type type
+             :content.block/visible? (boolean visible?)}
+      page (assoc :content.block/page page)
+      title' (assoc :content.block/title title')
+      body' (assoc :content.block/body body')
+      media' (assoc :content.block/media-ref media')
+      slug' (assoc :content.block/slug slug')
+      (some? order') (assoc :content.block/order order')
+      (seq tags) (assoc :content.block/tag (vec tags)))))
+
+(defn- validate-tag-form
+  [{:keys [name]}]
+  (when (str/blank? name) "Name is required"))
+
+(defn- tag-form->payload
+  [{:keys [name slug description]}]
+  (let [name' (present-str name)
+        slug' (present-str slug)
+        description' (present-str description)]
+    (cond-> {:content.tag/name name'}
+      slug' (assoc :content.tag/slug slug')
+      description' (assoc :content.tag/description description'))))
 
 (defn- assignees-from-tasks
   [tasks]
@@ -220,8 +361,7 @@
         stored-route (try
                        (.getItem js/localStorage nav-storage-key)
                        (catch :default _ nil))
-       allowed-routes (cond-> #{:home :tasks}
-                         land-enabled? (conj :land))
+       allowed-routes (state/allowed-routes nil)
         last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
                      (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
         theme-id (resolve-theme-id stored)]
@@ -254,13 +394,13 @@
 (rf/reg-event-fx
  ::navigate
  (fn [{:keys [db]} [_ route]]
-   (let [allowed (cond-> #{:home :tasks}
-                   land-enabled? (conj :land))
+   (let [allowed (state/allowed-routes (:session db))
          safe-route (if (contains? allowed route) route :home)
          dispatches (cond-> []
                        (= safe-route :home) (conj [::fetch-home])
                        (= safe-route :tasks) (conj [::fetch-tasks])
-                       (= safe-route :land) (conj [::fetch-land]))]
+                       (= safe-route :land) (conj [::fetch-land])
+                       (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
               (assoc-in [:nav :menu-open?] false)
@@ -312,21 +452,22 @@
 
 (rf/reg-event-fx
  ::login-success
- (fn [{:keys [db]} [_ payload]]
+  (fn [{:keys [db]} [_ payload]]
    (let [token (:session/token payload)
          user-id (:user/id payload)
          username (:user/username payload)
          preferred-route (let [cand (get-in db [:nav :last-route])
-                               allowed (cond-> #{:home :tasks}
-                                          land-enabled? (conj :land))]
+                               allowed (state/allowed-routes {:user {:roles (:user/roles payload)}})]
                            (if (contains? allowed cand) cand :home))
          db' (-> db
                  (assoc :session {:token token
                                   :user {:id user-id
-                                         :username username}})
+                                         :username username
+                                         :roles (:user/roles payload)}})
                  (assoc :route preferred-route)
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
+                 (assoc :control default-control-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
@@ -377,6 +518,7 @@
                    :route :login
                    :nav default-nav-state
                    :tasks default-task-state
+                   :control default-control-state
                    :tags default-tags-state
                    :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
@@ -500,6 +642,401 @@
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load home data.")]
      (-> (state/mark-error db [:home] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+;; Control panel content
+(rf/reg-event-fx
+ ::fetch-content
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (state/mark-loading [:control :pages])
+            (state/mark-loading [:control :blocks])
+            (state/mark-loading [:control :tags]))
+    :fx [[::fx/http {:url "/api/content/pages"
+                     :method "GET"
+                     :on-success [::fetch-pages-success]
+                     :on-error [::content-failure :pages]}]
+         [::fx/http {:url "/api/content/blocks"
+                     :method "GET"
+                     :on-success [::fetch-blocks-success]
+                     :on-error [::content-failure :blocks]}]
+         [::fx/http {:url "/api/content/tags"
+                     :method "GET"
+                     :on-success [::fetch-tags-success-control]
+                     :on-error [::content-failure :tags]}]]}))
+
+(rf/reg-event-db
+ ::fetch-pages-success
+ (fn [db [_ payload]]
+   (let [pages (vec (:pages payload))
+         current (get-in db [:control :pages :selected])
+         selected (or (some->> pages (some #(when (= (:content.page/id %) current) %)) :content.page/id)
+                      (:content.page/id (first pages)))
+         selected-page (some #(when (= (:content.page/id %) selected) %) pages)
+         current-detail (get-in db [:control :pages :detail])
+         keep-create? (and (= :create (:mode current-detail))
+                           (not= default-page-form (:form current-detail)))]
+     (-> db
+         (assoc-in [:control :pages :items] pages)
+         (assoc-in [:control :pages :selected] selected)
+         (assoc-in [:control :pages :status] (if (seq pages) :ready :empty))
+         (assoc-in [:control :pages :error] nil)
+         (assoc-in [:control :pages :detail]
+                   (cond
+                     keep-create? (-> current-detail
+                                      (assoc :status :idle)
+                                      (assoc :error nil))
+                     selected-page (page-detail selected-page)
+                     :else (page-detail nil)))))))
+
+(rf/reg-event-db
+ ::fetch-blocks-success
+ (fn [db [_ payload]]
+   (let [blocks (vec (:blocks payload))
+         current (get-in db [:control :blocks :selected])
+         selected (or (some->> blocks (some #(when (= (:content.block/id %) current) %)) :content.block/id)
+                      (:content.block/id (first blocks)))
+         selected-block (some #(when (= (:content.block/id %) selected) %) blocks)
+         current-detail (get-in db [:control :blocks :detail])
+         keep-create? (and (= :create (:mode current-detail))
+                           (not= default-block-form (:form current-detail)))]
+     (-> db
+         (assoc-in [:control :blocks :items] blocks)
+         (assoc-in [:control :blocks :selected] selected)
+         (assoc-in [:control :blocks :status] (if (seq blocks) :ready :empty))
+         (assoc-in [:control :blocks :error] nil)
+         (assoc-in [:control :blocks :detail]
+                   (cond
+                     keep-create? (-> current-detail
+                                      (assoc :status :idle)
+                                      (assoc :error nil))
+                     selected-block (block-detail selected-block)
+                     :else (block-detail nil)))))))
+
+(rf/reg-event-db
+ ::fetch-tags-success-control
+ (fn [db [_ payload]]
+   (let [tags (vec (:tags payload))
+         current (get-in db [:control :tags :selected])
+         selected (or (some->> tags (some #(when (= (:content.tag/id %) current) %)) :content.tag/id)
+                      (:content.tag/id (first tags)))
+         selected-tag (some #(when (= (:content.tag/id %) selected) %) tags)
+         current-detail (get-in db [:control :tags :detail])
+         keep-create? (and (= :create (:mode current-detail))
+                           (not= default-tag-form (:form current-detail)))]
+     (-> db
+         (assoc-in [:control :tags :items] tags)
+         (assoc-in [:control :tags :selected] selected)
+         (assoc-in [:control :tags :status] (if (seq tags) :ready :empty))
+         (assoc-in [:control :tags :error] nil)
+         (assoc-in [:control :tags :detail]
+                   (cond
+                     keep-create? (-> current-detail
+                                      (assoc :status :idle)
+                                      (assoc :error nil))
+                     selected-tag (tag-detail selected-tag)
+                     :else (tag-detail nil)))))))
+
+(rf/reg-event-db
+ ::content-failure
+ (fn [db [_ section {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load content.")]
+     (-> (state/mark-error db [:control section] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::select-page
+ (fn [db [_ page-id]]
+   (let [page (some #(when (= (:content.page/id %) page-id) %)
+                    (get-in db [:control :pages :items]))]
+     (-> db
+         (assoc-in [:control :pages :selected] page-id)
+         (assoc-in [:control :pages :detail] (page-detail page))))))
+
+(rf/reg-event-db
+ ::select-block
+ (fn [db [_ block-id]]
+   (let [block (some #(when (= (:content.block/id %) block-id) %)
+                     (get-in db [:control :blocks :items]))]
+     (-> db
+         (assoc-in [:control :blocks :selected] block-id)
+         (assoc-in [:control :blocks :detail] (block-detail block))))))
+
+(rf/reg-event-db
+ ::select-tag
+ (fn [db [_ tag-id]]
+   (let [tag (some #(when (= (:content.tag/id %) tag-id) %)
+                   (get-in db [:control :tags :items]))]
+     (-> db
+         (assoc-in [:control :tags :selected] tag-id)
+          (assoc-in [:control :tags :detail] (tag-detail tag))))))
+
+(rf/reg-event-db
+ ::new-page
+ (fn [db _]
+   (assoc-in db [:control :pages :detail] (page-detail nil))))
+
+(rf/reg-event-db
+ ::new-block
+ (fn [db _]
+   (assoc-in db [:control :blocks :detail] (block-detail nil))))
+
+(rf/reg-event-db
+ ::new-tag
+ (fn [db _]
+   (assoc-in db [:control :tags :detail] (tag-detail nil))))
+
+(rf/reg-event-db
+ ::set-page-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :pages :detail :form field] value)
+       (assoc-in [:control :pages :detail :status] :idle)
+       (assoc-in [:control :pages :detail :error] nil))))
+
+(rf/reg-event-db
+ ::toggle-page-tag
+ (fn [db [_ tag-id]]
+   (let [current (or (get-in db [:control :pages :detail :form :tags]) #{})
+         updated (if (contains? current tag-id) (disj current tag-id) (conj current tag-id))]
+     (-> db
+         (assoc-in [:control :pages :detail :form :tags] updated)
+         (assoc-in [:control :pages :detail :status] :idle)
+         (assoc-in [:control :pages :detail :error] nil)))))
+
+(rf/reg-event-db
+ ::set-block-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :blocks :detail :form field] value)
+       (assoc-in [:control :blocks :detail :status] :idle)
+       (assoc-in [:control :blocks :detail :error] nil))))
+
+(rf/reg-event-db
+ ::toggle-block-tag
+ (fn [db [_ tag-id]]
+   (let [current (or (get-in db [:control :blocks :detail :form :tags]) #{})
+         updated (if (contains? current tag-id) (disj current tag-id) (conj current tag-id))]
+     (-> db
+         (assoc-in [:control :blocks :detail :form :tags] updated)
+         (assoc-in [:control :blocks :detail :status] :idle)
+         (assoc-in [:control :blocks :detail :error] nil)))))
+
+(rf/reg-event-db
+ ::set-tag-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :tags :detail :form field] value)
+       (assoc-in [:control :tags :detail :status] :idle)
+       (assoc-in [:control :tags :detail :error] nil))))
+
+(rf/reg-event-fx
+ ::save-page
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:control :pages :detail])
+         id (:id form)
+         validation (validate-page-form form)
+         body (page-form->payload form)]
+     (cond
+       validation {:db (-> db
+                           (assoc-in [:control :pages :detail :status] :error)
+                           (assoc-in [:control :pages :detail :error] validation))}
+       (= mode :create)
+       {:db (-> db
+                (assoc-in [:control :pages :detail :status] :saving)
+                (assoc-in [:control :pages :detail :error] nil))
+        ::fx/http {:url "/api/content/pages"
+                   :method "POST"
+                   :body body
+                   :on-success [::page-save-success {:mode :create}]
+                   :on-error [::content-operation-failure :pages]}}
+       :else
+       {:db (-> db
+                (assoc-in [:control :pages :detail :status] :saving)
+                (assoc-in [:control :pages :detail :error] nil))
+        ::fx/http {:url (str "/api/content/pages/" id)
+                   :method "PUT"
+                   :body (assoc body :content.page/id id)
+                   :on-success [::page-save-success {:mode :update}]
+                   :on-error [::content-operation-failure :pages]}}))))
+
+(rf/reg-event-fx
+ ::delete-page
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :pages :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :pages :detail :error] "Select a page to delete")}
+       {:db (-> db
+                (assoc-in [:control :pages :detail :status] :deleting)
+                (assoc-in [:control :pages :detail :error] nil))
+        ::fx/http {:url (str "/api/content/pages/" id)
+                   :method "DELETE"
+                   :on-success [::page-delete-success]
+                   :on-error [::content-operation-failure :pages]}}))))
+
+(rf/reg-event-fx
+ ::page-save-success
+ (fn [{:keys [db]} [_ context payload]]
+   (let [page (:page payload)
+         pid (:content.page/id page)]
+     {:db (-> db
+              (assoc-in [:control :pages :detail :status] :success)
+              (assoc-in [:control :pages :detail :error] nil)
+              (cond-> page (assoc-in [:control :pages :detail] (page-detail page))
+                      pid (assoc-in [:control :pages :selected] pid)))
+      :dispatch-n [[::fetch-content]]})))
+
+(rf/reg-event-fx
+ ::page-delete-success
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:control :pages :detail] (page-detail nil))
+            (assoc-in [:control :pages :selected] nil))
+    :dispatch-n [[::fetch-content]]}))
+
+(rf/reg-event-fx
+ ::save-block
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:control :blocks :detail])
+         id (:id form)
+         validation (validate-block-form form)
+         body (block-form->payload form)]
+     (cond
+       validation {:db (-> db
+                           (assoc-in [:control :blocks :detail :status] :error)
+                           (assoc-in [:control :blocks :detail :error] validation))}
+       (= mode :create)
+       {:db (-> db
+                (assoc-in [:control :blocks :detail :status] :saving)
+                (assoc-in [:control :blocks :detail :error] nil))
+        ::fx/http {:url "/api/content/blocks"
+                   :method "POST"
+                   :body body
+                   :on-success [::block-save-success {:mode :create}]
+                   :on-error [::content-operation-failure :blocks]}}
+       :else
+       {:db (-> db
+                (assoc-in [:control :blocks :detail :status] :saving)
+                (assoc-in [:control :blocks :detail :error] nil))
+        ::fx/http {:url (str "/api/content/blocks/" id)
+                   :method "PUT"
+                   :body (assoc body :content.block/id id)
+                   :on-success [::block-save-success {:mode :update}]
+                   :on-error [::content-operation-failure :blocks]}}))))
+
+(rf/reg-event-fx
+ ::delete-block
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :blocks :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :blocks :detail :error] "Select a block to delete")}
+       {:db (-> db
+                (assoc-in [:control :blocks :detail :status] :deleting)
+                (assoc-in [:control :blocks :detail :error] nil))
+        ::fx/http {:url (str "/api/content/blocks/" id)
+                   :method "DELETE"
+                   :on-success [::block-delete-success]
+                   :on-error [::content-operation-failure :blocks]}}))))
+
+(rf/reg-event-fx
+ ::block-save-success
+ (fn [{:keys [db]} [_ _context payload]]
+   (let [block (:block payload)
+         bid (:content.block/id block)]
+     {:db (-> db
+              (assoc-in [:control :blocks :detail :status] :success)
+              (assoc-in [:control :blocks :detail :error] nil)
+              (cond-> block (assoc-in [:control :blocks :detail] (block-detail block))
+                      bid (assoc-in [:control :blocks :selected] bid)))
+      :dispatch-n [[::fetch-content]]})))
+
+(rf/reg-event-fx
+ ::block-delete-success
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:control :blocks :detail] (block-detail nil))
+            (assoc-in [:control :blocks :selected] nil))
+    :dispatch-n [[::fetch-content]]}))
+
+(rf/reg-event-fx
+ ::save-tag
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:control :tags :detail])
+         id (:id form)
+         validation (validate-tag-form form)
+         body (tag-form->payload form)]
+     (cond
+       validation {:db (-> db
+                           (assoc-in [:control :tags :detail :status] :error)
+                           (assoc-in [:control :tags :detail :error] validation))}
+       (= mode :create)
+       {:db (-> db
+                (assoc-in [:control :tags :detail :status] :saving)
+                (assoc-in [:control :tags :detail :error] nil))
+        ::fx/http {:url "/api/content/tags"
+                   :method "POST"
+                   :body body
+                   :on-success [::tag-save-success {:mode :create}]
+                   :on-error [::content-operation-failure :tags]}}
+       :else
+       {:db (-> db
+                (assoc-in [:control :tags :detail :status] :saving)
+                (assoc-in [:control :tags :detail :error] nil))
+        ::fx/http {:url (str "/api/content/tags/" id)
+                   :method "PUT"
+                   :body (assoc body :content.tag/id id)
+                   :on-success [::tag-save-success {:mode :update}]
+                   :on-error [::content-operation-failure :tags]}}))))
+
+(rf/reg-event-fx
+ ::delete-tag
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :tags :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :tags :detail :error] "Select a tag to delete")}
+       {:db (-> db
+                (assoc-in [:control :tags :detail :status] :deleting)
+                (assoc-in [:control :tags :detail :error] nil))
+        ::fx/http {:url (str "/api/content/tags/" id)
+                   :method "DELETE"
+                   :on-success [::tag-delete-success]
+                   :on-error [::content-operation-failure :tags]}}))))
+
+(rf/reg-event-fx
+ ::tag-save-success
+ (fn [{:keys [db]} [_ _context payload]]
+   (let [tag (:tag payload)
+         tid (:content.tag/id tag)]
+     {:db (-> db
+              (assoc-in [:control :tags :detail :status] :success)
+              (assoc-in [:control :tags :detail :error] nil)
+              (cond-> tag (assoc-in [:control :tags :detail] (tag-detail tag))
+                      tid (assoc-in [:control :tags :selected] tid)))
+      :dispatch-n [[::fetch-content]]})))
+
+(rf/reg-event-fx
+ ::tag-delete-success
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:control :tags :detail] (tag-detail nil))
+            (assoc-in [:control :tags :selected] nil))
+    :dispatch-n [[::fetch-content]]}))
+
+(rf/reg-event-db
+ ::content-operation-failure
+ (fn [db [_ section {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to save content.")]
+     (-> db
+         (assoc-in [:control section :detail :status] :error)
+         (assoc-in [:control section :detail :error] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -1147,6 +1684,7 @@
 (rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
+(rf/reg-sub ::control (fn [db _] (:control db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
 (rf/reg-sub ::home (fn [db _] (:home db)))
 (rf/reg-sub ::land (fn [db _] (:land db)))
@@ -1169,6 +1707,7 @@
      (if session
        (case route
          :home [home/home-shell]
+         :control-panel [control-panel/control-panel-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])
        [login/login-page])

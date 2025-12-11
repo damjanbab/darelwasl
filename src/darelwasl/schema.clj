@@ -59,7 +59,10 @@
           mapping [[:user/id :entity.type/user]
                    [:task/id :entity.type/task]
                    [:tag/id :entity.type/tag]
-                   [:system/id :entity.type/system]]
+                   [:system/id :entity.type/system]
+                   [:content.tag/id :entity.type/content-tag]
+                   [:content.page/id :entity.type/content-page]
+                   [:content.block/id :entity.type/content-block]]
           tx-data (->> mapping
                        (mapcat (fn [[ident type-kw]]
                                  (let [eids (map first (d/q '[:find ?e

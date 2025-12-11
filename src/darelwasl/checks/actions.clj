@@ -1,9 +1,10 @@
 (ns darelwasl.checks.actions
-  (:require [darelwasl.auth :as auth]
-            [darelwasl.fixtures :as fixtures]
-            [darelwasl.tasks :as tasks]
+  (:require [clojure.string :as str]
             [datomic.client.api :as d]
-            [clojure.string :as str])
+            [darelwasl.auth :as auth]
+            [darelwasl.content :as content]
+            [darelwasl.fixtures :as fixtures]
+            [darelwasl.tasks :as tasks])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -199,29 +200,79 @@
                  (fail! failures "Archived task should not appear in default list after archiving" (:tasks list-after)))))
            (let [deleted (tasks/delete-task! conn task-id actor)
                  deleted-task (some-> (ensure-success failures "Delete task" deleted) :task)]
-             (when deleted-task
-               (when-not (= task-id (:task/id deleted-task))
-                 (fail! failures "Delete response should echo task id" deleted-task)))
-             (let [list-after-delete (tasks/list-tasks conn {:archived :all})
-                   after (ensure-success failures "List after delete" list-after-delete)]
-               (when after
-                 (when (some #(= task-id (:task/id %)) (:tasks after))
-                   (fail! failures "Deleted task should not appear in listings" (:tasks after)))))))))))
+           (when deleted-task
+             (when-not (= task-id (:task/id deleted-task))
+               (fail! failures "Delete response should echo task id" deleted-task)))
+           (let [list-after-delete (tasks/list-tasks conn {:archived :all})
+                 after (ensure-success failures "List after delete" list-after-delete)]
+             (when after
+               (when (some #(= task-id (:task/id %)) (:tasks after))
+                 (fail! failures "Deleted task should not appear in listings" (:tasks after)))))))))))
+
+(defn- content-checks
+  [conn failures actor]
+  (let [tags (ensure-success failures "Content tags list" (content/list-tags conn))
+        pages (ensure-success failures "Content pages list" (content/list-pages conn {:with-blocks? true}))
+        blocks (ensure-success failures "Content blocks list" (content/list-blocks conn {}))]
+    (when tags
+      (when-not (= 3 (count (:tags tags)))
+        (fail! failures "Expected 3 content tags from fixtures")))
+    (when pages
+      (when-not (= 2 (count (:pages pages)))
+        (fail! failures "Expected 2 content pages from fixtures")))
+    (when blocks
+      (when-not (= 5 (count (:blocks blocks)))
+        (fail! failures "Expected 5 content blocks from fixtures"))))
+  (let [tag-id (-> (content/list-tags conn) :tags first :content.tag/id)
+        created-tag (some-> (ensure-success failures "Create content tag" (content/create-tag! conn {:content.tag/name "News"} actor)) :tag)
+        updated-tag (when created-tag
+                      (some-> (ensure-success failures "Update content tag" (content/update-tag! conn (:content.tag/id created-tag) {:content.tag/slug "news-updated"} actor)) :tag))]
+    (when updated-tag
+      (when-not (= "news-updated" (:content.tag/slug updated-tag))
+        (fail! failures "Content tag slug should update" updated-tag)))
+    (let [page-res (ensure-success failures "Create content page"
+                                   (content/create-page! conn {:content.page/title "News"
+                                                               :content.page/path "/news"
+                                                               :content.page/summary "News landing"
+                                                               :content.page/navigation-order 3
+                                                               :content.page/tag [tag-id]}
+                                                        actor))
+          page (:page page-res)
+          block-res (when page
+                      (ensure-success failures "Create content block"
+                                      (content/create-block! conn {:content.block/page (:content.page/id page)
+                                                                   :content.block/type :hero
+                                                                   :content.block/title "News hero"}
+                                                            actor)))
+          block (:block block-res)]
+      (when block
+        (let [updated (some-> (ensure-success failures "Update content block"
+                                              (content/update-block! conn (:content.block/id block) {:content.block/order 5
+                                                                                                    :content.block/type (:content.block/type block)} actor))
+                              :block)]
+          (when (not= 5 (:content.block/order updated))
+            (fail! failures "Content block order should update" updated)))
+        (let [page-blocks (:blocks (content/list-blocks conn {:page-id (:content.page/id page)}))]
+          (when-not (some #(= (:content.block/id block) (:content.block/id %)) page-blocks)
+            (fail! failures "Created block should be returned when filtering by page")))
+        (ensure-success failures "Delete content block"
+                        (content/delete-block! conn (:content.block/id block) actor))))
+    (when created-tag
+      (ensure-success failures "Delete content tag" (content/delete-tag! conn (:content.tag/id created-tag) actor)))))
 
 (defn run-check!
   []
   (let [failures (atom [])]
     (try
-      (let [result (fixtures/with-temp-fixtures
-                     (fn [{:keys [conn] :as state}]
-                       (if-let [err (:error state)]
-                         (fail! failures "Fixture setup failed" err)
-                         (let [auth-state (check-auth failures)]
-                           (let [state' (assoc auth-state :tag-index (tag-index conn))]
-                             (check-listing conn failures (:tag-index state'))
-                             (check-mutations conn failures state'))))))]
-        (when (and (map? result) (:error result))
-          (fail! failures "Action contract checks failed during setup" (:error result))))
+      (fixtures/with-temp-fixtures
+        (fn [{:keys [conn] :as state}]
+          (if-let [err (:error state)]
+            (fail! failures "Fixture setup failed" err)
+            (let [auth-state (check-auth failures)
+                  state' (assoc auth-state :tag-index (tag-index conn))]
+              (check-listing conn failures (:tag-index state'))
+              (check-mutations conn failures state')
+              (content-checks conn failures (:actor auth-state))))))
       (catch Exception e
         (fail! failures "Action contract checks crashed" (.getMessage e))))
     (if (seq @failures)
