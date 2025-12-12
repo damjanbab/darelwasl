@@ -382,6 +382,10 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Short description/metadata"}
+   {:ident :content.page/section-type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Optional section type hint for rendering (e.g., :section/hero, :section/comparison)"} 
    {:ident :content.page/blocks
     :type :db.type/ref
     :cardinality :db.cardinality/many
@@ -398,7 +402,15 @@
     :type :db.type/ref
     :cardinality :db.cardinality/many
     :doc "Tags/categories"}]
-  :enums []
+  :enums {:content.page/section-type [:section/hero
+                                      :section/services
+                                      :section/comparison
+                                      :section/journey
+                                      :section/personas
+                                      :section/support
+                                      :section/faq
+                                      :section/contact
+                                      :section/about]}
   :invariants ["Path unique and non-empty"
                "Id, title, and path required"
                "Blocks referenced belong to this page"
@@ -443,4 +455,508 @@
                   :flags []}
   :related {:actions [:cap/action/content-tags]
             :views [:cap/view/control-panel]}}
+
+ {:id :cap/schema/business
+  :title "Business Entity"
+  :version "v1"
+  :attributes
+  [{:ident :business/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Business identity"}
+   {:ident :business/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Business name"}
+   {:ident :business/tagline
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Short strapline"}
+   {:ident :business/summary
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Brief summary"}
+   {:ident :business/mission
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Mission statement"}
+   {:ident :business/vision
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Vision statement"}
+   {:ident :business/nav-label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Navigation label"}
+   {:ident :business/hero-headline
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Hero headline"}
+   {:ident :business/hero-strapline
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Hero supporting line"}
+   {:ident :business/contact
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Ref to contact details"}
+   {:ident :business/hero-stats
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Refs to hero stats"}
+   {:ident :business/hero-flows
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Refs to hero flow steps"}
+   {:ident :business/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}]
+  :enums []
+  :invariants ["Business id unique" "Entity type set to :entity.type/business"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/contact]}}
+
+ {:id :cap/schema/contact
+  :title "Contact"
+  :version "v1"
+  :attributes
+  [{:ident :contact/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Contact identity"}
+   {:ident :contact/email
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Email address"}
+   {:ident :contact/phone
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Phone number"}
+   {:ident :contact/primary-cta-label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Primary CTA label"}
+   {:ident :contact/primary-cta-url
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Primary CTA URL"}
+   {:ident :contact/secondary-cta-label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Secondary CTA label"}
+   {:ident :contact/secondary-cta-url
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Secondary CTA URL"}]
+  :enums []
+  :invariants ["Contact id unique" "Entity type set to :entity.type/contact"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/business]}}
+
+ {:id :cap/schema/license
+  :title "License"
+  :version "v1"
+  :attributes
+  [{:ident :license/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "License identity"}
+   {:ident :license/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "License type enum (general, entrepreneur, gcc)"}
+   {:ident :license/slug
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Slug/lookup key"}
+   {:ident :license/label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Display label"}
+   {:ident :license/processing-time
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Processing time copy"}
+   {:ident :license/ownership
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Ownership note"}
+   {:ident :license/renewal-cost
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Renewal cost text"}
+   {:ident :license/pricing-lines
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Pricing lines (text)"}
+   {:ident :license/activities
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Activities list"}
+   {:ident :license/who
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Audience highlights"}
+   {:ident :license/who-activities
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Audience activity examples"}
+   {:ident :license/document-checklist
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Document checklist items"}
+   {:ident :license/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering among licenses"}
+   {:ident :license/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}]
+  :enums {:license/type [:license.type/general :license.type/entrepreneur :license.type/gcc]}
+  :invariants ["License id and slug unique"
+               "License type in enum"
+               "Entity type set to :entity.type/license"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/comparison-row]}}
+
+ {:id :cap/schema/comparison-row
+  :title "Comparison Row"
+  :version "v1"
+  :attributes
+  [{:ident :comparison.row/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Comparison row identity"}
+   {:ident :comparison.row/criterion
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Criteria label"}
+   {:ident :comparison.row/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering in matrix"}
+   {:ident :comparison.row/entrepreneur
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Entrepreneur license value"}
+   {:ident :comparison.row/general
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "General investment license value"}
+   {:ident :comparison.row/gcc
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "GCC license value"}]
+  :enums []
+  :invariants ["Criterion non-empty" "Entity type set to :entity.type/comparison-row"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/license]}}
+
+ {:id :cap/schema/journey-phase
+  :title "Journey Phase"
+  :version "v1"
+  :attributes
+  [{:ident :journey.phase/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Journey phase identity"}
+   {:ident :journey.phase/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Phase title"}
+   {:ident :journey.phase/kind
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Phase enum (pre-incorporation/incorporation/post-incorporation)"}
+   {:ident :journey.phase/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering in journey"}
+   {:ident :journey.phase/bullets
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Bullet points for the phase"}]
+  :enums {:journey.phase/kind [:phase/pre-incorporation :phase/incorporation :phase/post-incorporation]}
+  :invariants ["Title non-empty" "Phase kind in enum" "Entity type set to :entity.type/journey-phase"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/activation-step]}}
+
+ {:id :cap/schema/activation-step
+  :title "Activation Step"
+  :version "v1"
+  :attributes
+  [{:ident :activation.step/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Activation step identity"}
+   {:ident :activation.step/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Step title"}
+   {:ident :activation.step/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering in activation list"}
+   {:ident :activation.step/phase
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Optional journey phase association"}]
+  :enums []
+  :invariants ["Title non-empty" "Entity type set to :entity.type/activation-step"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/journey-phase]}}
+
+ {:id :cap/schema/persona
+  :title "Persona"
+  :version "v1"
+  :attributes
+  [{:ident :persona/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Persona identity"}
+   {:ident :persona/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Persona title"}
+   {:ident :persona/detail
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Persona detail/benefit"}
+   {:ident :persona/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Optional persona type"}
+   {:ident :persona/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering in list"}
+   {:ident :persona/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}]
+  :enums []
+  :invariants ["Title non-empty" "Entity type set to :entity.type/persona"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/support-responsibility
+  :title "Support Responsibility"
+  :version "v1"
+  :attributes
+  [{:ident :support.entry/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Support entry identity"}
+   {:ident :support.entry/role
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Role enum (we/you)"}
+   {:ident :support.entry/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Responsibility text"}
+   {:ident :support.entry/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering in support list"}]
+  :enums {:support.entry/role [:support/we :support/you]}
+  :invariants ["Role in enum" "Entity type set to :entity.type/support-entry"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/hero-stat
+  :title "Hero Stat"
+  :version "v1"
+  :attributes
+  [{:ident :hero.stat/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Hero stat identity"}
+   {:ident :hero.stat/label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Label"}
+   {:ident :hero.stat/value
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Value"}
+   {:ident :hero.stat/hint
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Supporting hint"}
+   {:ident :hero.stat/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering"}]
+  :enums []
+  :invariants ["Label non-empty" "Entity type set to :entity.type/hero-stat"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/hero-flow
+  :title "Hero Flow Step"
+  :version "v1"
+  :attributes
+  [{:ident :hero.flow/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Hero flow step identity"}
+   {:ident :hero.flow/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Step title"}
+   {:ident :hero.flow/detail
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Step detail"}
+   {:ident :hero.flow/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering"}]
+  :enums []
+  :invariants ["Title non-empty" "Entity type set to :entity.type/hero-flow"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/faq
+  :title "FAQ"
+  :version "v1"
+  :attributes
+  [{:ident :faq/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "FAQ identity"}
+   {:ident :faq/question
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Question"}
+   {:ident :faq/answer
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Answer"}
+   {:ident :faq/scope
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Optional scope (e.g., license type or section)"}
+   {:ident :faq/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering"}
+   {:ident :faq/visible?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Visibility toggle"}]
+  :enums []
+  :invariants ["Question non-empty" "Entity type set to :entity.type/faq"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
+ {:id :cap/schema/value
+  :title "Value"
+  :version "v1"
+  :attributes
+  [{:ident :value/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Value identity"}
+   {:ident :value/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Value title"}
+   {:ident :value/copy
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Value copy"}
+   {:ident :value/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering"}]
+  :enums []
+  :invariants ["Title non-empty" "Entity type set to :entity.type/value"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/business]}}
+
+ {:id :cap/schema/team-member
+  :title "Team Member"
+  :version "v1"
+  :attributes
+  [{:ident :team.member/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Team member identity"}
+   {:ident :team.member/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Name"}
+   {:ident :team.member/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Role title"}
+   {:ident :team.member/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering"}
+   {:ident :team.member/avatar
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Optional avatar placeholder"}]
+  :enums []
+  :invariants ["Name non-empty" "Entity type set to :entity.type/team-member"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/business]}}
 ]

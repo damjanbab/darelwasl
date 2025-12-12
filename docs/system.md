@@ -102,7 +102,47 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Storage: Datomic schema added (`:cap/schema/content-tag`, `:cap/schema/content-page`, `:cap/schema/content-block`) with :entity/type on all content entities; slugs and IDs are unique; order fields are longs.
 - Fixtures: `fixtures/content.edn` seeds Home and About pages with ordered blocks and tags; seeding wires block→page refs and page→block refs after blocks exist.
 - Invariants: Paths/slugs non-empty and unique; blocks that reference a page must point at that page; tags referenced by pages/blocks must exist; visibility toggles default to true in fixtures.
-- Actions/API: Authenticated CRUD under `/api/content/{tags|pages|blocks}`; create/update validate slugs, paths, block types, refs, and unique constraints; mutations audit log under `darelwasl.content`.
+- Actions/API: Authenticated CRUD under `/api/content/{tags|pages|blocks}`; create/update validate slugs, paths, block types, refs, and unique constraints; mutations audit log under `darelwasl.content`. Read endpoint `/api/content/v2` returns Saudi license site entities (licenses, comparison rows, journey/activation, personas, support entries, hero stats/flows, FAQs, values, team, business/contact).
+
+### Content Model v2 (Saudi license site – implemented schema)
+- Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
+- Entities:
+  - `:content.page` adds optional `:content.page/section-type` enum (`:section/hero`, `:section/services`, `:section/comparison`, `:section/journey`, `:section/personas`, `:section/support`, `:section/faq`, `:section/contact`, `:section/about`) to hint which data set a section uses.
+  - Business (`:entity.type/business`): id, name, tagline, summary, mission, vision, nav label, hero headline/strapline, contact ref, hero stat refs, hero flow refs, visible?.
+  - Contact (`:entity.type/contact`): id, email, phone, primary/secondary CTA labels + URLs.
+  - License (`:entity.type/license`): id, type enum (`:license.type/general|entrepreneur|gcc`), slug, label, processing-time, ownership, renewal-cost, pricing-lines (string set), activities (string set), who (string set), who-activities (string set), document-checklist (string set), order, visible?.
+  - Comparison row (`:entity.type/comparison-row`): id, criterion, order, entrepreneur/general/gcc value strings.
+  - Journey phase (`:entity.type/journey-phase`): id, title, kind enum (`:phase/pre-incorporation|incorporation|post-incorporation`), order, bullets (string set).
+  - Activation step (`:entity.type/activation-step`): id, title, order, optional phase ref.
+  - Persona (`:entity.type/persona`): id, title, detail, optional type keyword, order, visible?.
+  - Support entry (`:entity.type/support-entry`): id, role enum (`:support/we`, `:support/you`), text, order.
+  - Hero stat/flow (`:entity.type/hero-stat`, `:entity.type/hero-flow`): id, label/value/hint/order for stats; title/detail/order for flows.
+  - FAQ (`:entity.type/faq`): id, question, answer, optional scope keyword, order, visible?.
+  - Value/team (`:entity.type/value`, `:entity.type/team-member`): id, title/copy/order for values; id, name/title/order/avatar for team. Both can be linked from the business/about section.
+- Relationships & invariants:
+  - Every entity sets `:entity/type` and uses UUID identity; slugs unique where present.
+  - Section-type hint is optional; v1 content pages/blocks remain valid.
+  - Lists (pricing-lines, activities, bullets, who, FAQ, etc.) are stored as string sets; ordering is driven by per-entity `:.../order` fields where present, otherwise callers should sort deterministically.
+  - License type/phase/support role enums validated via schema; visibility booleans default true in fixtures.
+- Compatibility/flags: additive; no existing content removed. Public site renders v2 sections by default (no flag presently).
+- Fixtures: `fixtures/content.edn` now seeds the Saudi license site content (business/contact, licenses, comparison rows, journey/activation steps, personas, support roles, hero stats/flows, FAQs, values, team) alongside the presentation/about pages and blocks; IDs are fixed and carry `:entity/type` for backfill.
+
+## Public Site Design Contract (run-site-premium-001)
+- Visual tone: “calm authority” with strong hierarchy, generous whitespace, minimal decoration; high-trust cues via early stats/proof and consistent primary CTA.
+- Nav & CTA: top-level nav items = Home, Services, Comparison, Process, About, Contact; site-wide primary CTA button = “Schedule a meeting”; max 2 levels (Services may list up to 6–9 leaves; others single level); mobile hamburger must be keyboard navigable with visible focus and Escape to close.
+- IA & sections:
+  - Home: only page with dark, full-bleed hero; includes trust strip, offer overview (3 cards), “How it works” (3 steps + rail), “Choose a path” teaser (3 cards + rail), proof, short FAQ, global footer CTA band.
+  - Services: light hero; license selector tabs (General/Entrepreneur/GCC) with single detail panel; outcomes; FAQ; global footer CTA band.
+  - Comparison: light hero with summary + “How to read this”; table with recommended column highlighted; global footer CTA band.
+  - Process: light hero with summary; journey/activation timeline; global footer CTA band.
+  - About: principles only (no placeholder team); global footer CTA band.
+  - Contact: light hero + funnel steps; contact CTAs; global footer CTA band.
+- Motifs & rails: keep a single Evidence Pill style for proof/meta labels; Step Rail only in “How it works” and “Choose a path”; functional funnel indicator (Select → Compare → Schedule) on Home/Services/Comparison/Contact with current step highlighted; remove other decorative gates/handles.
+- CTA: one global footer CTA band above the footer (static) instead of per-page CTA cards.
+- Layout rhythm: dark hero on Home; rest of body is light; compact footer (not a second nav maze).
+- Data & ordering: render from existing v2 content entities (licenses, comparison rows, journey/activation, personas/support, FAQs, values/team, business/contact, hero stats/flows); respect visibility flags; deterministic ordering by `.../order` with stable fallback (id/label) when order missing.
+- Tokens only: no hardcoded colors/spacing/typography—use generated theme CSS variables. Public site uses `:theme/site-premium` tokens (v2) with `data-theme="theme-site-premium"`.
+- Responsive & a11y: centered max-width, no horizontal scroll; header/nav/CTA remain accessible on desktop/mobile; tap targets ≥44px; keyboard navigable menus; visible focus; no hover-only affordances.
 
 ## Patterns and Guidelines
 - Data modeling: fact-first; prefer attributes over blobs; model history intentionally (use :db.cardinality/one with upserts for identity, or time-indexed facts for history); avoid duplicating derived data unless cached with clear invalidation rules; use enums/idents instead of ad-hoc strings.
@@ -404,7 +444,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
 - :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
-- Public site skeleton: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve a simple read-only site backed by content pages/blocks.
+- Public site process: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve the v2 public site (Home/About/Contact) rendering live v2 entities (hero stats/flows, licenses, comparison rows, journey/activation, personas/support, FAQs, values, team, contact) with visibility filtering.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.

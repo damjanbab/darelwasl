@@ -72,3 +72,42 @@
   --shadows-card: 0 10px 28px rgba(0,0,0,0.25);
   --motion-transition: 150ms ease;
 }
+[data-theme="site-premium"] {
+  --colors-text-on-accent: #F8FBFC;
+  --colors-background: #F7F4EF;
+  --colors-warning: #F59E0B;
+  --colors-danger: #F97066;
+  --colors-success: #22C55E;
+  --colors-text-primary: #0F172A;
+  --colors-focus: #0EA5E9;
+  --colors-text-secondary: #445064;
+  --colors-border: #E0E6EF;
+  --colors-accent: #0EA5E9;
+  --colors-accent-strong: #0284C7;
+  --colors-surface: #FFFFFF;
+  --colors-surface-muted: #0F172A;
+  --typography-font-family: Inter, "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --typography-font-sizes-title: 56px;
+  --typography-font-sizes-section: 32px;
+  --typography-font-sizes-body: 18px;
+  --typography-font-sizes-meta: 14px;
+  --typography-line-heights-title: 64px;
+  --typography-line-heights-section: 40px;
+  --typography-line-heights-body: 28px;
+  --typography-line-heights-meta: 20px;
+  --spacing-base: 4px;
+  --spacing-scale-1: 8px;
+  --spacing-scale-2: 16px;
+  --spacing-scale-3: 24px;
+  --spacing-scale-4: 32px;
+  --spacing-scale-5: 40px;
+  --spacing-scale-6: 56px;
+  --spacing-scale-7: 72px;
+  --spacing-scale-8: 88px;
+  --spacing-scale-9: 104px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --shadows-card: 0 16px 40px rgba(15,23,42,0.08);
+  --motion-transition: 160ms ease;
+}

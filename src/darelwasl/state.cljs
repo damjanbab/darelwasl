@@ -122,10 +122,61 @@
    :status :idle
    :error nil})
 
+(def default-journey-form
+  {:id nil
+   :title ""
+   :kind :phase/pre-incorporation
+   :order 0
+   :bullets ""})
+
+(def default-activation-form
+  {:id nil
+   :title ""
+   :order 0
+   :phase nil})
+
+(def default-simple-detail
+  {:form nil
+   :mode :create
+   :status :idle
+   :error nil})
+
 (def default-control-state
-  {:pages (assoc default-content-list-state :detail default-content-detail)
+  {:tab :v1
+   :v2 {:status :idle
+        :error nil
+        :data nil}
+   :pages (assoc default-content-list-state :detail default-content-detail)
    :blocks (assoc default-content-list-state :detail (assoc default-content-detail :form default-block-form))
-   :tags (assoc default-content-list-state :detail (assoc default-content-detail :form default-tag-form))})
+   :tags (assoc default-content-list-state :detail (assoc default-content-detail :form default-tag-form))
+   :journey (assoc default-content-list-state :detail (assoc default-simple-detail :form default-journey-form))
+   :activation (assoc default-content-list-state :detail (assoc default-simple-detail :form default-activation-form))
+   :personas (assoc default-content-list-state :detail (assoc default-simple-detail :form {:id nil :title "" :detail "" :type nil :order 0 :visible? true}))
+   :support (assoc default-content-list-state :detail (assoc default-simple-detail :form {:id nil :role :support/we :text "" :order 0}))
+   :business {:detail {:form {:id nil
+                              :name ""
+                              :tagline ""
+                              :summary ""
+                              :mission ""
+                              :vision ""
+                              :nav-label ""
+                              :hero-headline ""
+                              :hero-strapline ""
+                              :contact nil
+                              :hero-stats []
+                              :hero-flows []
+                              :visible? true}
+                       :status :idle
+                       :error nil}}
+   :contact {:detail {:form {:id nil
+                             :email ""
+                             :phone ""
+                             :primary-cta-label ""
+                             :primary-cta-url ""
+                             :secondary-cta-label ""
+                             :secondary-cta-url ""}
+                      :status :idle
+                      :error nil}}})
 
 (def default-theme-state
   {:id :theme/default})

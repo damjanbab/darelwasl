@@ -25,7 +25,8 @@
       (edn/read r))))
 
 (defn load-fixtures
-  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...] :content {:tags [...] :pages [...] :blocks [...]}}.
+  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...] :content {...}}.
+  Content includes tags/pages/blocks plus optional v2 entities (businesses, contacts, licenses, comparison rows, journey phases, activation steps, personas, support entries, hero stats/flows, faqs, values, team members).
   Paths default to fixtures/users.edn, fixtures/tags.edn, fixtures/tasks.edn, and fixtures/content.edn."
   ([] (load-fixtures default-users-path default-tags-path default-tasks-path default-content-path))
   ([users-path tags-path tasks-path content-path]
@@ -57,7 +58,7 @@
 
 (defn seed-conn!
   "Transact fixtures into an existing Datomic connection. Returns {:status :ok
-  :users n :tags n :tasks n :content-tags n :content-pages n :content-blocks n} or {:error e} on failure."
+  :users n :tags n :tasks n :content-tags n :content-pages n :content-blocks n ...} or {:error e} on failure."
   ([conn] (seed-conn! conn (load-fixtures) {}))
   ([conn fixtures] (seed-conn! conn fixtures {}))
   ([conn {:keys [users tags tasks content]} {:keys [add-marker?] :or {add-marker? true}}]
@@ -65,6 +66,19 @@
          content-tags (:tags content)
          content-pages (:pages content)
          content-blocks (:blocks content)
+         businesses (:businesses content)
+         contacts (:contacts content)
+         licenses (:licenses content)
+         comparison-rows (:comparison-rows content)
+         journey-phases (:journey-phases content)
+         activation-steps (:activation-steps content)
+         personas (:personas content)
+         support-entries (:support-entries content)
+         hero-stats (:hero-stats content)
+         hero-flows (:hero-flows content)
+         faqs (:faqs content)
+         values (:values content)
+         team-members (:team-members content)
          page-blocks-tx (->> (or content-pages [])
                              (mapcat (fn [page]
                                        (let [page-id (:content.page/id page)
@@ -81,14 +95,24 @@
          (d/transact conn {:tx-data tags}))
        (when (seq tasks)
          (d/transact conn {:tx-data (map task->tx tasks)}))
-       (when (seq content-tags)
-         (d/transact conn {:tx-data content-tags}))
+       (when (seq content-tags) (d/transact conn {:tx-data content-tags}))
+       (when (seq contacts) (d/transact conn {:tx-data contacts}))
+       (when (seq hero-stats) (d/transact conn {:tx-data hero-stats}))
+       (when (seq hero-flows) (d/transact conn {:tx-data hero-flows}))
+       (when (seq values) (d/transact conn {:tx-data values}))
+       (when (seq team-members) (d/transact conn {:tx-data team-members}))
+       (when (seq licenses) (d/transact conn {:tx-data licenses}))
+       (when (seq comparison-rows) (d/transact conn {:tx-data comparison-rows}))
+       (when (seq journey-phases) (d/transact conn {:tx-data journey-phases}))
+       (when (seq activation-steps) (d/transact conn {:tx-data activation-steps}))
+       (when (seq personas) (d/transact conn {:tx-data personas}))
+       (when (seq support-entries) (d/transact conn {:tx-data support-entries}))
+       (when (seq faqs) (d/transact conn {:tx-data faqs}))
+       (when (seq businesses) (d/transact conn {:tx-data businesses}))
        (when (seq content-pages)
          (d/transact conn {:tx-data (map #(dissoc % :content.page/blocks) content-pages)}))
-       (when (seq content-blocks)
-         (d/transact conn {:tx-data content-blocks}))
-       (when (seq page-blocks-tx)
-         (d/transact conn {:tx-data page-blocks-tx}))
+       (when (seq content-blocks) (d/transact conn {:tx-data content-blocks}))
+       (when (seq page-blocks-tx) (d/transact conn {:tx-data page-blocks-tx}))
        (when add-marker?
          (d/transact conn {:tx-data [(seed-marker-tx)]}))
        {:status :ok
@@ -97,7 +121,20 @@
         :tasks (count tasks)
         :content-tags (count content-tags)
         :content-pages (count content-pages)
-        :content-blocks (count content-blocks)}
+        :content-blocks (count content-blocks)
+        :businesses (count businesses)
+        :contacts (count contacts)
+        :licenses (count licenses)
+        :comparison-rows (count comparison-rows)
+        :journey-phases (count journey-phases)
+        :activation-steps (count activation-steps)
+        :personas (count personas)
+        :support-entries (count support-entries)
+        :hero-stats (count hero-stats)
+        :hero-flows (count hero-flows)
+        :faqs (count faqs)
+        :values (count values)
+        :team-members (count team-members)}
        (catch Exception e
          (log/error e "Failed to seed fixtures into Datomic")
          {:error e})))))

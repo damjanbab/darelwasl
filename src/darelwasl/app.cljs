@@ -653,7 +653,10 @@
    {:db (-> db
             (state/mark-loading [:control :pages])
             (state/mark-loading [:control :blocks])
-            (state/mark-loading [:control :tags]))
+            (state/mark-loading [:control :tags])
+            (state/mark-loading [:control :journey])
+            (state/mark-loading [:control :activation])
+            (state/mark-loading [:control :v2]))
     :fx [[::fx/http {:url "/api/content/pages"
                      :method "GET"
                      :on-success [::fetch-pages-success]
@@ -665,7 +668,111 @@
          [::fx/http {:url "/api/content/tags"
                      :method "GET"
                      :on-success [::fetch-tags-success-control]
-                     :on-error [::content-failure :tags]}]]}))
+                     :on-error [::content-failure :tags]}]
+         [::fx/http {:url "/api/content/v2"
+                     :method "GET"
+                     :on-success [::fetch-content-v2-success]
+                     :on-error [::content-failure :v2]}]]}))
+
+(rf/reg-event-db
+ ::fetch-content-v2-success
+ (fn [db [_ payload]]
+   (let [data (or payload {})
+         any? (some (comp seq val) data)
+         status (if any? :ready :empty)
+         phases (vec (:journey-phases data))
+         steps (vec (:activation-steps data))
+         business (first (:businesses data))
+         contact (first (:contacts data))
+         phase-selected (some-> (get-in db [:control :journey :selected])
+                                (#(some (fn [p] (when (= (:journey.phase/id p) %) p)) phases)))
+         step-selected (some-> (get-in db [:control :activation :selected])
+                               (#(some (fn [s] (when (= (:activation.step/id s) %) s)) steps)))]
+     (-> db
+         (assoc-in [:control :v2 :data] data)
+         (assoc-in [:control :v2 :status] status)
+         (assoc-in [:control :v2 :error] nil)
+         (assoc-in [:control :journey :items] phases)
+         (assoc-in [:control :journey :selected] (or (:journey.phase/id phase-selected) (:journey.phase/id (first phases))))
+         (assoc-in [:control :journey :status] (if (seq phases) :ready :empty))
+         (assoc-in [:control :journey :error] nil)
+         (assoc-in [:control :journey :detail] {:form (or (and phase-selected {:id (:journey.phase/id phase-selected)
+                                                                              :title (:journey.phase/title phase-selected)
+                                                                              :kind (:journey.phase/kind phase-selected)
+                                                                              :order (:journey.phase/order phase-selected)
+                                                                              :bullets (str/join "\n" (:journey.phase/bullets phase-selected))})
+                                                         state/default-journey-form)
+                                                :mode (if phase-selected :edit :create)
+                                                :status :idle
+                                                :error nil})
+         (assoc-in [:control :activation :items] steps)
+         (assoc-in [:control :activation :selected] (or (:activation.step/id step-selected) (:activation.step/id (first steps))))
+         (assoc-in [:control :activation :status] (if (seq steps) :ready :empty))
+         (assoc-in [:control :activation :error] nil)
+         (assoc-in [:control :activation :detail] {:form (or (and step-selected {:id (:activation.step/id step-selected)
+                                                                                :title (:activation.step/title step-selected)
+                                                                                :order (:activation.step/order step-selected)
+                                                                                :phase (some-> step-selected :activation.step/phase :journey.phase/id)})
+                                                            state/default-activation-form)
+                                                    :mode (if step-selected :edit :create)
+                                                    :status :idle
+                                                    :error nil})
+         (assoc-in [:control :business :detail]
+                   {:form {:id (:business/id business)
+                           :name (:business/name business)
+                           :tagline (:business/tagline business)
+                           :summary (:business/summary business)
+                           :mission (:business/mission business)
+                           :vision (:business/vision business)
+                           :nav-label (:business/nav-label business)
+                           :hero-headline (:business/hero-headline business)
+                           :hero-strapline (:business/hero-strapline business)
+                           :contact (some-> business :business/contact :contact/id)
+                           :hero-stats (vec (map #(ref-id % :hero.stat/id) (:business/hero-stats business)))
+                           :hero-flows (vec (map #(ref-id % :hero.flow/id) (:business/hero-flows business)))
+                           :visible? (not= false (:business/visible? business))}
+                    :mode (if business :edit :create)
+                    :status :idle
+                    :error nil})
+         (assoc-in [:control :contact :detail]
+                   {:form {:id (:contact/id contact)
+                           :email (:contact/email contact)
+                           :phone (:contact/phone contact)
+                           :primary-cta-label (:contact/primary-cta-label contact)
+                           :primary-cta-url (:contact/primary-cta-url contact)
+                           :secondary-cta-label (:contact/secondary-cta-label contact)
+                           :secondary-cta-url (:contact/secondary-cta-url contact)}
+                    :mode (if contact :edit :create)
+                    :status :idle
+                    :error nil})
+         (assoc-in [:control :personas :items] (vec (:personas data)))
+         (assoc-in [:control :personas :status] (if (seq (:personas data)) :ready :empty))
+         (assoc-in [:control :personas :selected] (let [sel (get-in db [:control :personas :selected])]
+                                                    (or sel (:persona/id (first (:personas data))))))
+         (assoc-in [:control :personas :detail] {:form (if-let [p (some (fn [p] (when (= (:persona/id p) (get-in db [:control :personas :selected])) p)) (:personas data))]
+                                                       {:id (:persona/id p)
+                                                        :title (:persona/title p)
+                                                        :detail (:persona/detail p)
+                                                        :type (:persona/type p)
+                                                        :order (:persona/order p)
+                                                        :visible? (:persona/visible? p)}
+                                                       {:id nil :title "" :detail "" :type nil :order 0 :visible? true})
+                                                 :mode (if (get-in db [:control :personas :selected]) :edit :create)
+                                                 :status :idle
+                                                 :error nil})
+         (assoc-in [:control :support :items] (vec (:support-entries data)))
+         (assoc-in [:control :support :status] (if (seq (:support-entries data)) :ready :empty))
+         (assoc-in [:control :support :selected] (let [sel (get-in db [:control :support :selected])]
+                                                   (or sel (:support.entry/id (first (:support-entries data))))))
+         (assoc-in [:control :support :detail] {:form (if-let [s (some (fn [s] (when (= (:support.entry/id s) (get-in db [:control :support :selected])) s)) (:support-entries data))]
+                                                       {:id (:support.entry/id s)
+                                                        :role (:support.entry/role s)
+                                                        :text (:support.entry/text s)
+                                                        :order (:support.entry/order s)}
+                                                       {:id nil :role :support/we :text "" :order 0})
+                                                 :mode (if (get-in db [:control :support :selected]) :edit :create)
+                                                 :status :idle
+                                                 :error nil})))))
 
 (rf/reg-event-db
  ::fetch-pages-success
@@ -749,6 +856,330 @@
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
+
+(rf/reg-event-fx
+ ::set-control-tab
+ (fn [{:keys [db]} [_ tab]]
+   (let [already? (= (get-in db [:control :tab]) tab)
+         v2-status (get-in db [:control :v2 :status])]
+    {:db (assoc-in db [:control :tab] tab)
+      :fx (cond-> []
+            (and (= tab :v2) (not already?) (#{:idle :error} v2-status))
+            (conj [::fx/http {:url "/api/content/v2"
+                              :method "GET"
+                              :on-success [::fetch-content-v2-success]
+                              :on-error [::content-failure :v2]}]))})))
+
+;; Journey/activation helpers
+(defn journey-detail [phase]
+  (if phase
+    {:form {:id (:journey.phase/id phase)
+            :title (:journey.phase/title phase)
+            :kind (:journey.phase/kind phase)
+            :order (:journey.phase/order phase)
+            :bullets (str/join "\n" (:journey.phase/bullets phase))}
+     :mode :edit
+     :status :idle
+     :error nil}
+    {:form state/default-journey-form
+     :mode :create
+     :status :idle
+     :error nil}))
+
+(defn activation-detail [step]
+  (if step
+    {:form {:id (:activation.step/id step)
+            :title (:activation.step/title step)
+            :order (:activation.step/order step)
+            :phase (some-> step :activation.step/phase :journey.phase/id)}
+     :mode :edit
+     :status :idle
+     :error nil}
+    {:form state/default-activation-form
+     :mode :create
+     :status :idle
+     :error nil}))
+
+(rf/reg-event-db
+ ::select-journey
+ (fn [db [_ phase-id]]
+   (let [phase (some #(when (= (:journey.phase/id %) phase-id) %) (get-in db [:control :journey :items]))]
+     (-> db
+         (assoc-in [:control :journey :selected] phase-id)
+         (assoc-in [:control :journey :detail] (journey-detail phase))))))
+
+(rf/reg-event-db
+ ::select-activation
+ (fn [db [_ step-id]]
+   (let [step (some #(when (= (:activation.step/id %) step-id) %) (get-in db [:control :activation :items]))]
+     (-> db
+         (assoc-in [:control :activation :selected] step-id)
+         (assoc-in [:control :activation :detail] (activation-detail step))))))
+
+(rf/reg-event-db
+ ::set-journey-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :journey :detail :form field] value)
+       (assoc-in [:control :journey :detail :status] :idle)
+       (assoc-in [:control :journey :detail :error] nil))))
+
+(rf/reg-event-db
+ ::set-activation-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :activation :detail :form field] value)
+       (assoc-in [:control :activation :detail :status] :idle)
+       (assoc-in [:control :activation :detail :error] nil))))
+
+(rf/reg-event-db
+ ::set-persona-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :personas :detail :form field] value)
+       (assoc-in [:control :personas :detail :status] :idle)
+       (assoc-in [:control :personas :detail :error] nil))))
+
+(rf/reg-event-db
+ ::set-support-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :support :detail :form field] value)
+       (assoc-in [:control :support :detail :status] :idle)
+       (assoc-in [:control :support :detail :error] nil))))
+
+(defn- parse-bullets [text]
+  (->> (str/split (or text "") #"\n")
+       (map #(str/trim %))
+       (remove str/blank?)
+       vec))
+
+(rf/reg-event-fx
+ ::save-journey
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:control :journey :detail])
+         bullets (parse-bullets (:bullets form))
+         required-errors (cond-> []
+                           (str/blank? (:title form)) (conj "Title is required"))
+         body (-> form
+                  (assoc :journey.phase/title (:title form))
+                  (assoc :journey.phase/kind (or (:kind form) :phase/pre-incorporation))
+                  (assoc :journey.phase/order (some-> (:order form) js/parseInt))
+                  (assoc :journey.phase/bullets bullets)
+                  (dissoc :title :kind :order :bullets))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :journey :detail :status] :error)
+                (assoc-in [:control :journey :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :journey :detail :status] :saving)
+                (assoc-in [:control :journey :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/journey-phases/" (:id form)) "/api/content/journey-phases")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :journey]}]]}))))
+
+(rf/reg-event-fx
+ ::save-activation
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:control :activation :detail])
+         required-errors (cond-> []
+                           (str/blank? (:title form)) (conj "Title is required"))
+         body (-> form
+                  (assoc :activation.step/title (:title form))
+                  (assoc :activation.step/order (some-> (:order form) js/parseInt))
+                  (assoc :activation.step/phase (when-let [p (:phase form)] [:journey.phase/id p]))
+                  (dissoc :title :order :phase))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :activation :detail :status] :error)
+                (assoc-in [:control :activation :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :activation :detail :status] :saving)
+                (assoc-in [:control :activation :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/activation-steps/" (:id form)) "/api/content/activation-steps")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :activation]}]]}))))
+
+(rf/reg-event-fx
+ ::delete-journey
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :journey :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :journey :detail :error] "Select a phase to delete")}
+       {:db (assoc-in db [:control :journey :detail :status] :deleting)
+        :fx [[::fx/http {:url (str "/api/content/journey-phases/" id)
+                         :method "DELETE"
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :journey]}]]}))))
+
+(rf/reg-event-fx
+ ::delete-activation
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :activation :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :activation :detail :error] "Select a step to delete")}
+       {:db (assoc-in db [:control :activation :detail :status] :deleting)
+        :fx [[::fx/http {:url (str "/api/content/activation-steps/" id)
+                         :method "DELETE"
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :activation]}]]}))))
+
+(rf/reg-event-fx
+ ::save-persona
+ (fn [{:keys [db]} _]
+   (let [{:keys [form]} (get-in db [:control :personas :detail])
+         required-errors (cond-> []
+                           (str/blank? (:title form)) (conj "Title is required")
+                           (str/blank? (:detail form)) (conj "Detail is required"))
+         body (-> form
+                  (assoc :persona/title (:title form))
+                  (assoc :persona/detail (:detail form))
+                  (assoc :persona/order (some-> (:order form) js/parseInt))
+                  (assoc :persona/type (:type form))
+                  (assoc :persona/visible? (if (nil? (:visible? form)) true (:visible? form)))
+                  (dissoc :title :detail :order :type :visible?))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :personas :detail :status] :error)
+                (assoc-in [:control :personas :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :personas :detail :status] :saving)
+                (assoc-in [:control :personas :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/personas/" (:id form)) "/api/content/personas")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :personas]}]]}))))
+
+(rf/reg-event-fx
+ ::delete-persona
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :personas :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :personas :detail :error] "Select a persona to delete")}
+       {:db (assoc-in db [:control :personas :detail :status] :deleting)
+        :fx [[::fx/http {:url (str "/api/content/personas/" id)
+                         :method "DELETE"
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :personas]}]]}))))
+
+(rf/reg-event-fx
+ ::save-support-entry
+ (fn [{:keys [db]} _]
+   (let [{:keys [form]} (get-in db [:control :support :detail])
+         required-errors (cond-> []
+                           (str/blank? (:text form)) (conj "Text is required"))
+         body (-> form
+                  (assoc :support.entry/role (or (:role form) :support/we))
+                  (assoc :support.entry/text (:text form))
+                  (assoc :support.entry/order (some-> (:order form) js/parseInt))
+                  (dissoc :role :text :order))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :support :detail :status] :error)
+                (assoc-in [:control :support :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :support :detail :status] :saving)
+                (assoc-in [:control :support :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/support-entries/" (:id form)) "/api/content/support-entries")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :support]}]]}))))
+
+(rf/reg-event-fx
+ ::delete-support-entry
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:control :support :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:control :support :detail :error] "Select an entry to delete")}
+       {:db (assoc-in db [:control :support :detail :status] :deleting)
+        :fx [[::fx/http {:url (str "/api/content/support-entries/" id)
+                         :method "DELETE"
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :support]}]]}))))
+
+;; Business/contact edits
+(rf/reg-event-db
+ ::set-business-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :business :detail :form field] value)
+       (assoc-in [:control :business :detail :status] :idle)
+       (assoc-in [:control :business :detail :error] nil))))
+
+(rf/reg-event-fx
+ ::save-business
+ (fn [{:keys [db]} _]
+   (let [{:keys [form]} (get-in db [:control :business :detail])
+         required-errors (cond-> []
+                           (str/blank? (:name form)) (conj "Name is required"))
+         body (-> form
+                  (assoc :business/name (:name form))
+                  (assoc :business/tagline (:tagline form))
+                  (assoc :business/summary (:summary form))
+                  (assoc :business/mission (:mission form))
+                  (assoc :business/vision (:vision form))
+                  (assoc :business/nav-label (:nav-label form))
+                  (assoc :business/hero-headline (:hero-headline form))
+                  (assoc :business/hero-strapline (:hero-strapline form))
+                  (assoc :business/contact (:contact form))
+                  (assoc :business/hero-stats (vec (:hero-stats form)))
+                  (assoc :business/hero-flows (vec (:hero-flows form)))
+                  (assoc :business/visible? (if (nil? (:visible? form)) true (:visible? form)))
+                  (dissoc :name :tagline :summary :mission :vision :nav-label :hero-headline :hero-strapline :hero-stats :hero-flows :visible?))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :business :detail :status] :error)
+                (assoc-in [:control :business :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :business :detail :status] :saving)
+                (assoc-in [:control :business :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/businesses/" (:id form)) "/api/content/businesses")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :business]}]]}))))
+
+(rf/reg-event-db
+ ::set-contact-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:control :contact :detail :form field] value)
+       (assoc-in [:control :contact :detail :status] :idle)
+       (assoc-in [:control :contact :detail :error] nil))))
+
+(rf/reg-event-fx
+ ::save-contact
+ (fn [{:keys [db]} _]
+   (let [{:keys [form]} (get-in db [:control :contact :detail])
+         required-errors (cond-> []
+                           (str/blank? (:email form)) (conj "Email is required")
+                           (str/blank? (:phone form)) (conj "Phone is required"))
+         body (-> form
+                  (assoc :contact/email (:email form))
+                  (assoc :contact/phone (:phone form))
+                  (assoc :contact/primary-cta-label (:primary-cta-label form))
+                  (assoc :contact/primary-cta-url (:primary-cta-url form))
+                  (assoc :contact/secondary-cta-label (:secondary-cta-label form))
+                  (assoc :contact/secondary-cta-url (:secondary-cta-url form))
+                  (dissoc :email :phone :primary-cta-label :primary-cta-url :secondary-cta-label :secondary-cta-url))]
+     (if (seq required-errors)
+       {:db (-> db
+                (assoc-in [:control :contact :detail :status] :error)
+                (assoc-in [:control :contact :detail :error] (str/join ", " required-errors)))}
+       {:db (-> db
+                (assoc-in [:control :contact :detail :status] :saving)
+                (assoc-in [:control :contact :detail :error] nil))
+        :fx [[::fx/http {:url (if (:id form) (str "/api/content/contacts/" (:id form)) "/api/content/contacts")
+                         :method (if (:id form) "PUT" "POST")
+                         :params body
+                         :on-success [::fetch-content-v2]
+                         :on-error [::content-failure :contact]}]]}))))
 
 (rf/reg-event-db
  ::select-page

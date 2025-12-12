@@ -1,26 +1,28 @@
 {:tags [
   {:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/content-tag
-   :content.tag/name "Marketing"
-   :content.tag/slug "marketing"
-   :content.tag/description "Marketing-facing content grouping"}
+   :content.tag/name "Licenses"
+   :content.tag/slug "licenses"
+   :content.tag/description "License options and comparisons"}
   {:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"
    :entity/type :entity.type/content-tag
-   :content.tag/name "Product"
-   :content.tag/slug "product"
-   :content.tag/description "Product highlights and value props"}
+   :content.tag/name "Process"
+   :content.tag/slug "process"
+   :content.tag/description "Journey, activation, and support steps"}
   {:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"
    :entity/type :entity.type/content-tag
-   :content.tag/name "Support"
-   :content.tag/slug "support"
-   :content.tag/description "Support and contact touchpoints"}]
+   :content.tag/name "About"
+   :content.tag/slug "about"
+   :content.tag/description "About the team and contact"}]
+
  :pages [
   {:content.page/id #uuid "60000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/content-page
-   :content.page/title "Home"
+   :content.page/title "Presentation"
    :content.page/path "/"
-   :content.page/summary "Public site landing page"
+   :content.page/summary "Saudi license overview and journey"
    :content.page/navigation-order 0
+   :content.page/section-type :section/hero
    :content.page/visible? true
    :content.page/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"]
                       [:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]
@@ -31,42 +33,44 @@
    :entity/type :entity.type/content-page
    :content.page/title "About"
    :content.page/path "/about"
-   :content.page/summary "About the team and mission"
+   :content.page/summary "About Sandbridge Advisory"
    :content.page/navigation-order 1
+   :content.page/section-type :section/about
    :content.page/visible? true
    :content.page/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]
    :content.page/blocks [[:content.block/id #uuid "70000000-0000-0000-0000-000000000004"]
                          [:content.block/id #uuid "70000000-0000-0000-0000-000000000005"]]}]
+
  :blocks [
   {:content.block/id #uuid "70000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
    :content.block/type :hero
-   :content.block/title "Welcome to DarelWASL"
-   :content.block/body "Editable hero block controlled via the control panel."
+   :content.block/title "Launch Your Saudi Business as a Foreign Founder"
+   :content.block/body "We guide you through the legal path to obtain the right license and activate your company in Saudi Arabia."
    :content.block/media-ref "hero-img"
    :content.block/slug "home-hero"
    :content.block/order 0
    :content.block/visible? true
    :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"]
-                      [:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]}
+                       [:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]}
   {:content.block/id #uuid "70000000-0000-0000-0000-000000000002"
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
    :content.block/type :feature
-   :content.block/title "Highlights"
-   :content.block/body "Three feature bullets or cards sourced from the CMS."
+   :content.block/title "License options at a glance"
+   :content.block/body "General Investment, Entrepreneur, and GCC license paths with costs, eligibility, and activities."
    :content.block/media-ref "features"
-   :content.block/slug "home-highlights"
+   :content.block/slug "home-licenses"
    :content.block/order 1
    :content.block/visible? true
-   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000002"]]}
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000001"]]}
   {:content.block/id #uuid "70000000-0000-0000-0000-000000000003"
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
    :content.block/type :cta
-   :content.block/title "Get in touch"
-   :content.block/body "CTA block with contact details and a button."
+   :content.block/title "Book a 30-minute visual session"
+   :content.block/body "Share your deck, company structure, and target date—we return a plotted roadmap within two business days."
    :content.block/media-ref "cta"
    :content.block/slug "home-cta"
    :content.block/order 2
@@ -76,8 +80,8 @@
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000002"]
    :content.block/type :section
-   :content.block/title "Who we are"
-   :content.block/body "Overview of the team and mission."
+   :content.block/title "About Sandbridge Advisory"
+   :content.block/body "Boutique team focused on Saudi market entry and license activation."
    :content.block/media-ref "about-section"
    :content.block/slug "about-team"
    :content.block/order 0
@@ -87,10 +91,205 @@
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000002"]
    :content.block/type :rich-text
-   :content.block/title "Our approach"
-   :content.block/body "Detailed narrative content managed through the CMS."
-   :content.block/media-ref "about-rich-text"
-   :content.block/slug "about-approach"
+   :content.block/title "Mission and values"
+   :content.block/body "We make Saudi expansion feel structured, transparent, and human with precise execution and calm guidance."
+   :content.block/media-ref "about-mission"
+   :content.block/slug "about-mission"
    :content.block/order 1
    :content.block/visible? true
-   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}]}
+   :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}]
+
+ :businesses [
+  {:business/id #uuid "80000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/business
+   :business/name "Sandbridge Advisory"
+   :business/tagline "Saudi market entry partners"
+   :business/summary "We choreograph Saudi license acquisition and activation for foreign founders."
+   :business/mission "Make Saudi expansion feel structured, transparent, and human."
+   :business/vision "Global founders deploy faster because regulatory work is choreographed by trusted partners."
+   :business/nav-label "Business Setup in Saudi"
+   :business/hero-headline "Launch Your Saudi Business as a Foreign Founder"
+   :business/hero-strapline "We guide you through the legal path to obtain the right license and activate your company in Saudi Arabia."
+   :business/contact [:contact/id #uuid "81000000-0000-0000-0000-000000000001"]
+   :business/hero-stats [[:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001"]
+                         [:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002"]
+                         [:hero.stat/id #uuid "88000000-0000-0000-0000-000000000003"]]
+   :business/hero-flows [[:hero.flow/id #uuid "89000000-0000-0000-0000-000000000001"]
+                         [:hero.flow/id #uuid "89000000-0000-0000-0000-000000000002"]
+                         [:hero.flow/id #uuid "89000000-0000-0000-0000-000000000003"]]
+   :business/visible? true}]
+
+ :contacts [
+  {:contact/id #uuid "81000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/contact
+   :contact/email "hello@sandbridge.sa"
+   :contact/phone "+966 50 000 0000"
+   :contact/primary-cta-label "Email hello@sandbridge.sa"
+   :contact/primary-cta-url "mailto:hello@sandbridge.sa"
+   :contact/secondary-cta-label "Call us"
+   :contact/secondary-cta-url "tel:+966500000000"}]
+
+ :licenses [
+  {:license/id #uuid "82000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/license
+   :license/type :license.type/general
+   :license/slug "general-investment"
+   :license/label "General Investment License"
+   :license/processing-time "2-6 weeks"
+   :license/ownership "100% ownership allowed"
+   :license/renewal-cost "62,000 SAR ($16,534 USD)"
+   :license/pricing-lines ["Year 1: 12,000 SAR ($3,200 USD)" "Renewal: 62,000 SAR/year ($16,534 USD)"]
+   :license/activities ["Construction" "Manufacturing" "Trading" "Education" "Landscape" "Accommodation" "Agriculture"]
+   :license/who ["Established foreign companies" "Investors expanding into KSA" "100% ownership"]
+   :license/who-activities ["Restaurant" "Cafe" "Schools" "Construction" "Workshops" "Trading" "Supermarket" "Agriculture"]
+   :license/document-checklist ["Parent company CR, AoA, Board Resolution (attested)"
+                                "Audited financials + power of attorney"
+                                "Embassy legalization and Arabic translations"]
+   :license/order 0
+   :license/visible? true}
+  {:license/id #uuid "82000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/license
+   :license/type :license.type/entrepreneur
+   :license/slug "entrepreneur"
+   :license/label "Entrepreneur License"
+   :license/processing-time "2-6 weeks"
+   :license/ownership "100% ownership allowed"
+   :license/renewal-cost "Varies by year"
+   :license/pricing-lines ["Years 1-3: 2,000 SAR/year ($533 USD/year)"
+                           "Years 4-5: 12,000 SAR/year ($3,200 USD/year)"
+                           "Year 6+: 62,000 SAR/year ($16,534 USD/year)"]
+   :license/activities ["Construction" "Manufacturing" "Education" "Landscape" "Accommodation" "Agriculture"]
+   :license/who ["High-potential founders" "Investors launching new ventures" "100% ownership"]
+   :license/who-activities ["Restaurant" "Cafe" "Schools" "Construction" "Workshops" "Supermarket" "Agriculture"]
+   :license/document-checklist ["Pitch deck" "Letter from incubators or VC" "Complete business plan"]
+   :license/order 1
+   :license/visible? true}
+  {:license/id #uuid "82000000-0000-0000-0000-000000000003"
+   :entity/type :entity.type/license
+   :license/type :license.type/gcc
+   :license/slug "gcc-license"
+   :license/label "GCC National License"
+   :license/processing-time "1-3 weeks"
+   :license/ownership "GCC nationals allowed"
+   :license/renewal-cost "License cost: 5,000 SAR ($1,333 USD)"
+   :license/pricing-lines ["License Fee: 5,000 SAR ($1,333 USD)"]
+   :license/activities ["Construction" "Manufacturing" "Trading" "Education" "Landscape" "Accommodation" "Agriculture"]
+   :license/who ["GCC nationals"]
+   :license/who-activities ["Restaurant" "Cafe" "Schools" "Construction" "Workshops" "Trading" "Supermarket" "Agriculture"]
+   :license/document-checklist ["ID" "Proof of residency" "Activity list"]
+   :license/order 2
+   :license/visible? true}]
+
+ :comparison-rows [
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Processing time"
+   :comparison.row/order 0
+   :comparison.row/entrepreneur "2-6 weeks"
+   :comparison.row/general "2-6 weeks"
+   :comparison.row/gcc "1-3 weeks"}
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Cost structure (SAR / USD)"
+   :comparison.row/order 1
+   :comparison.row/entrepreneur "Years 1-3: 2,000 SAR/year ($533); Years 4-5: 12,000 SAR/year ($3,200); Year 6+: 62,000 SAR/year ($16,534)"
+   :comparison.row/general "Year 1: 12,000 SAR ($3,200); Renewal: 62,000 SAR/year ($16,534)"
+   :comparison.row/gcc "License: 5,000 SAR ($1,333)"}
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000003"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Ownership"
+   :comparison.row/order 2
+   :comparison.row/entrepreneur "100% foreign ownership allowed"
+   :comparison.row/general "100% foreign ownership allowed"
+   :comparison.row/gcc "GCC nationals only"}
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000004"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Required documents"
+   :comparison.row/order 3
+   :comparison.row/entrepreneur "Pitch deck, incubator letter, full business plan"
+   :comparison.row/general "Attested parent-company documents, financials, POA, legalizations"
+   :comparison.row/gcc "ID, proof of residency, activity list"}
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000005"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Activities included"
+   :comparison.row/order 4
+   :comparison.row/entrepreneur "Construction, manufacturing, education, landscape, accommodation, agriculture"
+   :comparison.row/general "Construction, manufacturing, trading, education, landscape, accommodation, agriculture"
+   :comparison.row/gcc "Construction, manufacturing, trading, education, landscape, accommodation, agriculture"}
+  {:comparison.row/id #uuid "83000000-0000-0000-0000-000000000006"
+   :entity/type :entity.type/comparison-row
+   :comparison.row/criterion "Typical profiles"
+   :comparison.row/order 5
+   :comparison.row/entrepreneur "High-potential founders and startups seeking soft-entry"
+   :comparison.row/general "Established companies expanding with 100% ownership"
+   :comparison.row/gcc "GCC nationals formalizing operations"}]
+
+ :journey-phases [
+  {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000001"
+   :entity/type :entity.type/journey-phase
+   :journey.phase/title "Phase 1 · Pre-Incorporation"
+   :journey.phase/kind :phase/pre-incorporation
+   :journey.phase/order 0
+   :journey.phase/bullets ["Identifying activities" "License mapping" "Preparing and attestation of foreign company documents"]}
+  {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000002"
+   :entity/type :entity.type/journey-phase
+   :journey.phase/title "Phase 2 · Incorporation"
+   :journey.phase/kind :phase/incorporation
+   :journey.phase/order 1
+   :journey.phase/bullets ["MISA license" "Trade name reservation" "CR and Articles of Association"]}
+  {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000003"
+   :entity/type :entity.type/journey-phase
+   :journey.phase/title "Phase 3 · Post-Incorporation"
+   :journey.phase/kind :phase/post-incorporation
+   :journey.phase/order 2
+   :journey.phase/bullets ["Registration of business files" "Compliances" "Bank and addresses" "Final operations checklist"]}]
+
+ :activation-steps [
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000001" :entity/type :entity.type/activation-step :activation.step/title "Digital certificate / signage" :activation.step/order 0}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000002" :entity/type :entity.type/activation-step :activation.step/title "Municipal license (Baladi)" :activation.step/order 1}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000003" :entity/type :entity.type/activation-step :activation.step/title "ZATCA registration" :activation.step/order 2}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000004" :entity/type :entity.type/activation-step :activation.step/title "GOSI + Muqeem" :activation.step/order 3}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000005" :entity/type :entity.type/activation-step :activation.step/title "Bank account and capital deposit" :activation.step/order 4}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000006" :entity/type :entity.type/activation-step :activation.step/title "Office lease attestation" :activation.step/order 5}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000007" :entity/type :entity.type/activation-step :activation.step/title "Post-license visas" :activation.step/order 6}
+  {:activation.step/id #uuid "85000000-0000-0000-0000-000000000008" :entity/type :entity.type/activation-step :activation.step/title "Operational handover kit" :activation.step/order 7}]
+
+ :personas [
+  {:persona/id #uuid "86000000-0000-0000-0000-000000000001" :entity/type :entity.type/persona :persona/title "Scale-up service firms" :persona/detail "Consulting, design, digital groups with Saudi mandates" :persona/order 0 :persona/visible? true}
+  {:persona/id #uuid "86000000-0000-0000-0000-000000000002" :entity/type :entity.type/persona :persona/title "Industrial innovators" :persona/detail "Manufacturing and climate-tech setting up R&D or production" :persona/order 1 :persona/visible? true}
+  {:persona/id #uuid "86000000-0000-0000-0000-000000000003" :entity/type :entity.type/persona :persona/title "Venture-backed founders" :persona/detail "Entrepreneur License candidates with funding and traction" :persona/order 2 :persona/visible? true}]
+
+ :support-entries [
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000001" :entity/type :entity.type/support-entry :support.entry/role :support/we :support.entry/text "Sequence every ministerial and banking appointment" :support.entry/order 0}
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000002" :entity/type :entity.type/support-entry :support.entry/role :support/we :support.entry/text "Maintain bilingual data rooms and submission logs" :support.entry/order 1}
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000003" :entity/type :entity.type/support-entry :support.entry/role :support/we :support.entry/text "Coach executives for notary and investor meetings" :support.entry/order 2}
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000004" :entity/type :entity.type/support-entry :support.entry/role :support/you :support.entry/text "Approve structure, capital, and brand assets" :support.entry/order 3}
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000005" :entity/type :entity.type/support-entry :support.entry/role :support/you :support.entry/text "Sign and notarize documents we prepare" :support.entry/order 4}
+  {:support.entry/id #uuid "87000000-0000-0000-0000-000000000006" :entity/type :entity.type/support-entry :support.entry/role :support/you :support.entry/text "Provide corporate history and proof of funds" :support.entry/order 5}]
+
+ :hero-stats [
+  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-stat :hero.stat/label "Processing time" :hero.stat/value "1-6 weeks" :hero.stat/hint "Range across all three license paths" :hero.stat/order 0}
+  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-stat :hero.stat/label "Ownership" :hero.stat/value "Up to 100%" :hero.stat/hint "Foreign ownership possible on key routes" :hero.stat/order 1}
+  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-stat :hero.stat/label "Activation" :hero.stat/value "End-to-end" :hero.stat/hint "Licensing, banking, visas, addresses" :hero.stat/order 2}]
+
+ :hero-flows [
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-flow :hero.flow/title "Map activities" :hero.flow/detail "Pick the license that matches what you actually do." :hero.flow/order 0}
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-flow :hero.flow/title "Sequence filings" :hero.flow/detail "Know the exact order of attestations, notary, and ZATCA." :hero.flow/order 1}
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-flow :hero.flow/title "Go live" :hero.flow/detail "Finish activation with banking, payroll, visas, and office evidence." :hero.flow/order 2}]
+
+ :faqs [
+  {:faq/id #uuid "89100000-0000-0000-0000-000000000001" :entity/type :entity.type/faq :faq/question "Can I graduate from an Entrepreneur License to a General Investment License later?" :faq/answer "Yes. Once traction, capital, and documentation standards are met we migrate you without downtime." :faq/order 0 :faq/visible? true}
+  {:faq/id #uuid "89100000-0000-0000-0000-000000000002" :entity/type :entity.type/faq :faq/question "Can I engage in full trading activities as a foreign investor?" :faq/answer "Trading is permitted under the General Investment License and GCC National License subject to capital and compliance requirements." :faq/order 1 :faq/visible? true}
+  {:faq/id #uuid "89100000-0000-0000-0000-000000000003" :entity/type :entity.type/faq :faq/question "Do these licenses support long-term visas?" :faq/answer "Yes. Once the entity is active we coordinate GM visa issuance plus ongoing visa quotas." :faq/order 2 :faq/visible? true}
+  {:faq/id #uuid "89100000-0000-0000-0000-000000000004" :entity/type :entity.type/faq :faq/question "What is the biggest cause of delay?" :faq/answer "Incomplete attestations or missing embassy legalizations. Prep removes those gaps." :faq/order 3 :faq/visible? true}]
+
+ :values [
+  {:value/id #uuid "89200000-0000-0000-0000-000000000001" :entity/type :entity.type/value :value/title "Precision" :value/copy "We document every requirement, translation, and signature so approvals never slip." :value/order 0}
+  {:value/id #uuid "89200000-0000-0000-0000-000000000002" :entity/type :entity.type/value :value/title "Candor" :value/copy "Clear advice on feasibility, cost, and timing even when it is uncomfortable." :value/order 1}
+  {:value/id #uuid "89200000-0000-0000-0000-000000000003" :entity/type :entity.type/value :value/title "Stewardship" :value/copy "We treat your expansion like our own and protect your reputation in the Kingdom." :value/order 2}
+  {:value/id #uuid "89200000-0000-0000-0000-000000000004" :entity/type :entity.type/value :value/title "Calm execution" :value/copy "Complex processes stay orderly with structured workflows and proactive communication." :value/order 3}]
+
+ :team-members [
+  {:team.member/id #uuid "89300000-0000-0000-0000-000000000001" :entity/type :entity.type/team-member :team.member/name "Layla Hassan" :team.member/title "Partner, Strategy" :team.member/order 0}
+  {:team.member/id #uuid "89300000-0000-0000-0000-000000000002" :entity/type :entity.type/team-member :team.member/name "Omar Greene" :team.member/title "Director, Regulatory" :team.member/order 1}
+  {:team.member/id #uuid "89300000-0000-0000-0000-000000000003" :entity/type :entity.type/team-member :team.member/name "Maya Cheng" :team.member/title "Client Lead" :team.member/order 2}]}

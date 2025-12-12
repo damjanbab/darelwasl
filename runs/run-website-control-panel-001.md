@@ -382,6 +382,23 @@
   - Outcome: Full proof matrix executed via `./scripts/checks.sh all`; registries/schema/import/actions/app-smoke all green (smoke logged a skipped land navigation selector but completed successfully).
   - Proof: `./scripts/checks.sh all` (2025-12-11 06:09 UTC).
 
+- Task ID: public-site-v2-render
+  - Status: done (Codex, 2025-12-11 20:17 UTC)
+  - Objective: Render the public site from the new v2 content set (licenses, comparison, journey/activation, personas/support, hero stats/flows, FAQs, values/team, contact) with refreshed layout and navigation.
+  - Scope: Replace `site/http.clj` rendering to read `list-content-v2`, add Home/Services/About/Contact routes, build sections for hero, licenses, comparison table, journey/activation timeline, personas/support, FAQs, values/team, and contact CTAs; keep read-only.
+  - Out of Scope: Control-panel UI, caching/SEO, multi-domain configuration.
+  - Capabilities Touched: Public site process (read-only), content reads.
+  - Parallel Safety:
+    - Exclusive: site HTTP renderer.
+    - Shared/Read-only: content datastore (reads).
+    - Sequencing: After list-content-v2 backend.
+  - Requirement Change & Compatibility: Additive; filters on visibility flags preserved.
+  - Dependencies: content-v2 data (`content/list-content-v2`).
+  - Deliverables: Updated site layout using v2 entities, navigation labels from business nav text, 404 fallback intact.
+  - Proof Plan: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run`.
+  - Outcome: Public site now renders live v2 data with hero stats/flows, license cards, comparison table, journey/activation timeline, personas + support roles, FAQs, values, team, and contact CTAs across /, /services, /about, /contact.
+  - Proof: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run` (2025-12-11 20:17 UTC).
+
 ## Notes
 - Keep all changes additive; avoid breaking existing Tasks/Land apps.
 - Ensure ports are configurable to avoid conflict with existing app (3000). Consider site on 3200+.

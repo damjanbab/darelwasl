@@ -52,6 +52,39 @@
   :radius {:sm "4px" :md "8px" :lg "12px"}
   :shadows {:card "0 10px 28px rgba(0,0,0,0.25)"}
   :motion {:transition "150ms ease"}
-  :compatibility {:backward true :forward true :flags []}
+ :compatibility {:backward true :forward true :flags []}
   :related {:views [:cap/view/login :cap/view/tasks]}}
+
+ {:id :theme/site-premium
+  :title "Premium site"
+  :version "v2"
+  :purpose "Public site theme with dark hero, light body, and high-contrast CTA"
+  :colors {:background "#F7F4EF"
+           :surface "#FFFFFF"
+           :surface-muted "#0F172A"
+           :text-primary "#0F172A"
+           :text-secondary "#445064"
+           :text-on-accent "#F8FBFC"
+           :border "#E0E6EF"
+           :accent "#0EA5E9"
+           :accent-strong "#0284C7"
+           :warning "#F59E0B"
+           :danger "#F97066"
+           :success "#22C55E"
+           :focus "#0EA5E9"}
+  :typography {:font-family "Inter, \"IBM Plex Sans\", system-ui, -apple-system, sans-serif"
+               :font-sizes {:title "56px" :section "32px" :body "18px" :meta "14px"}
+               :line-heights {:title "64px" :section "40px" :body "28px" :meta "20px"}}
+  :spacing {:base "4px"
+            :scale ["8px" "16px" "24px" "32px" "40px" "56px" "72px" "88px" "104px"]}
+  :radius {:sm "8px" :md "14px" :lg "18px"}
+  :shadows {:card "0 16px 40px rgba(15,23,42,0.08)"}
+  :motion {:transition "160ms ease"}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:views [:cap/view/site-home
+                    :cap/view/site-services
+                    :cap/view/site-comparison
+                    :cap/view/site-process
+                    :cap/view/site-about
+                    :cap/view/site-contact]}}
 ]

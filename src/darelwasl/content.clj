@@ -89,6 +89,35 @@
       (and allowed (not (contains? allowed kw))) {:error (str "Unsupported " label)}
       :else {:value kw})))
 
+(defn- normalize-string-list
+  [v label]
+  (cond
+    (nil? v) {:value []}
+    (string? v) (let [s (str/trim v)]
+                  (if (str/blank? s)
+                    {:value []}
+                    {:value [s]}))
+    (sequential? v) (let [vals (->> v
+                                    (keep (fn [item]
+                                            (when (string? item)
+                                              (let [s (str/trim item)]
+                                                (when-not (str/blank? s) s)))))
+                                    vec)]
+                     {:value vals})
+    :else {:error (str label " must be a string or list of strings")}))
+
+(defn- normalize-ref-list
+  [items ref-key label]
+  (let [vals (or items [])]
+    (reduce (fn [acc v]
+              (if-let [{id :value err :error} (normalize-uuid v label)]
+                (if err
+                  (reduced {:error err})
+                  (update acc :value conj [ref-key id]))
+                acc))
+            {:value []}
+            vals)))
+
 (defn- slugify
   [s]
   (let [slug (-> s
@@ -112,6 +141,144 @@
 ;; -------- Pull helpers --------
 
 (def allowed-block-types #{:hero :section :rich-text :feature :cta :list})
+
+(defn- present-license
+  [license]
+  (when license
+    (select-keys license [:license/id
+                          :license/type
+                          :license/slug
+                          :license/label
+                          :license/processing-time
+                          :license/ownership
+                          :license/renewal-cost
+                          :license/pricing-lines
+                          :license/activities
+                          :license/who
+                          :license/who-activities
+                          :license/document-checklist
+                          :license/order
+                          :license/visible?])))
+
+(defn- present-comparison-row
+  [row]
+  (when row
+    (select-keys row [:comparison.row/id
+                      :comparison.row/criterion
+                      :comparison.row/order
+                      :comparison.row/entrepreneur
+                      :comparison.row/general
+                      :comparison.row/gcc])))
+
+(defn- present-journey-phase
+  [phase]
+  (when phase
+    (select-keys phase [:journey.phase/id
+                        :journey.phase/title
+                        :journey.phase/kind
+                        :journey.phase/order
+                        :journey.phase/bullets])))
+
+(defn- present-activation-step
+  [step]
+  (when step
+    (-> step
+        (update :activation.step/phase #(when-let [p (:journey.phase/id %)] [:journey.phase/id p]))
+        (select-keys [:activation.step/id
+                      :activation.step/title
+                      :activation.step/order
+                      :activation.step/phase]))))
+
+(defn- present-persona
+  [persona]
+  (when persona
+    (select-keys persona [:persona/id
+                          :persona/title
+                          :persona/detail
+                          :persona/type
+                          :persona/order
+                          :persona/visible?])))
+
+(defn- present-support-entry
+  [entry]
+  (when entry
+    (select-keys entry [:support.entry/id
+                        :support.entry/role
+                        :support.entry/text
+                        :support.entry/order])))
+
+(defn- present-hero-stat
+  [stat]
+  (when stat
+    (select-keys stat [:hero.stat/id
+                       :hero.stat/label
+                       :hero.stat/value
+                       :hero.stat/hint
+                       :hero.stat/order])))
+
+(defn- present-hero-flow
+  [flow]
+  (when flow
+    (select-keys flow [:hero.flow/id
+                       :hero.flow/title
+                       :hero.flow/detail
+                       :hero.flow/order])))
+
+(defn- present-faq
+  [faq]
+  (when faq
+    (select-keys faq [:faq/id
+                      :faq/question
+                      :faq/answer
+                      :faq/scope
+                      :faq/order
+                      :faq/visible?])))
+
+(defn- present-value
+  [v]
+  (when v
+    (select-keys v [:value/id :value/title :value/copy :value/order])))
+
+(defn- present-team-member
+  [member]
+  (when member
+    (select-keys member [:team.member/id
+                         :team.member/name
+                         :team.member/title
+                         :team.member/order
+                         :team.member/avatar])))
+
+(defn- present-contact
+  [contact]
+  (when contact
+    (select-keys contact [:contact/id
+                          :contact/email
+                          :contact/phone
+                          :contact/primary-cta-label
+                          :contact/primary-cta-url
+                          :contact/secondary-cta-label
+                          :contact/secondary-cta-url])))
+
+(defn- present-business
+  [business]
+  (when business
+    (-> business
+        (update :business/contact #(when-let [c (:contact/id %)] [:contact/id c]))
+        (update :business/hero-stats #(vec (map (fn [s] [:hero.stat/id (:hero.stat/id s)]) %)))
+        (update :business/hero-flows #(vec (map (fn [f] [:hero.flow/id (:hero.flow/id f)]) %)))
+        (select-keys [:business/id
+                      :business/name
+                      :business/tagline
+                      :business/summary
+                      :business/mission
+                      :business/vision
+                      :business/nav-label
+                      :business/hero-headline
+                      :business/hero-strapline
+                      :business/contact
+                      :business/hero-stats
+                      :business/hero-flows
+                      :business/visible?]))))
 
 (defn- present-tag
   [tag]
@@ -726,3 +893,603 @@
                            (or (:user/username actor) (:user/id actor))
                            bid)
                 {:block {:content.block/id bid}})))))))
+
+;; -------- License + comparison mutations --------
+
+(def license-types #{:license.type/general :license.type/entrepreneur :license.type/gcc})
+
+(defn- validate-license
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :license/id) "license id")
+        {slug :value slug-err :error} (normalize-string (param-value body :license/slug) "slug" {:required true})
+        {label :value label-err :error} (normalize-string (param-value body :license/label) "label" {:required true})
+        {type-kw :value type-err :error} (normalize-keyword (param-value body :license/type) "license type" license-types)
+        {processing :value processing-err :error} (normalize-string (param-value body :license/processing-time) "processing time" {:required false :allow-blank? true})
+        {ownership :value ownership-err :error} (normalize-string (param-value body :license/ownership) "ownership" {:required false :allow-blank? true})
+        {renewal :value renewal-err :error} (normalize-string (param-value body :license/renewal-cost) "renewal cost" {:required false :allow-blank? true})
+        {pricing :value pricing-err :error} (normalize-string-list (param-value body :license/pricing-lines) "pricing")
+        {activities :value activities-err :error} (normalize-string-list (param-value body :license/activities) "activities")
+        {who :value who-err :error} (normalize-string-list (param-value body :license/who) "who")
+        {who-act :value who-act-err :error} (normalize-string-list (param-value body :license/who-activities) "who activities")
+        {docs :value docs-err :error} (normalize-string-list (param-value body :license/document-checklist) "document checklist")
+        {order :value order-err :error} (normalize-long (param-value body :license/order) "order")
+        {visible :value visible-err :error} (normalize-boolean (param-value body :license/visible?) "visible" {:default true})]
+    (or id-err slug-err label-err type-err processing-err ownership-err renewal-err pricing-err activities-err who-err who-act-err docs-err order-err visible-err
+        {:tx {:license/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/license
+              :license/slug slug
+              :license/label label
+              :license/type type-kw
+              :license/processing-time processing
+              :license/ownership ownership
+              :license/renewal-cost renewal
+              :license/pricing-lines pricing
+              :license/activities activities
+              :license/who who
+              :license/who-activities who-act
+              :license/document-checklist docs
+              :license/order order
+              :license/visible? (if (nil? visible) true visible)}})))
+
+(defn upsert-license!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-license (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:license/id (:license/id tx)])] "upsert license")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT license-upsert user=%s license=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:license/id tx))
+                {:license (present-license tx)})))))))
+
+(defn delete-license!
+  [conn license-id actor]
+  (or (ensure-conn conn)
+      (let [{lid :value id-err :error} (normalize-uuid license-id "license id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :license/id ?id]] db lid)) (error 404 "License not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:license/id lid]]] "delete license")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT license-delete user=%s license=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 lid)
+                      {:license/id lid})))))))
+
+(defn- validate-comparison-row
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :comparison.row/id) "comparison row id")
+        {criterion :value crit-err :error} (normalize-string (param-value body :comparison.row/criterion) "criterion" {:required true})
+        {order :value order-err :error} (normalize-long (param-value body :comparison.row/order) "order")
+        {ent :value ent-err :error} (normalize-string (param-value body :comparison.row/entrepreneur) "entrepreneur value" {:required false :allow-blank? true})
+        {gen :value gen-err :error} (normalize-string (param-value body :comparison.row/general) "general value" {:required false :allow-blank? true})
+        {gcc :value gcc-err :error} (normalize-string (param-value body :comparison.row/gcc) "gcc value" {:required false :allow-blank? true})]
+    (or id-err crit-err order-err ent-err gen-err gcc-err
+        {:tx {:comparison.row/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/comparison-row
+              :comparison.row/criterion criterion
+              :comparison.row/order order
+              :comparison.row/entrepreneur ent
+              :comparison.row/general gen
+              :comparison.row/gcc gcc}})))
+
+(defn upsert-comparison-row!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-comparison-row (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:comparison.row/id (:comparison.row/id tx)])] "upsert comparison row")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT comparison-row-upsert user=%s row=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:comparison.row/id tx))
+                {:comparison-row (present-comparison-row tx)})))))))
+
+(defn delete-comparison-row!
+  [conn row-id actor]
+  (or (ensure-conn conn)
+      (let [{rid :value id-err :error} (normalize-uuid row-id "comparison row id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :comparison.row/id ?id]] db rid)) (error 404 "Comparison row not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:comparison.row/id rid]]] "delete comparison row")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT comparison-row-delete user=%s row=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 rid)
+                      {:comparison.row/id rid})))))))
+
+;; -------- Content v2 read helpers --------
+
+(defn- q-all
+  [db ident pull-expr]
+  (->> (d/q '[:find (pull ?e pattern)
+              :in $ ?attr pattern
+              :where [?e ?attr]]
+            db ident pull-expr)
+       (map first)))
+
+(defn list-licenses
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [items (->> (q-all (d/db conn) :license/id [:license/id
+                                                     :license/type
+                                                     :license/slug
+                                                     :license/label
+                                                     :license/processing-time
+                                                     :license/ownership
+                                                     :license/renewal-cost
+                                                     :license/pricing-lines
+                                                     :license/activities
+                                                     :license/who
+                                                     :license/who-activities
+                                                     :license/document-checklist
+                                                     :license/order
+                                                     :license/visible?])
+                     (map present-license)
+                     (sort-by (fn [l] (or (:license/order l) Long/MAX_VALUE))))]
+      {:licenses (vec items)})))
+
+(defn list-comparison-rows
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [rows (->> (q-all (d/db conn) :comparison.row/id [:comparison.row/id
+                                                          :comparison.row/criterion
+                                                          :comparison.row/order
+                                                          :comparison.row/entrepreneur
+                                                          :comparison.row/general
+                                                          :comparison.row/gcc])
+                    (map present-comparison-row)
+                    (sort-by (fn [r] (or (:comparison.row/order r) Long/MAX_VALUE))))]
+      {:comparison-rows (vec rows)})))
+
+(defn list-journey-phases
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [items (->> (q-all (d/db conn) :journey.phase/id [:journey.phase/id
+                                                          :journey.phase/title
+                                                          :journey.phase/kind
+                                                          :journey.phase/order
+                                                          :journey.phase/bullets])
+                     (map present-journey-phase)
+                     (sort-by (fn [p] (or (:journey.phase/order p) Long/MAX_VALUE))))]
+      {:journey-phases (vec items)})))
+
+(defn list-activation-steps
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [items (->> (q-all (d/db conn) :activation.step/id [:activation.step/id
+                                                             :activation.step/title
+                                                             :activation.step/order
+                                                             {:activation.step/phase [:journey.phase/id]}])
+                      (map present-activation-step)
+                      (sort-by (fn [s] (or (:activation.step/order s) Long/MAX_VALUE))))]
+      {:activation-steps (vec items)})))
+
+(defn- validate-activation-step
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :activation.step/id) "activation step id")
+        {title :value title-err :error} (normalize-string (param-value body :activation.step/title) "title" {:required true})
+        {order :value order-err :error} (normalize-long (param-value body :activation.step/order) "order")
+        {phase :value phase-err :error} (normalize-uuid (param-value body :activation.step/phase) "phase id")]
+    (or id-err title-err order-err phase-err
+        {:tx (cond-> {:activation.step/id (or id (UUID/randomUUID))
+                      :entity/type :entity.type/activation-step
+                      :activation.step/title title
+                      :activation.step/order order}
+               phase (assoc :activation.step/phase [:journey.phase/id phase]))})))
+
+(defn upsert-activation-step!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-activation-step (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:activation.step/id (:activation.step/id tx)])] "upsert activation step")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT activation-step-upsert user=%s step=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:activation.step/id tx))
+                {:activation-step tx})))))))
+
+(defn delete-activation-step!
+  [conn step-id actor]
+  (or (ensure-conn conn)
+      (let [{sid :value id-err :error} (normalize-uuid step-id "activation step id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :activation.step/id ?id]] db sid)) (error 404 "Activation step not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:activation.step/id sid]]] "delete activation step")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT activation-step-delete user=%s step=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 sid)
+                      {:activation.step/id sid})))))))
+
+(defn list-personas
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [items (->> (q-all (d/db conn) :persona/id [:persona/id
+                                                   :persona/title
+                                                   :persona/detail
+                                                   :persona/type
+                                                   :persona/order
+                                                   :persona/visible?])
+                     (map present-persona)
+                     (sort-by (fn [p] (or (:persona/order p) Long/MAX_VALUE))))]
+      {:personas (vec items)})))
+
+(defn- validate-persona
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :persona/id) "persona id")
+        {title :value title-err :error} (normalize-string (param-value body :persona/title) "title" {:required true})
+        {detail :value detail-err :error} (normalize-string (param-value body :persona/detail) "detail" {:required true})
+        {type-kw :value type-err :error} (normalize-keyword (param-value body :persona/type) "persona type" nil)
+        {order :value order-err :error} (normalize-long (param-value body :persona/order) "order")
+        {visible :value visible-err :error} (normalize-boolean (param-value body :persona/visible?) "visible" {:default true})]
+    (or id-err title-err detail-err type-err order-err visible-err
+        {:tx {:persona/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/persona
+              :persona/title title
+              :persona/detail detail
+              :persona/type type-kw
+              :persona/order order
+              :persona/visible? (if (nil? visible) true visible)}})))
+
+(defn upsert-persona!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-persona (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:persona/id (:persona/id tx)])] "upsert persona")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT persona-upsert user=%s persona=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:persona/id tx))
+                {:persona tx})))))))
+
+(defn delete-persona!
+  [conn persona-id actor]
+  (or (ensure-conn conn)
+      (let [{pid :value id-err :error} (normalize-uuid persona-id "persona id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :persona/id ?id]] db pid)) (error 404 "Persona not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:persona/id pid]]] "delete persona")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT persona-delete user=%s persona=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 pid)
+                      {:persona/id pid})))))))
+
+(defn list-support-entries
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (let [items (->> (q-all (d/db conn) :support.entry/id [:support.entry/id
+                                                         :support.entry/role
+                                                         :support.entry/text
+                                                         :support.entry/order])
+                     (map present-support-entry)
+                     (sort-by (fn [s] (or (:support.entry/order s) Long/MAX_VALUE))))]
+      {:support-entries (vec items)})))
+
+(defn- validate-support-entry
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :support.entry/id) "support entry id")
+        {role :value role-err :error} (normalize-keyword (param-value body :support.entry/role) "support role" #{:support/we :support/you})
+        {text :value text-err :error} (normalize-string (param-value body :support.entry/text) "text" {:required true})
+        {order :value order-err :error} (normalize-long (param-value body :support.entry/order) "order")]
+    (or id-err role-err text-err order-err
+        {:tx {:support.entry/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/support-entry
+              :support.entry/role (or role :support/we)
+              :support.entry/text text
+              :support.entry/order order}})))
+
+(defn upsert-support-entry!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-support-entry (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:support.entry/id (:support.entry/id tx)])] "upsert support entry")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT support-entry-upsert user=%s entry=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:support.entry/id tx))
+                {:support-entry tx})))))))
+
+(defn delete-support-entry!
+  [conn entry-id actor]
+  (or (ensure-conn conn)
+      (let [{sid :value id-err :error} (normalize-uuid entry-id "support entry id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :support.entry/id ?id]] db sid)) (error 404 "Support entry not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:support.entry/id sid]]] "delete support entry")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT support-entry-delete user=%s entry=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 sid)
+                      {:support.entry/id sid})))))))
+
+(defn- validate-contact
+  [body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :contact/id) "contact id")
+        {email :value email-err :error} (normalize-string (param-value body :contact/email) "email" {:required true})
+        {phone :value phone-err :error} (normalize-string (param-value body :contact/phone) "phone" {:required true})
+        {primary-label :value primary-label-err :error} (normalize-string (param-value body :contact/primary-cta-label) "primary CTA label" {:required false})
+        {primary-url :value primary-url-err :error} (normalize-string (param-value body :contact/primary-cta-url) "primary CTA url" {:required false})
+        {secondary-label :value secondary-label-err :error} (normalize-string (param-value body :contact/secondary-cta-label) "secondary CTA label" {:required false})
+        {secondary-url :value secondary-url-err :error} (normalize-string (param-value body :contact/secondary-cta-url) "secondary CTA url" {:required false})]
+    (or id-err email-err phone-err primary-label-err primary-url-err secondary-label-err secondary-url-err
+        {:tx {:contact/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/contact
+              :contact/email email
+              :contact/phone phone
+              :contact/primary-cta-label primary-label
+              :contact/primary-cta-url primary-url
+              :contact/secondary-cta-label secondary-label
+              :contact/secondary-cta-url secondary-url}})))
+
+(defn upsert-contact!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-contact body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:contact/id (:contact/id tx)])] "upsert contact")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT contact-upsert user=%s contact=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:contact/id tx))
+                {:contact tx})))))))
+
+(defn- validate-business
+  [body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :business/id) "business id")
+        {name :value name-err :error} (normalize-string (param-value body :business/name) "name" {:required true})
+        {tagline :value tagline-err :error} (normalize-string (param-value body :business/tagline) "tagline" {:required false})
+        {summary :value summary-err :error} (normalize-string (param-value body :business/summary) "summary" {:required false})
+        {mission :value mission-err :error} (normalize-string (param-value body :business/mission) "mission" {:required false})
+        {vision :value vision-err :error} (normalize-string (param-value body :business/vision) "vision" {:required false})
+        {nav-label :value nav-label-err :error} (normalize-string (param-value body :business/nav-label) "nav label" {:required false})
+        {headline :value headline-err :error} (normalize-string (param-value body :business/hero-headline) "hero headline" {:required false})
+        {strapline :value strapline-err :error} (normalize-string (param-value body :business/hero-strapline) "hero strapline" {:required false})
+        {contact-ref :value contact-err :error} (normalize-uuid (param-value body :business/contact) "contact id")
+        hero-stats-res (normalize-ref-list (param-value body :business/hero-stats) :hero.stat/id "hero stat id")
+        hero-flows-res (normalize-ref-list (param-value body :business/hero-flows) :hero.flow/id "hero flow id")
+        {visible :value visible-err :error} (normalize-boolean (param-value body :business/visible?) "visible" {:default true})]
+    (or id-err name-err tagline-err summary-err mission-err vision-err nav-label-err headline-err strapline-err contact-err visible-err
+        (:error hero-stats-res)
+        (:error hero-flows-res)
+        {:tx (cond-> {:business/id (or id (UUID/randomUUID))
+                      :entity/type :entity.type/business
+                      :business/name name
+                      :business/tagline tagline
+                      :business/summary summary
+                      :business/mission mission
+                      :business/vision vision
+                      :business/nav-label nav-label
+                      :business/hero-headline headline
+                      :business/hero-strapline strapline
+                      :business/visible? (if (nil? visible) true visible)}
+               contact-ref (assoc :business/contact [:contact/id contact-ref])
+               (seq (:value hero-stats-res)) (assoc :business/hero-stats (:value hero-stats-res))
+               (seq (:value hero-flows-res)) (assoc :business/hero-flows (:value hero-flows-res)))})))
+
+(defn upsert-business!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-business body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:business/id (:business/id tx)])] "upsert business")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT business-upsert user=%s business=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:business/id tx))
+                {:business tx})))))))
+
+(defn list-hero-stats
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:hero-stats (->> (q-all (d/db conn) :hero.stat/id [:hero.stat/id
+                                                       :hero.stat/label
+                                                       :hero.stat/value
+                                                       :hero.stat/hint
+                                                       :hero.stat/order])
+                      (map present-hero-stat)
+                      (sort-by (fn [h] (or (:hero.stat/order h) Long/MAX_VALUE)))
+                      vec)}))
+
+(defn- validate-journey-phase
+  [db body]
+  (let [{id :value id-err :error} (normalize-uuid (param-value body :journey.phase/id) "journey phase id")
+        {title :value title-err :error} (normalize-string (param-value body :journey.phase/title) "title" {:required true})
+        {kind :value kind-err :error} (normalize-keyword (param-value body :journey.phase/kind) "phase kind" #{:phase/pre-incorporation :phase/incorporation :phase/post-incorporation})
+        {order :value order-err :error} (normalize-long (param-value body :journey.phase/order) "order")
+        {bullets :value bullets-err :error} (normalize-string-list (param-value body :journey.phase/bullets) "bullets")]
+    (or id-err title-err kind-err order-err bullets-err
+        {:tx {:journey.phase/id (or id (UUID/randomUUID))
+              :entity/type :entity.type/journey-phase
+              :journey.phase/title title
+              :journey.phase/kind (or kind :phase/pre-incorporation)
+              :journey.phase/order order
+              :journey.phase/bullets bullets}})))
+
+(defn upsert-journey-phase!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [{:keys [tx error]} (validate-journey-phase (d/db conn) body)]
+        (if error
+          (error 400 error)
+          (let [txres (attempt-transact conn [(assoc tx :db/id [:journey.phase/id (:journey.phase/id tx)])] "upsert journey phase")]
+            (if (:error txres)
+              {:error (:error txres)}
+              (do
+                (log/infof "AUDIT journey-phase-upsert user=%s phase=%s"
+                           (or (:user/username actor) (:user/id actor))
+                           (:journey.phase/id tx))
+                {:journey-phase tx})))))))
+
+(defn delete-journey-phase!
+  [conn phase-id actor]
+  (or (ensure-conn conn)
+      (let [{pid :value id-err :error} (normalize-uuid phase-id "journey phase id")
+            db (d/db conn)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? (d/q '[:find ?e :in $ ?id :where [?e :journey.phase/id ?id]] db pid)) (error 404 "Journey phase not found")
+          :else (let [txres (attempt-transact conn [[:db/retractEntity [:journey.phase/id pid]]] "delete journey phase")]
+                  (if (:error txres)
+                    {:error (:error txres)}
+                    (do
+                      (log/infof "AUDIT journey-phase-delete user=%s phase=%s"
+                                 (or (:user/username actor) (:user/id actor))
+                                 pid)
+                      {:journey.phase/id pid})))))))
+
+(defn list-hero-flows
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:hero-flows (->> (q-all (d/db conn) :hero.flow/id [:hero.flow/id
+                                                       :hero.flow/title
+                                                       :hero.flow/detail
+                                                       :hero.flow/order])
+                      (map present-hero-flow)
+                      (sort-by (fn [h] (or (:hero.flow/order h) Long/MAX_VALUE)))
+                      vec)}))
+
+(defn list-faqs
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:faqs (->> (q-all (d/db conn) :faq/id [:faq/id
+                                           :faq/question
+                                           :faq/answer
+                                           :faq/scope
+                                           :faq/order
+                                           :faq/visible?])
+                (map present-faq)
+                (sort-by (fn [f] (or (:faq/order f) Long/MAX_VALUE)))
+                vec)}))
+
+(defn list-values
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:values (->> (q-all (d/db conn) :value/id [:value/id
+                                                :value/title
+                                                :value/copy
+                                                :value/order])
+                  (map present-value)
+                  (sort-by (fn [v] (or (:value/order v) Long/MAX_VALUE)))
+                  vec)}))
+
+(defn list-team-members
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:team-members (->> (q-all (d/db conn) :team.member/id [:team.member/id
+                                                            :team.member/name
+                                                            :team.member/title
+                                                            :team.member/order
+                                                            :team.member/avatar])
+                        (map present-team-member)
+                        (sort-by (fn [t] (or (:team.member/order t) Long/MAX_VALUE)))
+                        vec)}))
+
+(defn list-contacts
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:contacts (->> (q-all (d/db conn) :contact/id [:contact/id
+                                                    :contact/email
+                                                    :contact/phone
+                                                    :contact/primary-cta-label
+                                                    :contact/primary-cta-url
+                                                    :contact/secondary-cta-label
+                                                    :contact/secondary-cta-url])
+                    (map present-contact)
+                    vec)}))
+
+(defn list-businesses
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    {:businesses (->> (q-all (d/db conn) :business/id [:business/id
+                                                       :business/name
+                                                       :business/tagline
+                                                       :business/summary
+                                                       :business/mission
+                                                       :business/vision
+                                                       :business/nav-label
+                                                       :business/hero-headline
+                                                       :business/hero-strapline
+                                                       {:business/contact [:contact/id]}
+                                                       {:business/hero-stats [:hero.stat/id]}
+                                                       {:business/hero-flows [:hero.flow/id]}
+                                                       :business/visible?])
+                      (map present-business)
+                      vec)}))
+
+(defn list-content-v2
+  [conn]
+  (if-let [err (ensure-conn conn)]
+    err
+    (merge
+     (list-licenses conn)
+     (list-comparison-rows conn)
+     (list-journey-phases conn)
+     (list-activation-steps conn)
+     (list-personas conn)
+     (list-support-entries conn)
+     (list-hero-stats conn)
+     (list-hero-flows conn)
+     (list-faqs conn)
+     (list-values conn)
+     (list-team-members conn)
+     (list-contacts conn)
+     (list-businesses conn))))
