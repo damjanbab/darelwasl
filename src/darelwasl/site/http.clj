@@ -143,7 +143,7 @@
        "</div></header>"
        "<main>" body "</main>"
        (or footer-cta "")
-       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>© Darel Wasl · Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
+       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Darel Wasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
        "</body></html>"))
 
 (defn- render-hero
@@ -153,8 +153,8 @@
                      "Business setup in Saudi Arabia")
         strapline (or (:business/hero-strapline business)
                       (:business/tagline business)
-                      (:business/summary business)
-                      "Clear, sequenced paths for licensing and activation.")
+                     (:business/summary business)
+                     "Clear, sequenced paths for licensing and activation.")
         nav-label (or (:business/nav-label business) "Market entry partners")
         stats-view (when (seq hero-stats)
                      (format "<div class=\"stats\">%s</div>"
@@ -174,7 +174,7 @@
                                                            (escape-html (:hero.flow/title f))
                                                            (escape-html (:hero.flow/detail f))))
                                                 hero-flows))))]
-    (format "<section class=\"hero\"><p class=\"pill\">%s</p><h1 class=\"headline\">%s</h1><p class=\"strapline\">%s</p>%s%s</section>"
+    (format "<section class=\"hero\"><p class=\"pill\">%s</p><h1 class=\"headline\">%s</h1><p class=\"strapline\">%s</p>%s<div class=\"meta\">Gate review: leave with your next step + required inputs.</div>%s</section>"
             (escape-html nav-label)
             (escape-html headline)
             (escape-html strapline)
@@ -185,7 +185,7 @@
   [title subtitle]
   (format "<section class=\"hero-light\"><h1>%s</h1><p>%s</p></section>"
           (escape-html title)
-          (escape-html subtitle)))
+         (escape-html subtitle)))
 
 (defn- render-funnel
   [current]
@@ -193,7 +193,7 @@
                {:id :compare :label "2 Compare" :href "/comparison"}
                {:id :schedule :label "3 Schedule" :href "/contact"}]]
     (str "<div class=\"funnel\">"
-         (str/join "<span class=\"arrow\">→</span>"
+         (str/join "<span class=\"arrow\">&rarr;</span>"
                    (map (fn [{:keys [id label href]}]
                           (format "<span class=\"step %s\"><a href=\"%s\">%s</a></span>"
                                   (when (= id current) "active")
@@ -209,13 +209,13 @@
                      (sort-by #(or (:hero.flow/order %) Long/MAX_VALUE))
                      (take 5)
                      (map-indexed (fn [idx f]
-                                    (format "<div class=\"card\"><div class=\"badge\">Step %s</div><h3>%s</h3><p>%s</p></div>"
+                                    (format "<div class=\"card\"><div class=\"badge\">Gate %s</div><h3>%s</h3><p>%s</p></div>"
                                             (inc idx)
                                             (escape-html (:hero.flow/title f))
                                             (escape-html (:hero.flow/detail f)))))
                      (apply str))]
-      (format "<section><div class=\"section-title\"><div><h2>How it works</h2>%s</div><span class=\"pill\">Sequenced setup</span></div><div class=\"step-rail\"><span class=\"node active\"></span><span class=\"node\"></span><span class=\"node\"></span></div><div class=\"card-grid\">%s</div></section>"
-              (evidence-pill "Typical timeline")
+      (format "<section><div class=\"section-title\"><div><h2>How it works</h2>%s</div><span class=\"pill\">TIMELINE</span></div><div class=\"step-rail\"><span class=\"node active\"></span><span class=\"node\"></span><span class=\"node\"></span></div><div class=\"card-grid\">%s</div><div class=\"meta\">[Placeholder: process illustration]</div></section>"
+              (evidence-pill "TIMELINE")
               cards))))
 
 (defn- render-trust-strip
@@ -224,16 +224,16 @@
         claims (when (seq stats)
                  (apply str
                         (map (fn [s]
-                               (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div></div>"
+                               (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div><div class=\"meta\">[Placeholder: proof thumbnail]</div></div>"
                                        (escape-html (:hero.stat/label s))
                                        (escape-html (:hero.stat/value s))
                                        (escape-html (:hero.stat/hint s))))
                              stats)))
         comparison-note (when (seq comparison-rows)
-                          "<div class=\"card\"><div class=\"label\">Transparent choices</div><div class=\"hint\">Side-by-side comparison of license paths with processing, ownership, and renewal details.</div></div>")]
+                          "<div class=\"card\"><div class=\"label\">Transparent choices</div><div class=\"hint\">Side-by-side comparison of license paths with processing, ownership, and renewal details.</div><div class=\"meta\">[Placeholder: proof thumbnail]</div></div>")]
     (when (or claims comparison-note)
-      (format "<section class=\"trust-strip\"><div class=\"section-title\"><div><h2>Proof you can see</h2>%s</div><span class=\"pill\">Confidence builders</span></div><div class=\"card-grid\">%s%s</div></section>"
-              (evidence-pill "Evidence-based")
+      (format "<section class=\"trust-strip\"><div class=\"section-title\"><div><h2>Proof you can see</h2>%s</div><span class=\"pill\">PROOF</span></div><div class=\"card-grid\">%s%s</div></section>"
+              (evidence-pill "PROOF")
               (or claims "")
               (or comparison-note "")))))
 
@@ -256,8 +256,8 @@
                                     (escape-html (:license/processing-time l))
                                     (escape-html (:license/ownership l)))))
                      (apply str))]
-      (format "<section><div class=\"section-title\"><div><h2>Choose a path</h2>%s</div><span class=\"pill\">Three clear options</span></div><div class=\"step-rail\"><span class=\"node\"></span><span class=\"node active\"></span><span class=\"node\"></span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"cta secondary\" href=\"/comparison\">Compare details</a><a class=\"cta primary\" href=\"/services\">Explore services</a></div></section>"
-              (evidence-pill "Recommendation")
+      (format "<section><div class=\"section-title\"><div><h2>Choose a path</h2>%s</div><span class=\"pill\">NEXT GATE</span></div><div class=\"step-rail\"><span class=\"node\"></span><span class=\"node active\"></span><span class=\"node\"></span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"cta primary\" href=\"/comparison\">Compare details</a><a class=\"cta secondary\" href=\"/services\">Explore services</a></div></section>"
+              (evidence-pill "NEXT GATE")
               cards))))
 
 (defn- render-list
@@ -312,7 +312,7 @@
                                                        (first (:license/who l))
                                                        (or (:license/ownership l) "")))))
                             (take 3 licenses)))]
-      (format "<section><div class=\"section-title\"><h2>What we offer</h2><span class=\"pill\">Specialized entry paths</span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"nav-link primary-cta\" href=\"/services\">See all services</a></div></section>"
+      (format "<section><div class=\"section-title\"><h2>What we offer</h2><span class=\"pill\">COST</span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"nav-link primary-cta\" href=\"/services\">See all services</a></div></section>"
               cards))))
 
 (defn- render-pillars
@@ -323,7 +323,7 @@
                          (map (fn [[t ls]]
                                 (let [items (apply str
                                                    (map (fn [l]
-                                                          (format "<li>%s · %s</li>"
+                                                          (format "<li>%s - %s</li>"
                                                                   (escape-html (:license/label l))
                                                                   (escape-html (:license/processing-time l))))
                                                         (take 4 ls)))]
@@ -343,8 +343,8 @@
                                       (escape-html (:value/title v))
                                       (escape-html (:value/copy v))))
                             (take 4 values)))]
-      (format "<section><div class=\"section-title\"><div><h2>Outcomes we drive</h2>%s</div><span class=\"pill\">What you get</span></div><div class=\"card-grid\">%s</div></section>"
-              (evidence-pill "Impact")
+      (format "<section><div class=\"section-title\"><div><h2>Outcomes we drive</h2>%s</div><span class=\"pill\">OUTPUTS</span></div><div class=\"card-grid\">%s</div></section>"
+              (evidence-pill "OUTPUTS")
               cards))))
 
 (defn- render-license-tabs
@@ -368,19 +368,19 @@
                          activities (render-list (:license/activities selected))
                          who (render-list (:license/who selected))
                          checklist (render-list (:license/document-checklist selected))]
-                     (format "<div class=\"card\"><div class=\"section-title\"><h3>%s</h3><span class=\"pill\">%s</span></div><div class=\"meta\"><span>%s</span><span>%s</span><span>%s</span></div>%s%s%s%s<div class=\"ctas\"><a class=\"cta secondary\" href=\"/comparison\">Compare paths</a><a class=\"cta primary\" href=\"/contact\">Talk to an expert</a></div></div>"
+                     (format "<div class=\"card\"><div class=\"section-title\"><h3>%s</h3><span class=\"pill\">%s</span></div><div class=\"meta\"><span>%s</span><span>%s</span><span>%s</span></div>%s%s%s%s<div class=\"meta\"><strong>Outputs you get</strong><p>Route confirmation, sequenced filing plan, and activation checklist.</p></div><div class=\"ctas\"><a class=\"cta primary\" href=\"/comparison\">Compare paths</a><a class=\"cta secondary\" href=\"/contact\">Schedule a meeting</a></div></div>"
                              (escape-html (:license/label selected))
                              (str (-> (:license/type selected) license-type-slug str/capitalize) " path")
                              (escape-html (:license/processing-time selected))
                              (escape-html (:license/ownership selected))
                              (escape-html (:license/renewal-cost selected))
-                             (if pricing (str "<div><strong>Pricing</strong>" pricing "</div>") "")
-                             (if activities (str "<div><strong>Activities</strong>" activities "</div>") "")
-                             (if who (str "<div><strong>Best for</strong>" who "</div>") "")
-                             (if checklist (str "<div><strong>Checklist</strong>" checklist "</div>") ""))))]
+                             (if pricing (str "<div><strong>Cost structure</strong>" pricing "</div>") "")
+                             (if activities (str "<div><strong>Activities included</strong>" activities "</div>") "")
+                             (if who (str "<div><strong>Who this route fits</strong>" who "</div>") "")
+                             (if checklist (str "<div><strong>Inputs we need (requirements)</strong>" checklist "</div>") ""))))]
       (when (seq tabs)
         (format "<section><div class=\"section-title\"><div><h2>Select a license</h2>%s</div><span class=\"pill\">Guided recommendations</span></div><div class=\"tabs\">%s</div>%s</section>"
-                (evidence-pill "Engineered flow")
+                (evidence-pill "REQUIREMENTS")
                 tabs
                 (or detail ""))))))
 
@@ -396,13 +396,13 @@
                        (sort-by #(or (:hero.stat/order %) Long/MAX_VALUE))
                        (take 3)
                        (map (fn [s]
-                              (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div></div>"
+                              (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div><div class=\"meta\">[Placeholder: proof thumbnail]</div></div>"
                                       (escape-html (:hero.stat/label s))
                                       (escape-html (:hero.stat/value s))
                                       (escape-html (:hero.stat/hint s)))))
                        (apply str))]
-      (format "<section><div class=\"section-title\"><div><h2>Proof in practice</h2>%s</div><span class=\"pill\">Evidence</span></div><div class=\"card-grid\">%s%s</div></section>"
-              (evidence-pill "Evidence-based")
+      (format "<section><div class=\"section-title\"><div><h2>Proof in practice</h2>%s</div><span class=\"pill\">PROOF</span></div><div class=\"card-grid\">%s%s</div></section>"
+              (evidence-pill "PROOF")
               (or metrics "")
               (or (when (seq comparison-rows)
                     "<div class=\"card\"><h3>Side-by-side clarity</h3><p>We compare processing, ownership, and renewal across license paths so you can decide with confidence.</p><a class=\"cta secondary\" href=\"/comparison\">View comparison</a></div>")
@@ -418,30 +418,42 @@
                                      (escape-html (:comparison.row/entrepreneur r))
                                      (escape-html (:comparison.row/general r))
                                      (escape-html (:comparison.row/gcc r))))
-                           rows))]
-      (format "<section><div class=\"section-title\"><div><h2>Compare side by side</h2>%s</div><span class=\"pill\">Evidence-based decision</span></div><p>How to read this: pick the column that matches your ownership and capital reality; compare processing, cost, and requirements at a glance.</p><table class=\"table\"><thead><tr><th>Criterion</th><th class=\"recommended\">Entrepreneur</th><th>General Investment</th><th>GCC National</th></tr></thead><tbody>%s</tbody></table></section>"
-              (evidence-pill "Proof")
-              body))))
+                           rows))
+          rules "<ul class=\"rules\"><li>Pick the column that matches your ownership reality.</li><li>Confirm your activities are included.</li><li>Check document burden and renewal structure.</li></ul>"
+          next-cta (format "<div class=\"ctas\"><a class=\"cta primary\" href=\"/contact\">Schedule a meeting</a><div class=\"meta\">We confirm feasibility, constraints, and the next step.</div></div>")]
+      (format "<section><div class=\"section-title\"><div><h2>Compare side by side</h2>%s</div><span class=\"pill\">PROOF</span></div><p class=\"lead\">How to read this table.</p>%s<table class=\"table\"><thead><tr><th>Criterion</th><th class=\"recommended\">Entrepreneur</th><th>General Investment</th><th>GCC National</th></tr></thead><tbody>%s</tbody></table>%s</section>"
+              (evidence-pill "PROOF")
+              rules
+              body
+              next-cta))))
 
 (defn- render-journey
   [phases activation-steps]
   (when (or (seq phases) (seq activation-steps))
     (let [phases-view (when (seq phases)
-                        (format "<div class=\"timeline\">%s</div>"
+                        (format "<div class=\"meta\">[Placeholder: gate diagram]</div><div class=\"timeline\">%s</div>"
                                 (apply str
-                                       (map (fn [p]
-                                              (format "<div class=\"phase\"><div class=\"badge\">%s</div><h3>%s</h3>%s</div>"
-                                                      (escape-html (name (:journey.phase/kind p)))
-                                                      (escape-html (:journey.phase/title p))
-                                                      (render-list (:journey.phase/bullets p))))
-                                            phases))))
+                                       (map-indexed (fn [idx p]
+                                                      (format "<div class=\"phase\"><div class=\"badge\">Gate %s</div><h3>%s</h3><div class=\"meta\">Prerequisites / Actions / Verified outputs</div>%s</div>"
+                                                              (inc idx)
+                                                              (escape-html (:journey.phase/title p))
+                                                              (render-list (:journey.phase/bullets p))))
+                                                    phases))))
           activation-view (when (seq activation-steps)
-                            (format "<div class=\"stack\"><div class=\"badge\">Activation</div><ul class=\"list-inline\">%s</ul></div>"
-                                    (apply str
-                                           (map (fn [s]
-                                                  (format "<li>%s</li>" (escape-html (:activation.step/title s))))
-                                                activation-steps))))]
-      (format "<section><div class=\"section-title\"><h2>Journey and activation</h2><span class=\"pill\">Sequenced steps</span></div>%s%s</section>"
+                            (let [groups ["Operational identity" "Tax + payroll systems" "Banking + address" "Workforce + visas"]
+                                  size (max 1 (int (Math/ceil (/ (double (count activation-steps)) (double (count groups))))))
+                                  grouped (map vector groups (partition-all size activation-steps))]
+                              (format "<div class=\"stack\"><div class=\"badge\">Activation</div><div class=\"card-grid\">%s</div></div>"
+                                      (apply str
+                                             (map (fn [[title steps]]
+                                                    (format "<div class=\"card\"><h4>%s</h4><ul class=\"list-inline\">%s</ul></div>"
+                                                            title
+                                                            (apply str
+                                                                   (map (fn [s]
+                                                                          (format "<li>%s</li>" (escape-html (:activation.step/title s))))
+                                                                        steps))))
+                                                  grouped)))))]
+      (format "<section><div class=\"section-title\"><h2>Journey and activation</h2><span class=\"pill\">NEXT GATE</span></div>%s%s</section>"
               (or phases-view "")
               (or activation-view "")))))
 
@@ -488,6 +500,14 @@
                                   (escape-html (:faq/answer f))))
                         faqs)))))
 
+(defn- render-about-overview
+  [business]
+  (let [story (or (:business/summary business)
+                  "We choreograph Saudi market entry so founders move through each gate with clarity on requirements, cost, and timing.")]
+    (format "<section><div class=\"section-title\"><div><h2>Brand story</h2>%s</div><span class=\"pill\">PROOF</span></div><p>%s</p><div class=\"card\"><div class=\"meta\">Operating model</div><p>Fact-first modeling -> Gated progress -> Verified outputs -> Activation.</p><div class=\"meta\">[Placeholder: operating model diagram]</div></div></section>"
+            (evidence-pill "PROOF")
+            (escape-html story))))
+
 (defn- render-values-team
   [values team-members]
   (when (or (seq values) (seq team-members))
@@ -496,11 +516,11 @@
                                 (apply str
                                        (map (fn [v]
                                               (format "<div class=\"value\"><h3>%s</h3><p>%s</p></div>"
-                                      (escape-html (:value/title v))
-                                      (escape-html (:value/copy v))))
-                            values))))]
-      (format "<section><div class=\"section-title\"><div><h2>How we operate</h2>%s</div><span class=\"pill\">Principles</span></div>%s</section>"
-              (evidence-pill "Principles")
+                                                      (escape-html (:value/title v))
+                                                      (escape-html (:value/copy v))))
+                                       values))))]
+      (format "<section><div class=\"section-title\"><div><h2>How we operate</h2>%s</div><span class=\"pill\">OUTPUTS</span></div>%s</section>"
+              (evidence-pill "OUTPUTS")
               (or values-view "")))))
 
 (defn- render-contact
@@ -512,9 +532,11 @@
         primary-label (:contact/primary-cta-label contact)
         primary-url (:contact/primary-cta-url contact)
         secondary-label (:contact/secondary-cta-label contact)
-        secondary-url (:contact/secondary-cta-url contact)]
-    (format "<section class=\"contact\"><div><div class=\"section-title\"><h2>Talk to the team</h2><span class=\"pill\">Let's map your path</span></div><p>%s</p></div><div class=\"stack\"><div class=\"meta\">Email: %s</div><div class=\"meta\">Phone: %s</div><div class=\"ctas\">%s%s</div></div></section>"
+        secondary-url (:contact/secondary-cta-url contact)
+        inputs "<ul><li>Activities (1-3 lines)</li><li>Ownership (individual / parent company / GCC)</li><li>Timing target (weeks or month)</li><li>Documents status (ready / in progress)</li></ul>"]
+    (format "<section class=\"contact\"><div><div class=\"section-title\"><h2>Schedule a meeting</h2><span class=\"pill\">REQUIREMENTS</span></div><p>%s</p><div class=\"meta\"><strong>Include:</strong>%s</div></div><div class=\"stack\"><div class=\"meta\">Email: %s</div><div class=\"meta\">Phone: %s</div><div class=\"ctas\">%s%s</div><div class=\"meta\">Gate review: leave with your next step + required inputs.</div></div></section>"
             (escape-html summary)
+            inputs
             (escape-html email)
             (escape-html phone)
             (if primary-label
@@ -621,13 +643,13 @@
                                            (sort-by #(or (:hero.stat/order %) Long/MAX_VALUE)))
                          linked-flows (->> (:business/hero-flows business)
                                            (map #(get flow-index (ref-id % :hero.flow/id)))
-                         (remove nil?)
-                                          (sort-by #(or (:hero.flow/order %) Long/MAX_VALUE)))
+                                           (remove nil?)
+                                           (sort-by #(or (:hero.flow/order %) Long/MAX_VALUE)))
                        nav (nav-links nav-items clean-path)
                        footer-cta (render-footer-cta business selected-contact)]
                      (case clean-path
                        "/"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · Home")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - Home")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero business linked-stats linked-flows)
@@ -636,12 +658,11 @@
                                                           (render-offer-overview visible-licenses)
                                                           (render-how-it-works linked-flows)
                                                           (render-path-selector-teaser visible-licenses)
-                                                          (render-proof-section linked-stats sorted-comparison)
                                                           (render-faqs (take 3 visible-faqs))]))
                                       footer-cta)
 
                        "/services"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · Services")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - Services")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Licensing and activation services" "Select the license that fits, compare requirements, and book a call.")
@@ -657,7 +678,7 @@
                                       footer-cta)
 
                        "/comparison"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · Comparison")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - Comparison")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Compare license paths" "Side-by-side details across processing, cost, ownership, and required documents.")
@@ -666,7 +687,7 @@
                                       footer-cta)
 
                        "/process"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · Process")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - Process")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Process and activation" "Understand the phases, inputs, and outputs for going live in KSA.")
@@ -674,15 +695,16 @@
                                       footer-cta)
 
                        "/about"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · About")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - About")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "About Darel Wasl" "Principles and operating model for calm, evidence-led execution.")
+                                                          (render-about-overview business)
                                                           (render-values-team sorted-values sorted-team)]))
                                       footer-cta)
 
                        "/contact"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " · Contact")
+                       (html-response (str (or (:business/name business) "Darel Wasl") " - Contact")
                                       nav
                                       (apply str [(render-hero-light "Talk to the team" "Schedule a meeting or email us with your activities and timing.")
                                                   (render-funnel :schedule)

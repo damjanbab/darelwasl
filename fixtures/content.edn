@@ -70,7 +70,7 @@
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000001"]
    :content.block/type :cta
    :content.block/title "Book a 30-minute visual session"
-   :content.block/body "Share your deck, company structure, and target date—we return a plotted roadmap within two business days."
+   :content.block/body "Share your deck, company structure, and target date - we return a plotted roadmap within two business days."
    :content.block/media-ref "cta"
    :content.block/slug "home-cta"
    :content.block/order 2
@@ -100,19 +100,19 @@
    :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}]
 
  :businesses [
-  {:business/id #uuid "80000000-0000-0000-0000-000000000001"
-   :entity/type :entity.type/business
-   :business/name "Sandbridge Advisory"
-   :business/tagline "Saudi market entry partners"
-   :business/summary "We choreograph Saudi license acquisition and activation for foreign founders."
-   :business/mission "Make Saudi expansion feel structured, transparent, and human."
-   :business/vision "Global founders deploy faster because regulatory work is choreographed by trusted partners."
-   :business/nav-label "Business Setup in Saudi"
-   :business/hero-headline "Launch Your Saudi Business as a Foreign Founder"
-   :business/hero-strapline "We guide you through the legal path to obtain the right license and activate your company in Saudi Arabia."
-   :business/contact [:contact/id #uuid "81000000-0000-0000-0000-000000000001"]
-   :business/hero-stats [[:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001"]
-                         [:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002"]
+ {:business/id #uuid "80000000-0000-0000-0000-000000000001"
+  :entity/type :entity.type/business
+  :business/name "Sandbridge Advisory"
+  :business/tagline "Saudi market entry partners"
+  :business/summary "We choreograph Saudi license acquisition and activation for foreign founders."
+  :business/mission "Make Saudi expansion feel structured, transparent, and human."
+  :business/vision "Global founders deploy faster because regulatory work is choreographed by trusted partners."
+  :business/nav-label "Business Setup in Saudi"
+  :business/hero-headline "A sequenced path to a licensed, activated Saudi business."
+  :business/hero-strapline "Choose the route that matches your ownership and activities. See requirements, cost, and timeline before you commit."
+  :business/contact [:contact/id #uuid "81000000-0000-0000-0000-000000000001"]
+  :business/hero-stats [[:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001"]
+                        [:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002"]
                          [:hero.stat/id #uuid "88000000-0000-0000-0000-000000000003"]]
    :business/hero-flows [[:hero.flow/id #uuid "89000000-0000-0000-0000-000000000001"]
                          [:hero.flow/id #uuid "89000000-0000-0000-0000-000000000002"]
@@ -227,19 +227,19 @@
  :journey-phases [
   {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/journey-phase
-   :journey.phase/title "Phase 1 · Pre-Incorporation"
+   :journey.phase/title "Phase 1 - Pre-Incorporation"
    :journey.phase/kind :phase/pre-incorporation
    :journey.phase/order 0
    :journey.phase/bullets ["Identifying activities" "License mapping" "Preparing and attestation of foreign company documents"]}
   {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000002"
    :entity/type :entity.type/journey-phase
-   :journey.phase/title "Phase 2 · Incorporation"
+   :journey.phase/title "Phase 2 - Incorporation"
    :journey.phase/kind :phase/incorporation
    :journey.phase/order 1
    :journey.phase/bullets ["MISA license" "Trade name reservation" "CR and Articles of Association"]}
   {:journey.phase/id #uuid "84000000-0000-0000-0000-000000000003"
    :entity/type :entity.type/journey-phase
-   :journey.phase/title "Phase 3 · Post-Incorporation"
+   :journey.phase/title "Phase 3 - Post-Incorporation"
    :journey.phase/kind :phase/post-incorporation
    :journey.phase/order 2
    :journey.phase/bullets ["Registration of business files" "Compliances" "Bank and addresses" "Final operations checklist"]}]
@@ -268,14 +268,14 @@
   {:support.entry/id #uuid "87000000-0000-0000-0000-000000000006" :entity/type :entity.type/support-entry :support.entry/role :support/you :support.entry/text "Provide corporate history and proof of funds" :support.entry/order 5}]
 
  :hero-stats [
-  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-stat :hero.stat/label "Processing time" :hero.stat/value "1-6 weeks" :hero.stat/hint "Range across all three license paths" :hero.stat/order 0}
-  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-stat :hero.stat/label "Ownership" :hero.stat/value "Up to 100%" :hero.stat/hint "Foreign ownership possible on key routes" :hero.stat/order 1}
-  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-stat :hero.stat/label "Activation" :hero.stat/value "End-to-end" :hero.stat/hint "Licensing, banking, visas, addresses" :hero.stat/order 2}]
+ {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-stat :hero.stat/label "Processing time" :hero.stat/value "1-6 weeks" :hero.stat/hint "Range across all three license paths" :hero.stat/order 0}
+  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-stat :hero.stat/label "Ownership" :hero.stat/value "Up to 100%" :hero.stat/hint "Route-dependent; confirmed at Gate 1" :hero.stat/order 1}
+  {:hero.stat/id #uuid "88000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-stat :hero.stat/label "Activation" :hero.stat/value "End-to-end" :hero.stat/hint "License -> filings -> banking -> visas" :hero.stat/order 2}]
 
  :hero-flows [
-  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-flow :hero.flow/title "Map activities" :hero.flow/detail "Pick the license that matches what you actually do." :hero.flow/order 0}
-  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-flow :hero.flow/title "Sequence filings" :hero.flow/detail "Know the exact order of attestations, notary, and ZATCA." :hero.flow/order 1}
-  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-flow :hero.flow/title "Go live" :hero.flow/detail "Finish activation with banking, payroll, visas, and office evidence." :hero.flow/order 2}]
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000001" :entity/type :entity.type/hero-flow :hero.flow/title "Gate 1 - Map activities" :hero.flow/detail "Output: activity-to-license fit and ownership feasibility." :hero.flow/order 0}
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000002" :entity/type :entity.type/hero-flow :hero.flow/title "Gate 2 - Sequence filings" :hero.flow/detail "Output: ordered checklist with documents and appointments." :hero.flow/order 1}
+  {:hero.flow/id #uuid "89000000-0000-0000-0000-000000000003" :entity/type :entity.type/hero-flow :hero.flow/title "Gate 3 - Activate operations" :hero.flow/detail "Output: license + banking + payroll + visas ready." :hero.flow/order 2}]
 
  :faqs [
   {:faq/id #uuid "89100000-0000-0000-0000-000000000001" :entity/type :entity.type/faq :faq/question "Can I graduate from an Entrepreneur License to a General Investment License later?" :faq/answer "Yes. Once traction, capital, and documentation standards are met we migrate you without downtime." :faq/order 0 :faq/visible? true}
