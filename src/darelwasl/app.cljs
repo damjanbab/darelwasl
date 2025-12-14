@@ -7,6 +7,7 @@
             [darelwasl.features.tasks :as tasks-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
+            [darelwasl.shared.block-types :as block-types]
             [darelwasl.ui.components :as ui]
             [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
@@ -102,8 +103,6 @@
         (doseq [[k v] params]
           (.append sp k v))
         (.toString sp)))))
-
-(def allowed-block-types [:hero :section :rich-text :feature :cta :list])
 
 (defn- ref-id
   [entry kw]

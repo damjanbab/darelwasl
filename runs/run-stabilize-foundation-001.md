@@ -30,7 +30,7 @@
   - Reporting: Summarize registry fixes and new validation.
 
 - Task ID: shared-validation-and-enum-source
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:14 UTC)
   - Objective: Consolidate request/field normalization and shared enums (e.g., block types) into a reusable module for backend and CLJS consumers.
   - Scope: Extract normalization helpers from tasks/content into a shared namespace; drive block-type constants from a single source (registry or shared CLJC); refactor tasks/content actions and CLJS forms to consume shared helpers/constants; update docs/contracts if messages change.
   - Out of Scope: Adding new fields beyond existing domains.

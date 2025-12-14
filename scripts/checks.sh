@@ -100,7 +100,8 @@ check_edn_parse() {
 (require '[clojure.edn :as edn]
          '[clojure.java.io :as io]
          '[clojure.set :as set]
-         '[clojure.string :as str])
+         '[clojure.string :as str]
+         '[darelwasl.shared.block-types :as block-types])
 
 (defn read-single-edn! [path]
   (try
@@ -250,7 +251,7 @@ check_edn_parse() {
       duplicate-block-ids (seq (for [[id freq] (frequencies block-ids)
                                      :when (> freq 1)]
                                  id))
-      allowed-block-types #{:hero :section :rich-text :feature :cta :list}
+      allowed-block-types block-types/allowed-block-type-set
       invalid-blocks (seq (for [b content-blocks
                                 :let [bid (:content.block/id b)
                                       btype (:content.block/type b)
