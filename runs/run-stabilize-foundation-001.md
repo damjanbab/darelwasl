@@ -86,7 +86,7 @@
   - Reporting: Behavior changes and proof results.
 
 - Task ID: land-listing-performance-and-accuracy
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-14 16:20 UTC)
   - Objective: Replace load-all land queries with server-side filtered/paginated Datomic queries and keep stats accurate at scale.
   - Scope: Implement Datomic-backed filtering for people/parcels and stats; enforce pagination/limit guardrails; avoid full DB scans; ensure completeness filters use deterministic queries; update routes and UI wiring as needed.
   - Out of Scope: New land features beyond filtering/pagination fixes.
