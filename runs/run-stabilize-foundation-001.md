@@ -142,7 +142,7 @@
   - Reporting: UI changes and proof results.
 
 - Task ID: dead-code-prune-and-site-render-tighten
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:36 UTC)
   - Objective: Remove or wire unused helpers and simplify public-site rendering to eliminate orphaned code and reduce maintenance risk.
   - Scope: Remove unused `pull-by-type`/`ensure-type` (or adopt where appropriate), `list-key`, and orphan site render helpers (`render-licenses`, `render-pillars`, `render-proof-section`, `render-personas`); trim or integrate string-templating blocks as needed to keep only referenced sections; ensure site build still matches v2 spec.
   - Out of Scope: Full site redesign.

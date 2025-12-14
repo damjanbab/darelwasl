@@ -266,39 +266,6 @@
     (format "<ul>%s</ul>"
             (apply str (map (fn [item] (format "<li>%s</li>" (escape-html item))) items)))))
 
-(defn- render-licenses
-  [licenses]
-  (when (seq licenses)
-    (let [cards (apply str
-                       (map (fn [l]
-                              (str
-                               (format "<div class=\"card license\"><div class=\"section-title\"><h3>%s</h3><span class=\"pill\">%s</span></div>"
-                                       (escape-html (:license/label l))
-                                       (escape-html (name (:license/type l))))
-                               (format "<div class=\"meta\"><span>Processing: %s</span><span>Ownership: %s</span><span>Renewal: %s</span></div>%s%s%s%s</div>"
-                                       (escape-html (:license/processing-time l))
-                                       (escape-html (:license/ownership l))
-                                       (escape-html (:license/renewal-cost l))
-                                       (if-let [pricing (:license/pricing-lines l)]
-                                         (format "<div><strong>Pricing</strong>%s</div>"
-                                                 (render-list pricing))
-                                         "")
-                                       (if-let [activities (:license/activities l)]
-                                         (format "<div><strong>Core activities</strong>%s</div>"
-                                                 (render-list activities))
-                                         "")
-                                       (if-let [who (:license/who l)]
-                                         (format "<div><strong>Best for</strong>%s</div>"
-                                                 (render-list who))
-                                         "")
-                                       (if-let [docs (:license/document-checklist l)]
-                                         (format "<div><strong>Checklist</strong>%s</div>"
-                                                 (render-list docs))
-                                         ""))))
-                            licenses))]
-      (format "<section><div class=\"section-title\"><h2>License paths</h2><span class=\"pill\">Choose the route that fits</span></div><div class=\"card-grid\">%s</div></section>"
-              cards))))
-
 (defn- render-offer-overview
   [licenses]
   (when (seq licenses)
@@ -314,25 +281,6 @@
                             (take 3 licenses)))]
       (format "<section><div class=\"section-title\"><h2>What we offer</h2><span class=\"pill\">COST</span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"nav-link primary-cta\" href=\"/services\">See all services</a></div></section>"
               cards))))
-
-(defn- render-pillars
-  [licenses]
-  (when (seq licenses)
-    (let [by-type (group-by :license/type licenses)
-          pillars (apply str
-                         (map (fn [[t ls]]
-                                (let [items (apply str
-                                                   (map (fn [l]
-                                                          (format "<li>%s - %s</li>"
-                                                                  (escape-html (:license/label l))
-                                                                  (escape-html (:license/processing-time l))))
-                                                        (take 4 ls)))]
-                                  (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                                          (escape-html (name t))
-                                          items)))
-                              by-type))]
-      (format "<section><div class=\"section-title\"><h2>Services by pillar</h2><span class=\"pill\">Choose your path</span></div><div class=\"card-grid\">%s</div></section>"
-              pillars))))
 
 (defn- render-outcomes
   [values]
@@ -389,25 +337,6 @@
   (or (render-trust-strip hero-stats comparison-rows)
       (render-comparison comparison-rows)))
 
-(defn- render-proof-section
-  [hero-stats comparison-rows]
-  (when (or (seq hero-stats) (seq comparison-rows))
-    (let [metrics (->> hero-stats
-                       (sort-by #(or (:hero.stat/order %) Long/MAX_VALUE))
-                       (take 3)
-                       (map (fn [s]
-                              (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div><div class=\"meta\">[Placeholder: proof thumbnail]</div></div>"
-                                      (escape-html (:hero.stat/label s))
-                                      (escape-html (:hero.stat/value s))
-                                      (escape-html (:hero.stat/hint s)))))
-                       (apply str))]
-      (format "<section><div class=\"section-title\"><div><h2>Proof in practice</h2>%s</div><span class=\"pill\">PROOF</span></div><div class=\"card-grid\">%s%s</div></section>"
-              (evidence-pill "PROOF")
-              (or metrics "")
-              (or (when (seq comparison-rows)
-                    "<div class=\"card\"><h3>Side-by-side clarity</h3><p>We compare processing, ownership, and renewal across license paths so you can decide with confidence.</p><a class=\"cta secondary\" href=\"/comparison\">View comparison</a></div>")
-                    "")))))
-
 (defn- render-comparison
   [rows]
   (when (seq rows)
@@ -456,38 +385,6 @@
       (format "<section><div class=\"section-title\"><h2>Journey and activation</h2><span class=\"pill\">NEXT GATE</span></div>%s%s</section>"
               (or phases-view "")
               (or activation-view "")))))
-
-(defn- render-personas
-  [personas support-entries]
-  (when (or (seq personas) (seq support-entries))
-    (let [personas-view (when (seq personas)
-                          (let [cards (apply str
-                                             (map (fn [p]
-                                                    (format "<div class=\"card\"><h3>%s</h3><p>%s</p></div>"
-                                                            (escape-html (:persona/title p))
-                                                            (escape-html (:persona/detail p))))
-                                                  personas))]
-                            (format "<div class=\"card-grid\">%s</div>" cards)))
-          by-role (group-by :support.entry/role support-entries)
-          support-we (when-let [entries (seq (get by-role :support/we))]
-                       (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                               "We handle"
-                               (apply str
-                                      (map (fn [e]
-                                             (format "<li>%s</li>" (escape-html (:support.entry/text e))))
-                                           entries))))
-          support-you (when-let [entries (seq (get by-role :support/you))]
-                         (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                                 "You handle"
-                                 (apply str
-                                        (map (fn [e]
-                                               (format "<li>%s</li>" (escape-html (:support.entry/text e))))
-                                             entries))))
-          support-view (when (or support-we support-you)
-                         (format "<div class=\"card-grid\">%s%s</div>" (or support-we "") (or support-you "")))]
-      (format "<section><div class=\"section-title\"><h2>Who we guide</h2><span class=\"pill\">Tailored for foreign founders</span></div>%s%s</section>"
-              (or personas-view "")
-              (or support-view "")))))
 
 (defn- render-faqs
   [faqs]

@@ -59,9 +59,6 @@
 (defn list-config [entity-type]
   (get-in entity-view-config [entity-type :list]))
 
-(defn list-key [entity-type]
-  (get-in entity-view-config [entity-type :list :key]))
-
 (defn list-meta [entity-type items]
   (let [{:keys [meta meta-fn]} (list-config entity-type)]
     (cond
