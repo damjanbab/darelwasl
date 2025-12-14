@@ -58,7 +58,7 @@
   - Reporting: List modules updated and behavior alignment.
 
 - Task ID: task-listing-and-identity-hardening
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:19 UTC)
   - Objective: Move task listing/filtering/pagination to Datomic queries, simplify task identity lookup, and keep contracts aligned with registry expectations.
   - Scope: Implement server-side filtering/pagination in `tasks.clj`; remove or reduce `task-eid` scan fallback; ensure archived/filters/sort enforce documented limits; update action contract tests; align UI with new pagination responses if needed.
   - Out of Scope: UI redesign beyond necessary pagination alignment.

@@ -130,27 +130,15 @@
 (defn- task-eid
   [db task-id]
   (when task-id
-    (let [lookup (fn [id]
-                   (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]] db id)))
-          primary (lookup task-id)
-          fallback (when (and (nil? primary) (uuid? task-id))
-                     (lookup (str task-id)))
-          scanned (when (nil? (or primary fallback))
-                    (let [eids (entity/eids-by-type db :entity.type/task)]
-                      (some (fn [eid]
-                              (let [tid (:task/id (d/pull db [:task/id] eid))]
-                                (when (= (str tid) (str task-id))
-                                  eid)))
-                            eids)))]
-      (or primary
-          fallback
-          scanned
-          (let [available (->> (d/q '[:find ?id :where [_ :task/id ?id]] db)
-                               (map first)
-                               (take 5))]
-            (log/warnf "task-eid: no entity found for task-id=%s (uuid? %s). Example ids in DB: %s"
-                       task-id (uuid? task-id) available)
-            nil)))))
+    (let [tid (cond
+                (uuid? task-id) task-id
+                (string? task-id) (try
+                                    (UUID/fromString (str/trim task-id))
+                                    (catch Exception _ nil))
+                :else nil)]
+      (when tid
+        (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]]
+                     db tid))))))
 
 (defn- updated-at
   [db eid]
@@ -308,6 +296,44 @@
     :updated (sort-by :task/updated-at (compare-nil-last order) tasks)
     tasks))
 
+(defn- task-eids-by-filters
+  [db {:keys [status priority assignee tag archived]}]
+  (let [archived-filter (case archived
+                          :all :all
+                          true true
+                          false)
+        where (cond-> ['[?e :entity/type :entity.type/task]]
+                status (conj ['?e :task/status '?status])
+                priority (conj ['?e :task/priority '?priority])
+                assignee (-> (conj ['?e :task/assignee '?assignee-entity])
+                             (conj ['?assignee-entity :user/id '?assignee-id]))
+                tag (-> (conj ['?e :task/tags '?tag-entity])
+                        (conj ['?tag-entity :tag/id '?tag-id])))
+        in (cond-> ['$]
+             status (conj '?status)
+             priority (conj '?priority)
+             assignee (conj '?assignee-id)
+             tag (conj '?tag-id))
+        args (cond-> [db]
+               status (conj status)
+               priority (conj priority)
+               assignee (conj assignee)
+               tag (conj tag))
+        [where in args] (let [archived-clause ['(get-else $ ?e :task/archived? false) '?arch]]
+                          (case archived-filter
+                            :all [where in args]
+                            true [(conj where archived-clause ['(= ?arch true)])
+                                  in
+                                  args]
+                            [(conj where archived-clause ['(= ?arch false)])
+                             in
+                             args]))
+        query {:find ['?e]
+               :in (vec in)
+               :where where}]
+    (map first (d/q {:query query
+                     :args args}))))
+
 (defn recent-tasks
   "Return up to `limit` recent tasks sorted by updated-at desc, optional include-archived?."
   [conn {:keys [limit include-archived?]}]
@@ -356,11 +382,10 @@
         (if error
           {:error error}
           (let [db (d/db conn)
-                eids (entity/eids-by-type db :entity.type/task)
+                eids (task-eids-by-filters db filters)
                 tasks (->> eids
                            (map #(pull-task db %))
-                           (remove nil?)
-                           (filter #(filter-task % filters)))
+                           (remove nil?))
                 sorted (sort-tasks tasks filters)
                 total (count sorted)
                 bounded-offset (min offset (max 0 (- total limit)))
@@ -374,7 +399,7 @@
                           :limit limit
                           :offset bounded-offset
                           :page (inc (quot bounded-offset limit))
-                          :returned (count paged)}}))))) 
+                          :returned (count paged)}})))))
 
 (defn- validate-assignee!
   [db assignee-id]
