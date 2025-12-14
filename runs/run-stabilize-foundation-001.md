@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: registry-integrity-repair
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:06 UTC)
   - Objective: Restore registry integrity by ensuring all capability entries live in a single EDN form and update checks so malformed multi-form files fail fast.
   - Scope: Rewrap `registries/actions.edn` and `registries/views.edn` into single vectors; update `scripts/checks.sh` (and supporting Clojure parser) to reject trailing forms/extra data; align docs/system.md if capability visibility changed.
   - Out of Scope: Adding new capabilities beyond restoring visibility of existing ones.

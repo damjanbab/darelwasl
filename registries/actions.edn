@@ -352,7 +352,6 @@
   :related {:schema [:cap/schema/parcel :cap/schema/person :cap/schema/ownership]
             :views [:cap/view/land-registry]}
   :tooling []}
-]
 
  {:id :cap/action/content-blocks
   :title "Content Blocks CRUD"
@@ -575,12 +574,12 @@
                  :audit [:content/change]}
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:comparison.row/id :comparison.row/criterion]}
-  :idempotency {:strategy :dedupe-on :keys [:comparison.row/id :comparison.row/criterion]}
-  :contracts {:fixtures [:fixtures/content]}
-  :compatibility {:backward true :forward true :flags []}
+ :idempotency {:strategy :dedupe-on :keys [:comparison.row/id :comparison.row/criterion]}
+ :contracts {:fixtures [:fixtures/content]}
+ :compatibility {:backward true :forward true :flags []}
  :related {:schema [:cap/schema/comparison-row]
-            :views [:cap/view/control-panel]}
-  :tooling []}
+           :views [:cap/view/control-panel]}
+ :tooling []}
 
  {:id :cap/action/journey-phase-upsert
   :title "Journey Phase Upsert"
@@ -669,3 +668,4 @@
   :related {:schema [:cap/schema/comparison-row]
             :views [:cap/view/control-panel]}
   :tooling []}
+]

@@ -102,12 +102,23 @@ check_edn_parse() {
          '[clojure.set :as set]
          '[clojure.string :as str])
 
-(defn read-edn! [path]
+(defn read-single-edn! [path]
   (try
     (with-open [r (java.io.PushbackReader. (io/reader path))]
-      (let [data (edn/read r)]
-        (println "Parsed" path)
-        data))
+      (let [first (edn/read {:eof ::eof} r)
+            second (edn/read {:eof ::eof} r)]
+        (cond
+          (= first ::eof)
+          (do (println "Failed" path ": empty EDN file")
+              (System/exit 1))
+
+          (not= second ::eof)
+          (do (println "Failed" path ": trailing forms detected; registries must be single-form EDN")
+              (System/exit 1))
+
+          :else
+          (do (println "Parsed" path)
+              first))))
     (catch Exception e
       (println "Failed" path ":" (.getMessage e))
       (System/exit 1))))
@@ -130,8 +141,8 @@ check_edn_parse() {
                      :tasks (str root "/fixtures/tasks.edn")
                      :tags (str root "/fixtures/tags.edn")
                      :content (str root "/fixtures/content.edn")}
-      _ (doseq [f registry-paths] (read-edn! f))
-      fixtures (into {} (for [[k path] fixture-paths] [k (read-edn! path)]))
+      _ (doseq [f registry-paths] (read-single-edn! f))
+      fixtures (into {} (for [[k path] fixture-paths] [k (read-single-edn! path)]))
       users (:users fixtures)
       tasks (:tasks fixtures)
       tags (:tags fixtures)
