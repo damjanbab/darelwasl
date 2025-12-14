@@ -72,7 +72,7 @@
    :detail default-task-detail})
 
 (def default-home-state
-  {:status :idle
+  {:status :pending
    :error nil
    :recent []
    :counts {:todo 0 :in-progress 0 :done 0}})
@@ -198,8 +198,8 @@
    :parcels-page-size 25})
 
 (def default-land-state
-  {:status :idle
-  :error nil
+  {:status :pending
+   :error nil
    :people []
    :parcels []
    :stats nil

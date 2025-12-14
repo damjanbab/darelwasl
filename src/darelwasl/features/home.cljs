@@ -26,7 +26,7 @@
   (let [home @(rf/subscribe [:darelwasl.app/home])
         tags @(rf/subscribe [:darelwasl.app/tags])
         tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (or (:items tags) [])))]
-    (when (= :idle (:status home))
+    (when (= :pending (:status home))
       (rf/dispatch [:darelwasl.app/fetch-home]))
     [:div.home
      (case (:status home)

@@ -86,7 +86,7 @@
   - Reporting: Behavior changes and proof results.
 
 - Task ID: land-listing-performance-and-accuracy
-  - Status: in-progress (Codex, 2025-12-14 16:20 UTC)
+  - Status: done (Codex, 2025-12-14 16:27 UTC)
   - Objective: Replace load-all land queries with server-side filtered/paginated Datomic queries and keep stats accurate at scale.
   - Scope: Implement Datomic-backed filtering for people/parcels and stats; enforce pagination/limit guardrails; avoid full DB scans; ensure completeness filters use deterministic queries; update routes and UI wiring as needed.
   - Out of Scope: New land features beyond filtering/pagination fixes.
@@ -114,7 +114,7 @@
   - Reporting: Query changes and proof results.
 
 - Task ID: ui-side-effects-and-pagination-shared
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:33 UTC)
   - Objective: Remove render-time dispatch side effects and introduce a shared pagination/meta component used across tasks/home/land lists.
   - Scope: Move initial fetch triggers into effects/events (away from render bodies) for home and land views; add reusable pagination component/meta builder; apply it to tasks list and land lists; ensure keyboard/a11y unaffected.
   - Out of Scope: Visual redesign beyond component reuse.
