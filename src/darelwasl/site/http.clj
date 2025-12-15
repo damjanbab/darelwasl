@@ -50,7 +50,8 @@
        "header.site-header{position:sticky;top:0;z-index:20;background:var(--colors-surface);border-bottom:1px solid var(--colors-border);backdrop-filter:blur(10px);} "
        ".shell{max-width:1160px;margin:0 auto;padding:0 var(--spacing-scale-4);} "
        ".nav-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--spacing-scale-4);padding:var(--spacing-scale-4) 0;} "
-       ".brand{font-weight:700;letter-spacing:-0.01em;font-size:var(--typography-font-sizes-section);color:var(--colors-text-primary);} "
+       ".brand{display:inline-flex;align-items:center;gap:var(--spacing-scale-2);} "
+       ".brand img{height:72px;width:auto;object-fit:contain;display:block;} "
        ".nav-links{display:flex;gap:var(--spacing-scale-3);align-items:center;} "
        ".nav-link{padding:12px 16px;border-radius:var(--radius-md);text-decoration:none;color:var(--colors-text-secondary);border:1px solid transparent;font-weight:600;transition:all var(--motion-transition);} "
        ".nav-link:hover{border-color:var(--colors-focus);color:var(--colors-text-primary);} "
@@ -133,17 +134,17 @@
        "</style>"
        "<script>function toggleMenu(){document.body.classList.toggle('mobile-open');var btn=document.getElementById('mobile-toggle');if(btn){var open=document.body.classList.contains('mobile-open');btn.setAttribute('aria-expanded',open);if(!open){btn.focus();}}}</script>"
        "</head>"
-       "<body data-theme=\"site-premium\">"
-       "<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
-       "<div class=\"brand\">Darel Wasl</div>"
-       "<nav class=\"nav-links\" aria-label=\"Primary\">" nav "</nav>"
-       "<button id=\"mobile-toggle\" class=\"mobile-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"mobile-menu\" onclick=\"toggleMenu()\">Menu</button>"
-       "</div>"
-       "<nav id=\"mobile-menu\" class=\"mobile-menu\" aria-label=\"Mobile\">" nav "</nav>"
-       "</div></header>"
+"<body data-theme=\"site-premium\">"
+"<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
+"<div class=\"brand\" aria-label=\"Dar Alwasl\"><img src=\"/logo.jpg\" alt=\"Dar Alwasl logo\" loading=\"lazy\"></div>"
+"<nav class=\"nav-links\" aria-label=\"Primary\">" nav "</nav>"
+"<button id=\"mobile-toggle\" class=\"mobile-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"mobile-menu\" onclick=\"toggleMenu()\">Menu</button>"
+"</div>"
+"<nav id=\"mobile-menu\" class=\"mobile-menu\" aria-label=\"Mobile\">" nav "</nav>"
+"</div></header>"
        "<main>" body "</main>"
        (or footer-cta "")
-       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Darel Wasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
+       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Dar Alwasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
        "</body></html>"))
 
 (defn- render-hero
@@ -492,7 +493,7 @@
                      (subs raw-path 0 (dec (count raw-path)))
                      raw-path)]
     (if (or (str/starts-with? clean-path "/css/")
-            (= clean-path "/favicon.ico"))
+            (= clean-path "/logo.jpg"))
       (let [static-resp (resp/file-response (subs clean-path 1) {:root "public"})]
         (if static-resp
           (if (str/starts-with? clean-path "/css/")
@@ -546,7 +547,7 @@
                        footer-cta (render-footer-cta business selected-contact)]
                      (case clean-path
                        "/"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Home")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Home")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero business linked-stats linked-flows)
@@ -559,7 +560,7 @@
                                       footer-cta)
 
                        "/services"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Services")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Services")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Licensing and activation services" "Select the license that fits, compare requirements, and book a call.")
@@ -575,7 +576,7 @@
                                       footer-cta)
 
                        "/comparison"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Comparison")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Comparison")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Compare license paths" "Side-by-side details across processing, cost, ownership, and required documents.")
@@ -584,7 +585,7 @@
                                       footer-cta)
 
                        "/process"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Process")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Process")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Process and activation" "Understand the phases, inputs, and outputs for going live in KSA.")
@@ -592,16 +593,16 @@
                                       footer-cta)
 
                        "/about"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - About")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - About")
                                       nav
                                       (apply str (remove nil?
-                                                         [(render-hero-light "About Darel Wasl" "Principles and operating model for calm, evidence-led execution.")
+                                                         [(render-hero-light "About Dar Alwasl" "Principles and operating model for calm, evidence-led execution.")
                                                           (render-about-overview business)
                                                           (render-values-team sorted-values sorted-team)]))
                                       footer-cta)
 
-                       "/contact"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Contact")
+                      "/contact"
+                      (html-response (str (or (:business/name business) "Dar Alwasl") " - Contact")
                                       nav
                                       (apply str [(render-hero-light "Talk to the team" "Schedule a meeting or email us with your activities and timing.")
                                                   (render-funnel :schedule)

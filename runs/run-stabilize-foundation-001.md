@@ -170,7 +170,7 @@
   - Reporting: Items removed and validation steps.
 
 - Task ID: control-panel-form-shell-and-entity-config-reuse
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:55 UTC)
   - Objective: Reduce duplication in control-panel forms by introducing a reusable detail form shell and extending entity config usage for list/detail rendering.
   - Scope: Create shared form shell (status banners, actions, layout) and apply to pages/blocks/tags/persona/support/etc.; expand `ui/entity` configs and wire lists/details to use them where possible; keep feature parity.
   - Out of Scope: New features beyond refactor.
@@ -198,7 +198,7 @@
   - Reporting: Refactor summary and proofs.
 
 - Task ID: startup-bootstrap-deduplication
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 17:20 UTC)
   - Objective: Consolidate duplicated DB prep/backfill/seed logic between `main` and `site/main` into a shared bootstrap to reduce drift.
   - Scope: Extract shared startup helper (schema load, backfill, fixture seed gating, error handling) used by both processes; keep behavior identical; update docs/system.md if startup rules clarified.
   - Out of Scope: Changing fixture policies.

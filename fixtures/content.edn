@@ -33,7 +33,7 @@
    :entity/type :entity.type/content-page
    :content.page/title "About"
    :content.page/path "/about"
-   :content.page/summary "About Sandbridge Advisory"
+   :content.page/summary "About Dar Alwasl"
    :content.page/navigation-order 1
    :content.page/section-type :section/about
    :content.page/visible? true
@@ -80,7 +80,7 @@
    :entity/type :entity.type/content-block
    :content.block/page [:content.page/id #uuid "60000000-0000-0000-0000-000000000002"]
    :content.block/type :section
-   :content.block/title "About Sandbridge Advisory"
+   :content.block/title "About Dar Alwasl"
    :content.block/body "Boutique team focused on Saudi market entry and license activation."
    :content.block/media-ref "about-section"
    :content.block/slug "about-team"
@@ -100,12 +100,12 @@
    :content.block/tag [[:content.tag/id #uuid "50000000-0000-0000-0000-000000000003"]]}]
 
  :businesses [
- {:business/id #uuid "80000000-0000-0000-0000-000000000001"
-  :entity/type :entity.type/business
-  :business/name "Sandbridge Advisory"
-  :business/tagline "Saudi market entry partners"
-  :business/summary "We choreograph Saudi license acquisition and activation for foreign founders."
-  :business/mission "Make Saudi expansion feel structured, transparent, and human."
+{:business/id #uuid "80000000-0000-0000-0000-000000000001"
+ :entity/type :entity.type/business
+ :business/name "Dar Alwasl"
+ :business/tagline "Saudi market entry partners"
+ :business/summary "We choreograph Saudi license acquisition and activation for foreign founders."
+ :business/mission "Make Saudi expansion feel structured, transparent, and human."
   :business/vision "Global founders deploy faster because regulatory work is choreographed by trusted partners."
   :business/nav-label "Business Setup in Saudi"
   :business/hero-headline "A sequenced path to a licensed, activated Saudi business."
@@ -120,12 +120,12 @@
    :business/visible? true}]
 
  :contacts [
-  {:contact/id #uuid "81000000-0000-0000-0000-000000000001"
-   :entity/type :entity.type/contact
-   :contact/email "hello@sandbridge.sa"
+ {:contact/id #uuid "81000000-0000-0000-0000-000000000001"
+  :entity/type :entity.type/contact
+   :contact/email "hello@daralwasl.sa"
    :contact/phone "+966 50 000 0000"
-   :contact/primary-cta-label "Email hello@sandbridge.sa"
-   :contact/primary-cta-url "mailto:hello@sandbridge.sa"
+   :contact/primary-cta-label "Email hello@daralwasl.sa"
+   :contact/primary-cta-url "mailto:hello@daralwasl.sa"
    :contact/secondary-cta-label "Call us"
    :contact/secondary-cta-url "tel:+966500000000"}]
 

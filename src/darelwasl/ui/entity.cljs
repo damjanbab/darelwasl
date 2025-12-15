@@ -51,7 +51,59 @@
                                                         (util/format-area (:parcel/area-m2 parcel)) " m²")
                                          :selected? selected?
                                          :on-click #(when on-select (on-select pid))}]))}
-    :detail {:component (fn [props] [ui/land-parcel-detail-view props])}}})
+    :detail {:component (fn [props] [ui/land-parcel-detail-view props])}}
+
+   :entity.type/content-page
+   {:list {:title "Pages"
+           :key :content.page/id
+           :render-row (fn [page selected? {:keys [on-select]}]
+                         [ui/list-row {:title (or (:content.page/title page) "Untitled page")
+                                       :meta (or (:content.page/path page) "—")
+                                       :description (str (count (:content.page/blocks page)) " blocks")
+                                       :selected? selected?
+                                       :on-click #(when on-select (on-select (:content.page/id page)))}])}
+    :detail {:title "Page"
+             :create-title "New page"
+             :badge "Page"
+             :create-badge "Create"
+             :meta-edit-default "Select a page to edit"
+             :placeholder-title "Select a page"
+             :placeholder-copy "Choose a page or start a new one."}}
+
+   :entity.type/content-block
+   {:list {:title "Blocks"
+           :key :content.block/id
+           :render-row (fn [block selected? {:keys [on-select tag-index]}]
+                         (let [tags (map #(get tag-index (:content.tag/id %)) (:content.block/tag block))
+                               tag-label (when (seq tags) (str (count tags) " tag" (when (not= 1 (count tags)) "s")))]
+                           [ui/list-row {:title (or (:content.block/title block) (name (:content.block/type block)))
+                                         :meta (or (:content.block/slug block) "—")
+                                         :description tag-label
+                                         :selected? selected?
+                                         :on-click #(when on-select (on-select (:content.block/id block)))}]))}
+    :detail {:title "Block"
+             :create-title "New block"
+             :badge "Block"
+             :create-badge "Create"
+             :meta-edit-default "Select a block to edit"
+             :placeholder-title "Select a block"
+             :placeholder-copy "Choose a block or start a new one."}}
+
+   :entity.type/content-tag
+   {:list {:title "Tags"
+           :key :content.tag/id
+           :render-row (fn [tag selected? {:keys [on-select]}]
+                         [ui/list-row {:title (or (:content.tag/name tag) "Tag")
+                                       :meta (or (:content.tag/slug tag) "—")
+                                       :selected? selected?
+                                       :on-click #(when on-select (on-select (:content.tag/id tag)))}])}
+    :detail {:title "Tag"
+             :create-title "New tag"
+             :badge "Tag"
+             :create-badge "Create"
+             :meta-edit-default "Select a tag to edit"
+             :placeholder-title "Select a tag"
+             :placeholder-copy "Choose a tag or start a new one."}}})
 
 (defn config [entity-type]
   (get entity-view-config entity-type))

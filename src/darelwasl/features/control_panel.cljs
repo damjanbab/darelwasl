@@ -73,71 +73,94 @@
            [:span (or (:content.tag/name tag) "Tag")]]))]
      [:div.meta "No tags yet"])])
 
+(defn- detail-shell
+  [{:keys [title create-title badge create-badge meta-edit-default placeholder-title placeholder-copy on-new on-save on-delete deleting? saving? mode error status has-id? new-label create-label]} & body]
+  (let [new-label (or new-label create-badge "New")
+        create-label (or create-label create-badge "Create")]
+    [:div.panel.detail-panel
+     [:div.section-header
+      [:div
+       [:h2 (if (= mode :create) (or create-title title) title)]
+       (when (= mode :edit) [:span.meta meta-edit-default])]
+      [:div.controls
+       [ui/button {:variant :secondary
+                   :on-click on-new}
+        new-label]]]
+     (if (and (= mode :edit) (not has-id?))
+       [:div.state.empty
+        [:strong (or placeholder-title "Select an item")]
+        [:p (or placeholder-copy "Choose an item or start a new one.")]]
+       (into
+        [:form {:on-submit (fn [e] (.preventDefault e) (on-save))}
+         (when error [:div.form-error {:role "alert"} error])
+         (when (= status :success) [:div.form-success {:aria-live "polite"} "Saved"])]
+        (concat body
+                [[:div.button-row
+                  [ui/button {:type "submit"
+                              :disabled saving?}
+                   (if (= mode :create) create-label "Save")]
+                  (when (= mode :edit)
+                    [ui/button {:variant :danger
+                                :on-click on-delete
+                                :disabled deleting?}
+                     "Delete"])]])))]))
+
 (defn- page-form
   [{:keys [form mode status error]} pages tags]
   (let [saving? (= status :saving)
         deleting? (= status :deleting)
         selected-tags (or (:tags form) #{})
         nav (:navigation-order form)]
-    [:div.panel.detail-panel
-     [:div.section-header
-      [:div
-       [:h2 (if (= mode :create) "New page" "Edit page")]
-       (when (= mode :edit) [:span.meta (:path form)])]
-      [:div.controls
-       [ui/button {:variant :secondary
-                   :on-click #(rf/dispatch [:darelwasl.app/new-page])}
-        "New page"]]]
-     (if (and (nil? (:id form)) (= mode :edit))
-       [:div.state.empty
-        [:strong "Select a page"]
-        [:p "Choose a page or start a new one."]]
-       (let [save-btn [ui/button {:type "submit"
-                                  :disabled saving?}
-                       (if (= mode :create) "Create page" "Save page")]
-             delete-btn (when (= mode :edit)
-                          [ui/button {:variant :danger
-                                      :on-click #(rf/dispatch [:darelwasl.app/delete-page])
-                                      :disabled deleting?}
-                           "Delete page"])]
-         [:form {:on-submit (fn [e] (.preventDefault e) (rf/dispatch [:darelwasl.app/save-page]))}
-          (when error [:div.form-error {:role "alert"} error])
-          (when (= status :success) [:div.form-success {:aria-live "polite"} "Saved"])
-          [:div.detail-grid
-           [:div.field-group
-            [:label "Title"]
-            [ui/form-input {:value (:title form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-page-field :title (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Path"]
-            [ui/form-input {:value (:path form)
-                            :placeholder "/about"
-                            :on-change #(rf/dispatch [:darelwasl.app/set-page-field :path (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Summary"]
-            [:textarea.form-input {:value (:summary form)
-                                   :rows 2
-                                   :on-change #(rf/dispatch [:darelwasl.app/set-page-field :summary (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Navigation order"]
-            [ui/form-input {:type "number"
-                            :value nav
-                            :on-change #(rf/dispatch [:darelwasl.app/set-page-field :navigation-order (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Visible?"]
-            [:label.checkbox
-             [:input {:type "checkbox"
-                      :checked (boolean (:visible? form))
-                      :aria-label "Show page on site"
-                      :on-change #(rf/dispatch [:darelwasl.app/set-page-field :visible? (.. % -target -checked)])}]
-             [:span "Show on site"]]]
-           [tag-picker selected-tags tags :darelwasl.app/toggle-page-tag]
-           [:div.field-group
-            [:div.meta "Linked blocks"]
-            [:div.meta (str (count (:blocks form)) " block(s)")]]]
-          [:div.button-row
-           save-btn
-           delete-btn]]))]))
+    [detail-shell {:title "Page"
+                   :create-title "New page"
+                   :badge "Page"
+                   :create-badge "Create"
+                   :new-label "New page"
+                   :create-label "Create page"
+                   :meta-edit-default (:path form)
+                   :placeholder-title "Select a page"
+                   :placeholder-copy "Choose a page or start a new one."
+                   :mode mode
+                   :status status
+                   :error error
+                   :saving? saving?
+                   :deleting? deleting?
+                   :has-id? (:id form)
+                   :on-new #(rf/dispatch [:darelwasl.app/new-page])
+                   :on-save #(rf/dispatch [:darelwasl.app/save-page])
+                   :on-delete #(rf/dispatch [:darelwasl.app/delete-page])}
+     [:div.detail-grid
+      [:div.field-group
+       [:label "Title"]
+       [ui/form-input {:value (:title form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-page-field :title (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Path"]
+       [ui/form-input {:value (:path form)
+                       :placeholder "/about"
+                       :on-change #(rf/dispatch [:darelwasl.app/set-page-field :path (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Summary"]
+       [:textarea.form-input {:value (:summary form)
+                              :rows 2
+                              :on-change #(rf/dispatch [:darelwasl.app/set-page-field :summary (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Navigation order"]
+       [ui/form-input {:type "number"
+                       :value nav
+                       :on-change #(rf/dispatch [:darelwasl.app/set-page-field :navigation-order (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Visible?"]
+       [:label.checkbox
+        [:input {:type "checkbox"
+                 :checked (boolean (:visible? form))
+                 :aria-label "Show page on site"
+                 :on-change #(rf/dispatch [:darelwasl.app/set-page-field :visible? (.. % -target -checked)])}]
+        [:span "Show on site"]]]
+      [tag-picker selected-tags tags :darelwasl.app/toggle-page-tag]
+      [:div.field-group
+       [:div.meta "Linked blocks"]
+       [:div.meta (str (count (:blocks form)) " block(s)")]]]]))
 
 (defn- block-form
   [{:keys [form mode status error]} pages tags]
@@ -145,128 +168,110 @@
         deleting? (= status :deleting)
         selected-tags (or (:tags form) #{})
         current-page (:page form)]
-    [:div.panel.detail-panel
-     [:div.section-header
-      [:div
-       [:h2 (if (= mode :create) "New block" "Edit block")]
-       (when (= mode :edit) [:span.meta (:slug form)])]
-      [:div.controls
-       [ui/button {:variant :secondary
-                   :on-click #(rf/dispatch [:darelwasl.app/new-block])}
-        "New block"]]]
-     (if (and (nil? (:id form)) (= mode :edit))
-       [:div.state.empty
-        [:strong "Select a block"]
-        [:p "Pick a block or start a new one."]]
-       (let [save-btn [ui/button {:type "submit"
-                                  :disabled saving?}
-                       (if (= mode :create) "Create block" "Save block")]
-             delete-btn (when (= mode :edit)
-                          [ui/button {:variant :danger
-                                      :on-click #(rf/dispatch [:darelwasl.app/delete-block])
-                                      :disabled deleting?}
-                           "Delete block"])]
-         [:form {:on-submit (fn [e] (.preventDefault e) (rf/dispatch [:darelwasl.app/save-block]))}
-          (when error [:div.form-error {:role "alert"} error])
-          (when (= status :success) [:div.form-success {:aria-live "polite"} "Saved"])
-          [:div.detail-grid
-           [:div.field-group
-            [:label "Title"]
-            [ui/form-input {:value (:title form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-block-field :title (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Slug"]
-            [ui/form-input {:value (:slug form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-block-field :slug (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Page"]
-            [ui/select-field {:value (or current-page "")
-                              :on-change #(rf/dispatch [:darelwasl.app/set-block-field :page (let [v (.. % -target -value)]
-                                                                                                  (when-not (str/blank? v) v))])}
-             [:option {:value ""} "Unassigned"]
-             (for [p pages]
-               ^{:key (:content.page/id p)}
-               [:option {:value (:content.page/id p)} (or (:content.page/title p) (:content.page/path p))])]]
-           [:div.field-group
-            [:label "Type"]
-            [ui/select-field {:value (or (:type form) :hero)
-                              :on-change #(rf/dispatch [:darelwasl.app/set-block-field :type (keyword (.. % -target -value))])}
-             (for [t [:hero :section :rich-text :feature :cta :list]]
-               ^{:key (name t)}
-               [:option {:value (name t)} (block-type-label t)])]]
-           [:div.field-group
-            [:label "Order"]
-            [ui/form-input {:type "number"
-                            :value (:order form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-block-field :order (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Visible?"]
-            [:label.checkbox
-             [:input {:type "checkbox"
-                      :checked (boolean (:visible? form))
-                      :aria-label "Show block on site"
-                      :on-change #(rf/dispatch [:darelwasl.app/set-block-field :visible? (.. % -target -checked)])}]
-             [:span "Show on site"]]]
-          [:div.field-group
-           [:label "Body"]
-           [:textarea.form-input {:value (:body form)
-                                  :rows 3
-                                  :placeholder "Optional body copy"
-                                  :on-change #(rf/dispatch [:darelwasl.app/set-block-field :body (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Media ref"]
-            [ui/form-input {:value (:media-ref form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-block-field :media-ref (.. % -target -value)])}]]
-           [tag-picker selected-tags tags :darelwasl.app/toggle-block-tag]]
-          [:div.button-row
-           save-btn
-           delete-btn]]))]))
+    [detail-shell {:title "Block"
+                   :create-title "New block"
+                   :badge "Block"
+                   :create-badge "Create"
+                   :new-label "New block"
+                   :create-label "Create block"
+                   :meta-edit-default (:slug form)
+                   :placeholder-title "Select a block"
+                   :placeholder-copy "Pick a block or start a new one."
+                   :mode mode
+                   :status status
+                   :error error
+                   :saving? saving?
+                   :deleting? deleting?
+                   :has-id? (:id form)
+                   :on-new #(rf/dispatch [:darelwasl.app/new-block])
+                   :on-save #(rf/dispatch [:darelwasl.app/save-block])
+                   :on-delete #(rf/dispatch [:darelwasl.app/delete-block])}
+     [:div.detail-grid
+      [:div.field-group
+       [:label "Title"]
+       [ui/form-input {:value (:title form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-block-field :title (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Slug"]
+       [ui/form-input {:value (:slug form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-block-field :slug (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Page"]
+       [ui/select-field {:value (or current-page "")
+                         :on-change #(rf/dispatch [:darelwasl.app/set-block-field :page (let [v (.. % -target -value)]
+                                                                                         (when-not (str/blank? v) v))])}
+        [:option {:value ""} "Unassigned"]
+        (for [p pages]
+          ^{:key (:content.page/id p)}
+          [:option {:value (:content.page/id p)} (or (:content.page/title p) (:content.page/path p))])]]
+      [:div.field-group
+       [:label "Type"]
+       [ui/select-field {:value (or (:type form) :hero)
+                         :on-change #(rf/dispatch [:darelwasl.app/set-block-field :type (keyword (.. % -target -value))])}
+        (for [t [:hero :section :rich-text :feature :cta :list]]
+          ^{:key (name t)}
+          [:option {:value (name t)} (block-type-label t)])]]
+      [:div.field-group
+       [:label "Order"]
+       [ui/form-input {:type "number"
+                       :value (:order form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-block-field :order (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Visible?"]
+       [:label.checkbox
+        [:input {:type "checkbox"
+                 :checked (boolean (:visible? form))
+                 :aria-label "Show block on site"
+                 :on-change #(rf/dispatch [:darelwasl.app/set-block-field :visible? (.. % -target -checked)])}]
+        [:span "Show on site"]]]
+      [:div.field-group
+       [:label "Body"]
+       [:textarea.form-input {:value (:body form)
+                              :rows 3
+                              :placeholder "Optional body copy"
+                              :on-change #(rf/dispatch [:darelwasl.app/set-block-field :body (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Media ref"]
+       [ui/form-input {:value (:media-ref form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-block-field :media-ref (.. % -target -value)])}]]
+      [tag-picker selected-tags tags :darelwasl.app/toggle-block-tag]]]))
 
 (defn- tag-form
   [{:keys [form mode status error]}]
   (let [saving? (= status :saving)
         deleting? (= status :deleting)]
-    [:div.panel.detail-panel
-     [:div.section-header
-      [:div
-       [:h2 (if (= mode :create) "New tag" "Edit tag")]
-       (when (= mode :edit) [:span.meta (:slug form)])]
-      [:div.controls
-       [ui/button {:variant :secondary
-                   :on-click #(rf/dispatch [:darelwasl.app/new-tag])}
-        "New tag"]]]
-     (if (and (nil? (:id form)) (= mode :edit))
-       [:div.state.empty
-        [:strong "Select a tag"]
-        [:p "Pick a tag or start a new one."]]
-       (let [save-btn [ui/button {:type "submit"
-                                  :disabled saving?}
-                       (if (= mode :create) "Create tag" "Save tag")]
-             delete-btn (when (= mode :edit)
-                          [ui/button {:variant :danger
-                                      :on-click #(rf/dispatch [:darelwasl.app/delete-tag])
-                                      :disabled deleting?}
-                           "Delete tag"])]
-         [:form {:on-submit (fn [e] (.preventDefault e) (rf/dispatch [:darelwasl.app/save-tag]))}
-          (when error [:div.form-error {:role "alert"} error])
-          (when (= status :success) [:div.form-success {:aria-live "polite"} "Saved"])
-          [:div.detail-grid
-           [:div.field-group
-            [:label "Name"]
-            [ui/form-input {:value (:name form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :name (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Slug"]
-            [ui/form-input {:value (:slug form)
-                            :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :slug (.. % -target -value)])}]]
-           [:div.field-group
-            [:label "Description"]
-            [:textarea.form-input {:value (:description form)
-                                   :rows 2
-                                   :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :description (.. % -target -value)])}]]]
-          [:div.button-row
-           save-btn
-           delete-btn]]))]))
+    [detail-shell {:title "Tag"
+                   :create-title "New tag"
+                   :badge "Tag"
+                   :create-badge "Create"
+                   :new-label "New tag"
+                   :create-label "Create tag"
+                   :meta-edit-default (:slug form)
+                   :placeholder-title "Select a tag"
+                   :placeholder-copy "Pick a tag or start a new one."
+                   :mode mode
+                   :status status
+                   :error error
+                   :saving? saving?
+                   :deleting? deleting?
+                   :has-id? (:id form)
+                   :on-new #(rf/dispatch [:darelwasl.app/new-tag])
+                   :on-save #(rf/dispatch [:darelwasl.app/save-tag])
+                   :on-delete #(rf/dispatch [:darelwasl.app/delete-tag])}
+     [:div.detail-grid
+      [:div.field-group
+       [:label "Name"]
+       [ui/form-input {:value (:name form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :name (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Slug"]
+       [ui/form-input {:value (:slug form)
+                       :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :slug (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Description"]
+       [:textarea.form-input {:value (:description form)
+                              :rows 2
+                              :on-change #(rf/dispatch [:darelwasl.app/set-tag-field :description (.. % -target -value)])}]]]]))
 
 ;; -------- V2 read-only view --------
 
