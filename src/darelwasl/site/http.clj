@@ -50,7 +50,8 @@
        "header.site-header{position:sticky;top:0;z-index:20;background:var(--colors-surface);border-bottom:1px solid var(--colors-border);backdrop-filter:blur(10px);} "
        ".shell{max-width:1160px;margin:0 auto;padding:0 var(--spacing-scale-4);} "
        ".nav-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--spacing-scale-4);padding:var(--spacing-scale-4) 0;} "
-       ".brand{font-weight:700;letter-spacing:-0.01em;font-size:var(--typography-font-sizes-section);color:var(--colors-text-primary);} "
+       ".brand{display:inline-flex;align-items:center;gap:var(--spacing-scale-2);} "
+       ".brand img{height:72px;width:auto;object-fit:contain;display:block;} "
        ".nav-links{display:flex;gap:var(--spacing-scale-3);align-items:center;} "
        ".nav-link{padding:12px 16px;border-radius:var(--radius-md);text-decoration:none;color:var(--colors-text-secondary);border:1px solid transparent;font-weight:600;transition:all var(--motion-transition);} "
        ".nav-link:hover{border-color:var(--colors-focus);color:var(--colors-text-primary);} "
@@ -133,17 +134,17 @@
        "</style>"
        "<script>function toggleMenu(){document.body.classList.toggle('mobile-open');var btn=document.getElementById('mobile-toggle');if(btn){var open=document.body.classList.contains('mobile-open');btn.setAttribute('aria-expanded',open);if(!open){btn.focus();}}}</script>"
        "</head>"
-       "<body data-theme=\"site-premium\">"
-       "<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
-       "<div class=\"brand\">Darel Wasl</div>"
-       "<nav class=\"nav-links\" aria-label=\"Primary\">" nav "</nav>"
-       "<button id=\"mobile-toggle\" class=\"mobile-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"mobile-menu\" onclick=\"toggleMenu()\">Menu</button>"
-       "</div>"
-       "<nav id=\"mobile-menu\" class=\"mobile-menu\" aria-label=\"Mobile\">" nav "</nav>"
-       "</div></header>"
+"<body data-theme=\"site-premium\">"
+"<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
+"<div class=\"brand\" aria-label=\"Dar Alwasl\"><img src=\"/logo.jpg\" alt=\"Dar Alwasl logo\" loading=\"lazy\"></div>"
+"<nav class=\"nav-links\" aria-label=\"Primary\">" nav "</nav>"
+"<button id=\"mobile-toggle\" class=\"mobile-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"mobile-menu\" onclick=\"toggleMenu()\">Menu</button>"
+"</div>"
+"<nav id=\"mobile-menu\" class=\"mobile-menu\" aria-label=\"Mobile\">" nav "</nav>"
+"</div></header>"
        "<main>" body "</main>"
        (or footer-cta "")
-       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Darel Wasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
+       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Dar Alwasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
        "</body></html>"))
 
 (defn- render-hero
@@ -266,39 +267,6 @@
     (format "<ul>%s</ul>"
             (apply str (map (fn [item] (format "<li>%s</li>" (escape-html item))) items)))))
 
-(defn- render-licenses
-  [licenses]
-  (when (seq licenses)
-    (let [cards (apply str
-                       (map (fn [l]
-                              (str
-                               (format "<div class=\"card license\"><div class=\"section-title\"><h3>%s</h3><span class=\"pill\">%s</span></div>"
-                                       (escape-html (:license/label l))
-                                       (escape-html (name (:license/type l))))
-                               (format "<div class=\"meta\"><span>Processing: %s</span><span>Ownership: %s</span><span>Renewal: %s</span></div>%s%s%s%s</div>"
-                                       (escape-html (:license/processing-time l))
-                                       (escape-html (:license/ownership l))
-                                       (escape-html (:license/renewal-cost l))
-                                       (if-let [pricing (:license/pricing-lines l)]
-                                         (format "<div><strong>Pricing</strong>%s</div>"
-                                                 (render-list pricing))
-                                         "")
-                                       (if-let [activities (:license/activities l)]
-                                         (format "<div><strong>Core activities</strong>%s</div>"
-                                                 (render-list activities))
-                                         "")
-                                       (if-let [who (:license/who l)]
-                                         (format "<div><strong>Best for</strong>%s</div>"
-                                                 (render-list who))
-                                         "")
-                                       (if-let [docs (:license/document-checklist l)]
-                                         (format "<div><strong>Checklist</strong>%s</div>"
-                                                 (render-list docs))
-                                         ""))))
-                            licenses))]
-      (format "<section><div class=\"section-title\"><h2>License paths</h2><span class=\"pill\">Choose the route that fits</span></div><div class=\"card-grid\">%s</div></section>"
-              cards))))
-
 (defn- render-offer-overview
   [licenses]
   (when (seq licenses)
@@ -314,25 +282,6 @@
                             (take 3 licenses)))]
       (format "<section><div class=\"section-title\"><h2>What we offer</h2><span class=\"pill\">COST</span></div><div class=\"card-grid\">%s</div><div class=\"ctas\"><a class=\"nav-link primary-cta\" href=\"/services\">See all services</a></div></section>"
               cards))))
-
-(defn- render-pillars
-  [licenses]
-  (when (seq licenses)
-    (let [by-type (group-by :license/type licenses)
-          pillars (apply str
-                         (map (fn [[t ls]]
-                                (let [items (apply str
-                                                   (map (fn [l]
-                                                          (format "<li>%s - %s</li>"
-                                                                  (escape-html (:license/label l))
-                                                                  (escape-html (:license/processing-time l))))
-                                                        (take 4 ls)))]
-                                  (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                                          (escape-html (name t))
-                                          items)))
-                              by-type))]
-      (format "<section><div class=\"section-title\"><h2>Services by pillar</h2><span class=\"pill\">Choose your path</span></div><div class=\"card-grid\">%s</div></section>"
-              pillars))))
 
 (defn- render-outcomes
   [values]
@@ -389,25 +338,6 @@
   (or (render-trust-strip hero-stats comparison-rows)
       (render-comparison comparison-rows)))
 
-(defn- render-proof-section
-  [hero-stats comparison-rows]
-  (when (or (seq hero-stats) (seq comparison-rows))
-    (let [metrics (->> hero-stats
-                       (sort-by #(or (:hero.stat/order %) Long/MAX_VALUE))
-                       (take 3)
-                       (map (fn [s]
-                              (format "<div class=\"card\"><div class=\"label\">%s</div><div class=\"value\">%s</div><div class=\"hint\">%s</div><div class=\"meta\">[Placeholder: proof thumbnail]</div></div>"
-                                      (escape-html (:hero.stat/label s))
-                                      (escape-html (:hero.stat/value s))
-                                      (escape-html (:hero.stat/hint s)))))
-                       (apply str))]
-      (format "<section><div class=\"section-title\"><div><h2>Proof in practice</h2>%s</div><span class=\"pill\">PROOF</span></div><div class=\"card-grid\">%s%s</div></section>"
-              (evidence-pill "PROOF")
-              (or metrics "")
-              (or (when (seq comparison-rows)
-                    "<div class=\"card\"><h3>Side-by-side clarity</h3><p>We compare processing, ownership, and renewal across license paths so you can decide with confidence.</p><a class=\"cta secondary\" href=\"/comparison\">View comparison</a></div>")
-                    "")))))
-
 (defn- render-comparison
   [rows]
   (when (seq rows)
@@ -456,38 +386,6 @@
       (format "<section><div class=\"section-title\"><h2>Journey and activation</h2><span class=\"pill\">NEXT GATE</span></div>%s%s</section>"
               (or phases-view "")
               (or activation-view "")))))
-
-(defn- render-personas
-  [personas support-entries]
-  (when (or (seq personas) (seq support-entries))
-    (let [personas-view (when (seq personas)
-                          (let [cards (apply str
-                                             (map (fn [p]
-                                                    (format "<div class=\"card\"><h3>%s</h3><p>%s</p></div>"
-                                                            (escape-html (:persona/title p))
-                                                            (escape-html (:persona/detail p))))
-                                                  personas))]
-                            (format "<div class=\"card-grid\">%s</div>" cards)))
-          by-role (group-by :support.entry/role support-entries)
-          support-we (when-let [entries (seq (get by-role :support/we))]
-                       (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                               "We handle"
-                               (apply str
-                                      (map (fn [e]
-                                             (format "<li>%s</li>" (escape-html (:support.entry/text e))))
-                                           entries))))
-          support-you (when-let [entries (seq (get by-role :support/you))]
-                         (format "<div class=\"card\"><h3>%s</h3><ul>%s</ul></div>"
-                                 "You handle"
-                                 (apply str
-                                        (map (fn [e]
-                                               (format "<li>%s</li>" (escape-html (:support.entry/text e))))
-                                             entries))))
-          support-view (when (or support-we support-you)
-                         (format "<div class=\"card-grid\">%s%s</div>" (or support-we "") (or support-you "")))]
-      (format "<section><div class=\"section-title\"><h2>Who we guide</h2><span class=\"pill\">Tailored for foreign founders</span></div>%s%s</section>"
-              (or personas-view "")
-              (or support-view "")))))
 
 (defn- render-faqs
   [faqs]
@@ -595,7 +493,7 @@
                      (subs raw-path 0 (dec (count raw-path)))
                      raw-path)]
     (if (or (str/starts-with? clean-path "/css/")
-            (= clean-path "/favicon.ico"))
+            (= clean-path "/logo.jpg"))
       (let [static-resp (resp/file-response (subs clean-path 1) {:root "public"})]
         (if static-resp
           (if (str/starts-with? clean-path "/css/")
@@ -649,7 +547,7 @@
                        footer-cta (render-footer-cta business selected-contact)]
                      (case clean-path
                        "/"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Home")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Home")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero business linked-stats linked-flows)
@@ -662,7 +560,7 @@
                                       footer-cta)
 
                        "/services"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Services")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Services")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Licensing and activation services" "Select the license that fits, compare requirements, and book a call.")
@@ -678,7 +576,7 @@
                                       footer-cta)
 
                        "/comparison"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Comparison")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Comparison")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Compare license paths" "Side-by-side details across processing, cost, ownership, and required documents.")
@@ -687,7 +585,7 @@
                                       footer-cta)
 
                        "/process"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Process")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - Process")
                                       nav
                                       (apply str (remove nil?
                                                          [(render-hero-light "Process and activation" "Understand the phases, inputs, and outputs for going live in KSA.")
@@ -695,16 +593,16 @@
                                       footer-cta)
 
                        "/about"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - About")
+                       (html-response (str (or (:business/name business) "Dar Alwasl") " - About")
                                       nav
                                       (apply str (remove nil?
-                                                         [(render-hero-light "About Darel Wasl" "Principles and operating model for calm, evidence-led execution.")
+                                                         [(render-hero-light "About Dar Alwasl" "Principles and operating model for calm, evidence-led execution.")
                                                           (render-about-overview business)
                                                           (render-values-team sorted-values sorted-team)]))
                                       footer-cta)
 
-                       "/contact"
-                       (html-response (str (or (:business/name business) "Darel Wasl") " - Contact")
+                      "/contact"
+                      (html-response (str (or (:business/name business) "Dar Alwasl") " - Contact")
                                       nav
                                       (apply str [(render-hero-light "Talk to the team" "Schedule a meeting or email us with your activities and timing.")
                                                   (render-funnel :schedule)

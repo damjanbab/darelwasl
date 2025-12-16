@@ -4,7 +4,8 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.entity :as entity]
-            [darelwasl.schema :as schema])
+            [darelwasl.schema :as schema]
+            [darelwasl.validation :as v])
   (:import (java.time Instant)
            (java.time.format DateTimeFormatter)
            (java.util Date UUID)))
@@ -24,6 +25,12 @@
 
 (def ^:private priority-rank
   {:high 3 :medium 2 :low 1})
+
+(def ^:private param-value v/param-value)
+(def ^:private normalize-string-field v/normalize-string)
+(def ^:private normalize-enum v/normalize-enum)
+(def ^:private normalize-uuid v/normalize-uuid)
+(def ^:private normalize-boolean v/normalize-boolean)
 
 (def ^:private default-list-limit 25)
 (def ^:private max-list-limit 200)
@@ -45,79 +52,6 @@
   [^Date inst]
   (when inst
     (.format iso-formatter (.toInstant inst))))
-
-(defn- param-value
-  "Fetch a value from a map regardless of keyword/string key usage."
-  [m k]
-  (let [kname (name k)]
-    (or (get m k)
-        (get m (keyword kname))
-        (get m kname))))
-
-(defn- normalize-string-field
-  [v label {:keys [required allow-blank?]}]
-  (let [raw (if (sequential? v) (first v) v)]
-    (cond
-      (and required (nil? raw)) {:error (str label " is required")}
-      (nil? raw) {:value nil}
-      (not (string? raw)) {:error (str label " must be a string")}
-      :else (let [s (str/trim raw)]
-              (cond
-                (and (not allow-blank?) (str/blank? s)) {:error (str label " cannot be blank")}
-                :else {:value s})))))
-
-(defn- to-keyword
-  [v]
-  (cond
-    (keyword? v) v
-    (string? v) (let [trimmed (str/trim v)]
-                  (when-not (str/blank? trimmed)
-                    (keyword trimmed)))
-    :else nil))
-
-(defn- normalize-enum
-  [value allowed label]
-  (let [raw (if (sequential? value) (first value) value)]
-    (cond
-      (nil? raw) {:value nil}
-      :else
-      (let [kw (to-keyword raw)]
-        (cond
-          (nil? kw) {:error (str "Invalid " label)}
-          (not (contains? allowed kw)) {:error (str "Unsupported " label ": " (name kw))}
-          :else {:value kw})))))
-
-(defn- normalize-uuid
-  [value label]
-  (let [raw (if (sequential? value) (first value) value)]
-    (cond
-      (nil? raw) {:value nil}
-      (uuid? raw) {:value raw}
-      (string? raw) (try
-                      {:value (UUID/fromString (str/trim raw))}
-                      (catch Exception _
-                        {:error (str "Invalid " label)}))
-      :else {:error (str "Invalid " label)})))
-
-(defn- normalize-boolean
-  [value label {:keys [default allow-all?]}]
-  (let [raw (if (sequential? value) (first value) value)]
-    (cond
-      (keyword? raw) (recur (name raw) label {:default default
-                                              :allow-all? allow-all?})
-      (nil? raw) {:value default}
-      (boolean? raw) {:value raw}
-      (string? raw) (let [v (str/lower-case (str/trim raw))]
-                      (cond
-                        (#{"true" "1" "yes" "on"} v) {:value true}
-                        (#{"false" "0" "no" "off"} v) {:value false}
-                        (and allow-all? (= v "all")) {:value :all}
-                        :else {:error (str label " must be " (if allow-all?
-                                                               "true, false, or all"
-                                                               "true or false"))}))
-      :else {:error (str label " must be " (if allow-all?
-                                             "true, false, or all"
-                                             "true or false"))})))
 
 (defn- normalize-instant
   [value label]
@@ -196,27 +130,15 @@
 (defn- task-eid
   [db task-id]
   (when task-id
-    (let [lookup (fn [id]
-                   (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]] db id)))
-          primary (lookup task-id)
-          fallback (when (and (nil? primary) (uuid? task-id))
-                     (lookup (str task-id)))
-          scanned (when (nil? (or primary fallback))
-                    (let [eids (entity/eids-by-type db :entity.type/task)]
-                      (some (fn [eid]
-                              (let [tid (:task/id (d/pull db [:task/id] eid))]
-                                (when (= (str tid) (str task-id))
-                                  eid)))
-                            eids)))]
-      (or primary
-          fallback
-          scanned
-          (let [available (->> (d/q '[:find ?id :where [_ :task/id ?id]] db)
-                               (map first)
-                               (take 5))]
-            (log/warnf "task-eid: no entity found for task-id=%s (uuid? %s). Example ids in DB: %s"
-                       task-id (uuid? task-id) available)
-            nil)))))
+    (let [tid (cond
+                (uuid? task-id) task-id
+                (string? task-id) (try
+                                    (UUID/fromString (str/trim task-id))
+                                    (catch Exception _ nil))
+                :else nil)]
+      (when tid
+        (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]]
+                     db tid))))))
 
 (defn- updated-at
   [db eid]
@@ -295,32 +217,25 @@
 
 (defn- normalize-list-params
   [params]
-  (let [{status :value status-err :error} (normalize-enum (param-value params :status) @allowed-statuses "status")
-        {priority :value priority-err :error} (normalize-enum (param-value params :priority) @allowed-priorities "priority")
-        {tag :value tag-err :error} (normalize-uuid (param-value params :tag) "tag")
-        {assignee :value assignee-err :error} (normalize-uuid (param-value params :assignee) "assignee")
-        {archived :value archived-err :error} (normalize-boolean (param-value params :archived) "archived" {:default false
-                                                                                                          :allow-all? true})
-        limit-raw (param-value params :limit)
-        offset-raw (param-value params :offset)
+  (let [{status :value status-err :error} (v/normalize-enum (v/param-value params :status) @allowed-statuses "status")
+        {priority :value priority-err :error} (v/normalize-enum (v/param-value params :priority) @allowed-priorities "priority")
+        {tag :value tag-err :error} (v/normalize-uuid (v/param-value params :tag) "tag")
+        {assignee :value assignee-err :error} (v/normalize-uuid (v/param-value params :assignee) "assignee")
+        {archived :value archived-err :error} (v/normalize-boolean (v/param-value params :archived) "archived" {:default false
+                                                                                                                :allow-all? true})
+        limit-raw (v/param-value params :limit)
+        offset-raw (v/param-value params :offset)
         limit (or (parse-int limit-raw) default-list-limit)
         offset (or (parse-int offset-raw) 0)
-        raw-sort (param-value params :sort)
-        sort-key (cond
-                   (nil? raw-sort) :updated
-                   :else (case (to-keyword raw-sort)
-                           (:due :task/due-date) :due
-                           (:priority :task/priority) :priority
-                           (:updated :task/updated-at) :updated
-                           nil))
+        raw-sort (v/param-value params :sort)
+        {sort-val :value sort-err :error} (v/normalize-enum raw-sort #{:due :priority :updated} "sort")
+        sort-key (or sort-val :updated)
         default-order (if (= sort-key :due) :asc :desc)
-        raw-order (param-value params :order)
+        raw-order (v/param-value params :order)
+        {order-val :value order-err :error} (v/normalize-enum raw-order #{:asc :ascending :desc :descending} "order")
         order-key (cond
-                    (nil? raw-order) default-order
-                    :else (case (to-keyword raw-order)
-                            (:asc :ascending) :asc
-                            (:desc :descending) :desc
-                            nil))]
+                    order-val (if (#{:desc :descending} order-val) :desc :asc)
+                    :else default-order)]
     (cond
       status-err (error 400 status-err)
       priority-err (error 400 priority-err)
@@ -330,8 +245,8 @@
       (or (nil? limit) (<= limit 0)) (error 400 (str "Invalid limit; must be between 1 and " max-list-limit))
       (> limit max-list-limit) (error 400 (str "Limit too high; max " max-list-limit))
       (or (nil? offset) (neg? offset)) (error 400 "Invalid offset; must be 0 or greater")
-      (and raw-sort (nil? sort-key)) (error 400 "Invalid sort; expected due, priority, or updated")
-      (and raw-order (nil? order-key)) (error 400 "Invalid order; expected asc or desc")
+      sort-err (error 400 sort-err)
+      order-err (error 400 order-err)
       :else {:filters {:status status
                        :priority priority
                        :tag tag
@@ -381,6 +296,44 @@
     :updated (sort-by :task/updated-at (compare-nil-last order) tasks)
     tasks))
 
+(defn- task-eids-by-filters
+  [db {:keys [status priority assignee tag archived]}]
+  (let [archived-filter (case archived
+                          :all :all
+                          true true
+                          false)
+        where (cond-> ['[?e :entity/type :entity.type/task]]
+                status (conj ['?e :task/status '?status])
+                priority (conj ['?e :task/priority '?priority])
+                assignee (-> (conj ['?e :task/assignee '?assignee-entity])
+                             (conj ['?assignee-entity :user/id '?assignee-id]))
+                tag (-> (conj ['?e :task/tags '?tag-entity])
+                        (conj ['?tag-entity :tag/id '?tag-id])))
+        in (cond-> ['$]
+             status (conj '?status)
+             priority (conj '?priority)
+             assignee (conj '?assignee-id)
+             tag (conj '?tag-id))
+        args (cond-> [db]
+               status (conj status)
+               priority (conj priority)
+               assignee (conj assignee)
+               tag (conj tag))
+        [where in args] (let [archived-clause ['(get-else $ ?e :task/archived? false) '?arch]]
+                          (case archived-filter
+                            :all [where in args]
+                            true [(conj where archived-clause ['(= ?arch true)])
+                                  in
+                                  args]
+                            [(conj where archived-clause ['(= ?arch false)])
+                             in
+                             args]))
+        query {:find ['?e]
+               :in (vec in)
+               :where where}]
+    (map first (d/q {:query query
+                     :args args}))))
+
 (defn recent-tasks
   "Return up to `limit` recent tasks sorted by updated-at desc, optional include-archived?."
   [conn {:keys [limit include-archived?]}]
@@ -429,11 +382,10 @@
         (if error
           {:error error}
           (let [db (d/db conn)
-                eids (entity/eids-by-type db :entity.type/task)
+                eids (task-eids-by-filters db filters)
                 tasks (->> eids
                            (map #(pull-task db %))
-                           (remove nil?)
-                           (filter #(filter-task % filters)))
+                           (remove nil?))
                 sorted (sort-tasks tasks filters)
                 total (count sorted)
                 bounded-offset (min offset (max 0 (- total limit)))
@@ -447,7 +399,7 @@
                           :limit limit
                           :offset bounded-offset
                           :page (inc (quot bounded-offset limit))
-                          :returned (count paged)}}))))) 
+                          :returned (count paged)}})))))
 
 (defn- validate-assignee!
   [db assignee-id]

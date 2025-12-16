@@ -167,7 +167,7 @@
 
 (defn land-view []
   (let [{:keys [status stats]} @(rf/subscribe [:darelwasl.app/land])]
-    (when (= status :idle)
+    (when (= status :pending)
       (rf/dispatch [:darelwasl.app/fetch-land]))
     [:div.home
      [:div.section-header

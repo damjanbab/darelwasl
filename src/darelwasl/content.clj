@@ -2,7 +2,9 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
-            [darelwasl.entity :as entity])
+            [darelwasl.entity :as entity]
+            [darelwasl.shared.block-types :as block-types]
+            [darelwasl.validation :as v])
   (:import (java.util UUID)))
 
 ;; -------- Shared helpers --------
@@ -18,105 +20,14 @@
   (when-not conn
     (error 500 "Database not ready")))
 
-(defn- param-value
-  [m k]
-  (let [kname (name k)]
-    (or (get m k)
-        (get m (keyword kname))
-        (get m kname))))
-
-(defn- normalize-string
-  [v label {:keys [required allow-blank?] :or {allow-blank? false}}]
-  (let [raw (if (sequential? v) (first v) v)]
-    (cond
-      (and required (nil? raw)) {:error (str label " is required")}
-      (nil? raw) {:value nil}
-      (not (string? raw)) {:error (str label " must be a string")}
-      :else (let [s (str/trim raw)]
-              (cond
-                (and (not allow-blank?) (str/blank? s)) {:error (str label " cannot be blank")}
-                :else {:value s})))))
-
-(defn- normalize-uuid
-  [v label]
-  (let [raw (if (sequential? v) (first v) v)]
-    (cond
-      (nil? raw) {:value nil}
-      (uuid? raw) {:value raw}
-      (string? raw) (try
-                      {:value (UUID/fromString (str/trim raw))}
-                      (catch Exception _
-                        {:error (str "Invalid " label)}))
-      :else {:error (str "Invalid " label)})))
-
-(defn- normalize-boolean
-  [v label {:keys [default]}]
-  (let [raw (if (sequential? v) (first v) v)]
-    (cond
-      (nil? raw) {:value default}
-      (boolean? raw) {:value raw}
-      (string? raw) (let [s (str/lower-case (str/trim raw))]
-                      (cond
-                        (#{"true" "1" "yes" "on"} s) {:value true}
-                        (#{"false" "0" "no" "off"} s) {:value false}
-                        :else {:error (str label " must be true or false")}))
-      :else {:error (str label " must be true or false")})))
-
-(defn- normalize-long
-  [v label]
-  (let [raw (if (sequential? v) (first v) v)]
-    (cond
-      (nil? raw) {:value nil}
-      (integer? raw) {:value (long raw)}
-      (number? raw) {:value (long raw)}
-      (string? raw) (try
-                      {:value (Long/parseLong (str/trim raw))}
-                      (catch Exception _
-                        {:error (str label " must be a number")}))
-      :else {:error (str label " must be a number")})))
-
-(defn- normalize-keyword
-  [v label allowed]
-  (let [raw (if (sequential? v) (first v) v)
-        kw (cond
-             (keyword? raw) raw
-             (string? raw) (let [s (-> raw str/trim (str/replace #"^:" ""))]
-                             (when-not (str/blank? s)
-                               (keyword s)))
-             :else nil)]
-    (cond
-      (nil? kw) {:error (str "Invalid " label)}
-      (and allowed (not (contains? allowed kw))) {:error (str "Unsupported " label)}
-      :else {:value kw})))
-
-(defn- normalize-string-list
-  [v label]
-  (cond
-    (nil? v) {:value []}
-    (string? v) (let [s (str/trim v)]
-                  (if (str/blank? s)
-                    {:value []}
-                    {:value [s]}))
-    (sequential? v) (let [vals (->> v
-                                    (keep (fn [item]
-                                            (when (string? item)
-                                              (let [s (str/trim item)]
-                                                (when-not (str/blank? s) s)))))
-                                    vec)]
-                     {:value vals})
-    :else {:error (str label " must be a string or list of strings")}))
-
-(defn- normalize-ref-list
-  [items ref-key label]
-  (let [vals (or items [])]
-    (reduce (fn [acc v]
-              (if-let [{id :value err :error} (normalize-uuid v label)]
-                (if err
-                  (reduced {:error err})
-                  (update acc :value conj [ref-key id]))
-                acc))
-            {:value []}
-            vals)))
+(def ^:private param-value v/param-value)
+(def ^:private normalize-string v/normalize-string)
+(def ^:private normalize-uuid v/normalize-uuid)
+(def ^:private normalize-boolean v/normalize-boolean)
+(def ^:private normalize-long v/normalize-long)
+(def ^:private normalize-keyword v/normalize-keyword)
+(def ^:private normalize-string-list v/normalize-string-list)
+(def ^:private normalize-ref-list v/normalize-ref-list)
 
 (defn- slugify
   [s]
@@ -139,8 +50,6 @@
                :details (.getMessage e)}})))
 
 ;; -------- Pull helpers --------
-
-(def allowed-block-types #{:hero :section :rich-text :feature :cta :list})
 
 (defn- present-license
   [license]
@@ -706,7 +615,7 @@
         {type :value type-err :error} (let [raw (param-value body :content.block/type)]
                                          (if (nil? raw)
                                            {:value nil}
-                                           (normalize-keyword raw "block type" allowed-block-types)))
+                                           (normalize-keyword raw "block type" block-types/allowed-block-type-set)))
         {title :value title-err :error} (normalize-string (param-value body :content.block/title) "title" {:required false})
         {body :value body-err :error} (normalize-string (param-value body :content.block/body) "body" {:required false
                                                                                                       :allow-blank? true})
@@ -760,7 +669,7 @@
         {type :value type-err :error} (let [raw (param-value body :content.block/type)]
                                          (if (nil? raw)
                                            {:value nil}
-                                           (normalize-keyword raw "block type" allowed-block-types)))
+                                           (normalize-keyword raw "block type" block-types/allowed-block-type-set)))
         {title :value title-err :error} (normalize-string (param-value body :content.block/title) "title" {:required false})
         {body :value body-err :error} (normalize-string (param-value body :content.block/body) "body" {:required false
                                                                                                       :allow-blank? true})

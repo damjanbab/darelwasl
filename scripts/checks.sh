@@ -100,14 +100,26 @@ check_edn_parse() {
 (require '[clojure.edn :as edn]
          '[clojure.java.io :as io]
          '[clojure.set :as set]
-         '[clojure.string :as str])
+         '[clojure.string :as str]
+         '[darelwasl.shared.block-types :as block-types])
 
-(defn read-edn! [path]
+(defn read-single-edn! [path]
   (try
     (with-open [r (java.io.PushbackReader. (io/reader path))]
-      (let [data (edn/read r)]
-        (println "Parsed" path)
-        data))
+      (let [first (edn/read {:eof ::eof} r)
+            second (edn/read {:eof ::eof} r)]
+        (cond
+          (= first ::eof)
+          (do (println "Failed" path ": empty EDN file")
+              (System/exit 1))
+
+          (not= second ::eof)
+          (do (println "Failed" path ": trailing forms detected; registries must be single-form EDN")
+              (System/exit 1))
+
+          :else
+          (do (println "Parsed" path)
+              first))))
     (catch Exception e
       (println "Failed" path ":" (.getMessage e))
       (System/exit 1))))
@@ -130,8 +142,8 @@ check_edn_parse() {
                      :tasks (str root "/fixtures/tasks.edn")
                      :tags (str root "/fixtures/tags.edn")
                      :content (str root "/fixtures/content.edn")}
-      _ (doseq [f registry-paths] (read-edn! f))
-      fixtures (into {} (for [[k path] fixture-paths] [k (read-edn! path)]))
+      _ (doseq [f registry-paths] (read-single-edn! f))
+      fixtures (into {} (for [[k path] fixture-paths] [k (read-single-edn! path)]))
       users (:users fixtures)
       tasks (:tasks fixtures)
       tags (:tags fixtures)
@@ -239,7 +251,7 @@ check_edn_parse() {
       duplicate-block-ids (seq (for [[id freq] (frequencies block-ids)
                                      :when (> freq 1)]
                                  id))
-      allowed-block-types #{:hero :section :rich-text :feature :cta :list}
+      allowed-block-types block-types/allowed-block-type-set
       invalid-blocks (seq (for [b content-blocks
                                 :let [bid (:content.block/id b)
                                       btype (:content.block/type b)

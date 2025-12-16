@@ -2,7 +2,7 @@
 
 ## Tasks
 - Task ID: registry-integrity-repair
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:06 UTC)
   - Objective: Restore registry integrity by ensuring all capability entries live in a single EDN form and update checks so malformed multi-form files fail fast.
   - Scope: Rewrap `registries/actions.edn` and `registries/views.edn` into single vectors; update `scripts/checks.sh` (and supporting Clojure parser) to reject trailing forms/extra data; align docs/system.md if capability visibility changed.
   - Out of Scope: Adding new capabilities beyond restoring visibility of existing ones.
@@ -30,7 +30,7 @@
   - Reporting: Summarize registry fixes and new validation.
 
 - Task ID: shared-validation-and-enum-source
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:14 UTC)
   - Objective: Consolidate request/field normalization and shared enums (e.g., block types) into a reusable module for backend and CLJS consumers.
   - Scope: Extract normalization helpers from tasks/content into a shared namespace; drive block-type constants from a single source (registry or shared CLJC); refactor tasks/content actions and CLJS forms to consume shared helpers/constants; update docs/contracts if messages change.
   - Out of Scope: Adding new fields beyond existing domains.
@@ -58,7 +58,7 @@
   - Reporting: List modules updated and behavior alignment.
 
 - Task ID: task-listing-and-identity-hardening
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:19 UTC)
   - Objective: Move task listing/filtering/pagination to Datomic queries, simplify task identity lookup, and keep contracts aligned with registry expectations.
   - Scope: Implement server-side filtering/pagination in `tasks.clj`; remove or reduce `task-eid` scan fallback; ensure archived/filters/sort enforce documented limits; update action contract tests; align UI with new pagination responses if needed.
   - Out of Scope: UI redesign beyond necessary pagination alignment.
@@ -86,7 +86,7 @@
   - Reporting: Behavior changes and proof results.
 
 - Task ID: land-listing-performance-and-accuracy
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:27 UTC)
   - Objective: Replace load-all land queries with server-side filtered/paginated Datomic queries and keep stats accurate at scale.
   - Scope: Implement Datomic-backed filtering for people/parcels and stats; enforce pagination/limit guardrails; avoid full DB scans; ensure completeness filters use deterministic queries; update routes and UI wiring as needed.
   - Out of Scope: New land features beyond filtering/pagination fixes.
@@ -114,7 +114,7 @@
   - Reporting: Query changes and proof results.
 
 - Task ID: ui-side-effects-and-pagination-shared
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:33 UTC)
   - Objective: Remove render-time dispatch side effects and introduce a shared pagination/meta component used across tasks/home/land lists.
   - Scope: Move initial fetch triggers into effects/events (away from render bodies) for home and land views; add reusable pagination component/meta builder; apply it to tasks list and land lists; ensure keyboard/a11y unaffected.
   - Out of Scope: Visual redesign beyond component reuse.
@@ -142,7 +142,7 @@
   - Reporting: UI changes and proof results.
 
 - Task ID: dead-code-prune-and-site-render-tighten
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:36 UTC)
   - Objective: Remove or wire unused helpers and simplify public-site rendering to eliminate orphaned code and reduce maintenance risk.
   - Scope: Remove unused `pull-by-type`/`ensure-type` (or adopt where appropriate), `list-key`, and orphan site render helpers (`render-licenses`, `render-pillars`, `render-proof-section`, `render-personas`); trim or integrate string-templating blocks as needed to keep only referenced sections; ensure site build still matches v2 spec.
   - Out of Scope: Full site redesign.
@@ -170,7 +170,7 @@
   - Reporting: Items removed and validation steps.
 
 - Task ID: control-panel-form-shell-and-entity-config-reuse
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 16:55 UTC)
   - Objective: Reduce duplication in control-panel forms by introducing a reusable detail form shell and extending entity config usage for list/detail rendering.
   - Scope: Create shared form shell (status banners, actions, layout) and apply to pages/blocks/tags/persona/support/etc.; expand `ui/entity` configs and wire lists/details to use them where possible; keep feature parity.
   - Out of Scope: New features beyond refactor.
@@ -198,7 +198,7 @@
   - Reporting: Refactor summary and proofs.
 
 - Task ID: startup-bootstrap-deduplication
-  - Status: pending
+  - Status: done (Codex, 2025-12-14 17:20 UTC)
   - Objective: Consolidate duplicated DB prep/backfill/seed logic between `main` and `site/main` into a shared bootstrap to reduce drift.
   - Scope: Extract shared startup helper (schema load, backfill, fixture seed gating, error handling) used by both processes; keep behavior identical; update docs/system.md if startup rules clarified.
   - Out of Scope: Changing fixture policies.
