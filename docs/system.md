@@ -104,6 +104,15 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Invariants: Paths/slugs non-empty and unique; blocks that reference a page must point at that page; tags referenced by pages/blocks must exist; visibility toggles default to true in fixtures.
 - Actions/API: Authenticated CRUD under `/api/content/{tags|pages|blocks}`; create/update validate slugs, paths, block types, refs, and unique constraints; mutations audit log under `darelwasl.content`. Read endpoint `/api/content/v2` returns Saudi license site entities (licenses, comparison rows, journey/activation, personas, support entries, hero stats/flows, FAQs, values, team, business/contact).
 
+## Telegram Integration (tasks app)
+- Capabilities: :cap/integration/telegram-bot with actions :cap/action/telegram-send-message, :cap/action/telegram-set-webhook, :cap/action/telegram-handle-update.
+- Auth/config: env vars `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_BASE_URL`; flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false). HTTP calls timeout at 3s; no live Telegram calls in CI (use stubs/fixtures).
+- Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Long polling allowed only for local/dev behind a flag.
+- Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns top 5 assigned tasks; `/task <id>` returns summary if the mapped user is involved; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
+- Data/mapping: store optional `:user/telegram-chat-id` (unique). `/start` writes mapping; `/stop` clears it. Link tokens are generated in-app (control panel) and must be single-use with expiry.
+- Notifications: when enabled and a chat is mapped, send messages on task creation assigned to a user, assignee change, status change, and due-date change. Messages are short and include a control-panel link when available; apply backoff/jitter on 429/5xx.
+- Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
+
 ### Content Model v2 (Saudi license site – implemented schema)
 - Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
 - Entities:

@@ -29,8 +29,31 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :adapter {:library "ring.middleware.session"
+ :adapter {:library "ring.middleware.session"
             :notes "Used by :cap/action/auth-login to establish sessions"}
   :related {:actions [:cap/action/auth-login]
+            :schema [:cap/schema/user]}}
+
+ {:id :cap/integration/telegram-bot
+  :title "Telegram Bot"
+  :version "v1"
+  :external-system "Telegram Bot API"
+  :contracts {:timeout_ms 3000
+              :rate_limit "429 from Telegram; backoff with jitter"
+              :webhook {:path "/api/telegram/webhook"
+                        :secret-header "X-Telegram-Bot-Api-Secret-Token"
+                        :enabled-flag "TELEGRAM_WEBHOOK_ENABLED"}
+              :commands [:start :help :tasks :task :stop]}
+  :auth {:strategy :env-vars
+         :vars ["TELEGRAM_BOT_TOKEN" "TELEGRAM_WEBHOOK_SECRET" "TELEGRAM_WEBHOOK_BASE_URL"]}
+  :failure-modes ["429 rate limits" "Network timeouts/5xx" "Invalid/missing webhook secret" "Invalid/expired chat link token"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags [:telegram/webhook-enabled? :telegram/notifications-enabled?]}
+  :adapter {:library "Telegram Bot API (HTTPS)"
+            :notes "Use HTTP client wrapper with stubs; no live Telegram calls in CI"}
+  :related {:actions [:cap/action/telegram-send-message
+                      :cap/action/telegram-set-webhook
+                      :cap/action/telegram-handle-update]
             :schema [:cap/schema/user]}}
 ]

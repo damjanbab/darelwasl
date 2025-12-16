@@ -664,8 +664,67 @@
   :audit {:records [:content/change] :fields [:comparison.row/id]}
   :idempotency {:strategy :dedupe-on :keys [:comparison.row/id]}
   :contracts {:fixtures [:fixtures/content]}
-  :compatibility {:backward true :forward true :flags []}
+ :compatibility {:backward true :forward true :flags []}
   :related {:schema [:cap/schema/comparison-row]
             :views [:cap/view/control-panel]}
+ :tooling []}
+
+ {:id :cap/action/telegram-send-message
+  :title "Telegram Send Message"
+  :version "v1"
+  :inputs {:telegram/chat-id :string
+           :telegram/text :string
+           :telegram/parse-mode :keyword?
+           :telegram/message-key :string}
+  :outputs {:telegram/message-id :string}
+  :side-effects ["Send Telegram message via Bot API"]
+  :adapter {:integration :cap/integration/telegram-bot}
+  :audit {:records [:telegram/send]
+          :fields [:telegram/chat-id :telegram/message-key]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:telegram/chat-id :telegram/message-key]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true :forward true :flags [:telegram/notifications-enabled?]}
+  :related {:schema [:cap/schema/user]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/telegram-set-webhook
+  :title "Telegram Set Webhook"
+  :version "v1"
+  :inputs {:telegram/webhook-url :string
+           :telegram/secret-token :string}
+  :outputs {:status :ok}
+  :side-effects ["Register webhook URL and secret with Telegram"]
+  :adapter {:integration :cap/integration/telegram-bot}
+  :audit {:records [:telegram/webhook-set]
+          :fields [:telegram/webhook-url]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:telegram/webhook-url :telegram/secret-token]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true :forward true :flags [:telegram/webhook-enabled?]}
+  :related {:schema [] :views []}
+  :tooling []}
+
+ {:id :cap/action/telegram-handle-update
+  :title "Telegram Handle Update"
+  :version "v1"
+  :inputs {:telegram/update-id :long
+           :telegram/chat-id :string
+           :telegram/message-text :string?
+           :telegram/command :keyword?}
+  :outputs {:status :handled
+            :telegram/command :keyword?}
+  :side-effects ["Dispatch Telegram commands and emit replies"
+                 "Persist chat-id mapping via link token when applicable"]
+  :adapter {:integration :cap/integration/telegram-bot}
+  :audit {:records [:telegram/update]
+          :fields [:telegram/update-id :telegram/chat-id :telegram/command]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:telegram/update-id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true :forward true :flags [:telegram/webhook-enabled? :telegram/commands-enabled?]}
+  :related {:schema [:cap/schema/user]
+            :views []}
   :tooling []}
 ]
