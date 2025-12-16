@@ -1,4 +1,5 @@
-(ns darelwasl.state)
+(ns darelwasl.state
+  (:require [clojure.string :as str]))
 
 (def theme-storage-key "darelwasl/theme")
 (def nav-storage-key "darelwasl/last-app")
@@ -81,6 +82,102 @@
    :status :idle
    :error nil})
 
+(def default-content-list-state
+  {:items []
+   :status :idle
+   :error nil
+   :selected nil})
+
+(def default-page-form
+  {:id nil
+   :title ""
+   :path ""
+   :summary ""
+   :navigation-order ""
+   :visible? true
+   :tags #{}
+   :blocks []})
+
+(def default-block-form
+  {:id nil
+   :page nil
+   :type :hero
+   :title ""
+   :body ""
+   :media-ref ""
+   :slug ""
+   :order 0
+   :visible? true
+   :tags #{}})
+
+(def default-tag-form
+  {:id nil
+   :name ""
+   :slug ""
+   :description ""})
+
+(def default-content-detail
+  {:form default-page-form
+   :mode :create
+   :status :idle
+   :error nil})
+
+(def default-journey-form
+  {:id nil
+   :title ""
+   :kind :phase/pre-incorporation
+   :order 0
+   :bullets ""})
+
+(def default-activation-form
+  {:id nil
+   :title ""
+   :order 0
+   :phase nil})
+
+(def default-simple-detail
+  {:form nil
+   :mode :create
+   :status :idle
+   :error nil})
+
+(def default-control-state
+  {:tab :v1
+   :v2 {:status :idle
+        :error nil
+        :data nil}
+   :pages (assoc default-content-list-state :detail default-content-detail)
+   :blocks (assoc default-content-list-state :detail (assoc default-content-detail :form default-block-form))
+   :tags (assoc default-content-list-state :detail (assoc default-content-detail :form default-tag-form))
+   :journey (assoc default-content-list-state :detail (assoc default-simple-detail :form default-journey-form))
+   :activation (assoc default-content-list-state :detail (assoc default-simple-detail :form default-activation-form))
+   :personas (assoc default-content-list-state :detail (assoc default-simple-detail :form {:id nil :title "" :detail "" :type nil :order 0 :visible? true}))
+   :support (assoc default-content-list-state :detail (assoc default-simple-detail :form {:id nil :role :support/we :text "" :order 0}))
+   :business {:detail {:form {:id nil
+                              :name ""
+                              :tagline ""
+                              :summary ""
+                              :mission ""
+                              :vision ""
+                              :nav-label ""
+                              :hero-headline ""
+                              :hero-strapline ""
+                              :contact nil
+                              :hero-stats []
+                              :hero-flows []
+                              :visible? true}
+                       :status :idle
+                       :error nil}}
+   :contact {:detail {:form {:id nil
+                             :email ""
+                             :phone ""
+                             :primary-cta-label ""
+                             :primary-cta-url ""
+                             :secondary-cta-label ""
+                             :secondary-cta-url ""}
+                      :status :idle
+                      :error nil}}})
+
 (def default-theme-state
   {:id :theme/default})
 
@@ -117,21 +214,50 @@
    :theme default-theme-state
    :nav default-nav-state
    :tags default-tags-state
-  :home default-home-state
+   :home default-home-state
    :login default-login-state
    :tasks default-task-state
-   :land default-land-state})
+   :land default-land-state
+   :control default-control-state})
 
-(def app-options
+(def base-app-options
   (cond-> [{:id :home
             :label "Home"
             :desc "Summary surface"}
            {:id :tasks
             :label "Tasks"
-            :desc "Workboard"}]
+            :desc "Workboard"}
+           {:id :control-panel
+            :label "Control panel"
+            :desc "Website content"}]
     land-enabled? (conj {:id :land
                          :label "Land"
                          :desc "People ↔ parcels"})))
+
+(defn control-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (boolean (some #{:role/content-editor :role/admin} roles))))
+
+(defn app-options
+  "Return available app options filtered by session roles/flags."
+  [session]
+  (cond->> base-app-options
+    (not (control-enabled? session))
+    (remove #(= (:id %) :control-panel))))
+
+(defn allowed-routes
+  "Allowed route keywords for current session."
+  [session]
+  (into #{}
+        (map :id)
+        (app-options session)))
 
 (defn mark-loading [db path]
   (-> db

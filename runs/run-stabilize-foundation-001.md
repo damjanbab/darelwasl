@@ -1,0 +1,230 @@
+# Run run-stabilize-foundation-001
+
+## Tasks
+- Task ID: registry-integrity-repair
+  - Status: pending
+  - Objective: Restore registry integrity by ensuring all capability entries live in a single EDN form and update checks so malformed multi-form files fail fast.
+  - Scope: Rewrap `registries/actions.edn` and `registries/views.edn` into single vectors; update `scripts/checks.sh` (and supporting Clojure parser) to reject trailing forms/extra data; align docs/system.md if capability visibility changed.
+  - Out of Scope: Adding new capabilities beyond restoring visibility of existing ones.
+  - Capabilities Touched: Registries (`actions`, `views`), tooling/checks.
+  - Parallel Safety:
+    - Exclusive Capabilities: Registries, checks script.
+    - Shared/Read-only Capabilities: Docs/system.
+    - Sequencing Constraints: None.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Registry format validation; shared checks entrypoint.
+    - New composability rules needed: Enforce single-form EDN for registries.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Registry files must be single-form to preserve capability identity; checks must fail on malformed EDN.
+    - Compatibility expectation (backward/forward/none): Backward compatible for consumers once registry is valid.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: No runtime break expected; stricter checks may fail CI until fixed.
+  - Dependencies: None.
+  - Deliverables: Fixed registry files; updated checks script; docs note on registry shape if needed.
+  - Proof Plan: `scripts/checks.sh registries`.
+  - Fixtures/Data Assumptions: Existing fixtures unchanged.
+  - Protocol/System Updates: Add note on single-form EDN requirement if absent.
+  - FAQ Updates: Add registry parsing gotcha if needed.
+  - Tooling/Automation: Enhance registry parse check.
+  - Reporting: Summarize registry fixes and new validation.
+
+- Task ID: shared-validation-and-enum-source
+  - Status: pending
+  - Objective: Consolidate request/field normalization and shared enums (e.g., block types) into a reusable module for backend and CLJS consumers.
+  - Scope: Extract normalization helpers from tasks/content into a shared namespace; drive block-type constants from a single source (registry or shared CLJC); refactor tasks/content actions and CLJS forms to consume shared helpers/constants; update docs/contracts if messages change.
+  - Out of Scope: Adding new fields beyond existing domains.
+  - Capabilities Touched: :cap/action/task-create|task-update|task-set-status|task-set-tags|task-set-due|task-archive, :cap/action/content-pages|content-blocks|content-tags; shared UI/state.
+  - Parallel Safety:
+    - Exclusive Capabilities: Task and content action validation.
+    - Shared/Read-only Capabilities: Schema/registry reads.
+    - Sequencing Constraints: After registry integrity fix to ensure enums visible.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared validation pattern; enum source-of-truth.
+    - New composability rules needed: Single shared constants for enums; one validation utility used by actions.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Align error messages/behavior across actions; ensure enums consistent.
+    - Compatibility expectation: Backward compatible responses (minor message drift acceptable if documented).
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: Avoid breaking API; document any changed error text.
+  - Dependencies: registry-integrity-repair.
+  - Deliverables: Shared validation module; block-type shared constant; refactored actions/CLJS; docs update if behavior shifts.
+  - Proof Plan: `scripts/checks.sh actions`; `npm run check` if CLJS touched.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Note shared validation pattern if new rule added.
+  - FAQ Updates: Add validation helper usage if helpful.
+  - Tooling/Automation: Optional generator for enum constants.
+  - Reporting: List modules updated and behavior alignment.
+
+- Task ID: task-listing-and-identity-hardening
+  - Status: pending
+  - Objective: Move task listing/filtering/pagination to Datomic queries, simplify task identity lookup, and keep contracts aligned with registry expectations.
+  - Scope: Implement server-side filtering/pagination in `tasks.clj`; remove or reduce `task-eid` scan fallback; ensure archived/filters/sort enforce documented limits; update action contract tests; align UI with new pagination responses if needed.
+  - Out of Scope: UI redesign beyond necessary pagination alignment.
+  - Capabilities Touched: :cap/action/task-list, :cap/action/task-create|update|set-status|assign|set-due|set-tags|archive, :cap/view/tasks, :cap/view/home (recent/counts rely on task queries).
+  - Parallel Safety:
+    - Exclusive Capabilities: Task actions and list endpoints.
+    - Shared/Read-only Capabilities: Fixtures.
+    - Sequencing Constraints: After shared-validation-and-enum-source to reuse helpers.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Query helper pattern for lists; pagination guardrails.
+    - New composability rules needed: Prefer server-side filtering over in-memory scans.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Enforce documented pagination/limits; simplify identity handling.
+    - Compatibility expectation: Backward compatible responses; improved perf.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: Avoid API break; document any slight pagination field adjustments.
+  - Dependencies: shared-validation-and-enum-source.
+  - Deliverables: Datomic queries for task lists; lean task-id lookup; updated tests/contracts and docs/system.md if behavior clarified.
+  - Proof Plan: `scripts/checks.sh actions`; targeted curl/unit if available.
+  - Fixtures/Data Assumptions: Existing task fixtures.
+  - Protocol/System Updates: Note server-side pagination rule if new.
+  - FAQ Updates: Pagination/limit gotcha if needed.
+  - Tooling/Automation: None beyond existing checks.
+  - Reporting: Behavior changes and proof results.
+
+- Task ID: land-listing-performance-and-accuracy
+  - Status: pending
+  - Objective: Replace load-all land queries with server-side filtered/paginated Datomic queries and keep stats accurate at scale.
+  - Scope: Implement Datomic-backed filtering for people/parcels and stats; enforce pagination/limit guardrails; avoid full DB scans; ensure completeness filters use deterministic queries; update routes and UI wiring as needed.
+  - Out of Scope: New land features beyond filtering/pagination fixes.
+  - Capabilities Touched: :cap/action/person-list|person-detail|parcel-list|parcel-detail|parcel-stats, :cap/view/land-registry.
+  - Parallel Safety:
+    - Exclusive Capabilities: Land actions/routes.
+    - Shared/Read-only Capabilities: Importer/schema.
+    - Sequencing Constraints: After shared-validation-and-enum-source if shared helpers reused.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Query helper/pagination pattern; reuse stats computation.
+    - New composability rules needed: Server-side filtering for land lists.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Align with documented pagination guardrails; scale beyond fixtures.
+    - Compatibility expectation: Backward compatible responses; improved performance.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: Avoid breaking API; document any small response shape tweaks.
+  - Dependencies: shared-validation-and-enum-source.
+  - Deliverables: Updated land queries/endpoints; refreshed UI wiring if response shape changes; docs/system.md clarification if needed.
+  - Proof Plan: `scripts/checks.sh actions` or targeted land check; optional smoke on land view.
+  - Fixtures/Data Assumptions: Land registry fixtures/CSV.
+  - Protocol/System Updates: Note land pagination rule if added.
+  - FAQ Updates: Land query performance notes if needed.
+  - Tooling/Automation: None.
+  - Reporting: Query changes and proof results.
+
+- Task ID: ui-side-effects-and-pagination-shared
+  - Status: pending
+  - Objective: Remove render-time dispatch side effects and introduce a shared pagination/meta component used across tasks/home/land lists.
+  - Scope: Move initial fetch triggers into effects/events (away from render bodies) for home and land views; add reusable pagination component/meta builder; apply it to tasks list and land lists; ensure keyboard/a11y unaffected.
+  - Out of Scope: Visual redesign beyond component reuse.
+  - Capabilities Touched: :cap/view/home, :cap/view/tasks, :cap/view/land-registry, shared UI/state.
+  - Parallel Safety:
+    - Exclusive Capabilities: UI state/dispatch for listed views.
+    - Shared/Read-only Capabilities: Shared components.
+    - Sequencing Constraints: May follow task/land list backend changes to match pagination.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared pagination UI pattern; event/effect discipline.
+    - New composability rules needed: No dispatch in render; use shared paginator.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Prevent double-fetch; unify pagination UI.
+    - Compatibility expectation: Backward compatible UX; more stable behavior.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None expected; verify smoke.
+  - Dependencies: task-listing-and-identity-hardening, land-listing-performance-and-accuracy.
+  - Deliverables: Refactored components; new shared paginator; updated subscriptions/events if needed.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Potential UI pattern note.
+  - FAQ Updates: Add note on dispatch-in-render avoidance if useful.
+  - Tooling/Automation: None.
+  - Reporting: UI changes and proof results.
+
+- Task ID: dead-code-prune-and-site-render-tighten
+  - Status: pending
+  - Objective: Remove or wire unused helpers and simplify public-site rendering to eliminate orphaned code and reduce maintenance risk.
+  - Scope: Remove unused `pull-by-type`/`ensure-type` (or adopt where appropriate), `list-key`, and orphan site render helpers (`render-licenses`, `render-pillars`, `render-proof-section`, `render-personas`); trim or integrate string-templating blocks as needed to keep only referenced sections; ensure site build still matches v2 spec.
+  - Out of Scope: Full site redesign.
+  - Capabilities Touched: :cap/view/site-home|site-services|site-comparison|site-process|site-about|site-contact (render code), shared entity helpers.
+  - Parallel Safety:
+    - Exclusive Capabilities: Site render namespace and shared helper namespace touched.
+    - Shared/Read-only Capabilities: Registries (read).
+    - Sequencing Constraints: After registry-integrity-repair to confirm capabilities.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Cleaning unused code to keep capability surfaces intentional.
+    - New composability rules needed: None.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Reduce dead code and risk; keep render aligned with actual routes.
+    - Compatibility expectation: No user-visible regression; ensure same sections render.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: Avoid breaking outputs; verify with site dry-run.
+  - Dependencies: registry-integrity-repair.
+  - Deliverables: Cleaned namespaces; updated render wiring if needed.
+  - Proof Plan: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run`; `npm run check` if CLJS touched.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: Note removal if capabilities previously claimed dead code.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Items removed and validation steps.
+
+- Task ID: control-panel-form-shell-and-entity-config-reuse
+  - Status: pending
+  - Objective: Reduce duplication in control-panel forms by introducing a reusable detail form shell and extending entity config usage for list/detail rendering.
+  - Scope: Create shared form shell (status banners, actions, layout) and apply to pages/blocks/tags/persona/support/etc.; expand `ui/entity` configs and wire lists/details to use them where possible; keep feature parity.
+  - Out of Scope: New features beyond refactor.
+  - Capabilities Touched: :cap/view/control-panel, shared UI/entity config.
+  - Parallel Safety:
+    - Exclusive Capabilities: Control panel UI components.
+    - Shared/Read-only Capabilities: Shared components.
+    - Sequencing Constraints: After ui-side-effects-and-pagination-shared for pagination reuse.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared form shell; entity config pattern.
+    - New composability rules needed: Encourage list/detail via entity config.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Cleaner composable UI; consistent UX.
+    - Compatibility expectation: UX-equivalent or improved; backward compatible behavior.
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None expected; ensure smoke passes.
+  - Dependencies: ui-side-effects-and-pagination-shared.
+  - Deliverables: Shared form shell; refactored control panel forms; updated entity configs.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: Mention form shell pattern if new rule.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Refactor summary and proofs.
+
+- Task ID: startup-bootstrap-deduplication
+  - Status: pending
+  - Objective: Consolidate duplicated DB prep/backfill/seed logic between `main` and `site/main` into a shared bootstrap to reduce drift.
+  - Scope: Extract shared startup helper (schema load, backfill, fixture seed gating, error handling) used by both processes; keep behavior identical; update docs/system.md if startup rules clarified.
+  - Out of Scope: Changing fixture policies.
+  - Capabilities Touched: Tooling/startup, :cap/view/site-* (process), :cap/view/tasks/home/control-panel (app process).
+  - Parallel Safety:
+    - Exclusive Capabilities: Startup code paths.
+    - Shared/Read-only Capabilities: Config.
+    - Sequencing Constraints: None.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Shared bootstrap pattern.
+    - New composability rules needed: Single bootstrap entry for processes.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Reduce duplication; consistent startup behavior.
+    - Compatibility expectation: Backward compatible (same defaults/flags).
+    - Flag/Rollout plan: None.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: Avoid changing behavior; verify both processes start identically.
+  - Dependencies: None.
+  - Deliverables: Shared bootstrap module; updated `main` and `site/main` to use it; docs note if needed.
+  - Proof Plan: `clojure -M:dev` smoke (manual or scripted); `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run`.
+  - Fixtures/Data Assumptions: Existing fixtures.
+  - Protocol/System Updates: Document shared bootstrap if new rule.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Startup refactor summary and proof steps.
+
+## Notes
+- Ensure registry validation change is strict enough to catch multi-form EDN across all registries, not just actions/views.
+- Keep pagination/UI refactors aligned with backend contract changes to avoid double effort.

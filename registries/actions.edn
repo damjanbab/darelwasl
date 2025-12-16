@@ -5,7 +5,8 @@
   :inputs {:user/username :string
            :user/password :string}
   :outputs {:session/token :string
-            :user/id :uuid}
+            :user/id :uuid
+            :user/roles [:set :keyword]}
   :side-effects ["Create session for user"]
   :adapter {:integration :cap/integration/local-session}
   :audit {:records [:auth/login]
@@ -355,9 +356,20 @@
 
  {:id :cap/action/content-blocks
   :title "Content Blocks CRUD"
-  :version "v0"
-  :inputs {:content.block/id :uuid? :content.block/type :keyword? :content.block/title :string? :content.block/body :string? :content.block/slug :string? :content.block/order :long? :content.block/visible? :boolean? :content.block/tag :uuid-set?}
-  :outputs {:content.block/id :uuid}
+  :version "v1"
+  :inputs {:content.block/id :uuid?
+           :content.block/page :uuid?
+           :content.block/type :keyword?
+           :content.block/title :string?
+           :content.block/body :string?
+           :content.block/media-ref :string?
+           :content.block/slug :string?
+           :content.block/order :long?
+           :content.block/visible? :boolean?
+           :content.block/tag :uuid-set?}
+  :outputs {:content.block {:content.block/id :uuid
+                            :content.block/type :keyword
+                            :content.block/slug :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.block/id :content.block/type]}
@@ -370,9 +382,17 @@
 
  {:id :cap/action/content-pages
   :title "Content Pages CRUD"
-  :version "v0"
-  :inputs {:content.page/id :uuid? :content.page/title :string? :content.page/path :string? :content.page/blocks :uuid-set? :content.page/visible? :boolean? :content.page/tag :uuid-set?}
-  :outputs {:content.page/id :uuid}
+  :version "v1"
+  :inputs {:content.page/id :uuid?
+           :content.page/title :string?
+           :content.page/path :string?
+           :content.page/summary :string?
+           :content.page/navigation-order :long?
+           :content.page/blocks :uuid-set?
+           :content.page/visible? :boolean?
+           :content.page/tag :uuid-set?}
+  :outputs {:content.page {:content.page/id :uuid
+                           :content.page/path :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.page/id :content.page/path]}
@@ -385,9 +405,13 @@
 
  {:id :cap/action/content-tags
   :title "Content Tags CRUD"
-  :version "v0"
-  :inputs {:content.tag/id :uuid? :content.tag/name :string?}
-  :outputs {:content.tag/id :uuid}
+  :version "v1"
+  :inputs {:content.tag/id :uuid?
+           :content.tag/name :string?
+           :content.tag/slug :string?
+           :content.tag/description :string?}
+  :outputs {:content.tag {:content.tag/id :uuid
+                          :content.tag/name :string}}
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:content/change] :fields [:content.tag/id :content.tag/name]}
@@ -395,5 +419,253 @@
   :contracts {:fixtures [:fixtures/content]}
   :compatibility {:backward true :forward true :flags []}
   :related {:schema [:cap/schema/content-tag]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/content-v2
+  :title "Content V2 Read"
+  :version "v1"
+  :purpose "List Saudi license site content entities for control panel/public site rendering."
+  :inputs {}
+  :outputs {:content/v2 {:licenses :vector
+                         :comparison-rows :vector
+                         :journey-phases :vector
+                         :activation-steps :vector
+                         :personas :vector
+                         :support-entries :vector
+                         :hero-stats :vector
+                         :hero-flows :vector
+                         :faqs :vector
+                         :values :vector
+                         :team-members :vector
+                         :contacts :vector
+                         :businesses :vector}}
+  :side-effects {:http/endpoints ["/api/content/v2"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/read] :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/content]}
+ :compatibility {:backward true :forward true :flags []}
+ :related {:schema [:cap/schema/license
+                     :cap/schema/comparison-row
+                     :cap/schema/journey-phase
+                     :cap/schema/activation-step
+                     :cap/schema/persona
+                     :cap/schema/support-responsibility
+                     :cap/schema/hero-stat
+                     :cap/schema/hero-flow
+                     :cap/schema/faq
+                     :cap/schema/value
+                     :cap/schema/team-member
+                     :cap/schema/business
+                     :cap/schema/contact]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/contact-upsert
+  :title "Contact Upsert"
+  :version "v1"
+  :purpose "Create/update contact entities (email, phone, CTA labels/URLs) for public site and control panel."
+  :inputs {:contact/id :uuid?
+           :contact/email :string
+           :contact/phone :string
+           :contact/primary-cta-label :string?
+           :contact/primary-cta-url :string?
+           :contact/secondary-cta-label :string?
+           :contact/secondary-cta-url :string?}
+  :outputs {:contact {:contact/id :uuid}}
+  :side-effects {:http/endpoints ["/api/content/contacts" "/api/content/contacts/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:contact/id :contact/email]}
+  :idempotency {:strategy :dedupe-on :keys [:contact/id :contact/email]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/contact]
+            :views [:cap/view/control-panel :cap/view/site-contact :cap/view/site-home :cap/view/site-services :cap/view/site-about]}
+  :tooling []}
+
+ {:id :cap/action/business-upsert
+  :title "Business Upsert"
+  :version "v1"
+  :purpose "Create/update business entity (nav label, hero headline/strapline, contact ref, hero stats/flows, visibility)."
+  :inputs {:business/id :uuid?
+           :business/name :string
+           :business/tagline :string?
+           :business/summary :string?
+           :business/mission :string?
+           :business/vision :string?
+           :business/nav-label :string?
+           :business/hero-headline :string?
+           :business/hero-strapline :string?
+           :business/contact :uuid?
+           :business/hero-stats [:uuid]
+           :business/hero-flows [:uuid]
+           :business/visible? :boolean?}
+  :outputs {:business {:business/id :uuid}}
+  :side-effects {:http/endpoints ["/api/content/businesses" "/api/content/businesses/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:business/id :business/name]}
+  :idempotency {:strategy :dedupe-on :keys [:business/id :business/name]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/business :cap/schema/contact :cap/schema/hero-stat :cap/schema/hero-flow]
+            :views [:cap/view/control-panel :cap/view/site-home :cap/view/site-services :cap/view/site-about :cap/view/site-contact]}
+  :tooling []}
+
+ {:id :cap/action/license-upsert
+  :title "License Upsert"
+  :version "v1"
+  :purpose "Create/update license content entities."
+  :inputs {:license/id :uuid?
+           :license/type :keyword
+           :license/slug :string
+           :license/label :string
+           :license/processing-time :string?
+           :license/ownership :string?
+           :license/renewal-cost :string?
+           :license/pricing-lines :string-seq?
+           :license/activities :string-seq?
+           :license/who :string-seq?
+           :license/who-activities :string-seq?
+           :license/document-checklist :string-seq?
+           :license/order :long?
+           :license/visible? :boolean?}
+  :outputs {:license {:license/id :uuid
+                      :license/slug :string}}
+  :side-effects {:http/endpoints ["/api/content/licenses" "/api/content/licenses/:id"]
+                 :audit [:content/change]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:license/id :license/type :license/slug]}
+  :idempotency {:strategy :dedupe-on :keys [:license/id :license/slug]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/license]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/license-delete
+  :title "License Delete"
+  :version "v1"
+  :purpose "Delete a license entity by id."
+  :inputs {:license/id :uuid}
+  :outputs {:status :deleted}
+  :side-effects {:http/endpoints ["/api/content/licenses/:id"]
+                 :audit [:content/change]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:license/id]}
+  :idempotency {:strategy :dedupe-on :keys [:license/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/license]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/comparison-row-upsert
+  :title "Comparison Row Upsert"
+  :version "v1"
+  :purpose "Create/update comparison rows for license matrices."
+  :inputs {:comparison.row/id :uuid?
+           :comparison.row/criterion :string
+           :comparison.row/order :long?
+           :comparison.row/entrepreneur :string?
+           :comparison.row/general :string?
+           :comparison.row/gcc :string?}
+  :outputs {:comparison.row {:comparison.row/id :uuid}}
+  :side-effects {:http/endpoints ["/api/content/comparison-rows" "/api/content/comparison-rows/:id"]
+                 :audit [:content/change]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:comparison.row/id :comparison.row/criterion]}
+  :idempotency {:strategy :dedupe-on :keys [:comparison.row/id :comparison.row/criterion]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+ :related {:schema [:cap/schema/comparison-row]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/journey-phase-upsert
+  :title "Journey Phase Upsert"
+  :version "v1"
+  :purpose "Create/update journey phases."
+  :inputs {:journey.phase/id :uuid?
+           :journey.phase/title :string
+           :journey.phase/kind :keyword
+           :journey.phase/order :long?
+           :journey.phase/bullets :string-seq?}
+  :outputs {:journey.phase {:journey.phase/id :uuid}}
+  :side-effects {:http/endpoints ["/api/content/journey-phases" "/api/content/journey-phases/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:journey.phase/id :journey.phase/title]}
+  :idempotency {:strategy :dedupe-on :keys [:journey.phase/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/journey-phase]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/journey-phase-delete
+  :title "Journey Phase Delete"
+  :version "v1"
+  :purpose "Delete a journey phase."
+  :inputs {:journey.phase/id :uuid}
+  :outputs {:status :deleted}
+  :side-effects {:http/endpoints ["/api/content/journey-phases/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:journey.phase/id]}
+  :idempotency {:strategy :dedupe-on :keys [:journey.phase/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/journey-phase]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/activation-step-upsert
+  :title "Activation Step Upsert"
+  :version "v1"
+  :purpose "Create/update activation steps."
+  :inputs {:activation.step/id :uuid?
+           :activation.step/title :string
+           :activation.step/order :long?
+           :activation.step/phase :uuid?}
+  :outputs {:activation.step {:activation.step/id :uuid}}
+  :side-effects {:http/endpoints ["/api/content/activation-steps" "/api/content/activation-steps/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:activation.step/id :activation.step/title]}
+  :idempotency {:strategy :dedupe-on :keys [:activation.step/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/activation-step]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/activation-step-delete
+  :title "Activation Step Delete"
+  :version "v1"
+  :purpose "Delete an activation step."
+  :inputs {:activation.step/id :uuid}
+  :outputs {:status :deleted}
+  :side-effects {:http/endpoints ["/api/content/activation-steps/:id"]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:activation.step/id]}
+  :idempotency {:strategy :dedupe-on :keys [:activation.step/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/activation-step]
+            :views [:cap/view/control-panel]}
+  :tooling []}
+
+ {:id :cap/action/comparison-row-delete
+  :title "Comparison Row Delete"
+  :version "v1"
+  :purpose "Delete a comparison row by id."
+  :inputs {:comparison.row/id :uuid}
+  :outputs {:status :deleted}
+  :side-effects {:http/endpoints ["/api/content/comparison-rows/:id"]
+                 :audit [:content/change]}
+  :adapter {:integration :local/db}
+  :audit {:records [:content/change] :fields [:comparison.row/id]}
+  :idempotency {:strategy :dedupe-on :keys [:comparison.row/id]}
+  :contracts {:fixtures [:fixtures/content]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/comparison-row]
             :views [:cap/view/control-panel]}
   :tooling []}

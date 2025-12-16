@@ -97,6 +97,53 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Compatibility/Flags:
 - Related Views/Tools:
 
+## Content Model (Control Panel + Public Site)
+- Entities: content tags (`:content.tag/id|name|slug|description`), content pages (`:content.page/id|title|path|summary|navigation-order|visible?` plus tags + blocks), content blocks (`:content.block/id|page|type|title|body|media-ref|slug|order|visible?` plus tags). Block types enum: `:hero`, `:section`, `:rich-text`, `:feature`, `:cta`, `:list`.
+- Storage: Datomic schema added (`:cap/schema/content-tag`, `:cap/schema/content-page`, `:cap/schema/content-block`) with :entity/type on all content entities; slugs and IDs are unique; order fields are longs.
+- Fixtures: `fixtures/content.edn` seeds Home and About pages with ordered blocks and tags; seeding wires block→page refs and page→block refs after blocks exist.
+- Invariants: Paths/slugs non-empty and unique; blocks that reference a page must point at that page; tags referenced by pages/blocks must exist; visibility toggles default to true in fixtures.
+- Actions/API: Authenticated CRUD under `/api/content/{tags|pages|blocks}`; create/update validate slugs, paths, block types, refs, and unique constraints; mutations audit log under `darelwasl.content`. Read endpoint `/api/content/v2` returns Saudi license site entities (licenses, comparison rows, journey/activation, personas, support entries, hero stats/flows, FAQs, values, team, business/contact).
+
+### Content Model v2 (Saudi license site – implemented schema)
+- Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
+- Entities:
+  - `:content.page` adds optional `:content.page/section-type` enum (`:section/hero`, `:section/services`, `:section/comparison`, `:section/journey`, `:section/personas`, `:section/support`, `:section/faq`, `:section/contact`, `:section/about`) to hint which data set a section uses.
+  - Business (`:entity.type/business`): id, name, tagline, summary, mission, vision, nav label, hero headline/strapline, contact ref, hero stat refs, hero flow refs, visible?.
+  - Contact (`:entity.type/contact`): id, email, phone, primary/secondary CTA labels + URLs.
+  - License (`:entity.type/license`): id, type enum (`:license.type/general|entrepreneur|gcc`), slug, label, processing-time, ownership, renewal-cost, pricing-lines (string set), activities (string set), who (string set), who-activities (string set), document-checklist (string set), order, visible?.
+  - Comparison row (`:entity.type/comparison-row`): id, criterion, order, entrepreneur/general/gcc value strings.
+  - Journey phase (`:entity.type/journey-phase`): id, title, kind enum (`:phase/pre-incorporation|incorporation|post-incorporation`), order, bullets (string set).
+  - Activation step (`:entity.type/activation-step`): id, title, order, optional phase ref.
+  - Persona (`:entity.type/persona`): id, title, detail, optional type keyword, order, visible?.
+  - Support entry (`:entity.type/support-entry`): id, role enum (`:support/we`, `:support/you`), text, order.
+  - Hero stat/flow (`:entity.type/hero-stat`, `:entity.type/hero-flow`): id, label/value/hint/order for stats; title/detail/order for flows.
+  - FAQ (`:entity.type/faq`): id, question, answer, optional scope keyword, order, visible?.
+  - Value/team (`:entity.type/value`, `:entity.type/team-member`): id, title/copy/order for values; id, name/title/order/avatar for team. Both can be linked from the business/about section.
+- Relationships & invariants:
+  - Every entity sets `:entity/type` and uses UUID identity; slugs unique where present.
+  - Section-type hint is optional; v1 content pages/blocks remain valid.
+  - Lists (pricing-lines, activities, bullets, who, FAQ, etc.) are stored as string sets; ordering is driven by per-entity `:.../order` fields where present, otherwise callers should sort deterministically.
+  - License type/phase/support role enums validated via schema; visibility booleans default true in fixtures.
+- Compatibility/flags: additive; no existing content removed. Public site renders v2 sections by default (no flag presently).
+- Fixtures: `fixtures/content.edn` now seeds the Saudi license site content (business/contact, licenses, comparison rows, journey/activation steps, personas, support roles, hero stats/flows, FAQs, values, team) alongside the presentation/about pages and blocks; IDs are fixed and carry `:entity/type` for backfill.
+
+## Public Site Design Contract (run-site-premium-001)
+- Visual tone: “calm authority” with strong hierarchy, generous whitespace, minimal decoration; high-trust cues via early stats/proof and consistent primary CTA.
+- Nav & CTA: top-level nav items = Home, Services, Comparison, Process, About, Contact; site-wide primary CTA button = “Schedule a meeting”; max 2 levels (Services may list up to 6–9 leaves; others single level); mobile hamburger must be keyboard navigable with visible focus and Escape to close.
+- IA & sections:
+  - Home: only page with dark, full-bleed hero; includes trust strip, offer overview (3 cards), “How it works” (3 steps + rail), “Choose a path” teaser (3 cards + rail), proof, short FAQ, global footer CTA band.
+  - Services: light hero; license selector tabs (General/Entrepreneur/GCC) with single detail panel; outcomes; FAQ; global footer CTA band.
+  - Comparison: light hero with summary + “How to read this”; table with recommended column highlighted; global footer CTA band.
+  - Process: light hero with summary; journey/activation timeline; global footer CTA band.
+  - About: principles only (no placeholder team); global footer CTA band.
+  - Contact: light hero + funnel steps; contact CTAs; global footer CTA band.
+- Motifs & rails: keep a single Evidence Pill style for proof/meta labels; Step Rail only in “How it works” and “Choose a path”; functional funnel indicator (Select → Compare → Schedule) on Home/Services/Comparison/Contact with current step highlighted; remove other decorative gates/handles.
+- CTA: one global footer CTA band above the footer (static) instead of per-page CTA cards.
+- Layout rhythm: dark hero on Home; rest of body is light; compact footer (not a second nav maze).
+- Data & ordering: render from existing v2 content entities (licenses, comparison rows, journey/activation, personas/support, FAQs, values/team, business/contact, hero stats/flows); respect visibility flags; deterministic ordering by `.../order` with stable fallback (id/label) when order missing.
+- Tokens only: no hardcoded colors/spacing/typography—use generated theme CSS variables. Public site uses `:theme/site-premium` tokens (v2) with `data-theme="theme-site-premium"`.
+- Responsive & a11y: centered max-width, no horizontal scroll; header/nav/CTA remain accessible on desktop/mobile; tap targets ≥44px; keyboard navigable menus; visible focus; no hover-only affordances.
+
 ## Patterns and Guidelines
 - Data modeling: fact-first; prefer attributes over blobs; model history intentionally (use :db.cardinality/one with upserts for identity, or time-indexed facts for history); avoid duplicating derived data unless cached with clear invalidation rules; use enums/idents instead of ad-hoc strings.
 - Naming: use stable, descriptive idents; keep capability IDs aligned with registry IDs; avoid abbreviations that hide meaning.
@@ -180,10 +227,10 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Deployment (Hetzner plan)
 - Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); `haloeddepth.com` points here; no reverse proxy/SSL yet—serve on the raw IP/domain for now (port 3000).
-- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env file at `/etc/darelwasl/app.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
-- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; reserve 80/443 for a future reverse proxy/SSL front.
-- Ports/firewall: allow inbound 22 (SSH) and 3000 (app); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
-- Logging: systemd journal for the app service (no separate log files initially); optional logrotate can be added later.
+- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env files at `/etc/darelwasl/app.env` and `/etc/darelwasl/site.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
+- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; site on `SITE_HOST=0.0.0.0`, `SITE_PORT=3200` (configurable). Reserve 80/443 for a future reverse proxy/SSL front.
+- Ports/firewall: allow inbound 22 (SSH) and 3000 (app) + 3200 (site); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
+- Logging: systemd journal for both services (no separate log files initially); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
 - Env file template (`/etc/darelwasl/app.env`):
   - `APP_HOST=0.0.0.0`
@@ -193,6 +240,13 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `DATOMIC_DB_NAME=darelwasl`
   - `ALLOW_FIXTURE_SEED=false` (prod: disable fixture reseed)
   - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
+- Site env file template (`/etc/darelwasl/site.env`):
+  - `SITE_HOST=0.0.0.0`
+  - `SITE_PORT=3200`
+  - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
+  - `DATOMIC_SYSTEM=darelwasl`
+  - `DATOMIC_DB_NAME=darelwasl`
+  - `ALLOW_FIXTURE_SEED=false`
 - Systemd unit (`/etc/systemd/system/darelwasl.service`):
   ```
   [Unit]
@@ -214,11 +268,32 @@ Maintain stable IDs; reference them in tasks/PRs.
   WantedBy=multi-user.target
   ```
   Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl`.
-- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
+- Site Systemd unit (`/etc/systemd/system/darelwasl-site.service`):
+  ```
+  [Unit]
+  Description=DarelWasl public site
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=darelwasl
+  WorkingDirectory=/opt/darelwasl
+  EnvironmentFile=/etc/darelwasl/site.env
+  ExecStart=/opt/darelwasl/scripts/run-site.sh
+  Restart=on-failure
+  RestartSec=5
+  StandardOutput=journal
+  StandardError=journal
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-site`.
+- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl darelwasl-site`.
 - Service ops (Hetzner):
-  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl`.
-  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`.
-  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed).
+  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl darelwasl-site`.
+  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`; same for `darelwasl-site`.
+  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed) and `curl http://127.0.0.1:3200/` (site).
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
 ## Product Spec: Entity Foundation + App Suite (Home + Tasks)
@@ -360,6 +435,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Process: when a change affects composability rules, update this section and the relevant registry entries in the same run; tasks must declare their composability impact.
 ## Fixtures and Test Data
 - :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
+-   Roles: fixtures carry `:user/roles` (huda = `:role/admin` + `:role/content-editor`, damjan = `:role/content-editor`) to gate the control panel and content actions.
 - :fixtures/tags (`fixtures/tags.edn`): tag entities with fixed IDs and names (`Ops`, `Home`, `Finance`, `Urgent`) used by tasks and exposed via `/api/tags`.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tag references (lookup refs to `:tag/id`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
 - All fixtures include `:entity/type` (`:entity.type/user`, `:entity.type/task`, `:entity.type/tag`). A backfill helper sets this on existing DBs lacking it (inferred from identity attrs).
@@ -368,6 +444,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
 - :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
+- Public site process: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve the v2 public site (Home/About/Contact) rendering live v2 entities (hero stats/flows, licenses, comparison rows, journey/activation, personas/support, FAQs, values, team, contact) with visibility filtering.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.

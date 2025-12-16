@@ -29,11 +29,13 @@
                             (str (UUID/randomUUID)))
                   session-data {:session/token token
                                 :user/id (:user/id user)
-                                :user/username (:user/username user)}]
+                                :user/username (:user/username user)
+                                :user/roles (:user/roles user)}]
               {:status 200
                :body {:session/token token
                       :user/id (:user/id user)
-                      :user/username (:user/username user)}
+                      :user/username (:user/username user)
+                      :user/roles (:user/roles user)}
                :session session-data})))))))
 
 (defn session-handler
@@ -43,7 +45,8 @@
       {:status 200
        :body {:session/token (:session/token session)
               :user/id (:user/id session)
-              :user/username (:user/username session)}})))
+              :user/username (:user/username session)
+              :user/roles (:user/roles session)}})))
 
 (defn routes
   [state]

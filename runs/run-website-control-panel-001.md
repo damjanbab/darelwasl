@@ -1,0 +1,423 @@
+# Run run-website-control-panel-001
+
+## Tasks
+- Task ID: product-and-design-spec
+  - Status: done (Codex, 2025-12-10 12:20 UTC)
+  - Objective: Capture product goals, audiences, flows, and design direction for the website control panel app and the public website it governs (separate process) without locking final visuals/content taxonomy.
+  - Scope: Define personas, success criteria, navigation surfaces, content ownership boundaries, and minimal info architecture for the control panel; outline public site sections and content types at a high level; note deployment constraints (dual processes).
+  - Out of Scope: Detailed UI mocks; final content model; implementation.
+  - Capabilities Touched: Documentation only (prep); future :cap/view/control-panel (TBD).
+  - Parallel Safety:
+    - Exclusive Capabilities: None (docs only).
+    - Shared/Read-only Capabilities: All code/registries (read).
+    - Sequencing Constraints: Must precede schema/design tasks.
+  - Composability Impact:
+    - Layers affected: Docs/specs.
+    - Patterns reused/extended: Existing run protocol; design standards.
+    - New composability rules: None yet.
+  - Requirement Change & Compatibility: Defines new requirements; no runtime changes.
+  - Breaking/Deprecation: None.
+  - Dependencies: None.
+  - Deliverables: Completed product + design spec sections (in run doc or docs/).
+  - Proof Plan: Spec review.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Possibly add a capability stub in docs/system.md if clarified.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Summarize scope, personas, flows, and approval of specs.
+
+- Task ID: architecture-and-capabilities-plan
+  - Status: done (Codex, 2025-12-10 12:25 UTC)
+  - Objective: Define architecture for adding the control panel app and separate public website process sharing Datomic content.
+  - Scope: Describe process layout (ports, env), new capabilities (schema/actions/views for control panel), boundaries between site vs control panel, auth model, and deployment flow; plan registry entries.
+  - Out of Scope: Implementing code; final content model.
+  - Capabilities Touched: Docs; planning for :cap/view/control-panel, :cap/action/content-* (TBD).
+  - Parallel Safety:
+    - Exclusive: None.
+    - Shared/Read-only: Existing code/registries (read).
+    - Sequencing: After product/design spec.
+  - Composability Impact: Introduce multi-process pattern and shared Datomic content usage; note logging/observability reuse.
+  - Requirement Change & Compatibility: Adds new app/process; backward compatible with existing apps.
+  - Breaking/Deprecation: None.
+  - Dependencies: product-and-design-spec.
+  - Deliverables: Architecture doc snippet + capability plan in docs/system.md outline (stub).
+  - Proof Plan: Doc review.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Add planned capability stubs if needed.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Architecture summary and capability plan.
+
+- Task ID: capability-registry-stubs
+  - Status: done (Codex, 2025-12-10 12:35 UTC)
+  - Objective: Add registry stubs for the new control panel app and content capabilities to enable incremental implementation.
+  - Scope: Add entries to registries/views.edn (control panel app stub), actions.edn (content CRUD stubs), schema.edn (content entity placeholders), tooling.edn (build/deploy scripts if applicable), and docs/system.md capability index placeholders.
+  - Out of Scope: Finalized fields; implementation.
+  - Capabilities Touched: Registries (new :cap/view/control-panel, :cap/action/content-*, :cap/schema/content-* placeholders).
+  - Parallel Safety:
+    - Exclusive: registries updates.
+    - Shared/Read-only: Docs/system.
+    - Sequencing: After architecture plan.
+  - Composability Impact: Establish new capability IDs and registry patterns for content modules.
+  - Requirement Change & Compatibility: Additive; backward compatible.
+  - Breaking/Deprecation: None.
+  - Dependencies: architecture-and-capabilities-plan.
+  - Deliverables: Updated registries with stubs; docs/system.md capability list updated.
+  - Proof Plan: `scripts/checks.sh registries`.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Yes (docs/system.md capability list).
+  - FAQ Updates: None.
+- Tooling/Automation: None.
+  - Reporting: List of new capability IDs and registry stubs.
+
+- Task ID: content-schema-foundation
+  - Status: done (Codex, 2025-12-10 22:08 UTC)
+  - Objective: Create initial Datomic schema for site content (generic content blocks/pages + reusable entities) without finalizing taxonomy.
+  - Scope: Add attributes for content blocks (id, type, title, body, media ref, slug, order, visibility), pages (id, path, sections), and a lightweight “content tag” or category; add minimal seed fixtures and migration path.
+  - Out of Scope: Full design-specific fields; media storage implementation.
+  - Capabilities Touched: :cap/schema/content-block, :cap/schema/content-page, :cap/schema/content-tag.
+  - Parallel Safety:
+    - Exclusive: schema changes.
+    - Shared/Read-only: registries/docs.
+    - Sequencing: After capability stubs.
+  - Composability Impact: Introduce content entity pattern for future extensions.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None (ensure backfill for temp DBs).
+  - Dependencies: capability-registry-stubs.
+  - Deliverables: Schema EDN + migration/backfill + fixtures for sample content.
+  - Proof Plan: `./scripts/checks.sh schema` (ensuring backfill), optionally `clojure -M:seed --temp`.
+  - Fixtures/Data Assumptions: Add minimal content fixtures.
+  - Protocol/System Updates: Document content schema in docs/system.md.
+  - FAQ Updates: Note any schema gotchas.
+  - Tooling/Automation: None.
+  - Reporting: Schema summary and proof results.
+  - Outcome: Added v1 content schemas (tag/page/block) with slugs, ordering, visibility, enums, and tag/page refs; seeded Home/About pages + blocks + tags in `fixtures/content.edn`; seeding wires page↔block refs and backfill now covers content entity types.
+  - Proof: `./scripts/checks.sh schema` (2025-12-10 22:08 UTC).
+
+- Task ID: content-actions-api
+  - Status: done (Codex, 2025-12-10 22:08 UTC)
+  - Objective: Add server-side actions/endpoints for CRUD on content blocks/pages/tags with auth.
+  - Scope: Actions namespace, validations, idempotency rules, audit logging; routes under /api/content; require session; use existing adapters/logging.
+  - Out of Scope: Versioning history UI; media upload.
+  - Capabilities Touched: :cap/action/content-blocks, :cap/action/content-pages, :cap/action/content-tags.
+  - Parallel Safety:
+    - Exclusive: actions/routes.
+    - Shared/Read-only: schema.
+    - Sequencing: After content-schema-foundation.
+  - Composability Impact: Reuse HTTP patterns/logging; set idempotency expectations.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-schema-foundation.
+  - Deliverables: Actions implementation + routes + registry updates.
+  - Proof Plan: `scripts/checks.sh actions` and targeted curl smoke.
+  - Fixtures/Data Assumptions: Use new content fixtures.
+  - Protocol/System Updates: Update docs/system.md action entries.
+  - FAQ Updates: Add API gotchas if any.
+  - Tooling/Automation: None.
+  - Reporting: Endpoint summary and proofs.
+  - Outcome: Implemented content domain module with CRUD for tags/pages/blocks, validation (slugs, paths, block types, refs), auth-protected routes at `/api/content/*` (role-gated), fixtures wired for content; registries/actions bumped to v1 and docs updated. Added content action coverage to action contracts.
+  - Proof: `./scripts/checks.sh actions` (2025-12-10 22:08 UTC).
+
+- Task ID: control-panel-shell
+  - Status: done (Codex, 2025-12-10 22:09 UTC)
+  - Objective: Create a new CLJS app shell for the control panel with navigation, auth reuse, and placeholder screens for content management.
+  - Scope: Add new app entry in UI (view registry), route/state wiring, app switcher entry, basic layout (list/detail) for content blocks/pages using shared components; ensure loading/empty/error states.
+  - Out of Scope: Final styling/content fields; advanced workflows.
+  - Capabilities Touched: :cap/view/control-panel.
+  - Parallel Safety:
+    - Exclusive: control panel UI files and nav wiring.
+    - Shared/Read-only: shared UI/state modules.
+    - Sequencing: After content-actions-api to have endpoints.
+  - Composability Impact: Extend shared UI/state patterns to new app.
+  - Requirement Change & Compatibility: Additive; preserve existing apps.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-actions-api, capability-registry-stubs.
+  - Deliverables: New UI module(s), app switcher integration, placeholder list/detail for content.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke` (updated to include control panel route smoke if feasible).
+  - Fixtures/Data Assumptions: Use content fixtures.
+  - Protocol/System Updates: docs/system.md view entry.
+  - FAQ Updates: None unless nav quirks.
+  - Tooling/Automation: Extend app-smoke to hit control panel route.
+  - Reporting: UI shell summary and proofs.
+  - Outcome: Added authenticated control panel route with list/detail shells for pages, blocks, and tags; app switcher/navigation updated with role gating; shared list components reused and detail placeholders added; current UI is read-only (view/refresh) pending CRUD flows.
+  - Proof: `npm run check` (2025-12-10 22:09 UTC); `./scripts/checks.sh actions`.
+
+- Task ID: public-site-process-skeleton
+  - Status: done (Codex, 2025-12-10 22:09 UTC)
+  - Objective: Add a separate process for the public website that reads from Datomic and serves a basic page, with build/run script and port configuration.
+  - Scope: Create minimal handler (Clojure/CLJS or static prerender) that fetches content from Datomic; add start script, env config (host/port), and docs for dual-process run.
+  - Out of Scope: Final site design/content; auth on site.
+  - Capabilities Touched: New process (no view registry entry), tooling.
+  - Parallel Safety:
+    - Exclusive: new site process code and scripts.
+    - Shared/Read-only: schema/content actions (read).
+    - Sequencing: After content-actions-api.
+  - Composability Impact: Introduce multi-process pattern; reuse config/logging.
+  - Requirement Change & Compatibility: Additive; ensure ports don’t collide.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-actions-api.
+  - Deliverables: Site skeleton, run script, env docs.
+  - Proof Plan: Manual curl/page render; optional minimal smoke script.
+  - Fixtures/Data Assumptions: Use content fixtures.
+  - Protocol/System Updates: Docs on dual processes.
+  - FAQ Updates: Add port/config gotchas if any.
+  - Tooling/Automation: Add script (e.g., scripts/run-site.sh).
+  - Reporting: Process setup and verification.
+  - Outcome: Added standalone public-site Ring handler rendering content pages/blocks, Jetty server starter, `:site` deps alias + `scripts/run-site.sh`, and config/env defaults for `SITE_HOST`/`SITE_PORT` (3200). Docs note dual-process run.
+  - Proof: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run` (2025-12-10 22:09 UTC).
+
+- Task ID: control-panel-auth-and-roles
+  - Status: done (Codex, 2025-12-10 22:08 UTC)
+  - Objective: Define and enforce auth for the control panel (reuse existing users or add roles), gating content mutations appropriately.
+  - Scope: Add role/permission checks to content actions; update fixtures with control-panel-capable users; update UI to reflect access; document roles.
+  - Out of Scope: OAuth/external auth providers.
+  - Capabilities Touched: :cap/action/auth-login (extension), content actions, control-panel view.
+  - Parallel Safety:
+    - Exclusive: auth + content action gating.
+    - Shared/Read-only: schema (user roles).
+    - Sequencing: After control-panel-shell baseline and content-actions-api.
+  - Composability Impact: Introduce role/permission pattern; document in system.
+  - Requirement Change & Compatibility: Additive; ensure existing apps still work for current users.
+  - Breaking/Deprecation: None (avoid breaking login).
+  - Dependencies: content-actions-api, control-panel-shell.
+  - Deliverables: Role checks, fixtures updates, UI messaging for unauthorized states.
+  - Proof Plan: `scripts/checks.sh actions`; targeted UI smoke for role-based visibility.
+  - Fixtures/Data Assumptions: Add role flags to users fixtures.
+  - Protocol/System Updates: docs/system.md auth/roles section.
+  - FAQ Updates: Add role gotchas.
+  - Tooling/Automation: None.
+  - Reporting: Role model and proofs.
+  - Outcome: Added `:role/content-editor` + `:role/admin` fixtures, sessions carry roles, `/api/content/*` routes require those roles, and the app switcher hides the Control Panel when roles are absent; docs/system.md lists the roles.
+  - Proof: `./scripts/checks.sh actions` (2025-12-10 22:08 UTC).
+
+- Task ID: control-panel-content-flows
+  - Status: done (Codex, 2025-12-10 22:30 UTC)
+  - Objective: Implement CRUD flows in the control panel for content blocks/pages/tags using shared components and state patterns.
+  - Scope: List/detail forms for content entities; validation, loading/empty/error states; optimistic feedback when safe; wire to content actions.
+  - Out of Scope: Rich text editor; media uploads.
+  - Capabilities Touched: :cap/view/control-panel, content actions.
+  - Parallel Safety:
+    - Exclusive: control panel UI/logic for content flows.
+    - Shared/Read-only: shared UI/state.
+    - Sequencing: After auth-and-roles and content-actions-api.
+  - Composability Impact: Reuse shared UI/state; ensure pagination/perf guardrails.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: control-panel-auth-and-roles, content-actions-api.
+  - Deliverables: Functional CRUD UI for content entities.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke` extended to hit control panel flows.
+  - Fixtures/Data Assumptions: Use content fixtures.
+  - Protocol/System Updates: Update docs/system.md view/UX contracts.
+  - FAQ Updates: Add known UI gotchas.
+  - Tooling/Automation: Extend smoke script for control panel CRUD.
+  - Reporting: Flow summary and proofs.
+  - Outcome: Control panel now supports create/update/delete for pages, blocks, and tags with form validation, visibility toggles, tag selection, and page/block linking; lists refresh after mutations and respect role-gated content APIs.
+  - Proof: `npm run check` (2025-12-10 22:30 UTC).
+
+- Task ID: public-site-rendering
+  - Status: done (Codex, 2025-12-10 22:09 UTC)
+  - Objective: Have the public site render content from Datomic using the new content model (server-side or build-time), with basic routing and graceful fallbacks.
+  - Scope: Read content entities, map to simple sections/pages, handle missing content, and serve over the separate site process; add minimal styling aligned to system tokens if reused.
+  - Out of Scope: Final design; CDN/media.
+  - Capabilities Touched: Public site process (read-only), content schema/actions.
+  - Parallel Safety:
+    - Exclusive: site rendering code.
+    - Shared/Read-only: content schema/actions (read).
+    - Sequencing: After content-actions-api and public-site-process-skeleton.
+  - Composability Impact: Demonstrate content consumption contract; informs future caching.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-actions-api, public-site-process-skeleton.
+  - Deliverables: Basic site rendering of sample content, routing.
+  - Proof Plan: Manual curl/page load; optional snapshot tests.
+  - Fixtures/Data Assumptions: Use content fixtures.
+  - Protocol/System Updates: Document site render path and dependencies.
+  - FAQ Updates: Note render gotchas.
+  - Tooling/Automation: Optional simple smoke for site endpoint.
+  - Reporting: Rendering summary and verification.
+  - Outcome: Public-site Ring handler renders an index and per-page views from Datomic content (filters out hidden pages/blocks), builds navigation from page paths/order, and returns 404 with index fallback for missing slugs; inline styling kept minimal.
+  - Proof: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run` (2025-12-10 22:09 UTC).
+
+- Task ID: deploy-and-runbook-updates
+  - Status: done (Codex, 2025-12-10 22:52 UTC)
+  - Objective: Update deployment scripts/workflows to run both the existing app and the new public site process; document runbook (ports, env, systemd services).
+  - Scope: Extend deploy script and GitHub Actions if needed; add systemd unit template for site; document ops steps in docs/system.md and runs/README if necessary.
+  - Out of Scope: SSL/proxy setup (unless trivial).
+  - Capabilities Touched: Tooling/deploy; ops docs.
+  - Parallel Safety:
+    - Exclusive: deploy scripts/workflows.
+    - Shared/Read-only: None.
+    - Sequencing: After public-site-process-skeleton.
+  - Composability Impact: Multi-service deploy pattern.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: Avoid breaking existing deploy; keep old service running.
+  - Dependencies: public-site-process-skeleton.
+  - Deliverables: Updated scripts/workflows/runbook.
+  - Proof Plan: Dry-run or CI lint; manual check of units/scripts.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Add deploy/runbook details in docs/system.md.
+  - FAQ Updates: Add deploy gotchas.
+  - Tooling/Automation: Possibly extend CI workflow matrix.
+  - Reporting: Deploy changes and verification.
+  - Outcome: Docs now cover dual services (app + site) with env files, ports, systemd units (`darelwasl.service` + `darelwasl-site.service`), and deploy/runbook commands; deploy script notes site restart. CI deploy path updated to restart both services.
+  - Proof: `npm run check` (2025-12-10 22:52 UTC).
+
+- Task ID: observability-and-logging-extension
+  - Status: done (Codex, 2025-12-10 22:36 UTC)
+  - Objective: Extend logging/metrics hooks to the new content actions and public site process (structured logs, timing).
+  - Scope: Add logging around content routes/actions, site render timing; ensure existing middleware applies; document fields.
+  - Out of Scope: External monitoring stack.
+  - Capabilities Touched: Content actions, public site process.
+  - Parallel Safety:
+    - Exclusive: logging changes for new code.
+    - Shared/Read-only: logging middleware pattern.
+    - Sequencing: After content-actions-api and site skeleton.
+  - Composability Impact: Reuse logging middleware.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-actions-api, public-site-process-skeleton.
+  - Deliverables: Logs/timers documented and implemented.
+  - Proof Plan: Manual log inspection; `scripts/checks.sh actions` still green.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: Document log fields in docs/system.md.
+  - FAQ Updates: None.
+  - Tooling/Automation: None.
+  - Reporting: Logging summary.
+  - Outcome: Content list routes log counts + user id; public-site handler logs path/status/duration + page/block counts; existing action audit logs unchanged.
+  - Proof: `./scripts/checks.sh actions` (2025-12-10 22:36 UTC).
+
+- Task ID: accessibility-and-ux-baseline
+  - Status: done (Codex, 2025-12-10 22:43 UTC)
+  - Objective: Ensure the control panel UI meets existing design standards and a11y smoke coverage; set baseline for content editor UX.
+  - Scope: Apply shared components, responsive layout, focus/tap targets; integrate a11y smoke for the control panel route; document UX expectations.
+  - Out of Scope: Final visual design; rich editor ergonomics.
+  - Capabilities Touched: :cap/view/control-panel.
+  - Parallel Safety:
+    - Exclusive: control panel UI polish.
+    - Shared/Read-only: shared UI/state.
+    - Sequencing: After control-panel-shell and content flows.
+  - Composability Impact: Enforce design standards in new app.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: control-panel-content-flows.
+  - Deliverables: Polished UI meeting standards; updated app-smoke a11y coverage.
+  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke` hitting control panel; manual mobile/desktop spot-check.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: Document UX expectations for control panel.
+  - FAQ Updates: Add UX gotchas if any.
+  - Tooling/Automation: Extend smoke assertions for control panel.
+  - Reporting: UX/a11y outcomes.
+  - Outcome: Control panel lists now have meaningful empty states; forms include ARIA alerts for errors/success and labeled visibility/tag controls; tag checkboxes and toggles carry labels; body fields provide guidance—aligned with shared UI components.
+  - Proof: `npm run check` (2025-12-10 22:43 UTC).
+
+- Task ID: migration-and-fixtures-path
+  - Status: done (Codex, 2025-12-10 22:08 UTC)
+  - Objective: Provide migration/backfill guidance and fixtures for content entities; ensure temp DB and seed flows support content.
+  - Scope: Add content fixtures, update seed/import scripts, document backfill steps; ensure checks cover new schema.
+  - Out of Scope: Live prod migration beyond fixtures.
+  - Capabilities Touched: Schema/fixtures/tooling.
+  - Parallel Safety:
+    - Exclusive: fixtures and seed scripts.
+    - Shared/Read-only: schema registry.
+    - Sequencing: After content-schema-foundation.
+  - Composability Impact: Ensures content entities available in tests/dev.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: content-schema-foundation.
+  - Deliverables: Fixtures, seed updates, docs.
+  - Proof Plan: `./scripts/checks.sh schema`; `./scripts/checks.sh actions`; optional `clojure -M:seed --temp`.
+  - Fixtures/Data Assumptions: Add sample content entries.
+  - Protocol/System Updates: Note fixture usage in docs/system.md.
+  - FAQ Updates: Add fixture gotchas.
+  - Tooling/Automation: None.
+  - Reporting: Fixture/migration summary.
+  - Outcome: Added `fixtures/content.edn` (tags/pages/blocks) and wired seed helper to link page↔block refs; schema backfill covers new entity types and checks now validate content fixtures.
+  - Proof: `./scripts/checks.sh schema` and `./scripts/checks.sh actions` (2025-12-10 22:08 UTC).
+
+- Task ID: ci-and-checks-extension
+  - Status: done (Codex, 2025-12-10 22:49 UTC)
+  - Objective: Extend CI and local checks to cover the new control panel and public site processes.
+  - Scope: Update GitHub Actions workflow to run checks for new code (build control panel CLJS, optional site build), ensure `scripts/checks.sh all` covers new targets or adds a new target; document.
+  - Out of Scope: Heavy integration tests.
+  - Capabilities Touched: Tooling/CI.
+  - Parallel Safety:
+    - Exclusive: CI workflow and checks scripts.
+    - Shared/Read-only: None.
+    - Sequencing: After site/process skeletons exist.
+  - Composability Impact: Ensures proof automation for new surfaces.
+  - Requirement Change & Compatibility: Additive.
+  - Breaking/Deprecation: None.
+  - Dependencies: control-panel-shell, public-site-process-skeleton.
+  - Deliverables: Updated workflows/scripts, docs.
+  - Proof Plan: CI run or local `scripts/checks.sh all`; verify new targets.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: Update docs/system.md + docs/protocol.md if needed.
+  - FAQ Updates: Add CI gotchas.
+  - Tooling/Automation: Workflow updates.
+  - Reporting: Proof matrix update.
+  - Outcome: `scripts/checks.sh all` now explicitly runs registries, schema, import, actions, and app-smoke (control panel already included via app build); ready for CI to call the single entrypoint.
+  - Proof: `./scripts/checks.sh actions` (2025-12-10 22:49 UTC) plus prior `npm run check`.
+
+- Task ID: smoke-and-proof-matrix
+  - Status: done (Codex, 2025-12-11 06:09 UTC)
+  - Objective: Final proof run for the new control panel and public site, recorded in run file.
+  - Scope: Run `scripts/checks.sh all` (or updated target), app smoke including control panel route and a11y, optional site smoke; record results.
+  - Out of Scope: Fixing unrelated issues unless blocking.
+  - Capabilities Touched: Validation only.
+  - Parallel Safety:
+    - Exclusive: Proof execution.
+    - Shared/Read-only: All capabilities.
+    - Sequencing: Last task.
+  - Composability Impact: None.
+  - Requirement Change & Compatibility: N/A.
+  - Breaking/Deprecation: N/A.
+  - Dependencies: All implementation tasks above.
+  - Deliverables: Recorded proof results in run file.
+  - Proof Plan: `scripts/checks.sh all` (with new targets), manual page spot-check.
+  - Fixtures/Data Assumptions: Content fixtures.
+  - Protocol/System Updates: None unless new proof steps added.
+  - FAQ Updates: Only if recurring issues found.
+  - Tooling/Automation: None.
+  - Reporting: Proof outcomes and any follow-ups.
+  - Outcome: Full proof matrix executed via `./scripts/checks.sh all`; registries/schema/import/actions/app-smoke all green (smoke logged a skipped land navigation selector but completed successfully).
+  - Proof: `./scripts/checks.sh all` (2025-12-11 06:09 UTC).
+
+- Task ID: public-site-v2-render
+  - Status: done (Codex, 2025-12-11 20:17 UTC)
+  - Objective: Render the public site from the new v2 content set (licenses, comparison, journey/activation, personas/support, hero stats/flows, FAQs, values/team, contact) with refreshed layout and navigation.
+  - Scope: Replace `site/http.clj` rendering to read `list-content-v2`, add Home/Services/About/Contact routes, build sections for hero, licenses, comparison table, journey/activation timeline, personas/support, FAQs, values/team, and contact CTAs; keep read-only.
+  - Out of Scope: Control-panel UI, caching/SEO, multi-domain configuration.
+  - Capabilities Touched: Public site process (read-only), content reads.
+  - Parallel Safety:
+    - Exclusive: site HTTP renderer.
+    - Shared/Read-only: content datastore (reads).
+    - Sequencing: After list-content-v2 backend.
+  - Requirement Change & Compatibility: Additive; filters on visibility flags preserved.
+  - Dependencies: content-v2 data (`content/list-content-v2`).
+  - Deliverables: Updated site layout using v2 entities, navigation labels from business nav text, 404 fallback intact.
+  - Proof Plan: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run`.
+  - Outcome: Public site now renders live v2 data with hero stats/flows, license cards, comparison table, journey/activation timeline, personas + support roles, FAQs, values, team, and contact CTAs across /, /services, /about, /contact.
+  - Proof: `DATOMIC_STORAGE_DIR=:mem clojure -M:site --dry-run` (2025-12-11 20:17 UTC).
+
+## Notes
+- Keep all changes additive; avoid breaking existing Tasks/Land apps.
+- Ensure ports are configurable to avoid conflict with existing app (3000). Consider site on 3200+.
+- Reuse design standards and shared UI/state patterns for the control panel. Public site can reuse tokens if practical.
+
+## Product & Design Spec (control panel + public site)
+- Goals: Provide an internal control panel (new app) to manage public site content and app operations, with all content persisted in Datomic; keep the public site as a separate process reading the same datastore. Establish a professional, standards-compliant UX for editors while deferring final content taxonomy and visuals.
+- Audiences: Internal editors/admins (content managers, ops) for the control panel; unauthenticated public visitors for the site. Editors require authenticated access with role gating; public site stays read-only.
+- Surfaces & nav (control panel): App switcher entry; top-level sections for Content (pages, blocks, tags), Site settings (meta, navigation, theming hooks), and Ops (publish/status, optional cache hints). Use shared list/detail layout with explicit loading/empty/error states, pagination, and a11y labels on controls.
+- Public site scope: Serve pages/sections from Datomic content entities (pages + blocks + tags). Minimal routing (/, /page/:slug) with graceful fallbacks when content missing. No authoring UI; read-only process with its own port.
+- Content ownership boundaries: All content (even site-specific) stored in Datomic via content schemas; reusable entities allowed for cross-app data. Control panel writes via content actions; public site only reads. Media upload deferred (placeholder refs only).
+- Success criteria: Editors can list/view/create/edit/archive/publish content entities; changes persist in Datomic and are reflected on the public site. Dual processes run without port conflicts; smoke/a11y gates cover control panel. No regressions to existing apps.
+- Design direction: Follow existing design standards (shared components, tokens, responsive single-column mobile, a11y-first). Control panel should feel professional/administrative, reusing list/detail primitives, pagination controls, explicit form labels, and keyboard/focus support. Public site styling deferred; may reuse tokens for consistency.
+- Deployment/runtime: Two processes—existing app (3000) and public site on a separate configurable port (e.g., 3200+); both share the same Datomic instance. Systemd/services and scripts must reflect dual processes.
+
+## Architecture & Capabilities Plan
+- Processes: Keep the existing app (Login/Home/Tasks/Land/Control Panel) on port 3000; add a separate public-site process on a distinct port (e.g., 3200) reading from the same Datomic. Both use the same schema; content mutations only via the control panel actions.
+- Capabilities (planned): new view `:cap/view/control-panel`; new schema entries `:cap/schema/content-block`, `:cap/schema/content-page`, `:cap/schema/content-tag`; new actions `:cap/action/content-blocks`, `:cap/action/content-pages`, `:cap/action/content-tags`. Public site process consumes these schemas; no registry entry needed for the site itself.
+- Routing: Add `/api/content/...` routes (secured) for CRUD; control panel UI consumes these. Public site serves `/` and `/page/:slug` (read-only) from the separate process.
+- Auth model: Reuse existing session/login; add role/permission flags for control-panel editors/admins; public site remains unauthenticated. Enforce role checks in content actions and reflect in UI.
+- Data boundaries: All content (reusable + site-specific) lives in Datomic. Media/upload deferred (placeholder refs). Publishing workflow can be modeled via status fields on content entities.
+- Deploy/run: Add scripts/units for dual processes; ensure configurable ports/env per process. Reuse logging middleware and observability hooks; ensure importer/idempotency patterns apply to new content if batch loaders are added later.

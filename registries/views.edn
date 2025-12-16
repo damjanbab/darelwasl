@@ -95,7 +95,6 @@
                   :forward true
                   :flags [:land-registry/enabled]}
   :related {:schema [:cap/schema/person :cap/schema/parcel :cap/schema/ownership]}}
-]
 
  {:id :cap/view/control-panel
   :title "Website Control Panel"
@@ -104,10 +103,145 @@
                    {:id :content/blocks :source :cap/schema/content-block :pull [:content.block/id :content.block/title :content.block/type :content.block/slug :content.block/order :content.block/visible? {:content.block/tag [:content.tag/id :content.tag/name]}]}
                    {:id :content/tags :source :cap/schema/content-tag :pull [:content.tag/id :content.tag/name]}]}
   :actions [:cap/action/content-pages :cap/action/content-blocks :cap/action/content-tags]
-  :ux {:states [:loading :empty :ready :error]
+ :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 300 :pagination {:default-limit 25 :max-limit 200}}
        :state-model :finite
        :layout {:desktop "list + detail" :mobile "stacked"}
        :toggles [:light-dark-switch]}
   :compatibility {:backward true :forward true :flags []}
-  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}
+  :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}]
+ {:id :cap/view/site-home
+  :title "Public Site · Home"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:licenses :comparison-rows :journey-phases :activation-steps
+                           :personas :support-entries :hero-stats :hero-flows
+                           :faqs :values :team-members :contacts :businesses]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 400}
+       :state-model :finite
+       :layout {:desktop "Template A sections" :mobile "stacked sections"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/license
+                     :cap/schema/comparison-row
+                     :cap/schema/journey-phase
+                     :cap/schema/activation-step
+                     :cap/schema/persona
+                     :cap/schema/support-responsibility
+                     :cap/schema/hero-stat
+                     :cap/schema/hero-flow
+                     :cap/schema/faq
+                     :cap/schema/value
+                     :cap/schema/team-member
+                     :cap/schema/business
+                     :cap/schema/contact]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-services
+  :title "Public Site · Services Hub"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:licenses :journey-phases :activation-steps :values :team-members :businesses]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 400}
+       :state-model :finite
+       :layout {:desktop "Template B sections" :mobile "stacked sections"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/license
+                     :cap/schema/journey-phase
+                     :cap/schema/activation-step
+                     :cap/schema/value
+                     :cap/schema/team-member
+                     :cap/schema/business]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-comparison
+  :title "Public Site · Comparison"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:comparison-rows :licenses]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "comparison table" :mobile "stacked rows/cards"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/comparison-row :cap/schema/license]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-process
+  :title "Public Site · Process"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:journey-phases :activation-steps]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "timeline + steps" :mobile "stacked sections"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/journey-phase :cap/schema/activation-step]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-about
+  :title "Public Site · About"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:values :team-members :businesses :contacts]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "values/team/contact" :mobile "stacked sections"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/value :cap/schema/team-member :cap/schema/business :cap/schema/contact]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-contact
+  :title "Public Site · Contact"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:businesses :contacts]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 200}
+       :state-model :finite
+       :layout {:desktop "contact CTA + details" :mobile "stacked"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/business :cap/schema/contact]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/site-service-leaf
+  :title "Public Site · Service Leaf"
+  :version "v1"
+  :data {:sources [{:id :content/v2
+                    :source :cap/action/content-v2
+                    :pull [:licenses :journey-phases :activation-steps :values :team-members :businesses]}]}
+  :actions [:cap/action/content-v2]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 400}
+       :state-model :finite
+       :layout {:desktop "Template C (deliverables/proof/steps)" :mobile "stacked sections"}
+       :theme [:theme/site-premium]}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema [:cap/schema/license
+                     :cap/schema/journey-phase
+                     :cap/schema/activation-step
+                     :cap/schema/value
+                     :cap/schema/team-member
+                     :cap/schema/business]
+            :actions [:cap/action/content-v2]}}]
