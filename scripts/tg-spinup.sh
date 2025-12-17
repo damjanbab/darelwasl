@@ -91,7 +91,27 @@ curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
 echo "Webhook set to: $WEBHOOK_URL"
 
 echo "Generating link token for user 'damjan'..."
-LINK_TOKEN="$(clojure -M:tg-dev link-token damjan | awk -F': ' '/^token:/{print $2}' | tr -d '\r\n')"
+COOKIE_JAR="$ROOT/.cpcache/tg/cookies.txt"
+rm -f "$COOKIE_JAR"
+
+curl -sS -c "$COOKIE_JAR" -X POST "http://localhost:3000/api/login" \
+  -H "content-type: application/json" \
+  -d '{"user/username":"damjan","user/password":"Damjan1!"}' >/dev/null
+
+LINK_TOKEN_JSON="$(curl -sS -b "$COOKIE_JAR" -X POST "http://localhost:3000/api/telegram/link-token" \
+  -H "content-type: application/json" \
+  -d '{}')"
+
+LINK_TOKEN="$(LINK_TOKEN_JSON="$LINK_TOKEN_JSON" python3 - <<'PY'
+import json, os, sys
+payload = json.loads(os.environ["LINK_TOKEN_JSON"])
+token = payload.get("token")
+if not token:
+    print("")
+    sys.exit(0)
+print(token)
+PY
+)"
 if [[ -z "$LINK_TOKEN" ]]; then
   echo "Failed to generate link token. Check:"
   echo "  $ROOT/.cpcache/tg/backend.log"
@@ -107,4 +127,3 @@ echo ""
 echo "Logs:"
 echo "  backend: $ROOT/.cpcache/tg/backend.log"
 echo "  tunnel:  $ROOT/.cpcache/tg/tunnel.log"
-
