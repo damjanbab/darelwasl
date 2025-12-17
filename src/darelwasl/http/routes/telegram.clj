@@ -28,7 +28,38 @@
             {:status 200
              :body (select-keys res [:status :telegram/command :telegram/message-id])}))))))
 
+(defn- parse-uuid
+  [v]
+  (when v
+    (try
+      (java.util.UUID/fromString (str/trim (str v)))
+      (catch Exception _ nil))))
+
+(defn link-token-handler
+  [state]
+  (fn [request]
+    (let [session (:auth/session request)
+          session-user-id (:user/id session)
+          session-roles (set (:user/roles session))
+          target-id (or (parse-uuid (get-in request [:body-params :user/id]))
+                        (parse-uuid (get-in request [:body-params "user/id"]))
+                        session-user-id)
+          admin? (contains? session-roles :role/admin)]
+      (cond
+        (nil? target-id) (common/error-response 400 "user/id is required")
+        (and (not admin?) (not= target-id session-user-id))
+        (common/error-response 403 "Forbidden: can only generate tokens for yourself unless admin")
+        :else
+        (let [res (telegram/ensure-link-token! state target-id)]
+          (if-let [err (:error res)]
+            (common/error-response 500 err)
+            {:status 200
+             :body {:token (:token res)
+                    :user/id target-id}}))))))
+
 (defn routes
   [state]
   [["/telegram"
-    ["/webhook" {:post (webhook-handler state)}]]])
+    ["/webhook" {:post (webhook-handler state)}]
+    ["/link-token" {:middleware [common/require-session]
+                    :post (link-token-handler state)}]]])

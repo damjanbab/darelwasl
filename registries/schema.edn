@@ -40,9 +40,19 @@
    {:ident :user/roles
     :type :db.type/keyword
     :cardinality :db.cardinality/many
-    :doc "User roles for authorization (e.g., :role/content-editor, :role/admin)"}]
+    :doc "User roles for authorization (e.g., :role/content-editor, :role/admin)"}
+   {:ident :user/telegram-chat-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Telegram chat id bound to this user (optional)"}
+   {:ident :user/telegram-link-token
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "One-time token to link Telegram chat via /start"}]
   :enums []
-  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums"]
+  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums" "Telegram chat id unique when set" "Link tokens are single-use"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
