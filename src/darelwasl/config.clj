@@ -7,6 +7,10 @@
           :host "0.0.0.0"}
    :site {:port 3200
           :host "0.0.0.0"}
+   :telegram {:webhook-enabled? false
+              :commands-enabled? true
+              :notifications-enabled? false
+              :http-timeout-ms 3000}
    :datomic {:storage-dir "data/datomic"
              :system "darelwasl"
              :db-name "darelwasl"}
@@ -57,6 +61,18 @@
         (assoc-in [:site :host]
                   (env-str (get env "SITE_HOST")
                            (get-in default-config [:site :host])))
+        (assoc :telegram
+               {:bot-token (env-str (get env "TELEGRAM_BOT_TOKEN") nil)
+                :webhook-secret (env-str (get env "TELEGRAM_WEBHOOK_SECRET") nil)
+                :webhook-base-url (env-str (get env "TELEGRAM_WEBHOOK_BASE_URL") nil)
+                :webhook-enabled? (env-bool (get env "TELEGRAM_WEBHOOK_ENABLED")
+                                            (get-in default-config [:telegram :webhook-enabled?]))
+                :commands-enabled? (env-bool (get env "TELEGRAM_COMMANDS_ENABLED")
+                                             (get-in default-config [:telegram :commands-enabled?]))
+                :notifications-enabled? (env-bool (get env "TELEGRAM_NOTIFICATIONS_ENABLED")
+                                                  (get-in default-config [:telegram :notifications-enabled?]))
+                :http-timeout-ms (parse-int (get env "TELEGRAM_HTTP_TIMEOUT_MS")
+                                            (get-in default-config [:telegram :http-timeout-ms]))})
         (assoc-in [:datomic :storage-dir]
                   (normalize-storage-dir (get env "DATOMIC_STORAGE_DIR")
                                          (get-in default-config [:datomic :storage-dir])))

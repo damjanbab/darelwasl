@@ -1,0 +1,133 @@
+# Run run-telegram-integration-001
+
+Goal: add a Telegram bot integration for task notifications and lightweight commands, with hardened webhook handling, registry coverage, and documentation.
+
+## Tasks
+- Task ID: requirements-and-scope
+  - Status: done (Codex, 2025-12-16 23:29 UTC)
+  - Objective: Capture the Telegram bot requirements (commands, notifications, auth model) and document the flows and security constraints.
+  - Scope: Define supported commands (e.g., /start, /help, /task), notification triggers (task status/assignee changes), chat ID storage strategy, webhook vs polling decision, and env vars (token/secret).
+  - Out of Scope: Final UI copy for messages beyond basic responses.
+  - Capabilities Touched: Docs only (prep).
+  - Parallel Safety:
+    - Exclusive Capabilities: None (docs).
+    - Shared/Read-only Capabilities: registries, docs/system.md, docs/faq.md.
+    - Sequencing Constraints: None; must precede registry/implementation tasks.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Document integration + action IDs, reuse existing action/registry conventions.
+    - New composability rules needed: Add guidance for external webhooks/secrets and opt-in chat mappings.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: New Telegram entry-point and notifications; additive.
+    - Compatibility expectation (backward/forward/none): Backward compatible (no behavior change until enabled).
+    - Flag/Rollout plan: Define feature flag for outbound notifications and webhook enablement.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None.
+  - Dependencies: None.
+  - Deliverables: Documented requirements/flows/flags in docs/system.md (or run doc), updated FAQ if needed.
+  - Proof Plan: Doc review.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Update docs/system.md capability list if IDs are introduced.
+  - FAQ Updates: Add webhook/secret handling notes if needed.
+  - Tooling/Automation: None.
+  - Reporting: Summarize requirements, flows, security, flags.
+
+- Task ID: registries-and-docs
+  - Status: done (Codex, 2025-12-16 23:40 UTC)
+  - Objective: Register the Telegram integration and actions in registries and align documentation.
+  - Scope: Add :cap/integration/telegram-bot and actions (:cap/action/telegram-send-message, :cap/action/telegram-set-webhook, :cap/action/telegram-handle-update); note contracts (env vars, rate limits, secret token), update docs/system.md and docs/faq.md.
+  - Out of Scope: Adapter code or routes.
+  - Capabilities Touched: registries/integrations.edn, registries/actions.edn, docs/system.md, docs/faq.md.
+  - Parallel Safety:
+    - Exclusive Capabilities: registries and docs.
+    - Shared/Read-only Capabilities: None.
+    - Sequencing Constraints: After requirements-and-scope.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Registry/action patterns; webhook security guidance.
+    - New composability rules needed: Add rule for validating external webhook secrets if missing.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Introduces new capabilities; additive.
+    - Compatibility expectation: Backward compatible (no runtime behavior until used).
+    - Flag/Rollout plan: Document feature flags/env toggles.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None.
+  - Dependencies: requirements-and-scope.
+  - Deliverables: Updated registries + docs entries referencing new capability IDs.
+  - Proof Plan: `scripts/checks.sh registries`.
+  - Fixtures/Data Assumptions: None.
+  - Protocol/System Updates: Yes—update docs/system.md capability index.
+  - FAQ Updates: Yes—token/secret handling and webhook validation notes.
+  - Tooling/Automation: None.
+  - Reporting: List added capability IDs and contracts.
+
+- Task ID: adapter-and-webhook-endpoint
+  - Status: done (Codex, 2025-12-16 23:55 UTC)
+  - Objective: Implement Telegram adapter and secure webhook endpoint to receive updates.
+  - Scope: Add HTTP client wrapper for Telegram Bot API (sendMessage, setWebhook/deleteWebhook), env var loading for token/secret, webhook route `/api/telegram/webhook` with secret header validation, basic update dispatcher to allowed commands; wire feature flag for enablement.
+  - Out of Scope: Rich command parsing beyond defined flows; long polling.
+  - Capabilities Touched: :cap/integration/telegram-bot, :cap/action/telegram-handle-update, :cap/action/telegram-set-webhook.
+  - Parallel Safety:
+    - Exclusive Capabilities: Telegram integration adapter + webhook route.
+    - Shared/Read-only Capabilities: Existing HTTP/common middleware (read).
+    - Sequencing Constraints: After registries-and-docs.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Reuse HTTP middleware, logging, validation patterns; add helper for external API calls with timeouts.
+    - New composability rules needed: If adding external-call helper, document in docs/system.md/tooling.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: New inbound webhook; additive; gated by flag/secret.
+    - Compatibility expectation: Backward compatible when disabled.
+    - Flag/Rollout plan: Feature flag + env gating; document default off.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None.
+  - Dependencies: registries-and-docs.
+  - Deliverables: Adapter namespace, config wiring, webhook route, minimal command handlers, tests (unit/handler) and updated scripts/checks.sh to include any new checks if needed.
+  - Proof Plan: `scripts/checks.sh actions` (if adapter/hooks covered) or targeted clj tests; manual curl to webhook with secret token; `npm run check` not required unless CLJS touched.
+  - Fixtures/Data Assumptions: Use fake webhook payloads; no live Telegram calls in tests (stub HTTP).
+  - Protocol/System Updates: Document webhook endpoint/flags in docs/system.md.
+  - FAQ Updates: Add testing guidance for Telegram webhook and stubbed HTTP.
+  - Tooling/Automation: Add HTTP stub/mocking helper if required.
+  - Reporting: Endpoint, adapter summary, proofs.
+
+- Task ID: outbound-notifications
+  - Status: pending
+  - Objective: Send Telegram notifications for selected task events with opt-in storage for chat IDs.
+  - Scope: Capture chat ID binding (e.g., via /start linking to user), persist mapping, publish outbound messages on task events (status/assignee/due change, comments if any), feature-flagged; include rate-limit/backoff handling.
+  - Out of Scope: Rich templates; multi-language; per-user preferences UI.
+  - Capabilities Touched: :cap/action/telegram-send-message, :cap/action/task-* (hooks), :cap/schema/user (chat-id field or mapping table) if needed.
+  - Parallel Safety:
+    - Exclusive Capabilities: Task event hooks + Telegram send-message wiring.
+    - Shared/Read-only Capabilities: Existing task actions (read).
+    - Sequencing Constraints: After adapter-and-webhook-endpoint.
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: Reuse existing audit/logging; add event hook pattern for outbound integrations.
+    - New composability rules needed: If adding event hooks, document pattern in docs/system.md/tooling.
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: Adds optional notifications; gated/opt-in.
+    - Compatibility expectation: Backward compatible with flag off and no chat IDs.
+    - Flag/Rollout plan: Feature flag controlling outbound notifications + user opt-in mapping.
+  - Breaking/Deprecation:
+    - Breaking change? Deprecation plan/timeline/mitigations: None if gated.
+  - Dependencies: adapter-and-webhook-endpoint, requirements-and-scope.
+  - Deliverables: Chat ID storage (schema/fixtures if needed), hook wiring on task events, outbound send wrapper with retries/backoff, docs updates (system/faq), tests covering hooks and flag behavior.
+  - Proof Plan: `scripts/checks.sh actions` (task hooks), schema check if schema touched, targeted unit tests; manual smoke of a task change triggering mocked send.
+  - Fixtures/Data Assumptions: Add sample chat ID mapping fixture if schema added.
+  - Protocol/System Updates: Update docs/system.md for new schema/action behavior and flags.
+  - FAQ Updates: Note opt-in mapping and failure handling.
+  - Tooling/Automation: None beyond existing hooks/tests.
+  - Reporting: Event hooks added, flags, proofs.
+
+## Requirements and scope (decided)
+- Mode: default to Telegram webhook at `/api/telegram/webhook` secured by `X-Telegram-Bot-Api-Secret-Token`; drop requests with missing/mismatched secret. Long polling allowed only for local/dev behind a flag.
+- Env/config: `TELEGRAM_BOT_TOKEN` (required to enable), `TELEGRAM_WEBHOOK_SECRET` (required for webhook), `TELEGRAM_WEBHOOK_BASE_URL` (used to call `setWebhook`), flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), timeout 3s for Telegram HTTP calls.
+- Commands:
+  - `/start <link-token>`: binds a Telegram chat to a user via a one-time link token generated in the app/control panel; stores chat-id mapping; rejects if token invalid/expired/already used.
+  - `/help`: returns available commands and support contact text.
+  - `/tasks`: lists up to 5 tasks assigned to the mapped user (title/status/due).
+  - `/task <id>`: returns summary/status/due/assignee for the given task if the mapped user is involved (assignee or creator); otherwise redacts.
+  - `/stop`: unlinks chat (clears mapping) and stops outbound notifications.
+- Security/authorization: all commands except `/help` require a valid chat→user mapping; `/task` checks involvement; webhook rejects bodies lacking the secret header; rate-limit/backoff handling for 429/5xx from Telegram (retry with jitter).
+- Notifications: send on task creation assigned to a user, assignee change, status change, and due-date change. Require both `TELEGRAM_NOTIFICATIONS_ENABLED` and chat mapping. Messages are short (task title/id/status/due) and include a link back to the control panel when available.
+- Chat ID storage: single optional field `:user/telegram-chat-id` (unique) to keep mapping simple; can be extended to a mapping entity later for multi-chat support. Mapping created by `/start` token exchange; `/stop` clears it.
+- Testing/CI: no live Telegram calls; use HTTP stubs and sample webhook payloads. Webhook handler must respond quickly (<1s) and offload heavy work to a worker if needed.
+
+## Notes
+- Keep live Telegram calls out of CI; rely on HTTP stubs and fixture payloads. Gate outbound sends behind feature flags and env tokens. Validate `X-Telegram-Bot-Api-Secret-Token` on the webhook endpoint.***
