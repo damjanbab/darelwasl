@@ -17,3 +17,5 @@ data/land/*
 node_modules/
 .shadow-cljs/
 .cljs_node_repl/
+.secrets/*
+!.secrets/README.md
