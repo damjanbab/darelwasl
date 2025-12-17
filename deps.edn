@@ -17,5 +17,7 @@
                   :jvm-opts ["-Dclojure.main.report=stderr"]}
            :import {:main-opts ["-m" "darelwasl.importer"]
                     :jvm-opts ["-Dclojure.main.report=stderr"]}
+           :tg-dev {:main-opts ["-m" "darelwasl.telegram.dev"]
+                    :jvm-opts ["-Dclojure.main.report=stderr"]}
            :site {:main-opts ["-m" "darelwasl.site.main"]
                   :jvm-opts ["-Dclojure.main.report=stderr"]}}}
