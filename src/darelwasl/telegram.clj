@@ -10,7 +10,7 @@
 (def ^:private default-timeout-ms 3000)
 
 (def ^:private allowed-commands
-  #{:start :help :tasks :task :stop})
+  #{:start :help :tasks :task :stop :new})
 
 (defn webhook-enabled?
   [cfg]
@@ -38,21 +38,58 @@
   (if (str/blank? (:bot-token cfg))
     {:error "Telegram bot token not configured"}
     (let [timeout (:http-timeout-ms cfg default-timeout-ms)]
-      (try
-        (let [resp (http/post (bot-url cfg path)
-                              {:headers {"Content-Type" "application/json"}
-                               :body (json/write-str payload)
-                               :socket-timeout timeout
-                               :conn-timeout timeout
-                               :as :json})]
-          (if (true? (get-in resp [:body :ok]))
-            {:result (get-in resp [:body :result])}
-            {:error (or (get-in resp [:body :description])
-                        "Telegram API error")
-             :details (select-keys (:body resp) [:description :error_code])}))
-        (catch Exception e
-          (log/warn e "Telegram API request failed" {:path path})
-          {:error "Telegram API request failed"})))))
+      (letfn [(parse-int* [v]
+                (when (and v (not (str/blank? (str v))))
+                  (try
+                    (Long/parseLong (str/trim (str v)))
+                    (catch Exception _ nil))))
+              (retry-after-ms [resp]
+                (when-let [raw (get-in resp [:headers "retry-after"])]
+                  (when-let [secs (parse-int* raw)]
+                    (* 1000 secs))))
+              (base-backoff-ms [attempt]
+                (+ (* attempt 300)
+                   (rand-int 200)))
+              (should-retry? [resp]
+                (let [status (:status resp)]
+                  (or (= status 429)
+                      (and (number? status) (<= 500 status)))))
+              (attempt! [attempt]
+                (try
+                  (let [resp (http/post (bot-url cfg path)
+                                        {:headers {"Content-Type" "application/json"
+                                                   "Accept" "application/json"}
+                                         :body (json/write-str payload)
+                                         :socket-timeout timeout
+                                         :conn-timeout timeout
+                                         :throw-exceptions false
+                                         :as :json})]
+                    (cond
+                      (true? (get-in resp [:body :ok]))
+                      {:result (get-in resp [:body :result])}
+
+                      (and (< attempt 3) (should-retry? resp))
+                      (let [sleep-ms (or (retry-after-ms resp)
+                                         (base-backoff-ms attempt))]
+                        (log/warnf "Telegram API transient error; retrying path=%s status=%s attempt=%s sleep_ms=%s"
+                                   path (:status resp) attempt sleep-ms)
+                        (Thread/sleep sleep-ms)
+                        (attempt! (inc attempt)))
+
+                      :else
+                      {:error (or (get-in resp [:body :description])
+                                  "Telegram API error")
+                       :details (select-keys (:body resp) [:description :error_code])}))
+                  (catch Exception e
+                    (if (< attempt 3)
+                      (do
+                        (log/warn e "Telegram API request failed; retrying" {:path path :attempt attempt})
+                        (Thread/sleep (base-backoff-ms attempt))
+                        (attempt! (inc attempt)))
+                      (do
+                        (log/warn e "Telegram API request failed" {:path path})
+                        {:error "Telegram API request failed"})))))]
+        (attempt! 1)))))
 
 (defn send-message!
   "Send a Telegram message to chat-id. Returns {:telegram/message-id ...} or {:error ...}."
@@ -182,11 +219,16 @@
 (defn- parse-command
   [text]
   (when (and text (str/starts-with? text "/"))
-    (let [[cmd & args] (-> text str/trim (str/split #"\s+"))
-          cmd (some-> cmd (str/replace #"^/" "") keyword)]
+    (let [trimmed (str/trim text)
+          [_ cmd rest] (re-matches #"^/([A-Za-z0-9_-]+)(?:\\s+(.*))?$" trimmed)
+          cmd (some-> cmd
+                      (str/split #"@" 2)
+                      first
+                      str/lower-case
+                      keyword)]
       (when (allowed-commands cmd)
         {:command cmd
-         :args args}))))
+         :rest (some-> rest str/trim)}))))
 
 (defn- extract-update
   [update]
@@ -195,12 +237,12 @@
         chat-id (or (get-in message [:chat :id])
                     (get-in message ["chat" "id"]))
         text (or (:text message) (get message "text"))
-        {:keys [command args]} (parse-command text)]
+        {:keys [command rest]} (parse-command text)]
     {:update-id update-id
      :chat-id (some-> chat-id str)
      :text text
      :command command
-     :args args}))
+     :rest rest}))
 
 (defn- format-task-line
   [task]
@@ -247,17 +289,23 @@
            first))))
 
 (defn- handle-command
-  [state chat-id {:keys [command args]}]
+  [state chat-id {:keys [command rest text]}]
   (let [cfg (get-in state [:config :telegram])
         conn (ensure-conn state)
         db (when conn (d/db conn))
         chat-user (when db (user-by-chat-id db chat-id))]
     (case command
-      :help {:text "Commands: /start <link-token>, /help, /tasks, /task <id>, /stop.\nLink chat with /start using a token from the app. Notifications require flags on."}
-      :start (let [token (first args)
+      :help {:text "Commands: /start <link-token>, /help, /tasks, /task <uuid>, /new <title> [| description], /stop.\nLink chat with /start using a token from the app. Notifications require flags on."}
+      :start (let [token (or (some-> rest (str/split #"\s+" 2) first)
+                             (some->> text
+                                      (re-matches #"^/start(?:@[A-Za-z0-9_]+)?\\s+(.*)$")
+                                      second
+                                      str/trim))
                    res (bind-chat! state {:token token :chat-id chat-id})]
                (if-let [err (:error res)]
-                 {:text (str "Cannot link chat: " err)}
+                 (if (= err "Missing link token")
+                   {:text "Missing link token. Generate one in the app (POST /api/telegram/link-token) and send: /start <token>."}
+                   {:text (str "Cannot link chat: " err)})
                  {:text (str "Chat linked to " (get-in res [:user :user/username]) ". Notifications remain gated by flags.")}))
       :stop (let [res (unbind-chat! state chat-id)]
               (if-let [err (:error res)]
@@ -271,13 +319,39 @@
                    {:text (tasks-summary-text (:tasks resp))})))
       :task (if-not chat-user
               {:text "Chat not linked. Use /start <token> from the app to link."}
-              (let [raw (first args)
+              (let [raw (some-> rest (str/split #"\s+" 2) first)
                     task-id (when raw (try (UUID/fromString (str/trim raw)) (catch Exception _ nil)))]
                 (cond
                   (nil? task-id) {:text "Invalid task id. Use /task <uuid>."}
                   :else
                   (let [task (find-user-task conn (:user/id chat-user) task-id)]
                     {:text (task-detail-text task)}))))
+      :new (if-not chat-user
+             {:text "Chat not linked. Use /start <token> from the app to link."}
+             (let [raw (str/trim (or rest ""))
+                   [title desc] (if (str/includes? raw "|")
+                                  (map str/trim (str/split raw #"\|" 2))
+                                  [(str/trim raw) nil])
+                   title (when-not (str/blank? title) title)
+                   desc (when-not (str/blank? desc) desc)]
+               (cond
+                 (nil? title) {:text "Usage: /new <title> [| description]"}
+                 :else
+                 (let [body {:task/title title
+                             :task/description (or desc (str "Created via Telegram: " title))
+                             :task/status :todo
+                             :task/priority :medium
+                             :task/assignee (:user/id chat-user)}
+                       res (tasks/create-task! conn body chat-user)]
+                   (if-let [err (:error res)]
+                     {:text (str "Unable to create task: " (:message err))}
+                     (let [task (:task res)
+                           id-str (some-> (:task/id task) str)
+                           due (or (:task/due-date task) "none")]
+                       {:text (str "Created task " id-str "\n"
+                                   (:task/title task) "\n"
+                                   "Status: " (name (:task/status task)) "\n"
+                                   "Due: " due)}))))))
       {:text "Unknown command. Send /help for available commands."})))
 
 (defn notify-task-event!

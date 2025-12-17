@@ -1,5 +1,6 @@
 (ns darelwasl.http.routes.telegram
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [darelwasl.http.common :as common]
             [darelwasl.telegram :as telegram]))
 
@@ -22,11 +23,17 @@
         (common/error-response 401 "Invalid webhook secret")
 
         :else
-        (let [res (telegram/handle-update state (:body-params request))]
-          (if-let [err (:error res)]
-            (common/error-response 400 err)
+        (try
+          (let [res (telegram/handle-update state (:body-params request))]
+            (when-let [err (:error res)]
+              (log/warn "Telegram webhook handler returned error" {:error err}))
             {:status 200
-             :body (select-keys res [:status :telegram/command :telegram/message-id])}))))))
+             :body (select-keys res [:status :telegram/command :telegram/message-id :error :reason])})
+          (catch Exception e
+            (log/error e "Unhandled exception while processing Telegram webhook")
+            {:status 200
+             :body {:status :error
+                    :error "Unhandled exception"}}))))))
 
 (defn- parse-uuid-value
   [v]
