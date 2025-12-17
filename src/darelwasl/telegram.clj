@@ -20,6 +20,10 @@
   [cfg]
   (true? (:commands-enabled? cfg)))
 
+(defn notifications-enabled?
+  [cfg]
+  (true? (:notifications-enabled? cfg)))
+
 (defn- bot-url
   [cfg path]
   (when-let [token (:bot-token cfg)]
@@ -82,7 +86,8 @@
   (if-let [conn (ensure-conn state)]
     (try
       (let [token (str (UUID/randomUUID))]
-        (d/transact conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-link-token token]]})
+        (d/transact conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-link-token token]
+                                    [:db/add [:user/id user-id] :user/telegram-link-token-created-at (java.util.Date.)]]})
         {:token token})
       (catch Exception e
         (log/warn e "Failed to create Telegram link token" {:user-id user-id})
@@ -92,7 +97,12 @@
 (defn- user-by-link-token
   [db token]
   (when-not (str/blank? token)
-    (-> (d/q '[:find (pull ?u [:user/id :user/username :user/name :user/telegram-link-token :user/telegram-chat-id])
+    (-> (d/q '[:find (pull ?u [:user/id
+                               :user/username
+                               :user/name
+                               :user/telegram-link-token
+                               :user/telegram-link-token-created-at
+                               :user/telegram-chat-id])
                :in $ ?token
                :where [?u :user/telegram-link-token ?token]]
              db token)
@@ -105,6 +115,16 @@
                :in $ ?chat
                :where [?u :user/telegram-chat-id ?chat]]
              db chat-id)
+        ffirst)))
+
+(defn- chat-id-by-user-id
+  [db user-id]
+  (when user-id
+    (-> (d/q '[:find ?chat
+               :in $ ?id
+               :where [?u :user/id ?id]
+                      [?u :user/telegram-chat-id ?chat]]
+             db user-id)
         ffirst)))
 
 (defn bind-chat!
@@ -120,13 +140,22 @@
               user (user-by-link-token db token)]
           (if-not user
             {:error "Invalid or expired link token"}
-            (let [existing (user-by-chat-id db chat-id)
-                  tx (cond-> []
-                       existing (conj [:db/retract [:user/id (:user/id existing)] :user/telegram-chat-id (:user/telegram-chat-id existing)])
-                       (:user/telegram-link-token user) (conj [:db/retract [:user/id (:user/id user)] :user/telegram-link-token (:user/telegram-link-token user)])
-                       true (conj [:db/add [:user/id (:user/id user)] :user/telegram-chat-id chat-id]))]
-              (d/transact conn {:tx-data tx})
-              {:user (assoc user :user/telegram-chat-id chat-id)})))
+            (let [issued-at (:user/telegram-link-token-created-at user)
+                  ttl-ms (get-in state [:config :telegram :link-token-ttl-ms] 900000)
+                  now-ms (System/currentTimeMillis)
+                  issued-ms (when issued-at (.getTime ^java.util.Date issued-at))]
+              (cond
+                (nil? issued-ms) {:error "Invalid or expired link token"}
+                (> (- now-ms issued-ms) ttl-ms) {:error "Invalid or expired link token"}
+                :else
+                (let [existing (user-by-chat-id db chat-id)
+                      tx (cond-> []
+                           existing (conj [:db/retract [:user/id (:user/id existing)] :user/telegram-chat-id (:user/telegram-chat-id existing)])
+                           (:user/telegram-link-token user) (conj [:db/retract [:user/id (:user/id user)] :user/telegram-link-token (:user/telegram-link-token user)])
+                           (:user/telegram-link-token-created-at user) (conj [:db/retract [:user/id (:user/id user)] :user/telegram-link-token-created-at (:user/telegram-link-token-created-at user)])
+                           true (conj [:db/add [:user/id (:user/id user)] :user/telegram-chat-id chat-id]))]
+                  (d/transact conn {:tx-data tx})
+                  {:user (assoc user :user/telegram-chat-id chat-id)})))))
         (catch Exception e
           (log/warn e "Failed to bind Telegram chat" {:chat-id chat-id})
           {:error "Unable to bind chat"}))
@@ -202,10 +231,12 @@
 
 (defn- list-user-tasks
   [conn user-id limit]
-  (tasks/list-tasks conn {:filters {:assignee user-id
-                                    :archived :all}
+  (tasks/list-tasks conn {:assignee user-id
+                          :archived :all
                           :limit limit
-                          :offset 0}))
+                          :offset 0
+                          :sort :updated
+                          :order :desc}))
 
 (defn- find-user-task
   [conn user-id task-id]
@@ -248,6 +279,45 @@
                   (let [task (find-user-task conn (:user/id chat-user) task-id)]
                     {:text (task-detail-text task)}))))
       {:text "Unknown command. Send /help for available commands."})))
+
+(defn notify-task-event!
+  "Best-effort notification helper. Does nothing unless notifications are enabled and assignee has a chat id mapping."
+  [state {:keys [event task actor]}]
+  (let [cfg (get-in state [:config :telegram])]
+    (when (and (notifications-enabled? cfg) task)
+      (when-let [conn (ensure-conn state)]
+        (try
+          (let [db (d/db conn)
+                assignee-id (get-in task [:task/assignee :user/id])
+                chat-id (chat-id-by-user-id db assignee-id)]
+            (when (and (not (str/blank? chat-id))
+                       (not (str/blank? (:bot-token cfg))))
+              (let [task-id (str (:task/id task))
+                    title (:task/title task)
+                    status (some-> (:task/status task) name)
+                    due (or (:task/due-date task) "none")
+                    actor-name (or (:user/username actor)
+                                   (:user/name actor)
+                                   (some-> (:user/id actor) str)
+                                   "system")
+                    text (case event
+                           :task/created (str "New task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
+                           :task/assigned (str "Task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
+                           :task/status-changed (str "Task status updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
+                           :task/due-changed (str "Task due date updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
+                           (str "Task update:\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id))
+                    message-key (case event
+                                  :task/created (str "task-created:" task-id)
+                                  :task/assigned (str "task-assigned:" task-id ":" (or (some-> assignee-id str) "none"))
+                                  :task/status-changed (str "task-status:" task-id ":" status)
+                                  :task/due-changed (str "task-due:" task-id ":" due)
+                                  (str "task-update:" task-id))]
+                (when-let [err (:error (send-message! cfg {:chat-id chat-id
+                                                          :text text
+                                                          :message-key message-key}))]
+                  (log/warn "Telegram notification failed" {:event event :error err})))))
+          (catch Exception e
+            (log/warn e "Telegram notification failed")))))))
 
 (defn handle-update
   "Process a Telegram update payload. Returns {:status ...} or {:error ...}."

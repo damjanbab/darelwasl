@@ -46,13 +46,17 @@
     :cardinality :db.cardinality/one
     :unique :db.unique/value
     :doc "Telegram chat id bound to this user (optional)"}
-   {:ident :user/telegram-link-token
-    :type :db.type/string
-    :cardinality :db.cardinality/one
-    :unique :db.unique/value
-    :doc "One-time token to link Telegram chat via /start"}]
+	   {:ident :user/telegram-link-token
+	    :type :db.type/string
+	    :cardinality :db.cardinality/one
+	    :unique :db.unique/value
+	    :doc "One-time token to link Telegram chat via /start"}
+	   {:ident :user/telegram-link-token-created-at
+	    :type :db.type/instant
+	    :cardinality :db.cardinality/one
+	    :doc "Timestamp when the current link token was issued"}]
   :enums []
-  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums" "Telegram chat id unique when set" "Link tokens are single-use"]
+  :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums" "Telegram chat id unique when set" "Link tokens are single-use and must be used before expiry"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true

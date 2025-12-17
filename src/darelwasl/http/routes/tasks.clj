@@ -1,6 +1,7 @@
 (ns darelwasl.http.routes.tasks
   (:require [clojure.tools.logging :as log]
             [darelwasl.http.common :as common]
+            [darelwasl.telegram :as telegram]
             [darelwasl.tasks :as tasks]))
 
 (def ^:private task-id-path
@@ -31,11 +32,14 @@
 (defn create-task-handler
   [state]
   (fn [request]
-    (common/handle-task-result
-     (tasks/create-task! (get-in state [:db :conn])
-                         (or (:body-params request) {})
-                         (:auth/session request))
-     201)))
+    (let [res (tasks/create-task! (get-in state [:db :conn])
+                                  (or (:body-params request) {})
+                                  (:auth/session request))]
+      (when-not (:error res)
+        (telegram/notify-task-event! state {:event :task/created
+                                            :task (:task res)
+                                            :actor (:auth/session request)}))
+      (common/handle-task-result res 201))))
 
 (defn update-task-handler
   [state]
@@ -49,29 +53,41 @@
 (defn set-status-handler
   [state]
   (fn [request]
-    (common/handle-task-result
-     (tasks/set-status! (get-in state [:db :conn])
-                        (common/task-id-param request)
-                        (or (:body-params request) {})
-                        (:auth/session request)))))
+    (let [res (tasks/set-status! (get-in state [:db :conn])
+                                 (common/task-id-param request)
+                                 (or (:body-params request) {})
+                                 (:auth/session request))]
+      (when-not (:error res)
+        (telegram/notify-task-event! state {:event :task/status-changed
+                                            :task (:task res)
+                                            :actor (:auth/session request)}))
+      (common/handle-task-result res))))
 
 (defn assign-task-handler
   [state]
   (fn [request]
-    (common/handle-task-result
-     (tasks/assign-task! (get-in state [:db :conn])
-                         (common/task-id-param request)
-                         (or (:body-params request) {})
-                         (:auth/session request)))))
+    (let [res (tasks/assign-task! (get-in state [:db :conn])
+                                  (common/task-id-param request)
+                                  (or (:body-params request) {})
+                                  (:auth/session request))]
+      (when-not (:error res)
+        (telegram/notify-task-event! state {:event :task/assigned
+                                            :task (:task res)
+                                            :actor (:auth/session request)}))
+      (common/handle-task-result res))))
 
 (defn due-date-handler
   [state]
   (fn [request]
-    (common/handle-task-result
-     (tasks/set-due-date! (get-in state [:db :conn])
-                          (common/task-id-param request)
-                          (or (:body-params request) {})
-                          (:auth/session request)))))
+    (let [res (tasks/set-due-date! (get-in state [:db :conn])
+                                   (common/task-id-param request)
+                                   (or (:body-params request) {})
+                                   (:auth/session request))]
+      (when-not (:error res)
+        (telegram/notify-task-event! state {:event :task/due-changed
+                                            :task (:task res)
+                                            :actor (:auth/session request)}))
+      (common/handle-task-result res))))
 
 (defn tags-handler
   [state]

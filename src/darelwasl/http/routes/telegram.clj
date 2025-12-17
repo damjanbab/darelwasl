@@ -28,7 +28,7 @@
             {:status 200
              :body (select-keys res [:status :telegram/command :telegram/message-id])}))))))
 
-(defn- parse-uuid
+(defn- parse-uuid-value
   [v]
   (when v
     (try
@@ -41,8 +41,8 @@
     (let [session (:auth/session request)
           session-user-id (:user/id session)
           session-roles (set (:user/roles session))
-          target-id (or (parse-uuid (get-in request [:body-params :user/id]))
-                        (parse-uuid (get-in request [:body-params "user/id"]))
+          target-id (or (parse-uuid-value (get-in request [:body-params :user/id]))
+                        (parse-uuid-value (get-in request [:body-params "user/id"]))
                         session-user-id)
           admin? (contains? session-roles :role/admin)]
       (cond
@@ -55,7 +55,8 @@
             (common/error-response 500 err)
             {:status 200
              :body {:token (:token res)
-                    :user/id target-id}}))))))
+                    :user/id target-id
+                    :ttl-ms (get-in state [:config :telegram :link-token-ttl-ms] 900000)}}))))))
 
 (defn routes
   [state]

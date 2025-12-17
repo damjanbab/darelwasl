@@ -106,10 +106,10 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Telegram Integration (tasks app)
 - Capabilities: :cap/integration/telegram-bot with actions :cap/action/telegram-send-message, :cap/action/telegram-set-webhook, :cap/action/telegram-handle-update.
-- Auth/config: env vars `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_BASE_URL`; flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false). HTTP calls timeout at 3s; no live Telegram calls in CI (use stubs/fixtures).
+- Auth/config: env vars `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_BASE_URL`; flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false). HTTP calls timeout at 3s; link tokens expire by `TELEGRAM_LINK_TOKEN_TTL_MS` (default 900000). No live Telegram calls in CI (use stubs/fixtures).
 - Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Long polling allowed only for local/dev behind a flag.
 - Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns top 5 assigned tasks; `/task <id>` returns summary if the mapped user is involved; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
-- Data/mapping: store optional `:user/telegram-chat-id` (unique) and `:user/telegram-link-token` (single-use, unique). `/start` writes mapping and clears the token; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others).
+- Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others).
 - Notifications: when enabled and a chat is mapped, send messages on task creation assigned to a user, assignee change, status change, and due-date change. Messages are short and include a control-panel link when available; apply backoff/jitter on 429/5xx.
 - Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
 

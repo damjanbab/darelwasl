@@ -88,7 +88,7 @@ Goal: add a Telegram bot integration for task notifications and lightweight comm
   - Reporting: Endpoint, adapter summary, proofs.
 
 - Task ID: outbound-notifications
-  - Status: pending
+  - Status: done (Codex, 2025-12-17 14:58 UTC)
   - Objective: Send Telegram notifications for selected task events with opt-in storage for chat IDs.
   - Scope: Capture chat ID binding (e.g., via /start linking to user), persist mapping, publish outbound messages on task events (status/assignee/due change, comments if any), feature-flagged; include rate-limit/backoff handling.
   - Out of Scope: Rich templates; multi-language; per-user preferences UI.
@@ -114,10 +114,12 @@ Goal: add a Telegram bot integration for task notifications and lightweight comm
   - FAQ Updates: Note opt-in mapping and failure handling.
   - Tooling/Automation: None beyond existing hooks/tests.
   - Reporting: Event hooks added, flags, proofs.
+  - Outcome: Implemented chat linking token issuance via `POST /api/telegram/link-token` (authenticated; admin can target other users), enforced single-use/TTL link tokens, and added best-effort outbound notifications (gated by `TELEGRAM_NOTIFICATIONS_ENABLED`) on task create/assign/status/due-date changes. Telegram commands `/tasks` and `/task <uuid>` now read from the task API for the linked user.
+  - Proof: `./scripts/checks.sh schema` and `./scripts/checks.sh actions` (2025-12-17 14:58 UTC).
 
 ## Requirements and scope (decided)
 - Mode: default to Telegram webhook at `/api/telegram/webhook` secured by `X-Telegram-Bot-Api-Secret-Token`; drop requests with missing/mismatched secret. Long polling allowed only for local/dev behind a flag.
-- Env/config: `TELEGRAM_BOT_TOKEN` (required to enable), `TELEGRAM_WEBHOOK_SECRET` (required for webhook), `TELEGRAM_WEBHOOK_BASE_URL` (used to call `setWebhook`), flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), timeout 3s for Telegram HTTP calls.
+- Env/config: `TELEGRAM_BOT_TOKEN` (required to enable), `TELEGRAM_WEBHOOK_SECRET` (required for webhook), `TELEGRAM_WEBHOOK_BASE_URL` (used to call `setWebhook`), flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), timeout 3s for Telegram HTTP calls, and `TELEGRAM_LINK_TOKEN_TTL_MS` (default 900000).
 - Commands:
   - `/start <link-token>`: binds a Telegram chat to a user via a one-time link token generated in the app/control panel; stores chat-id mapping; rejects if token invalid/expired/already used.
   - `/help`: returns available commands and support contact text.
