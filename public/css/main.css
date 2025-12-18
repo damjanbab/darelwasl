@@ -955,6 +955,19 @@ a {
   color: var(--colors-text-secondary);
 }
 
+.chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-scale-2);
+  margin: var(--spacing-scale-3) 0;
+}
+
+.chip-bar .button.active {
+  background: var(--colors-accent);
+  color: var(--colors-text-on-accent);
+  border-color: var(--colors-accent);
+}
+
 .assignee {
   display: inline-flex;
   align-items: center;

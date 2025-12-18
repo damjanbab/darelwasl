@@ -126,9 +126,22 @@
    [:strong "No tasks yet"]
    [:p "Create your first task to see summaries here."]])
 
+(defn chip-bar
+  "Simple chip bar for filters/actions. chips is a seq of {:label :active? :on-click}."
+  [{:keys [chips]}]
+  (when (seq chips)
+    [:div.chip-bar
+     (for [{:keys [label active? on-click]} chips
+           :when label]
+       ^{:key (str "chip-" label)}
+       [:button.button.secondary {:type "button"
+                                  :class (when active? "active")
+                                  :on-click on-click}
+        label])]))
+
 (defn entity-list
   "Generic list panel with states. render-row receives (item selected?)."
-  [{:keys [title meta items status error selected render-row key-fn panel-class list-class header-actions loading-node error-node empty-node]}]
+  [{:keys [title meta items status error selected render-row key-fn panel-class list-class header-actions chips loading-node error-node empty-node]}]
   (let [items (let [base (or items [])]
                 (if (sequential? base) base []))
         key-fn (or key-fn :task/id)
@@ -144,6 +157,7 @@
        (when meta [:span.meta meta])]
      (when (seq header-actions)
        (into [:div.controls] header-actions))]
+    [chip-bar {:chips chips}]
     (case status
       :loading loading-node
       :error error-node
