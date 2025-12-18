@@ -1,22 +1,22 @@
 [
  {:id :theme/default
-  :title "Warm neutral + teal accent"
+  :title "Soft linen + cobalt accent"
   :version "v1"
-  :purpose "Base theme for the task app with calm neutrals and teal emphasis"
-  :colors {:background "#F7F4EF"
+  :purpose "Minimalist base with quiet neutrals and a single blue accent"
+  :colors {:background "#F6F3EE"
            :surface "#FFFFFF"
-           :surface-muted "#F0ECE6"
-           :text-primary "#1F2933"
-           :text-secondary "#52606D"
-           :text-on-accent "#F8FBFC"
-           :border "#E0E0E0"
-           :accent "#0FA3B1"
-           :accent-strong "#0B7E89"
-           :warning "#F59E0B"
-           :danger "#D14343"
-           :success "#2D9D78"
-           :focus "#0FA3B1"}
-  :typography {:font-family "Inter, \"IBM Plex Sans\", system-ui, -apple-system, sans-serif"
+           :surface-muted "#EEE9E2"
+           :text-primary "#1B1C1E"
+           :text-secondary "#6A6F77"
+           :text-on-accent "#F7F8FB"
+           :border "#E3DED5"
+           :accent "#2A6AE6"
+           :accent-strong "#1F53BA"
+           :warning "#E1A243"
+           :danger "#D65A5A"
+           :success "#2E8C6A"
+           :focus "#2A6AE6"}
+  :typography {:font-family "\"Manrope\", \"Plus Jakarta Sans\", \"Avenir Next\", sans-serif"
                :font-sizes {:title "20px" :section "16px" :body "14px" :meta "12px"}
                :line-heights {:title "28px" :section "22px" :body "20px" :meta "16px"}}
   :spacing {:base "4px"
@@ -28,23 +28,23 @@
   :related {:views [:cap/view/login :cap/view/tasks]}}
 
  {:id :theme/dark
-  :title "Noir teal"
+  :title "Midnight cobalt"
   :version "v1"
-  :purpose "Dark counterpart with soft contrasts and teal accent"
-  :colors {:background "#0E1116"
-           :surface "#171A1F"
-           :surface-muted "#11151B"
-           :text-primary "#E5E7EB"
-           :text-secondary "#9CA3AF"
-           :text-on-accent "#0C1418"
-           :border "#2B3037"
-           :accent "#1FB6D5"
-           :accent-strong "#1690A8"
-           :warning "#F5A524"
-           :danger "#F97066"
-           :success "#27AE7B"
-           :focus "#1FB6D5"}
-  :typography {:font-family "Inter, \"IBM Plex Sans\", system-ui, -apple-system, sans-serif"
+  :purpose "Dark minimalist variant with subdued blues"
+  :colors {:background "#0F1114"
+           :surface "#171A1E"
+           :surface-muted "#121418"
+           :text-primary "#E8E9EC"
+           :text-secondary "#A2A7B0"
+           :text-on-accent "#0C1016"
+           :border "#2A2F37"
+           :accent "#5B8EEB"
+           :accent-strong "#4B78C9"
+           :warning "#E1A243"
+           :danger "#E16B6B"
+           :success "#2FA579"
+           :focus "#5B8EEB"}
+  :typography {:font-family "\"Manrope\", \"Plus Jakarta Sans\", \"Avenir Next\", sans-serif"
                :font-sizes {:title "20px" :section "16px" :body "14px" :meta "12px"}
                :line-heights {:title "28px" :section "22px" :body "20px" :meta "16px"}}
   :spacing {:base "4px"
