@@ -88,7 +88,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Reporting: Summarize token changes and regeneration command
 
 - Task ID: entity-view-contract-v2
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-18 19:16 UTC)
   - Objective: Extend the entity-view primitives to support the new minimalist contract (toolbar, filters, list row structure, detail shell).
   - Scope: Update `src/darelwasl/ui/entity.cljs` config shape, add/adjust shared UI components in `src/darelwasl/ui/components.cljs`, and align any dependent views with the new contract.
   - Out of Scope: Task-specific layout/logic redesign (handled in next task), backend changes.
