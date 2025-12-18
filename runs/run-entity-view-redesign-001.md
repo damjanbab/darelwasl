@@ -1,0 +1,148 @@
+# Run run-entity-view-redesign-001
+
+Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-first, low typing) while formalizing an entity-view contract that other entity views can adopt. Refresh the visual system via new theme tokens and ensure the redesigned UX remains consistent on both mobile and desktop.
+
+## Tasks
+- Task ID: product-spec-entity-view-redesign
+  - Status: in-progress (Codex, 2025-12-18 15:48 UTC)
+  - Objective: Document the product spec for the entity-view contract and the redesigned Task view in `docs/system.md` (flows, acceptance criteria, mobile/desktop behavior).
+  - Scope: Define list/detail flows, capture and quick actions, filter behavior (minimal chip bar + More drawer), mobile bottom-sheet detail, desktop two-pane behavior, and default/task lifecycle assumptions (tap-first, minimal typing).
+  - Out of Scope: Visual tokens, layout implementation, backend/schema changes, new entity types (notes/clients).
+  - Capabilities Touched: docs/spec (narrative only; no registry IDs change yet).
+  - Parallel Safety:
+    - Exclusive Capabilities: system product spec doc
+    - Shared/Read-only Capabilities: registries (read), existing views/actions docs
+    - Sequencing Constraints: precedes all design + implementation tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: views/app UX contract, entity view primitives
+    - New composability rules needed: define entity-view contract expectations and view parity rules
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: task view redesigned and generalized into an entity-view contract; focus on minimal tap-first usage
+    - Compatibility expectation: backward compatible (behavioral shift, no API change)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No; doc-only
+  - Dependencies: none
+  - Deliverables: Updated `docs/system.md` product sections with the entity-view contract + task UX flows
+  - Proof Plan: Consistency review; no code proofs
+  - Fixtures/Data Assumptions: None
+  - Protocol/System Updates: Update system doc narrative only
+  - FAQ Updates: None
+  - Tooling/Automation: None
+  - Reporting: Summarize spec decisions and acceptance criteria
+
+- Task ID: design-spec-entity-view-redesign
+  - Status: pending
+  - Objective: Capture the minimalist visual language and interaction patterns for the entity-view contract in `docs/system.md`.
+  - Scope: Define typography direction, layout rhythm, spacing density, component styles (list rows, chips, sheets, buttons), states, and mobile vs desktop behavior.
+  - Out of Scope: Token implementation in `registries/theme.edn`, CSS changes, component refactors.
+  - Capabilities Touched: docs/design (view UX narrative only).
+  - Parallel Safety:
+    - Exclusive Capabilities: design spec doc
+    - Shared/Read-only Capabilities: theme registry (read), system doc
+    - Sequencing Constraints: after product-spec-entity-view-redesign; precedes theme + UI implementation
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view patterns, shared UI components
+    - New composability rules needed: define minimal/tap-first contract for entity views
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: establish minimalist UI system for entity views
+    - Compatibility expectation: backward compatible
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No; doc-only
+  - Dependencies: product-spec-entity-view-redesign
+  - Deliverables: Updated design sections in `docs/system.md`
+  - Proof Plan: Consistency review
+  - Fixtures/Data Assumptions: None
+  - Protocol/System Updates: None
+  - FAQ Updates: None
+  - Tooling/Automation: None
+  - Reporting: Note visual + interaction decisions
+
+- Task ID: theme-refresh-minimal
+  - Status: pending
+  - Objective: Implement the refreshed minimalist palette and typography tokens in `registries/theme.edn` and regenerate theme CSS.
+  - Scope: Update `:theme/default` (and any referenced tokens) to match the new design spec; regenerate CSS variables via `npm run theme:css-vars`; ensure no hardcoded colors/spacing remain in affected styles.
+  - Out of Scope: New theming tooling, dark theme redesign, backend changes.
+  - Capabilities Touched: :cap/tooling/theme-css-vars, :cap/view/tasks (theme usage).
+  - Parallel Safety:
+    - Exclusive Capabilities: theme registry + generated CSS output
+    - Shared/Read-only Capabilities: UI components (read), existing theme tooling
+    - Sequencing Constraints: after design-spec-entity-view-redesign; before UI redesign tasks
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: theme registry + shared tokens
+    - New composability rules needed: none
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: full palette refresh to support minimalist UI
+    - Compatibility expectation: backward compatible (visual change only)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No
+  - Dependencies: design-spec-entity-view-redesign
+  - Deliverables: Updated `registries/theme.edn`, regenerated `public/css/theme.css` (via existing generator), doc note if required
+  - Proof Plan: `npm run theme:css-vars`
+  - Fixtures/Data Assumptions: None
+  - Protocol/System Updates: None (unless new theming rules are introduced)
+  - FAQ Updates: None
+  - Tooling/Automation: None
+  - Reporting: Summarize token changes and regeneration command
+
+- Task ID: entity-view-contract-v2
+  - Status: pending
+  - Objective: Extend the entity-view primitives to support the new minimalist contract (toolbar, filters, list row structure, detail shell).
+  - Scope: Update `src/darelwasl/ui/entity.cljs` config shape, add/adjust shared UI components in `src/darelwasl/ui/components.cljs`, and align any dependent views with the new contract.
+  - Out of Scope: Task-specific layout/logic redesign (handled in next task), backend changes.
+  - Capabilities Touched: :cap/view/tasks (shared primitives), :cap/view/home (list reuse), :cap/view/land-registry (list reuse), :cap/view/control-panel (list reuse).
+  - Parallel Safety:
+    - Exclusive Capabilities: shared UI primitives (`ui/entity.cljs`, `ui/components.cljs`)
+    - Shared/Read-only Capabilities: view implementations (read), registries (read)
+    - Sequencing Constraints: after theme-refresh-minimal; before task-view-minimal-redesign
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: view/component layer, entity-view contract
+    - New composability rules needed: document new contract fields and required defaults in `docs/system.md`
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: formalize entity-view contract to enable consistent minimalist UX
+    - Compatibility expectation: backward compatible with updated config consumers
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? Potential; mitigate by updating dependent views in-task
+  - Dependencies: theme-refresh-minimal
+  - Deliverables: Updated entity-view config + shared components; doc updates for contract changes
+  - Proof Plan: `npm run check`, `scripts/checks.sh app-smoke`
+  - Fixtures/Data Assumptions: Existing fixtures
+  - Protocol/System Updates: Update entity view primitive rules in `docs/system.md`
+  - FAQ Updates: Add note if new contract introduces gotchas
+  - Tooling/Automation: None
+  - Reporting: Summarize contract changes and affected views
+
+- Task ID: task-view-minimal-redesign
+  - Status: pending
+  - Objective: Redesign the Task view UI using the new minimalist contract (mobile-first, tap-first, low typing).
+  - Scope: Update `src/darelwasl/features/tasks.cljs` and related UI styles/components to deliver the new layout (mobile list + bottom-sheet detail; desktop two-pane; minimal filter controls; quick actions). Keep existing data/actions unchanged.
+  - Out of Scope: Backend action changes, new task fields, new entities (notes/clients), additional app views.
+  - Capabilities Touched: :cap/view/tasks.
+  - Parallel Safety:
+    - Exclusive Capabilities: task view implementation
+    - Shared/Read-only Capabilities: shared UI primitives (read), theme registry (read)
+    - Sequencing Constraints: after entity-view-contract-v2
+  - Composability Impact:
+    - Layers affected / patterns reused/extended: task view UX + shared primitives
+    - New composability rules needed: none beyond contract updates
+  - Requirement Change & Compatibility:
+    - Requirement change and rationale: deliver the new minimalist task UX
+    - Compatibility expectation: backward compatible (no API change)
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation:
+    - Breaking change? No (visual/interaction update only)
+  - Dependencies: entity-view-contract-v2
+  - Deliverables: Updated Task view UI (desktop + mobile) and any supporting components/styles; update `registries/views.edn` if UX metadata changes
+  - Proof Plan: `npm run check`, `scripts/checks.sh app-smoke`
+  - Fixtures/Data Assumptions: Existing fixtures
+  - Protocol/System Updates: Update `docs/system.md` view description if UX metadata changes
+  - FAQ Updates: None expected
+  - Tooling/Automation: None
+  - Reporting: Summarize UX changes and proofs run
+
+## Notes
+- Palette refresh is a full visual reset; keep other views readable and consistent with updated tokens.
+- Filters UI will be minimal chip bar + “More” drawer unless product spec dictates otherwise.
