@@ -50,6 +50,7 @@
               archived? "muted"
               (= status :todo) "neutral"
               (= status :in-progress) "warning"
+              (= status :pending) "danger"
               (= status :done) "success"
               :else "neutral")]
     [chip label :class (str "status " cls)]))

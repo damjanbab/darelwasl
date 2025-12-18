@@ -1,7 +1,9 @@
 (ns darelwasl.http
   (:require [darelwasl.http.common :as common]
+            [darelwasl.http.routes.actions :as actions-routes]
             [darelwasl.http.routes.auth :as auth-routes]
             [darelwasl.http.routes.content :as content-routes]
+            [darelwasl.http.routes.events :as events-routes]
             [darelwasl.http.routes.land :as land-routes]
             [darelwasl.http.routes.tasks :as task-routes]
             [darelwasl.http.routes.telegram :as telegram-routes]
@@ -30,6 +32,8 @@
   (into ["/api"]
         (concat
          (auth-routes/routes state)
+         (actions-routes/routes state)
+         (events-routes/routes state)
          (task-routes/routes state)
          (content-routes/routes state)
          (telegram-routes/routes state)

@@ -46,12 +46,28 @@
    :task/priority
    {:task/tags [:tag/id :tag/name]}
    :task/archived?
-   :task/extended?])
+   :task/extended?
+   :task/automation-key])
 
 (defn- format-inst
   [^Date inst]
   (when inst
     (.format iso-formatter (.toInstant inst))))
+
+(defn- now-inst
+  []
+  (Date/from (Instant/now)))
+
+(defn- pending-note-tx
+  [task-id reason actor]
+  (let [author-id (:user/id actor)]
+    (cond-> {:note/id (UUID/randomUUID)
+             :entity/type :entity.type/note
+             :note/body reason
+             :note/type :note.type/pending-reason
+             :note/subject [:task/id task-id]
+             :note/created-at (now-inst)}
+      author-id (assoc :note/author [:user/id author-id]))))
 
 (defn- normalize-instant
   [value label]
@@ -139,6 +155,14 @@
       (when tid
         (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]]
                      db tid))))))
+
+(defn- task-eid-by-automation-key
+  [db automation-key]
+  (when (and (string? automation-key) (not (str/blank? (str/trim automation-key))))
+    (ffirst (d/q '[:find ?e
+                   :in $ ?k
+                   :where [?e :task/automation-key ?k]]
+                 db (str/trim automation-key)))))
 
 (defn- updated-at
   [db eid]
@@ -372,6 +396,7 @@
                         (frequencies))]
         {:counts {:todo (get counts :todo 0)
                   :in-progress (get counts :in-progress 0)
+                  :pending (get counts :pending 0)
                   :done (get counts :done 0)}})))
 
 (defn list-tasks
@@ -417,24 +442,35 @@
         {desc :value desc-err :error} (normalize-string-field (param-value body :task/description) "Description" {:required true
                                                                                                                    :allow-blank? false})
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
+        pending? (= status :pending)
+        {pending-reason :value pending-err :error} (normalize-string-field (param-value body :note/body)
+                                                                           "Pending reason"
+                                                                           {:required pending?
+                                                                            :allow-blank? false})
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
         {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil #{}})
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")
         {archived? :value archived-err :error} (normalize-boolean (param-value body :task/archived?) "archived" {:default false})
         {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default false})
+        {automation-key :value automation-err :error} (normalize-string-field (param-value body :task/automation-key)
+                                                                              "automation key"
+                                                                              {:required false
+                                                                               :allow-blank? false})
         {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")]
     (cond
       title-err (error 400 title-err)
       desc-err (error 400 desc-err)
       status-err (error 400 status-err)
+      pending-err (error 400 pending-err)
       priority-err (error 400 priority-err)
       (:error tags-result) (error 400 (:error tags-result))
       due-err (error 400 due-err)
       archived-err (error 400 archived-err)
       extended-err (error 400 extended-err)
+      automation-err (error 400 automation-err)
       assignee-err (error 400 assignee-err)
       :else
-          (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
+      (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
         (if assignee-error
           {:error assignee-error}
           (let [tag-ids (or value #{})
@@ -449,8 +485,10 @@
                       :task/archived? (boolean archived?)
                       :task/extended? (boolean extended?)}
                 data (cond-> base
-                       due-date (assoc :task/due-date due-date))]
-            {:data data}))))))
+                       due-date (assoc :task/due-date due-date)
+                       automation-key (assoc :task/automation-key automation-key))]
+            {:data data
+             :pending-reason pending-reason}))))))
 
 (defn- update-tags-tx
   [task-id existing-tags new-tag-ids]
@@ -495,15 +533,22 @@
 (defn- validate-simple-status
   [db task-id body]
   (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
-        {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")]
+        {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
+        pending? (= status :pending)
+        {pending-reason :value pending-err :error} (normalize-string-field (param-value body :note/body)
+                                                                           "Pending reason"
+                                                                           {:required pending?
+                                                                            :allow-blank? false})]
     (cond
       id-err (error 400 id-err)
       status-err (error 400 status-err)
+      pending-err (error 400 pending-err)
       :else
       (if (task-eid db task-id)
         {:task-id task-id
          :updates {:task/id task-id
-                   :task/status status}}
+                   :task/status status}
+         :pending-reason pending-reason}
         (error 404 "Task not found")))))
 
 (defn- validate-assignee-update
@@ -570,25 +615,49 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-create db body)]
-        (if-let [err (:error result)]
-          {:error err}
-          (let [tx-data [(:data result)]
-                tx-result (attempt-transact conn tx-data "create task")]
-            (if-let [tx-error (:error tx-result)]
-              {:error tx-error}
-              (let [db-after (:db-after tx-result)
-                    task (when-let [eid (task-eid db-after (:task/id (:data result)))]
-                           (some-> (pull-task db-after eid)
-                                   present-task))]
-                (if task
-                  (do
-                    (log/infof "AUDIT task-create user=%s task=%s status=%s"
-                               (or (:user/username actor) (:user/id actor))
-                               (:task/id (:data result))
-                               (:task/status (:data result)))
-                    {:task task})
-                  (error 500 "Task not available after create")))))))))
+            {:keys [data pending-reason error] :as result} (validate-create db body)]
+        (if error
+          {:error error}
+          (let [automation-key (:task/automation-key data)
+                existing-eid (when automation-key (task-eid-by-automation-key db automation-key))]
+            (if existing-eid
+              (if-let [existing (some-> (pull-task db existing-eid) present-task)]
+                (do
+                  (log/infof "AUDIT task-create-idempotent actor=%s key=%s task=%s"
+                             (or (:user/username actor) (:user/id actor) (:automation/id actor) "-")
+                             automation-key
+                             (:task/id existing))
+                  {:task existing})
+                (error 500 "Task not available for automation key"))
+              (let [note-tx (when (= :pending (:task/status data))
+                              (pending-note-tx (:task/id data) pending-reason actor))
+                    tx-data (cond-> [data]
+                              note-tx (conj note-tx))
+                    tx-result (attempt-transact conn tx-data "create task")]
+                (if-let [tx-error (:error tx-result)]
+                  (let [db-now (d/db conn)
+                        eid (when automation-key (task-eid-by-automation-key db-now automation-key))
+                        task (when eid (some-> (pull-task db-now eid) present-task))]
+                    (if task
+                      (do
+                        (log/infof "AUDIT task-create-idempotent-on-conflict actor=%s key=%s task=%s"
+                                   (or (:user/username actor) (:user/id actor) (:automation/id actor) "-")
+                                   automation-key
+                                   (:task/id task))
+                        {:task task})
+                      {:error tx-error}))
+                  (let [db-after (:db-after tx-result)
+                        created-eid (task-eid db-after (:task/id data))
+                        task (when created-eid
+                               (some-> (pull-task db-after created-eid) present-task))]
+                    (if task
+                      (do
+                        (log/infof "AUDIT task-create user=%s task=%s status=%s"
+                                   (or (:user/username actor) (:user/id actor))
+                                   (:task/id data)
+                                   (:task/status data))
+                        {:task task})
+                      (error 500 "Task not available after create")))))))))))
 
 (defn update-task!
   [conn task-id body actor]
@@ -623,8 +692,12 @@
             result (validate-simple-status db task-id body)]
         (if-let [err (:error result)]
           {:error err}
-          (let [{:keys [task-id updates]} result
-                tx-result (attempt-transact conn [updates] "set task status")
+          (let [{:keys [task-id updates pending-reason]} result
+                note-tx (when (= :pending (:task/status updates))
+                          (pending-note-tx task-id pending-reason actor))
+                tx-data (cond-> [updates]
+                          note-tx (conj note-tx))
+                tx-result (attempt-transact conn tx-data "set task status")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)

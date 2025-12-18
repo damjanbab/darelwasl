@@ -17,6 +17,7 @@
   [{:id nil :label "All statuses"}
    {:id :todo :label "To do"}
    {:id :in-progress :label "In progress"}
+   {:id :pending :label "Pending"}
    {:id :done :label "Done"}])
 
 (def priority-options
@@ -48,6 +49,7 @@
    :title ""
    :description ""
    :status :todo
+   :pending-reason ""
    :priority :medium
    :assignee nil
    :due-date ""
@@ -75,7 +77,7 @@
   {:status :pending
    :error nil
    :recent []
-   :counts {:todo 0 :in-progress 0 :done 0}})
+   :counts {:todo 0 :in-progress 0 :pending 0 :done 0}})
 
 (def default-tags-state
   {:items []

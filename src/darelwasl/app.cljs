@@ -267,9 +267,10 @@
       (:id (first fallback-assignees))))
 
 (defn- status-count-cards
-  [{:keys [todo in-progress done]}]
+  [{:keys [todo in-progress pending done]}]
   [ui/stat-group {:cards [{:label "To do" :value (or todo 0)}
                           {:label "In progress" :value (or in-progress 0)}
+                          {:label "Pending" :value (or pending 0)}
                           {:label "Done" :value (or done 0)}]}])
 
 (declare tag-chip)
@@ -309,6 +310,7 @@
           :title (or (:task/title task) "")
           :description (or (:task/description task) "")
           :status (:task/status task)
+          :pending-reason ""
           :priority (:task/priority task)
           :assignee (get-in task [:task/assignee :user/id])
           :due-date (iso->input-date (:task/due-date task))
@@ -1914,11 +1916,12 @@
       :dispatch [::fetch-tasks]})))
 
 (defn- validate-task-form
-  [{:keys [title description status priority assignee]}]
+  [{:keys [title description status priority assignee pending-reason]}]
   (cond
     (str/blank? title) "Title is required"
     (str/blank? description) "Description is required"
     (nil? status) "Status is required"
+    (and (= status :pending) (str/blank? (or pending-reason ""))) "Pending reason is required"
     (nil? priority) "Priority is required"
     (str/blank? (str assignee)) "Assignee is required"
     :else nil))
@@ -1930,6 +1933,7 @@
         current-tags (set (map :tag/id (or (:task/tags current-task) [])))
         current-due (iso->input-date (:task/due-date current-task))
         due-iso (input-date->iso (:due-date form))
+        pending-reason (:pending-reason form)
         general-updates (cond-> {}
                           (not= (:title form) (:task/title current-task)) (assoc :task/title (:title form))
                           (not= (:description form) (:task/description current-task)) (assoc :task/description (:description form))
@@ -1942,7 +1946,9 @@
                                                  :body general-updates})
       (and task-id (not= (:status form) (:task/status current-task))) (conj {:url (str "/api/tasks/" task-id "/status")
                                                                              :method "POST"
-                                                                             :body {:task/status (:status form)}})
+                                                                             :body (cond-> {:task/status (:status form)}
+                                                                                     (= (:status form) :pending)
+                                                                                     (assoc :note/body pending-reason))})
       (and task-id (not= (:assignee form) (get-in current-task [:task/assignee :user/id]))) (conj {:url (str "/api/tasks/" task-id "/assignee")
                                                                                                     :method "POST"
                                                                                                     :body {:task/assignee (:assignee form)}})
@@ -2017,15 +2023,17 @@
                 (assoc-in [:tasks :detail :error] "Select a task to update")
                 (assoc-in [:tasks :detail :status] :error))}
        creating?
-       (let [body {:task/title (:title form)
-                   :task/description (:description form)
-                   :task/status (:status form)
-                   :task/priority (:priority form)
-                   :task/assignee (:assignee form)
-                   :task/tags (vec tags)
-                   :task/due-date due-iso
-                   :task/archived? (boolean (:archived? form))
-                   :task/extended? (boolean (:extended? form))}]
+       (let [body (cond-> {:task/title (:title form)
+                           :task/description (:description form)
+                           :task/status (:status form)
+                           :task/priority (:priority form)
+                           :task/assignee (:assignee form)
+                           :task/tags (vec tags)
+                           :task/due-date due-iso
+                           :task/archived? (boolean (:archived? form))
+                           :task/extended? (boolean (:extended? form))}
+                    (= (:status form) :pending)
+                    (assoc :note/body (:pending-reason form)))]
          {:db (-> db
                   (assoc-in [:tasks :detail :status] :saving)
                   (assoc-in [:tasks :detail :error] nil))

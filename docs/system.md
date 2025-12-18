@@ -107,10 +107,23 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Telegram Integration (tasks app)
 - Capabilities: :cap/integration/telegram-bot with actions :cap/action/telegram-send-message, :cap/action/telegram-set-webhook, :cap/action/telegram-handle-update.
 - Auth/config: env vars `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_BASE_URL`; flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false). HTTP calls timeout at 3s; link tokens expire by `TELEGRAM_LINK_TOKEN_TTL_MS` (default 900000). No live Telegram calls in CI (use stubs/fixtures).
-- Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Long polling allowed only for local/dev behind a flag.
-- Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns top 5 assigned tasks; `/task <id>` returns summary if the mapped user is involved; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
-- Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others).
-- Notifications: when enabled and a chat is mapped, send messages on task creation assigned to a user, assignee change, status change, and due-date change. Messages are short and include a control-panel link when available; apply backoff/jitter on 429/5xx.
+<<<<<<< HEAD
+- Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Allowed updates include `message` and `callback_query`.
+- Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns a task list message with filter buttons + per-task “Open” buttons; `/task <uuid>` returns a task card; `/new <title> [| description]` creates a task assigned to the mapped user; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
+- Freeform capture: non-command text shows a capture prompt with inline buttons (“Create task”, “Dismiss”) and only creates on confirmation.
+- Inline UX: task cards include inline buttons for status, archive/unarchive, and refresh; list message filters by status/archived and updates in-place.
+- Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-user-id` (unique for auto-recognition), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others). Recognized users can be registered via `POST /api/telegram/recognize`.
+- Auto-recognition: when incoming `from.id` matches `:user/telegram-user-id`, the bot auto-binds chat id to that user (token optional). `scripts/tg-spinup.sh` will register the id from `.secrets/telegram_user_id` if present.
+- Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
+=======
+- Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Allowed updates include `message` and `callback_query`.
+- Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns a task list message with filter buttons + per-task “Open” buttons; `/task <uuid>` returns a task card; `/new <title> [| description]` creates a task assigned to the mapped user; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
+- Freeform capture: non-command text shows a capture prompt with inline buttons (“Create task”, “Dismiss”) and only creates on confirmation.
+- Inline UX: task cards include inline buttons for status, archive/unarchive, and refresh; list message filters by status/archived and updates in-place.
+- Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-user-id` (unique for auto-recognition), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others). Recognized users can be registered via `POST /api/telegram/recognize`.
+- Auto-recognition: when incoming `from.id` matches `:user/telegram-user-id`, the bot auto-binds chat id to that user (token optional). `scripts/tg-spinup.sh` will register the id from `.secrets/telegram_user_id` if present.
+- Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
+>>>>>>> 5d51025 (Implement actions/outbox and pending reasons)
 - Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
 
 ### Content Model v2 (Saudi license site – implemented schema)
@@ -308,7 +321,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Product Spec: Entity Foundation + App Suite (Home + Tasks)
 - Entities and identity:
-  - All persisted entities carry `:entity/type` (additive discriminator) alongside their type-specific attrs. Current types: `:entity.type/user`, `:entity.type/task`, `:entity.type/tag`. Future types follow the same pattern (type ident + attrs + refs).
+  - All persisted entities carry `:entity/type` (additive discriminator) alongside their type-specific attrs. Current types: `:entity.type/user`, `:entity.type/task`, `:entity.type/tag`, `:entity.type/note`. Future types follow the same pattern (type ident + attrs + refs).
   - Relationships stay Datomic refs (e.g., task → assignee/user, task → tags). History remains via Datomic tx log; no runtime DSL.
   - Backfill/migration: existing user/task/tag rows get `:entity/type` set by migration; fixtures and seeds include it going forward.
 - Apps:

@@ -5,9 +5,10 @@
             [re-frame.core :as rf]))
 
 (defn status-count-cards
-  [{:keys [todo in-progress done]}]
+  [{:keys [todo in-progress pending done]}]
   [ui/stat-group {:cards [{:label "To do" :value (or todo 0)}
                           {:label "In progress" :value (or in-progress 0)}
+                          {:label "Pending" :value (or pending 0)}
                           {:label "Done" :value (or done 0)}]}])
 
 (defn home-recent-list

@@ -30,9 +30,10 @@
            :task/assignee :uuid
            :task/due-date :instant?
            :task/priority :keyword
-           :task/tags :uuid-set}
+           :task/tags :uuid-set
+           :note/body :string?}
   :outputs {:task/id :uuid}
-  :side-effects ["Persist task"]
+  :side-effects ["Persist task" "Create pending-reason note when status = :pending"]
   :adapter {:integration :local/db}
   :audit {:records [:task/change]
           :fields [:task/id :task/status :task/assignee]}
@@ -69,14 +70,15 @@
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 
- {:id :cap/action/task-set-status
+{:id :cap/action/task-set-status
   :title "Set Task Status"
   :version "v1"
   :inputs {:task/id :uuid
-           :task/status :keyword}
+           :task/status :keyword
+           :note/body :string?}
   :outputs {:task/id :uuid
             :task/status :keyword}
-  :side-effects ["Persist status change"]
+  :side-effects ["Persist status change" "Create pending-reason note when status = :pending"]
   :adapter {:integration :local/db}
   :audit {:records [:task/change]
           :fields [:task/id :task/status]}

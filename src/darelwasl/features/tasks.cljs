@@ -267,7 +267,7 @@
                    "Reset"]]
         :placeholder placeholder
         :content (when-not placeholder
-                   (let [{:keys [title description priority assignee due-date tags archived? extended?]} form
+                   (let [{:keys [title description priority assignee due-date tags archived? extended? pending-reason]} form
                          tag-state @(rf/subscribe [:darelwasl.app/tags])
                          current-assignee (or assignee (:id (first available-assignees)) "")]
                      [:form.detail-form
@@ -301,6 +301,15 @@
                          (for [{:keys [id label]} state/task-status-options]
                            ^{:key (name id)}
                            [:option {:value (name id)} label])]]
+                       (when (= task-status :pending)
+                         [:div.form-group
+                          [:label.form-label {:for "task-pending-reason"} "Pending reason"]
+                          [:input.form-input {:id "task-pending-reason"
+                                              :type "text"
+                                              :value (or pending-reason "")
+                                              :placeholder "Why is this pending?"
+                                              :on-change #(rf/dispatch [:darelwasl.app/update-detail-field :pending-reason (.. % -target -value)])
+                                              :disabled saving?}]])
                        [:div.form-group
                         [:label.form-label {:for "task-assignee"} "Assignee"]
                         [:select.form-input {:id "task-assignee"

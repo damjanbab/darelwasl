@@ -22,7 +22,7 @@ EOF
 check_registries() {
   echo "Checking registry files exist and are non-empty..."
   local missing=0
-  for f in schema actions views tooling theme; do
+  for f in schema actions views tooling theme automations; do
     local path="$ROOT/registries/$f.edn"
     if [ ! -s "$path" ]; then
       echo "Missing or empty registry: $path"
@@ -90,6 +90,7 @@ check_registry_fields() {
   require_keys "$ROOT/registries/views.edn" ":id" ":version" ":data" ":actions" ":ux" ":compatibility"
   require_keys "$ROOT/registries/tooling.edn" ":id" ":version" ":invocation" ":scope" ":determinism" ":enforces"
   require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius" ":shadows" ":motion" ":compatibility"
+  require_keys "$ROOT/registries/automations.edn" ":id" ":version" ":enabled" ":triggers" ":handler"
   echo "Registry field checks passed."
 }
 
@@ -137,7 +138,8 @@ check_edn_parse() {
                       (str root "/registries/actions.edn")
                       (str root "/registries/views.edn")
                       (str root "/registries/tooling.edn")
-                      (str root "/registries/theme.edn")]
+                      (str root "/registries/theme.edn")
+                      (str root "/registries/automations.edn")]
       fixture-paths {:users (str root "/fixtures/users.edn")
                      :tasks (str root "/fixtures/tasks.edn")
                      :tags (str root "/fixtures/tags.edn")

@@ -46,6 +46,11 @@
     :cardinality :db.cardinality/one
     :unique :db.unique/value
     :doc "Telegram chat id bound to this user (optional)"}
+   {:ident :user/telegram-user-id
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Telegram user id for auto-recognition (optional, unique when set)"}
 	   {:ident :user/telegram-link-token
 	    :type :db.type/string
 	    :cardinality :db.cardinality/one
@@ -58,11 +63,74 @@
   :enums []
   :invariants ["Username unique" "Password stored only for local dev" "Entity type set to :entity.type/user" "Roles optional; when present, use keyword enums" "Telegram chat id unique when set" "Link tokens are single-use and must be used before expiry"]
   :history {:strategy :overwrite}
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:actions [:cap/action/auth-login]
             :views [:cap/view/login]}}
+
+{:id :cap/schema/outbox
+  :title "Outbox"
+  :version "v1"
+  :attributes
+  [{:ident :outbox/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Outbox entry id"}
+   {:ident :outbox/integration
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Target integration (e.g., :integration/telegram)"}
+   {:ident :outbox/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Delivery status (:pending, :processing, :succeeded, :failed)"}
+   {:ident :outbox/payload
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "EDN-encoded payload for the integration"}
+   {:ident :outbox/dedupe-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Idempotency key for this delivery (optional)"}
+   {:ident :outbox/attempts
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Number of delivery attempts"}
+   {:ident :outbox/available-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When this job becomes available for delivery"}
+   {:ident :outbox/locked-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When a worker claimed this job"}
+   {:ident :outbox/worker
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Worker id that claimed the job"}
+   {:ident :outbox/last-error
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Last error message (if any)"}
+   {:ident :outbox/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :outbox/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last status change timestamp"}]
+  :enums {:outbox/status [:pending :processing :succeeded :failed]}
+  :invariants ["Outbox entries must set :entity/type to :entity.type/outbox"
+               "Dedupe key unique when present"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
 
  {:id :cap/schema/system
   :title "System Meta"
@@ -153,10 +221,15 @@
    {:ident :task/extended?
     :type :db.type/boolean
     :cardinality :db.cardinality/one
-    :doc "Feature flag gating future fields"}]
-  :enums {:task/status [:todo :in-progress :done]
+    :doc "Feature flag gating future fields"}
+   {:ident :task/automation-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Stable idempotency key for automation-created tasks (optional, unique when set)"}]
+  :enums {:task/status [:todo :in-progress :pending :done]
           :task/priority [:low :medium :high]}
-  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities" "Entity type set to :entity.type/task"]
+  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities" "Entity type set to :entity.type/task" "Automation key unique when present"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -169,6 +242,44 @@
                       :cap/action/task-set-tags
                       :cap/action/task-archive]
             :views [:cap/view/tasks :cap/view/login]}}
+
+ {:id :cap/schema/note
+  :title "Note"
+  :version "v1"
+  :attributes
+  [{:ident :note/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Note identity"}
+   {:ident :note/body
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Note text"}
+   {:ident :note/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Note type enum"}
+   {:ident :note/subject
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Entity ref this note belongs to"}
+   {:ident :note/author
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "User who authored the note (optional)"}
+   {:ident :note/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}]
+  :enums {:note/type [:note.type/pending-reason]}
+  :invariants ["Body non-empty" "Type in enum" "Subject required" "Entity type set to :entity.type/note"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/user]
+            :views [:cap/view/tasks]}}
 
  {:id :cap/schema/person
   :title "Person (Land Registry)"

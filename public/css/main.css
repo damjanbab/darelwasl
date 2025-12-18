@@ -915,8 +915,8 @@ a {
 }
 
 .chip.status.neutral {
-  background: var(--colors-surface-muted);
-  color: var(--colors-text-primary);
+  background: rgba(15, 163, 177, 0.12);
+  color: var(--colors-accent);
 }
 
 .chip.status.warning {
@@ -927,6 +927,11 @@ a {
 .chip.status.success {
   background: rgba(45, 157, 120, 0.12);
   color: var(--colors-success);
+}
+
+.chip.status.danger {
+  background: rgba(209, 67, 67, 0.14);
+  color: var(--colors-danger);
 }
 
 .chip.status.muted {

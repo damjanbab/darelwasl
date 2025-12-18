@@ -1,0 +1,194 @@
+(ns darelwasl.actions
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
+            [clojure.tools.logging :as log]
+            [darelwasl.automations :as automations]
+            [darelwasl.events :as events]
+            [darelwasl.tasks :as tasks]))
+
+(defn actor-from-session
+  "Normalize an HTTP session map into an actor map."
+  [session]
+  (when (map? session)
+    (cond-> session
+      (nil? (:actor/type session)) (assoc :actor/type :actor.type/user)
+      (nil? (:actor/surface session)) (assoc :actor/surface :surface/http))))
+
+(defn actor-from-telegram
+  "Normalize a Telegram-linked user map into an actor map."
+  [user]
+  (when (map? user)
+    (cond-> user
+      (nil? (:actor/type user)) (assoc :actor/type :actor.type/user)
+      (nil? (:actor/surface user)) (assoc :actor/surface :surface/telegram))))
+
+(defn parse-action-id
+  "Parse a URL-safe action id string like `cap.action.task-create` into a keyword
+  like `:cap/action/task-create`. Returns nil for invalid inputs."
+  [s]
+  (when (and (string? s) (not (str/blank? s)))
+    (let [trimmed (str/trim s)]
+      (when (re-matches #"[A-Za-z0-9._:-]+" trimmed)
+        (try
+          (let [kw-str (str ":" (str/replace trimmed "." "/"))
+                v (edn/read-string kw-str)]
+            (when (keyword? v) v))
+          (catch Exception _ nil))))))
+
+(defn- conn
+  [state]
+  (get-in state [:db :conn]))
+
+(defn- task-create
+  [state {:keys [input actor]}]
+  (tasks/create-task! (conn state) (or input {}) actor))
+
+(defn- task-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/update-task! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-set-status
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/set-status! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-assign
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/assign-task! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-set-due
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/set-due-date! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-set-tags
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/set-tags! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-archive
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/archive-task! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-delete
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/delete-task! (conn state) task-id actor)))
+
+(def ^:private handlers
+  {:cap/action/task-create task-create
+   :cap/action/task-update task-update
+   :cap/action/task-set-status task-set-status
+   :cap/action/task-assign task-assign
+   :cap/action/task-set-due task-set-due
+   :cap/action/task-set-tags task-set-tags
+   :cap/action/task-archive task-archive
+   :cap/action/task-delete task-delete})
+
+(defn dispatch!
+  "Execute an action invocation and return a uniform action result:
+  - success: {:action/id kw :result <domain-result>}
+  - error:   {:action/id kw :error {:status .. :message .. :details ..}}
+
+  The handler result is expected to be a domain map (e.g. {:task ...}) or
+  {:error {:status ...}}."
+  [state {:keys [action-id actor input] :as invocation}]
+  (let [resolved-id (or (:action/id invocation) action-id)
+        handler (get handlers resolved-id)]
+    (cond
+      (nil? resolved-id)
+      {:error {:status 400 :message "Missing action id"}}
+
+      (nil? handler)
+      {:action/id resolved-id
+       :error {:status 404
+               :message "Unknown action"
+               :details {:action/id resolved-id}}}
+
+      :else
+      (try
+        (let [domain-res (handler state {:action/id resolved-id
+                                         :actor actor
+                                         :input input})]
+          (if-let [err (:error domain-res)]
+            {:action/id resolved-id
+             :error err}
+            {:action/id resolved-id
+             :result domain-res}))
+        (catch Exception e
+          (log/error e "Action handler crashed" {:action/id resolved-id})
+          {:action/id resolved-id
+           :error {:status 500
+                   :message "Action failed"}})))))
+
+(defn- task-event
+  [event-type actor task]
+  (let [task-id (:task/id task)]
+    (events/new-event {:event/type event-type
+                       :event/subject {:subject/type :subject.type/task
+                                      :subject/id task-id}
+                       :event/payload {:task/id task-id
+                                      :task/status (:task/status task)
+                                      :task/assignee (get-in task [:task/assignee :user/id])}
+                       :actor actor})))
+
+(defn- emit-events
+  [action-id actor domain-result]
+  (let [task (:task domain-result)]
+    (cond
+      (and (= action-id :cap/action/task-create) task) [(task-event :task/created actor task)]
+      (and (= action-id :cap/action/task-update) task) [(task-event :task/updated actor task)]
+      (and (= action-id :cap/action/task-set-status) task) [(task-event :task/status-changed actor task)]
+      (and (= action-id :cap/action/task-assign) task) [(task-event :task/assigned actor task)]
+      (and (= action-id :cap/action/task-set-due) task) [(task-event :task/due-changed actor task)]
+      (and (= action-id :cap/action/task-set-tags) task) [(task-event :task/tags-changed actor task)]
+      (and (= action-id :cap/action/task-archive) task) [(task-event :task/archived actor task)]
+      (and (= action-id :cap/action/task-delete) (:task domain-result))
+      [(events/new-event {:event/type :task/deleted
+                          :event/payload {:task/id (get-in domain-result [:task :task/id])}
+                          :actor actor})]
+      :else [])))
+
+(defn apply-event!
+  "Run automations for an external/internal event and execute the resulting
+  action invocations. Returns {:event .. :automation/invocations .. :automation/results ..}."
+  [state event]
+  (let [invocations (automations/derive-invocations state event)
+        results (mapv (fn [inv] (dispatch! state inv)) invocations)]
+    {:event event
+     :automation/invocations invocations
+     :automation/results results}))
+
+(defn execute!
+  "Execute an action and (Path A) run automations derived from its emitted events.
+  Uses one-level automation execution to avoid accidental loops."
+  [state invocation]
+  (let [res (dispatch! state invocation)]
+    (if-let [err (:error res)]
+      res
+      (let [actor (:actor invocation)
+            events (->> (emit-events (:action/id res) actor (:result res))
+                        (remove :error)
+                        vec)
+            automation (mapv #(apply-event! state %) events)]
+        (assoc res
+               :events events
+               :automation automation)))))
+
+(defn dispatch-result!
+  "Compatibility helper: returns the domain result map directly (or {:error ...})."
+  [state invocation]
+  (let [res (dispatch! state invocation)]
+    (if-let [err (:error res)]
+      {:error err}
+      (:result res))))

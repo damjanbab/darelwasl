@@ -37,6 +37,16 @@
   [cmp-fn coll]
   (every? (fn [[a b]] (not (pos? (cmp-fn a b)))) (partition 2 1 coll)))
 
+(defn- pending-note-count
+  [db task-id]
+  (or (ffirst (d/q '[:find (count ?n)
+                     :in $ ?tid
+                     :where [?t :task/id ?tid]
+                            [?n :note/subject ?t]
+                            [?n :note/type :note.type/pending-reason]]
+                   db task-id))
+      0))
+
 (defn- check-listing
   [conn failures tag-index]
   (let [default-list (tasks/list-tasks conn {})
@@ -160,6 +170,18 @@
              (when s1
                (when-not (= :in-progress (:task/status s1))
                  (fail! failures "Status should update to :in-progress" s1))))
+           (let [missing-reason (tasks/set-status! conn task-id {:task/status :pending} actor)]
+             (when-not (and (:error missing-reason) (= 400 (get-in missing-reason [:error :status])))
+               (fail! failures "Pending status should require a note body" missing-reason)))
+           (let [pending (tasks/set-status! conn task-id {:task/status :pending
+                                                          :note/body "Awaiting client response"} actor)
+                 pending-task (some-> (ensure-success failures "Set status pending" pending) :task)
+                 note-count (pending-note-count (d/db conn) task-id)]
+             (when pending-task
+               (when-not (= :pending (:task/status pending-task))
+                 (fail! failures "Status should update to :pending" pending-task))
+               (when-not (pos? note-count)
+                 (fail! failures "Pending reason note should be created" note-count))))
            (let [assign (tasks/assign-task! conn task-id {:task/assignee assignee-damjan} actor)
                  assigned-task (some-> (ensure-success failures "Assign task" assign) :task)]
              (when assigned-task

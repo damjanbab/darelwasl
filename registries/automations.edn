@@ -1,0 +1,10 @@
+[
+ {:id :cap/automation/telegram-onboarding-task
+  :title "Create onboarding task when Telegram is linked"
+  :version "v1"
+  :enabled true
+  :triggers [{:event/type :telegram/linked}]
+  :handler :cap/automation.handler/telegram-onboarding-task
+  :notes "Demonstrates external event -> internal action invocation. Must be idempotent via :task/automation-key."}
+]
+

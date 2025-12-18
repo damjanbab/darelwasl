@@ -61,7 +61,10 @@
     (let [d (js/Date. iso-str)]
       (.toLocaleDateString d "en-US" #js {:month "short" :day "numeric"}))))
 
-(defn status-label [s] (get {:todo "To do" :in-progress "In progress" :done "Done"} s "Unknown"))
+(defn status-label [s] (get {:todo "To do"
+                             :in-progress "In progress"
+                             :pending "Pending"
+                             :done "Done"} s "Unknown"))
 (defn priority-label [p] (get {:high "High" :medium "Medium" :low "Low"} p "Unknown"))
 
 (defn truncate
