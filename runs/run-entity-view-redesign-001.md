@@ -60,7 +60,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Reporting: Note visual + interaction decisions
 
 - Task ID: theme-refresh-minimal
-  - Status: pending
+  - Status: in-progress (Codex, 2025-12-18 16:14 UTC)
   - Objective: Implement the refreshed minimalist palette and typography tokens in `registries/theme.edn` and regenerate theme CSS.
   - Scope: Update `:theme/default` (and any referenced tokens) to match the new design spec; regenerate CSS variables via `npm run theme:css-vars`; ensure no hardcoded colors/spacing remain in affected styles.
   - Out of Scope: New theming tooling, dark theme redesign, backend changes.
