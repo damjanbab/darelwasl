@@ -32,7 +32,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Reporting: Summarize spec decisions and acceptance criteria
 
 - Task ID: design-spec-entity-view-redesign
-  - Status: pending
+  - Status: done (Codex, 2025-12-18 16:10 UTC)
   - Objective: Capture the minimalist visual language and interaction patterns for the entity-view contract in `docs/system.md`.
   - Scope: Define typography direction, layout rhythm, spacing density, component styles (list rows, chips, sheets, buttons), states, and mobile vs desktop behavior.
   - Out of Scope: Token implementation in `registries/theme.edn`, CSS changes, component refactors.

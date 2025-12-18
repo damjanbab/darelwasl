@@ -349,6 +349,33 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Mobile detail flows require at most two taps to reach status/priority/assignee controls.
   - Desktop view remains functional for power users but visually quiet; no layout regressions for Home/Control panel/Land views.
 
+## Design Spec: Entity View Redesign (Task View v2)
+- Visual language: calm, low-contrast neutrals with one clear accent; generous whitespace; minimal ornament.
+- Typography: expressive but restrained. Use a serif or humanist for headings and a clean sans for body; meta text can use a subtle mono. Avoid default system stacks.
+- Layout rhythm:
+  - Mobile: list-first, detail as bottom sheet; sticky primary action (floating "+").
+  - Desktop: two-pane with the list dominant; detail quieter and narrower.
+  - Spacing uses the existing token scale; keep list rows tall enough for 44px targets.
+- List rows:
+  - One title line + one meta line max; truncate long text.
+  - Status chip + quick action cluster on the right; no dense tag pills in the list by default.
+- Filters:
+  - Minimal chip bar for the 2-3 most common filters; "More" drawer holds advanced filters and sort.
+  - Default filter state is calm (no highlighted chips unless active).
+- Detail sheet:
+  - Header = title, status chip, and two primary actions (Save/Done).
+  - Fields use progressive disclosure; advanced fields hidden behind "More".
+  - Pending reason is a lightweight inline field (only shown when status is pending).
+- Status colors:
+  - Todo = blue, In progress = yellow, Pending = red, Done = green.
+  - Status chips use subtle tinted backgrounds with colored text.
+- Interaction:
+  - Tap-first controls; keyboard shortcuts optional for desktop.
+  - Inline actions must provide visual feedback (pressed/active state).
+- Accessibility:
+  - All tap targets >= 44px; focus visible; no hover-only controls.
+  - Bottom sheet has a clear close affordance and supports escape.
+
 ## Product Spec: Land Registry (People-to-Parcels + Summary Stats)
 - Goal: let authenticated users browse people and parcels (land lots) with cross-links and trustworthy summary stats, sourced from `hrib_parcele_upisane_osobe(1).csv`, without regressing existing apps.
 - Entities and identity:
