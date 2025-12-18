@@ -114,6 +114,18 @@
         tag-state @(rf/subscribe [:darelwasl.app/tags])
         tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (:items tag-state)))
         list-config (entity/list-config :entity.type/task)
+        filters (:filters tasks-state)
+        {:keys [status archived]} filters
+        chip-filters [{:label "All" :active? (nil? status) :on-click #(rf/dispatch [:darelwasl.app/update-filter :status nil])}
+                      {:label "In progress" :active? (= status :in-progress) :on-click #(rf/dispatch [:darelwasl.app/update-filter :status :in-progress])}
+                      {:label "Pending" :active? (= status :pending) :on-click #(rf/dispatch [:darelwasl.app/update-filter :status :pending])}
+                      {:label "Done" :active? (= status :done) :on-click #(rf/dispatch [:darelwasl.app/update-filter :status :done])}
+                      {:label (case archived
+                                true "Archived"
+                                :all "All"
+                                "Active")
+                       :active? (not= archived false)
+                       :on-click #(rf/dispatch [:darelwasl.app/toggle-archived])}]
         limit (or (:limit pagination) (count items))
         offset (or (:offset pagination) 0)
         total (or (:total pagination) (count items))
@@ -138,6 +150,7 @@
                       :status status
                       :error error
                       :selected selected
+                      :chips chip-filters
                       :key-fn (or (:key list-config) :task/id)
                       :render-row (entity/render-row :entity.type/task {:tag-index tag-index
                                                                         :on-select #(rf/dispatch [:darelwasl.app/select-task (:task/id %)])})}]
