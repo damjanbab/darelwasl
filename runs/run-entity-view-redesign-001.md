@@ -4,7 +4,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
 
 ## Tasks
 - Task ID: product-spec-entity-view-redesign
-  - Status: in-progress (Codex, 2025-12-18 15:48 UTC)
+  - Status: done (Codex, 2025-12-18 15:52 UTC)
   - Objective: Document the product spec for the entity-view contract and the redesigned Task view in `docs/system.md` (flows, acceptance criteria, mobile/desktop behavior).
   - Scope: Define list/detail flows, capture and quick actions, filter behavior (minimal chip bar + More drawer), mobile bottom-sheet detail, desktop two-pane behavior, and default/task lifecycle assumptions (tap-first, minimal typing).
   - Out of Scope: Visual tokens, layout implementation, backend/schema changes, new entity types (notes/clients).

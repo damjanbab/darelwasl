@@ -318,12 +318,36 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Product Spec: Task App v1 (two users)
 - Users: two seeded users (`huda`, `damjan`) sharing password `Damjan1!`. Login required before accessing tasks.
-- Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (set of tag entities via `:tag/id`), archived flag, feature flag `:task/extended?` (default false) for future fields.
+- Task fields: title (required), description (rich text allowed), status (enum: todo/in-progress/pending/done), assignee (user), due date (optional), priority (enum: low/medium/high), tags (set of tag entities via `:tag/id`), archived flag, feature flag `:task/extended?` (default false) for future fields.
+- Notes: minimal note entity (`:entity.type/note`) used for status reasons and audit; pending status requires a typed note `:note.type/pending-reason` attached to the task (multiple allowed over time).
 - Actions: create/edit task; change status; assign/reassign; set/clear due date; add/remove/rename/delete tags; archive/unarchive; login (auth action).
 - Views: login screen; task list with filters (status, assignee, tag, priority) and sorts (due date, priority, updated); detail side panel for edit/view; inline tag management without leaving the task view; light/dark theme toggle pinned bottom-left. Task app is selectable from the app switcher and may share list/detail primitives with Home.
 - UX: explicit loading/empty/error/ready states; inline validation for required fields; keyboard shortcut for new/save; responsive layout (desktop list + side panel; mobile stacked).
 - Acceptance: After login as huda or damjan, user can create/edit tasks, change status, assign, set due, manage tags (create/attach/rename/delete), archive, filter/sort; UI shows states correctly; theme (light/dark) applied and switchable; headless smoke passes.
 - Home view: default after login; shows status counts, recent tasks (updated desc), tag highlights, and quick action to create a task. Uses `/api/tasks/recent` and `/api/tasks/counts`; loading/empty/error/ready states; the app switcher (hover/push desktop, tap mobile) provides navigation to Tasks.
+
+## Product Spec: Entity View Redesign (Task View v2)
+- Goal: a minimalist, tap-first task experience on mobile and desktop, while formalizing an entity-view contract reusable for future entities (notes, clients, etc.).
+- Entity view contract:
+  - List panel: title, meta count, minimal filter chip bar + “More” drawer; list rows are single-tap targets with inline quick actions.
+  - Detail panel: consistent header (title/meta/actions), a compact edit form, and quick status/priority/assignee controls.
+  - Actions: list/detail must invoke canonical actions; no surface-specific writes.
+  - States: loading/empty/error handled in list and detail with shared components.
+- Mobile behavior:
+  - List is the default surface; detail opens as a bottom sheet.
+  - “+” or primary action opens a lightweight create sheet (title first, rest optional).
+  - Quick status changes are tap-first (no keyboard required).
+- Desktop behavior:
+  - Two-pane layout remains, but detail is visually calm and secondary; list stays primary.
+  - Filters default to minimal chips; the “More” drawer holds advanced filters/sorts.
+- Default task flow:
+  - Create with title only; status defaults to todo; assignee defaults to current user; tags/priority/due optional.
+  - Pending status requires a reason; reason entry is lightweight and does not require navigation away.
+- Acceptance:
+  - Task view presents a minimal, uncluttered list; no more than one primary action row per section.
+  - Users can create, update, and complete tasks without typing beyond title unless they choose to.
+  - Mobile detail flows require at most two taps to reach status/priority/assignee controls.
+  - Desktop view remains functional for power users but visually quiet; no layout regressions for Home/Control panel/Land views.
 
 ## Product Spec: Land Registry (People-to-Parcels + Summary Stats)
 - Goal: let authenticated users browse people and parcels (land lots) with cross-links and trustworthy summary stats, sourced from `hrib_parcele_upisane_osobe(1).csv`, without regressing existing apps.
