@@ -1,0 +1,25 @@
+(ns darelwasl.provenance
+  "Small helper for attaching provenance metadata to tx maps."
+  (:require [clojure.string :as str])
+  (:import (java.util Date)))
+
+(defn provenance
+  "Build a provenance map for writes. Adapter defaults to web-ui; workspace defaults to \"default\".
+  Optionally accepts a run-id for batch/rule contexts."
+  ([actor] (provenance actor :adapter/web-ui nil))
+  ([actor adapter] (provenance actor adapter nil))
+  ([actor adapter run-id]
+   (into {}
+         (remove (comp nil? val)
+                 {:fact/source-id (str (or (:user/id actor) (:user/username actor) "system"))
+                  :fact/source-type (if (:user/id actor) :user :system)
+                  :fact/adapter adapter
+                  :fact/run-id run-id
+                  :fact/created-at (Date.)
+                  :fact/valid-from (Date.)
+                  :fact/workspace "default"}))))
+
+(defn enrich-tx
+  "Attach provenance to tx maps; leave retracts and datoms untouched."
+  [tx prov]
+  (if (map? tx) (merge tx prov) tx))

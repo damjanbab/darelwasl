@@ -5,7 +5,8 @@
             [darelwasl.bootstrap :as bootstrap]
             [darelwasl.config :as config]
             [darelwasl.server :as server]
-            [darelwasl.site.server :as site-server]))
+            [darelwasl.site.server :as site-server]
+            [darelwasl.telegram :as telegram]))
 
 (defonce system-state (atom nil))
 
@@ -26,6 +27,7 @@
          started (-> base
                      (server/start-http)
                      (site-server/start))]
+     (telegram/auto-set-webhook! (:telegram cfg))
      (reset! system-state started)
      started)))
 

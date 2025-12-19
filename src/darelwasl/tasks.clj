@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.entity :as entity]
+            [darelwasl.provenance :as prov]
             [darelwasl.schema :as schema]
             [darelwasl.validation :as v])
   (:import (java.time Instant)
@@ -17,7 +18,7 @@
 
 (def ^:private allowed-statuses
   (delay (or (some-> @task-schema-entry (get-in [:enums :task/status]) set)
-             #{:todo :in-progress :done})))
+             #{:todo :in-progress :pending :done})))
 
 (def ^:private allowed-priorities
   (delay (or (some-> @task-schema-entry (get-in [:enums :task/priority]) set)
@@ -41,13 +42,22 @@
    :task/title
    :task/description
    :task/status
+   :fact/source-id
+   :fact/source-type
+   :fact/adapter
+   :fact/run-id
+   :fact/workspace
+   :fact/created-at
+   :fact/valid-from
+   :fact/valid-until
    {:task/assignee [:user/id :user/username :user/name]}
    :task/due-date
    :task/priority
    {:task/tags [:tag/id :tag/name]}
    :task/archived?
    :task/extended?
-   :task/automation-key])
+   :task/automation-key
+   :task/pending-reason])
 
 (defn- format-inst
   [^Date inst]
@@ -181,14 +191,26 @@
 (defn- present-task
   [task]
   (when (map? task)
-    (-> task
-        (update :task/due-date format-inst)
-        (update :task/updated-at format-inst)
-        (update :task/tags (fn [tags]
-                             (when tags
-                               (->> tags
-                                    (sort-by (comp str/lower-case :tag/name))
-                                    vec)))))))
+    (let [prov (select-keys task [:fact/source-id
+                                  :fact/source-type
+                                  :fact/adapter
+                                  :fact/run-id
+                                  :fact/workspace
+                                  :fact/created-at
+                                  :fact/valid-from
+                                  :fact/valid-until])]
+      (-> task
+          (update :task/due-date format-inst)
+          (update :task/updated-at format-inst)
+          (update :fact/created-at format-inst)
+          (update :fact/valid-from format-inst)
+          (update :fact/valid-until format-inst)
+          (assoc :task/provenance prov)
+          (update :task/tags (fn [tags]
+                               (when tags
+                                 (->> tags
+                                      (sort-by (comp str/lower-case :tag/name))
+                                      vec))))))))
 
 (defn- existing-tag-by-name
   [db tag-name]
@@ -443,7 +465,9 @@
                                                                                                                    :allow-blank? false})
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
         pending? (= status :pending)
-        {pending-reason :value pending-err :error} (normalize-string-field (param-value body :note/body)
+        pending-raw (or (param-value body :pending-reason)
+                        (param-value body :note/body))
+        {pending-reason :value pending-err :error} (normalize-string-field pending-raw
                                                                            "Pending reason"
                                                                            {:required pending?
                                                                             :allow-blank? false})
@@ -486,6 +510,7 @@
                       :task/extended? (boolean extended?)}
                 data (cond-> base
                        due-date (assoc :task/due-date due-date)
+                       (and pending? pending-reason) (assoc :task/pending-reason pending-reason)
                        automation-key (assoc :task/automation-key automation-key))]
             {:data data
              :pending-reason pending-reason}))))))
@@ -535,7 +560,9 @@
   (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
         pending? (= status :pending)
-        {pending-reason :value pending-err :error} (normalize-string-field (param-value body :note/body)
+        pending-raw (or (param-value body :pending-reason)
+                        (param-value body :note/body))
+        {pending-reason :value pending-err :error} (normalize-string-field pending-raw
                                                                            "Pending reason"
                                                                            {:required pending?
                                                                             :allow-blank? false})]
@@ -548,7 +575,7 @@
         {:task-id task-id
          :updates {:task/id task-id
                    :task/status status}
-         :pending-reason pending-reason}
+         :pending-reason (when (= status :pending) pending-reason)}
         (error 404 "Task not found")))))
 
 (defn- validate-assignee-update
@@ -615,7 +642,7 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            {:keys [data pending-reason error] :as result} (validate-create db body)]
+            {:keys [data pending-reason error]} (validate-create db body)]
         (if error
           {:error error}
           (let [automation-key (:task/automation-key data)
@@ -629,10 +656,16 @@
                              (:task/id existing))
                   {:task existing})
                 (error 500 "Task not available for automation key"))
-              (let [note-tx (when (= :pending (:task/status data))
+              (let [tx-prov (prov/provenance actor)
+                    data-with-reason (cond-> data
+                                       (and (= :pending (:task/status data))
+                                            (not (str/blank? pending-reason)))
+                                       (assoc :task/pending-reason pending-reason))
+                    note-tx (when (and (= :pending (:task/status data))
+                                       (not (str/blank? pending-reason)))
                               (pending-note-tx (:task/id data) pending-reason actor))
-                    tx-data (cond-> [data]
-                              note-tx (conj note-tx))
+                    tx-data (cond-> [(prov/enrich-tx data-with-reason tx-prov)]
+                              note-tx (conj (prov/enrich-tx note-tx tx-prov)))
                     tx-result (attempt-transact conn tx-data "create task")]
                 (if-let [tx-error (:error tx-result)]
                   (let [db-now (d/db conn)
@@ -670,7 +703,8 @@
                 current (pull-task db eid)
                 tx-data (cond-> [updates]
                           tags (into (update-tags-tx task-id (:task/tags current) tags)))
-                tx-result (attempt-transact conn tx-data "update task")
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)
@@ -693,10 +727,22 @@
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id updates pending-reason]} result
-                note-tx (when (= :pending (:task/status updates))
+                current (when-let [eid (task-eid db task-id)]
+                          (pull-task db eid))
+                tx-prov (prov/provenance actor)
+                note-tx (when (and (= :pending (:task/status updates))
+                                   (not (str/blank? pending-reason)))
                           (pending-note-tx task-id pending-reason actor))
-                tx-data (cond-> [updates]
-                          note-tx (conj note-tx))
+                retract-pending (when (and (not= (:task/status updates) :pending)
+                                           (some? (:task/pending-reason current)))
+                                  [:db/retract [:task/id task-id] :task/pending-reason (:task/pending-reason current)])
+                updates-with-reason (cond-> updates
+                                       (and (= (:task/status updates) :pending)
+                                            (not (str/blank? pending-reason)))
+                                       (assoc :task/pending-reason pending-reason))
+                tx-data (cond-> [(prov/enrich-tx updates-with-reason tx-prov)]
+                          note-tx (conj (prov/enrich-tx note-tx tx-prov))
+                          retract-pending (conj retract-pending))
                 tx-result (attempt-transact conn tx-data "set task status")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
@@ -720,7 +766,8 @@
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [updates task-id]} result
-                tx-result (attempt-transact conn [updates] "assign task")
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn [(prov/enrich-tx updates tx-prov)] "assign task")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)
@@ -749,7 +796,8 @@
                                           :task/due-date due-date})
                           (and (nil? due-date) (:task/due-date current))
                           (conj [:db/retract [:task/id task-id] :task/due-date (:task/due-date current)]))
-                tx-result (attempt-transact conn tx-data "update task due date")
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task due date")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)
@@ -773,7 +821,8 @@
           (let [{:keys [eid task-id tags]} result
                 current (pull-task db eid)
                 tx-data (vec (update-tags-tx task-id (:task/tags current) tags))
-                tx-result (attempt-transact conn tx-data "update task tags")
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task tags")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)
@@ -796,7 +845,8 @@
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [updates task-id]} result
-                tx-result (attempt-transact conn [updates] "archive task")
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn [(prov/enrich-tx updates tx-prov)] "archive task")
                 updated (when-let [db-after (:db-after tx-result)]
                           (when-let [eid (task-eid db-after task-id)]
                             (some-> (pull-task db-after eid)

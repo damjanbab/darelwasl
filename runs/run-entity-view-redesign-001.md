@@ -116,7 +116,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Reporting: Summarize contract changes and affected views
 
 - Task ID: task-view-minimal-redesign
-  - Status: pending
+  - Status: done (Codex, 2025-12-18 20:02 UTC)
   - Objective: Redesign the Task view UI using the new minimalist contract (mobile-first, tap-first, low typing).
   - Scope: Update `src/darelwasl/features/tasks.cljs` and related UI styles/components to deliver the new layout (mobile list + bottom-sheet detail; desktop two-pane; minimal filter controls; quick actions). Keep existing data/actions unchanged.
   - Out of Scope: Backend action changes, new task fields, new entities (notes/clients), additional app views.
@@ -137,6 +137,7 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Dependencies: entity-view-contract-v2
   - Deliverables: Updated Task view UI (desktop + mobile) and any supporting components/styles; update `registries/views.edn` if UX metadata changes
   - Proof Plan: `npm run check`, `scripts/checks.sh app-smoke`
+  - Proofs: `npm run check`
   - Fixtures/Data Assumptions: Existing fixtures
   - Protocol/System Updates: Update `docs/system.md` view description if UX metadata changes
   - FAQ Updates: None expected

@@ -7,8 +7,9 @@
             [darelwasl.actions :as actions]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
-            [darelwasl.tasks :as tasks])
-  (:import (java.util UUID)))
+            [darelwasl.tasks :as tasks]
+            [darelwasl.provenance :as prov])
+  (:import (java.util UUID Date)))
 
 (def ^:private default-timeout-ms 3000)
 
@@ -80,6 +81,34 @@
   [chat-id]
   (prune-pending-reasons!)
   (get @pending-reasons (pending-reason-key chat-id)))
+
+(defn- log-telegram-message!
+  "Persist a minimal telegram message fact with provenance. Direction is :inbound or :outbound."
+  [state {:keys [chat-id from-id text update-id message-id direction]}]
+  (when-let [conn (ensure-conn state)]
+    (let [prov (prov/provenance {:actor/type :integration
+                                 :integration/id :integration/telegram}
+                                :adapter/telegram)
+          trimmed (when text
+                    (let [s (str text)]
+                      (if (> (count s) 2000)
+                        (subs s 0 2000)
+                        s)))
+          tx (prov/enrich-tx {:telegram.message/id (UUID/randomUUID)
+                              :entity/type :entity.type/telegram-message
+                              :telegram.message/chat-id (str chat-id)
+                              :telegram.message/from-id (when from-id (long from-id))
+                              :telegram.message/text trimmed
+                              :telegram.message/update-id update-id
+                              :telegram.message/message-id message-id
+                              :telegram.message/direction direction
+                              :telegram.message/created-at (Date.)}
+                             prov)]
+      (try
+        (d/transact conn {:tx-data [tx]})
+        (catch Exception e
+          (log/warn e "Failed to log Telegram message" {:chat-id chat-id :direction direction})))
+      nil)))
 
 (defn- take-pending-reason!
   [chat-id]
@@ -317,6 +346,19 @@
     (request-json cfg "setWebhook" {:url webhook-url
                                     :secret_token secret-token
                                     :allowed_updates ["message" "callback_query"]})))
+
+(defn auto-set-webhook!
+  "If enabled and configured, call setWebhook on startup."
+  [cfg]
+  (let [{:keys [webhook-enabled? auto-set-webhook? webhook-base-url webhook-secret]} cfg]
+    (when (and webhook-enabled? auto-set-webhook? (present-string? webhook-base-url))
+      (let [url (str (str/replace (str/trim webhook-base-url) #"/+$" "") "/api/telegram/webhook")]
+        (log/info "Setting Telegram webhook" {:url url})
+        (let [res (set-webhook! cfg {:webhook-url url
+                                     :secret-token webhook-secret})]
+          (when-let [err (:error res)]
+            (log/error "Failed to set Telegram webhook" {:error err :url url})
+            res))))))
 
 (defn ensure-link-token!
   "Generate and persist a new link token for the given user id. Returns {:token \"...\"} or {:error ...}."
@@ -1011,7 +1053,13 @@
           (str/blank? chat-id) {:error "Missing chat id"}
           (and (nil? command) (nil? callback) (str/blank? text)) {:status :ignored :reason :unsupported-command}
           :else
-          (let [response (cond
+          (do
+            (log-telegram-message! state {:chat-id chat-id
+                                          :from-id (:from-id parsed)
+                                          :text (or text (some-> command name))
+                                          :update-id update-id
+                                          :direction :inbound})
+            (let [response (cond
                            callback (handle-callback state chat-id callback)
                            command (handle-command state chat-id parsed)
                            :else (let [conn (ensure-conn state)
@@ -1066,4 +1114,4 @@
                        {:status :handled
                         :telegram/command command
                         :telegram/message-id (:telegram/message-id send-res)}))
-              :else {:status :handled})))))))
+              :else {:status :handled}))))))))))

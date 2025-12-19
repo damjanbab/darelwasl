@@ -11,7 +11,8 @@
               :commands-enabled? true
               :notifications-enabled? false
               :http-timeout-ms 3000
-              :link-token-ttl-ms 900000}
+              :link-token-ttl-ms 900000
+              :auto-set-webhook? true}
    :datomic {:storage-dir "data/datomic"
              :system "darelwasl"
              :db-name "darelwasl"}
@@ -75,7 +76,9 @@
                 :http-timeout-ms (parse-int (get env "TELEGRAM_HTTP_TIMEOUT_MS")
                                             (get-in default-config [:telegram :http-timeout-ms]))
                 :link-token-ttl-ms (parse-int (get env "TELEGRAM_LINK_TOKEN_TTL_MS")
-                                              (get-in default-config [:telegram :link-token-ttl-ms]))})
+                                              (get-in default-config [:telegram :link-token-ttl-ms]))
+                :auto-set-webhook? (env-bool (get env "TELEGRAM_AUTO_SET_WEBHOOK")
+                                             (get-in default-config [:telegram :auto-set-webhook?]))})
         (assoc-in [:datomic :storage-dir]
                   (normalize-storage-dir (get env "DATOMIC_STORAGE_DIR")
                                          (get-in default-config [:datomic :storage-dir])))

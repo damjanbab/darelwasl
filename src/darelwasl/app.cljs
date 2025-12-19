@@ -296,12 +296,19 @@
 (defn- normalize-task
   "Coerce API payload fields into keywords/sets/booleans for UI consumption."
   [task]
-  (-> task
-      (update :task/status kw)
-      (update :task/priority kw)
-      (update :task/tags normalize-tag-list)
-      (update :task/archived? boolean)
-      (update :task/extended? boolean)))
+  (let [kw-provenance (fn [p]
+                        (some-> p
+                                (update :fact/source-type kw)
+                                (update :fact/adapter kw)))]
+    (-> task
+        (update :task/status kw)
+        (update :task/priority kw)
+        (update :task/tags normalize-tag-list)
+        (update :task/archived? boolean)
+        (update :task/extended? boolean)
+        (update :fact/source-type kw)
+        (update :fact/adapter kw)
+        (update :task/provenance kw-provenance))))
 
 (defn- task->form
   [task]
@@ -310,7 +317,7 @@
           :title (or (:task/title task) "")
           :description (or (:task/description task) "")
           :status (:task/status task)
-          :pending-reason ""
+          :pending-reason (:task/pending-reason task)
           :priority (:task/priority task)
           :assignee (get-in task [:task/assignee :user/id])
           :due-date (iso->input-date (:task/due-date task))
@@ -1921,7 +1928,7 @@
     (str/blank? title) "Title is required"
     (str/blank? description) "Description is required"
     (nil? status) "Status is required"
-    (and (= status :pending) (str/blank? (or pending-reason ""))) "Pending reason is required"
+    (and (= status :pending) (str/blank? pending-reason)) "Pending status requires a pending reason"
     (nil? priority) "Priority is required"
     (str/blank? (str assignee)) "Assignee is required"
     :else nil))
@@ -1933,25 +1940,29 @@
         current-tags (set (map :tag/id (or (:task/tags current-task) [])))
         current-due (iso->input-date (:task/due-date current-task))
         due-iso (input-date->iso (:due-date form))
-        pending-reason (:pending-reason form)
+        status-op (when (and task-id (not= (:status form) (:task/status current-task)))
+                    (let [pending? (= (:status form) :pending)
+                          reason (some-> (:pending-reason form) str/trim)
+                          status-body (cond-> {:task/status (:status form)}
+                                        (and pending? (not (str/blank? reason))) (assoc :pending-reason reason))]
+                      {:url (str "/api/tasks/" task-id "/status")
+                       :method "POST"
+                       :body status-body}))
         general-updates (cond-> {}
                           (not= (:title form) (:task/title current-task)) (assoc :task/title (:title form))
                           (not= (:description form) (:task/description current-task)) (assoc :task/description (:description form))
                           (not= (:priority form) (:task/priority current-task)) (assoc :task/priority (:priority form))
                           (not= tags current-tags) (assoc :task/tags (vec tags))
+                          (not= (:pending-reason form) (:task/pending-reason current-task)) (assoc :task/pending-reason (:pending-reason form))
                           (not= (:extended? form) (boolean (:task/extended? current-task))) (assoc :task/extended? (:extended? form)))]
     (cond-> []
       (and task-id (seq general-updates)) (conj {:url (str "/api/tasks/" task-id)
                                                  :method "PUT"
                                                  :body general-updates})
-      (and task-id (not= (:status form) (:task/status current-task))) (conj {:url (str "/api/tasks/" task-id "/status")
-                                                                             :method "POST"
-                                                                             :body (cond-> {:task/status (:status form)}
-                                                                                     (= (:status form) :pending)
-                                                                                     (assoc :note/body pending-reason))})
+      status-op (conj status-op)
       (and task-id (not= (:assignee form) (get-in current-task [:task/assignee :user/id]))) (conj {:url (str "/api/tasks/" task-id "/assignee")
-                                                                                                    :method "POST"
-                                                                                                    :body {:task/assignee (:assignee form)}})
+                                                                                                   :method "POST"
+                                                                                                   :body {:task/assignee (:assignee form)}})
       (and task-id (not= (:due-date form) current-due)) (conj {:url (str "/api/tasks/" task-id "/due-date")
                                                                :method "POST"
                                                                :body {:task/due-date due-iso}})
@@ -1964,6 +1975,7 @@
  (fn [db _]
    (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
      (-> db
+         (assoc-in [:tasks :selected] nil)
          (assoc-in [:tasks :detail] (blank-detail assignees (:session db)))))))
 
 (rf/reg-event-db
@@ -2023,7 +2035,9 @@
                 (assoc-in [:tasks :detail :error] "Select a task to update")
                 (assoc-in [:tasks :detail :status] :error))}
        creating?
-       (let [body (cond-> {:task/title (:title form)
+       (let [reason (some-> (:pending-reason form) str/trim)
+             pending? (= (:status form) :pending)
+             body (cond-> {:task/title (:title form)
                            :task/description (:description form)
                            :task/status (:status form)
                            :task/priority (:priority form)
@@ -2032,8 +2046,7 @@
                            :task/due-date due-iso
                            :task/archived? (boolean (:archived? form))
                            :task/extended? (boolean (:extended? form))}
-                    (= (:status form) :pending)
-                    (assoc :note/body (:pending-reason form)))]
+                    (and pending? (not (str/blank? reason))) (assoc :pending-reason reason))]
          {:db (-> db
                   (assoc-in [:tasks :detail :status] :saving)
                   (assoc-in [:tasks :detail :error] nil))

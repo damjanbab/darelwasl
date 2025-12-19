@@ -48,10 +48,7 @@
                 :else (util/status-label status))
         cls (cond
               archived? "muted"
-              (= status :todo) "neutral"
-              (= status :in-progress) "warning"
-              (= status :pending) "danger"
-              (= status :done) "success"
+              status (name status)
               :else "neutral")]
     [chip label :class (str "status " cls)]))
 
@@ -265,33 +262,41 @@
       (when footer footer)])])
 
 (defn task-card
-  [{:task/keys [id title description status priority tags due-date updated-at assignee archived?] :as task}
+  [{:task/keys [id title description status priority tags due-date updated-at assignee archived? pending-reason] :as task}
    selected?
    tag-index
    {:keys [on-select]}]
   (let [tag-list (or tags [])
         on-select (or on-select #(rf/dispatch [:darelwasl.app/select-task id]))
-        tag-names (map (fn [t] (or (:tag/name t) (get tag-index (:tag/id t)) "Tag")) tag-list)]
-    [:div.task-card {:class (when selected? "selected")
-                     :on-click on-select}
+        tag-names (map (fn [t] (or (:tag/name t) (get tag-index (:tag/id t)) "Tag")) tag-list)
+        assignee-name (or (:user/name assignee) (:user/username assignee) "Unassigned")
+        prov-label (util/provenance-label task)]
+    [:button.task-card {:type "button"
+                        :class (when selected? "selected")
+                        :on-click on-select}
      [:div.task-card__header
       [:div
        [:div.title-row
-        [:h3 title]
-        [status-chip {:task/status status :task/archived? archived?}]]
+        [:h3 (or title "Untitled")]]
        [:div.meta-row
         (when due-date
           [:span.meta (str "Due " (util/format-date due-date))])
-        (when updated-at
-          [:span.meta (str "Updated " (util/format-date updated-at))])]]
-      [priority-chip priority]]
-     [:p.description (or (util/truncate description 140) "No description")]
+        [:span.meta assignee-name]]]
+      [:div.task-card__status
+       [status-chip {:task/status status :task/archived? archived?}]
+       [priority-chip priority]]]
+     [:p.description
+      (cond
+        (and (= status :pending) (not (str/blank? pending-reason))) (str "Pending: " (util/truncate pending-reason 110))
+        :else (or (util/truncate description 110) "No description"))]
      [:div.task-card__footer
-      [assignee-pill assignee]
-      [:div.tags
-       (for [tag tag-names]
-         ^{:key (str tag)}
-         [:span.tag-chip tag])]]]))
+      [:div.meta-row
+       (when updated-at
+         [:span.meta (str "Updated " (util/format-date updated-at))])
+       (when prov-label
+         [:span.meta prov-label])
+       (when (seq tag-names)
+         [:span.meta (str (count tag-names) " tag" (when (> (count tag-names) 1) "s"))])]]]))
 
 (defn land-person-detail-view
   [{:keys [selected-person status on-select-parcel]}]

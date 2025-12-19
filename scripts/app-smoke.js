@@ -10,6 +10,20 @@ const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
 const A11Y_REPORT_PATH = path.join(ARTIFACT_DIR, "app-a11y.json");
 
+async function waitForHealth(baseURL) {
+  const api = await request.newContext({ baseURL });
+  for (let i = 0; i < 10; i++) {
+    const resp = await api.get("/health").catch(() => null);
+    if (resp && resp.ok()) {
+      await api.dispose();
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  await api.dispose();
+  throw new Error("Health check did not become ready");
+}
+
 async function loginViaApi(context) {
   const api = await request.newContext({ baseURL: BASE_URL });
   const resp = await api.post("/api/login", {
@@ -110,6 +124,7 @@ async function run() {
   // Proactively clear cookies/storage to avoid stale sessions causing redirects mid-login.
   await page.context().clearCookies();
   await page.context().clearPermissions();
+  await waitForHealth(BASE_URL);
   await loginViaApi(page.context());
   await page.context().addInitScript(() => {
     try {
@@ -164,8 +179,16 @@ async function run() {
     await page.fill("#task-description", newDescription);
     await page.selectOption("#task-status", { value: "todo" });
     await page.selectOption("#task-priority", { value: "high" });
-    await page.fill('input[placeholder="Create or attach tag (press Enter)"]', newTag);
-    await page.keyboard.press("Enter");
+    // Tags are in the advanced section now.
+    const moreFieldsBtn = page.getByRole("button", { name: /More fields/i });
+    if (await moreFieldsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await moreFieldsBtn.click();
+    }
+    const tagInput = page.locator('input[placeholder="Create or attach tag (press Enter)"]');
+    if (await tagInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await tagInput.fill(newTag);
+      await page.keyboard.press("Enter");
+    }
     const createResp = page.waitForResponse(
       (resp) => resp.request().method() === "POST" && resp.url().endsWith("/api/tasks") && resp.ok(),
       { timeout: 15000 }

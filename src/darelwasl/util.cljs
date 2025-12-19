@@ -110,3 +110,20 @@
   (let [trimmed (str/trim (or v ""))]
     (when-not (str/blank? trimmed)
       (keyword trimmed))))
+
+(defn provenance-label
+  "Create a compact provenance string from a task or provenance map."
+  [task-or-prov]
+  (let [prov (or (:task/provenance task-or-prov) task-or-prov)
+        {:fact/keys [adapter source-id source-type run-id created-at workspace]} prov
+        adapter-str (when adapter (-> adapter name (str/replace #"^adapter/" "") (str/replace #"-" " ")))
+        source-str (cond
+                     (and source-type source-id) (str (str/capitalize (name source-type)) " " source-id)
+                     source-type (str/capitalize (name source-type))
+                     source-id source-id)
+        run-str (when run-id (str "run " run-id))
+        time-str (when created-at (str "@" (format-date created-at)))
+        workspace-str (when workspace (str "ws " workspace))
+        parts (remove str/blank? [adapter-str source-str run-str workspace-str time-str])]
+    (when (seq parts)
+      (str/join " · " parts))))

@@ -198,6 +198,10 @@
     :type :db.type/keyword
     :cardinality :db.cardinality/one
     :doc "Task status enum"}
+   {:ident :task/pending-reason
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Reason provided when task is pending"}
    {:ident :task/assignee
     :type :db.type/ref
     :cardinality :db.cardinality/one
@@ -219,8 +223,8 @@
     :cardinality :db.cardinality/one
     :doc "Archived flag"}
    {:ident :task/extended?
-    :type :db.type/boolean
-    :cardinality :db.cardinality/one
+   :type :db.type/boolean
+   :cardinality :db.cardinality/one
     :doc "Feature flag gating future fields"}
    {:ident :task/automation-key
     :type :db.type/string
@@ -242,44 +246,6 @@
                       :cap/action/task-set-tags
                       :cap/action/task-archive]
             :views [:cap/view/tasks :cap/view/login]}}
-
- {:id :cap/schema/note
-  :title "Note"
-  :version "v1"
-  :attributes
-  [{:ident :note/id
-    :type :db.type/uuid
-    :cardinality :db.cardinality/one
-    :unique :db.unique/identity
-    :doc "Note identity"}
-   {:ident :note/body
-    :type :db.type/string
-    :cardinality :db.cardinality/one
-    :doc "Note text"}
-   {:ident :note/type
-    :type :db.type/keyword
-    :cardinality :db.cardinality/one
-    :doc "Note type enum"}
-   {:ident :note/subject
-    :type :db.type/ref
-    :cardinality :db.cardinality/one
-    :doc "Entity ref this note belongs to"}
-   {:ident :note/author
-    :type :db.type/ref
-    :cardinality :db.cardinality/one
-    :doc "User who authored the note (optional)"}
-   {:ident :note/created-at
-    :type :db.type/instant
-    :cardinality :db.cardinality/one
-    :doc "Creation timestamp"}]
-  :enums {:note/type [:note.type/pending-reason]}
-  :invariants ["Body non-empty" "Type in enum" "Subject required" "Entity type set to :entity.type/note"]
-  :history {:strategy :overwrite}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema [:cap/schema/task :cap/schema/user]
-            :views [:cap/view/tasks]}}
 
  {:id :cap/schema/person
   :title "Person (Land Registry)"
@@ -306,12 +272,20 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Upper/trimmed address for dedupe"}
-   {:ident :person/source-ref
+  {:ident :person/source-ref
     :type :db.type/string
     :cardinality :db.cardinality/one
-    :doc "Deterministic source reference (e.g., CSV row/person key)"}]
+    :doc "Deterministic source reference (e.g., CSV row/person key)"}
+   {:ident :person/roles
+    :type :db.type/keyword
+    :cardinality :db.cardinality/many
+    :doc "Roles/segments (e.g., :role/user, :role/client, :role/staff)"}
+   {:ident :person/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}]
   :enums []
-  :invariants ["Person identity is normalized name+address" "Entity type set to :entity.type/person"]
+  :invariants ["Person identity is normalized name+address" "Entity type set to :entity.type/person" "Workspace required when multi-tenant"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -1080,8 +1054,191 @@
   :enums []
   :invariants ["Name non-empty" "Entity type set to :entity.type/team-member"]
   :history {:strategy :overwrite}
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/business]}}
+
+ {:id :cap/schema/channel
+  :title "Channel (surface/bot/chat)"
+  :version "v1"
+  :attributes
+  [{:ident :channel/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Stable channel identity (bot/chat or other surface endpoint)"}
+   {:ident :channel/platform
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Platform (e.g., :platform/telegram, :platform/web, :platform/email)"}
+   {:ident :channel/remote-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Platform-specific identifier (e.g., Telegram chat/user id)"}
+   {:ident :channel/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Display label for the channel"}
+   {:ident :channel/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant the channel belongs to"}
+   {:ident :channel/bot?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Whether this channel represents a bot endpoint"}]
+  :enums []
+  :invariants ["Channel remote-id must be unique per platform/workspace" "Entity type set to :entity.type/channel"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/note
+  :title "Note (fact/annotation)"
+  :version "v1"
+  :attributes
+  [{:ident :note/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Note identity"}
+   {:ident :note/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Note type (e.g., :note.type/pending-reason, :note.type/comment, :note.type/system)"}
+   {:ident :note/body
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Note content"}
+   {:ident :note/subject
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Entity the note annotates (task, channel, person, etc.)"}
+   {:ident :note/author
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Authoring user/person (optional for system notes)"}
+   {:ident :note/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :note/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant for scoping"}]
+  :enums []
+  :invariants ["Notes carry :note/type and :note/subject" "Entity type set to :entity.type/note"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/telegram-message
+  :title "Telegram message fact"
+  :version "v1"
+  :attributes
+  [{:ident :telegram.message/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Telegram message fact identity"}
+   {:ident :telegram.message/chat-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Telegram chat id (stringified)"}
+   {:ident :telegram.message/from-id
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Telegram from.id sender (if present)"}
+   {:ident :telegram.message/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Message text (truncated)"}
+   {:ident :telegram.message/update-id
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Telegram update_id (inbound only)"}
+   {:ident :telegram.message/message-id
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Telegram message_id (if known)"}
+   {:ident :telegram.message/direction
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Direction of the message (:inbound or :outbound)"}
+   {:ident :telegram.message/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Timestamp when this fact was recorded"}]
+  :enums []
+  :invariants ["Entity type set to :entity.type/telegram-message"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/user]}}
+
+ {:id :cap/schema/provenance
+  :title "Fact provenance"
+  :version "v1"
+  :attributes
+  [{:ident :fact/source-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Stable id of the source (user/integration/rule/import run)"}
+   {:ident :fact/source-type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Source class: :user, :integration, :rule, :import, :system"}
+   {:ident :fact/adapter
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Adapter or surface that emitted the fact (e.g., :adapter/telegram, :adapter/web-ui)"}
+   {:ident :fact/run-id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :doc "Run/execution id for imports/rules"}
+   {:ident :fact/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :fact/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the fact was written"}
+   {:ident :fact/valid-from
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Validity start"}
+   {:ident :fact/valid-until
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Validity end (optional)"}
+   {:ident :fact/evidence-ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Pointer to raw payload or evidence storage"}
+   {:ident :fact/evidence-hash
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Hash of evidence/payload for tamper detection"}
+   {:ident :fact/rule-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Rule identifier that produced the fact (when applicable)"}
+   {:ident :fact/rule-version
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Rule version used when the fact was produced"}]
+  :enums []
+  :invariants ["Facts must carry source-type/id and workspace" "Provenance fields are additive; consumers may project current state from fact history"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
 ]

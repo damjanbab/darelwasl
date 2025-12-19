@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.entity :as entity]
+            [darelwasl.provenance :as prov]
             [darelwasl.shared.block-types :as block-types]
             [darelwasl.validation :as v])
   (:import (java.util UUID)))
@@ -38,11 +39,14 @@
     (if (str/blank? slug) "item" slug)))
 
 (defn- attempt-transact
-  [conn tx-data context]
+  [conn tx-data context & [tx-prov]]
   (try
-    (if (seq tx-data)
-      (d/transact conn {:tx-data tx-data})
-      {:db-after (d/db conn)})
+    (let [tx-data' (if tx-prov
+                     (map #(prov/enrich-tx % tx-prov) tx-data)
+                     tx-data)]
+      (if (seq tx-data')
+        (d/transact conn {:tx-data tx-data'})
+        {:db-after (d/db conn)}))
     (catch Exception e
       (log/error e (str "Failed to " context))
       {:error {:status 500
@@ -356,7 +360,8 @@
             {:keys [error tag]} (validate-tag-create db body)]
         (if error
           {:error error}
-          (let [tx (attempt-transact conn [tag] "create content tag")
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [tag] "create content tag" tx-prov)
                 created (when-let [db-after (:db-after tx)]
                           (some-> (tag-by-id db-after (:content.tag/id tag))
                                   present-tag))]
@@ -376,7 +381,8 @@
             {:keys [error updates]} (validate-tag-update db tag-id body)]
         (if error
           {:error error}
-          (let [tx (attempt-transact conn [updates] "update content tag")
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [updates] "update content tag" tx-prov)
                 updated (when-let [db-after (:db-after tx)]
                           (some-> (tag-by-id db-after (:content.tag/id updates))
                                   present-tag))]
@@ -398,7 +404,8 @@
           id-err (error 400 id-err)
           (nil? (tag-by-id db value)) (error 404 "Tag not found")
           :else
-          (let [tx (attempt-transact conn [[:db/retractEntity [:content.tag/id value]]] "delete content tag")]
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [[:db/retractEntity [:content.tag/id value]]] "delete content tag" tx-prov)]
             (if (:error tx)
               {:error (:error tx)}
               (do
@@ -551,7 +558,8 @@
                                    [[:db/add [:content.block/id bid] :content.block/page [:content.page/id (:content.page/id page)]]
                                     [:db/add [:content.block/id bid] :content.block/order (long idx)]])
                                  block-ids (range))
-                tx (attempt-transact conn (into [page] block-tx) "create content page")
+                tx-prov (prov/provenance actor)
+                tx (attempt-transact conn (into [page] block-tx) "create content page" tx-prov)
                 created (when-let [db-after (:db-after tx)]
                           (some-> (page-by-id db-after (:content.page/id page))
                                   present-page))]
@@ -575,7 +583,8 @@
                                    [[:db/add [:content.block/id bid] :content.block/page [:content.page/id page-id]]
                                     [:db/add [:content.block/id bid] :content.block/order (long idx)]])
                                  block-ids (range))
-                tx (attempt-transact conn (into [updates] block-tx) "update content page")
+                tx-prov (prov/provenance actor)
+                tx (attempt-transact conn (into [updates] block-tx) "update content page" tx-prov)
                 updated (when-let [db-after (:db-after tx)]
                           (some-> (page-by-id db-after page-id)
                                   present-page))]
@@ -597,7 +606,8 @@
           id-err (error 400 id-err)
           (nil? (page-by-id db pid)) (error 404 "Page not found")
           :else
-          (let [tx (attempt-transact conn [[:db/retractEntity [:content.page/id pid]]] "delete content page")]
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [[:db/retractEntity [:content.page/id pid]]] "delete content page" tx-prov)]
             (if (:error tx)
               {:error (:error tx)}
               (do
@@ -744,13 +754,14 @@
             {:keys [error block page-id]} (validate-block-create db body)]
         (if error
           {:error error}
-          (let [tx (attempt-transact conn [block] "create content block")
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [block] "create content block" tx-prov)
                 created (when-let [db-after (:db-after tx)]
                           (some-> (block-by-id db-after (:content.block/id block))
                                   present-block))
                 link-tx (when (and (nil? (:error tx)) page-id)
                           (attempt-transact conn [[:db/add [:content.page/id page-id] :content.page/blocks [:content.block/id (:content.block/id block)]]]
-                                            "link block to page"))]
+                                            "link block to page" tx-prov))]
             (cond
               (:error tx) {:error (:error tx)}
               (and link-tx (:error link-tx)) {:error (:error link-tx)}
@@ -768,10 +779,11 @@
             {:keys [error updates block-id page-id]} (validate-block-update db block-id body)]
         (if error
           {:error error}
-          (let [tx (attempt-transact conn [updates] "update content block")
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [updates] "update content block" tx-prov)
                 link-tx (when (and (nil? (:error tx)) page-id)
                           (attempt-transact conn [[:db/add [:content.page/id page-id] :content.page/blocks [:content.block/id block-id]]]
-                                            "link block to page"))
+                                            "link block to page" tx-prov))
                 updated (when-let [db-after (:db-after (or link-tx tx))]
                           (some-> (block-by-id db-after block-id)
                                   present-block))]
@@ -794,7 +806,8 @@
           id-err (error 400 id-err)
           (nil? (block-by-id db bid)) (error 404 "Block not found")
           :else
-          (let [tx (attempt-transact conn [[:db/retractEntity [:content.block/id bid]]] "delete content block")]
+          (let [tx-prov (prov/provenance actor)
+                tx (attempt-transact conn [[:db/retractEntity [:content.block/id bid]]] "delete content block" tx-prov)]
             (if (:error tx)
               {:error (:error tx)}
               (do
@@ -846,7 +859,8 @@
       (let [{:keys [tx error]} (validate-license (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:license/id (:license/id tx)])] "upsert license")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:license/id (:license/id tx)])] "upsert license" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -863,7 +877,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :license/id ?id]] db lid)) (error 404 "License not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:license/id lid]]] "delete license")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:license/id lid]]] "delete license" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do
@@ -895,7 +910,8 @@
       (let [{:keys [tx error]} (validate-comparison-row (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:comparison.row/id (:comparison.row/id tx)])] "upsert comparison row")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:comparison.row/id (:comparison.row/id tx)])] "upsert comparison row" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -912,7 +928,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :comparison.row/id ?id]] db rid)) (error 404 "Comparison row not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:comparison.row/id rid]]] "delete comparison row")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:comparison.row/id rid]]] "delete comparison row" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do
@@ -1011,7 +1028,8 @@
       (let [{:keys [tx error]} (validate-activation-step (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:activation.step/id (:activation.step/id tx)])] "upsert activation step")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:activation.step/id (:activation.step/id tx)])] "upsert activation step" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1028,7 +1046,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :activation.step/id ?id]] db sid)) (error 404 "Activation step not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:activation.step/id sid]]] "delete activation step")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:activation.step/id sid]]] "delete activation step" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do
@@ -1074,7 +1093,8 @@
       (let [{:keys [tx error]} (validate-persona (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:persona/id (:persona/id tx)])] "upsert persona")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:persona/id (:persona/id tx)])] "upsert persona" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1091,7 +1111,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :persona/id ?id]] db pid)) (error 404 "Persona not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:persona/id pid]]] "delete persona")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:persona/id pid]]] "delete persona" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do
@@ -1131,7 +1152,8 @@
       (let [{:keys [tx error]} (validate-support-entry (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:support.entry/id (:support.entry/id tx)])] "upsert support entry")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:support.entry/id (:support.entry/id tx)])] "upsert support entry" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1148,7 +1170,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :support.entry/id ?id]] db sid)) (error 404 "Support entry not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:support.entry/id sid]]] "delete support entry")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:support.entry/id sid]]] "delete support entry" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do
@@ -1182,7 +1205,8 @@
       (let [{:keys [tx error]} (validate-contact body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:contact/id (:contact/id tx)])] "upsert contact")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:contact/id (:contact/id tx)])] "upsert contact" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1230,7 +1254,8 @@
       (let [{:keys [tx error]} (validate-business body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:business/id (:business/id tx)])] "upsert business")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:business/id (:business/id tx)])] "upsert business" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1273,7 +1298,8 @@
       (let [{:keys [tx error]} (validate-journey-phase (d/db conn) body)]
         (if error
           (error 400 error)
-          (let [txres (attempt-transact conn [(assoc tx :db/id [:journey.phase/id (:journey.phase/id tx)])] "upsert journey phase")]
+          (let [tx-prov (prov/provenance actor)
+                txres (attempt-transact conn [(assoc tx :db/id [:journey.phase/id (:journey.phase/id tx)])] "upsert journey phase" tx-prov)]
             (if (:error txres)
               {:error (:error txres)}
               (do
@@ -1290,7 +1316,8 @@
         (cond
           id-err (error 400 id-err)
           (nil? (d/q '[:find ?e :in $ ?id :where [?e :journey.phase/id ?id]] db pid)) (error 404 "Journey phase not found")
-          :else (let [txres (attempt-transact conn [[:db/retractEntity [:journey.phase/id pid]]] "delete journey phase")]
+          :else (let [tx-prov (prov/provenance actor)
+                      txres (attempt-transact conn [[:db/retractEntity [:journey.phase/id pid]]] "delete journey phase" tx-prov)]
                   (if (:error txres)
                     {:error (:error txres)}
                     (do

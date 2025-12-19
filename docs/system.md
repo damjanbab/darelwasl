@@ -107,7 +107,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Telegram Integration (tasks app)
 - Capabilities: :cap/integration/telegram-bot with actions :cap/action/telegram-send-message, :cap/action/telegram-set-webhook, :cap/action/telegram-handle-update.
 - Auth/config: env vars `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_WEBHOOK_BASE_URL`; flags `TELEGRAM_WEBHOOK_ENABLED` (default false), `TELEGRAM_COMMANDS_ENABLED` (default true when webhook enabled), `TELEGRAM_NOTIFICATIONS_ENABLED` (default false). HTTP calls timeout at 3s; link tokens expire by `TELEGRAM_LINK_TOKEN_TTL_MS` (default 900000). No live Telegram calls in CI (use stubs/fixtures).
-<<<<<<< HEAD
+- Auto webhook (prod-friendly): when `TELEGRAM_WEBHOOK_ENABLED=true` and `TELEGRAM_WEBHOOK_BASE_URL`/`TELEGRAM_WEBHOOK_SECRET`/`TELEGRAM_BOT_TOKEN` are set, the app calls setWebhook on startup (set `TELEGRAM_AUTO_SET_WEBHOOK=false` to disable).
 - Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Allowed updates include `message` and `callback_query`.
 - Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns a task list message with filter buttons + per-task “Open” buttons; `/task <uuid>` returns a task card; `/new <title> [| description]` creates a task assigned to the mapped user; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
 - Freeform capture: non-command text shows a capture prompt with inline buttons (“Create task”, “Dismiss”) and only creates on confirmation.
@@ -115,15 +115,6 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-user-id` (unique for auto-recognition), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others). Recognized users can be registered via `POST /api/telegram/recognize`.
 - Auto-recognition: when incoming `from.id` matches `:user/telegram-user-id`, the bot auto-binds chat id to that user (token optional). `scripts/tg-spinup.sh` will register the id from `.secrets/telegram_user_id` if present.
 - Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
-=======
-- Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Allowed updates include `message` and `callback_query`.
-- Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns a task list message with filter buttons + per-task “Open” buttons; `/task <uuid>` returns a task card; `/new <title> [| description]` creates a task assigned to the mapped user; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
-- Freeform capture: non-command text shows a capture prompt with inline buttons (“Create task”, “Dismiss”) and only creates on confirmation.
-- Inline UX: task cards include inline buttons for status, archive/unarchive, and refresh; list message filters by status/archived and updates in-place.
-- Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-user-id` (unique for auto-recognition), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others). Recognized users can be registered via `POST /api/telegram/recognize`.
-- Auto-recognition: when incoming `from.id` matches `:user/telegram-user-id`, the bot auto-binds chat id to that user (token optional). `scripts/tg-spinup.sh` will register the id from `.secrets/telegram_user_id` if present.
-- Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
->>>>>>> 5d51025 (Implement actions/outbox and pending reasons)
 - Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
 
 ### Content Model v2 (Saudi license site – implemented schema)
@@ -519,6 +510,27 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
 - :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
 - Public site process: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve the v2 public site (Home/About/Contact) rendering live v2 entities (hero stats/flows, licenses, comparison rows, journey/activation, personas/support, FAQs, values, team, contact) with visibility filtering.
+
+## Data & Provenance: Entity + Fact Model (v1)
+- Identity:
+  - Every real-world thing is an entity with `:entity/id` + `:entity/type`. Reuse types; do not fork variants. People are always `:entity.type/person` (staff/user/client/lead are roles/segments, not new types). Channels are `:entity.type/channel` (with `:channel/platform`, `:channel/remote-id`, `:channel/workspace`, `:channel/bot?`).
+  - Handles: store external handles on the person (or as a collection) with platform/value/verified flags. Keep a lookup of (platform, remote-id) → `:entity/id` to dedupe.
+  - Linking: person ↔ channel bindings are facts (chat-link) scoped by workspace; enforce at most one active link unless explicitly multi-linked.
+- Provenance (required on every fact):
+  - `:fact/source-id`, `:fact/source-type` (user|integration|rule|import|system), `:fact/adapter` (telegram/web/rule/importer), `:fact/run-id`, `:fact/workspace`.
+  - `:fact/created-at`, `:fact/valid-from`, optional `:fact/valid-until`.
+  - Evidence/lineage: `:fact/evidence-ref` or hash, `:fact/inputs` (facts), `:fact/rule-id`, `:fact/rule-version`, optional `:fact/confidence`, optional `:fact/signature` for tamper-evidence.
+- Fact shapes (immutable events; projections derive “current” state):
+  - Tasks: create, status-change, assign, due-set/clear, tags-set, archived-set, pending-reason (as note link), title/description changes.
+  - Notes: `:entity.type/note` with `:note/type` (pending-reason, comment, system), `:note/body`, `:note/subject` (entity ref), provenance.
+  - Channels: message-received, message-sent, chat-linked-to-person, bot-start token usage.
+  - Rules/imports: rule-fired facts (inputs/outputs/lineage); import facts with dataset/version/row hash/source file.
+- Invariants:
+  - Facts must carry provenance and workspace. Status transitions respect enums; pending requires a pending-reason note. External handles unique per (platform, workspace). One active link per (person, channel, workspace) unless flagged multi-link.
+  - Projections read from facts; mutable attrs remain only as compatibility during migration.
+- Rollout:
+  - Add schema for provenance fields, handles, channels, notes. Backfill existing tasks into fact history with migration provenance, attach workspace. Keep old attrs in sync until projections cut over.
+  - Adapt adapters (web UI, Telegram, rules/importers) to emit provenance-aware facts; notifications/logs become message facts. Surface lineage minimally in UI (“from rule X / chat Y”) after projections stabilize.
 
 ## Change Rules
 - When adding/updating capabilities, update the relevant section with a stable ID.
