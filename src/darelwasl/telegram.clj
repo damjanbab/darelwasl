@@ -1116,4 +1116,4 @@
                        {:status :handled
                         :telegram/command command
                         :telegram/message-id (:telegram/message-id send-res)}))
-              :else {:status :handled}))))))))))
+              :else {:status :handled}))))))))
