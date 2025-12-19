@@ -29,6 +29,8 @@
 (defonce pending-reasons
   (atom {}))
 
+(declare ensure-conn)
+
 (defn- prune-captures!
   []
   (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
