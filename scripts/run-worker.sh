@@ -4,5 +4,4 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT"
-exec clojure -M:dev -m darelwasl.workers.outbox
-
+exec clojure -M -m darelwasl.workers.outbox
