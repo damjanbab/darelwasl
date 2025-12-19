@@ -6,7 +6,8 @@
             [darelwasl.config :as config]
             [darelwasl.server :as server]
             [darelwasl.site.server :as site-server]
-            [darelwasl.telegram :as telegram]))
+            [darelwasl.telegram :as telegram]
+            [darelwasl.workers.outbox :as outbox-worker]))
 
 (defonce system-state (atom nil))
 
@@ -26,7 +27,21 @@
                :auth/user-index user-index}
          started (-> base
                      (server/start-http)
-                     (site-server/start))]
+                     (site-server/start))
+         outbox-enabled? (get-in cfg [:outbox :worker-enabled?])
+         worker-future (when (and outbox-enabled? (not (:error db-state)))
+                         (future
+                           (try
+                             (outbox-worker/run-loop!
+                              {:config cfg
+                               :db db-state}
+                              {:poll-ms (get-in cfg [:outbox :poll-ms])})
+                             (catch InterruptedException _
+                               (log/info "Outbox worker stopped"))
+                             (catch Exception e
+                               (log/error e "Outbox worker crashed")))))
+         started (cond-> started
+                   worker-future (assoc :outbox/worker worker-future))]
      (telegram/auto-set-webhook! (:telegram cfg))
      (reset! system-state started)
      started)))
@@ -35,6 +50,8 @@
   "Stop the running application."
   []
   (when-let [state @system-state]
+    (when-let [worker (:outbox/worker state)]
+      (future-cancel worker))
     (-> state
         (site-server/stop)
         (server/stop-http))

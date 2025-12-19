@@ -13,6 +13,8 @@
               :http-timeout-ms 3000
               :link-token-ttl-ms 900000
               :auto-set-webhook? true}
+   :outbox {:worker-enabled? false
+            :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
              :system "darelwasl"
              :db-name "darelwasl"}
@@ -79,6 +81,11 @@
                                               (get-in default-config [:telegram :link-token-ttl-ms]))
                 :auto-set-webhook? (env-bool (get env "TELEGRAM_AUTO_SET_WEBHOOK")
                                              (get-in default-config [:telegram :auto-set-webhook?]))})
+        (assoc :outbox
+               {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
+                                           (get-in default-config [:outbox :worker-enabled?]))
+                :poll-ms (parse-int (get env "OUTBOX_WORKER_POLL_MS")
+                                    (get-in default-config [:outbox :poll-ms]))})
         (assoc-in [:datomic :storage-dir]
                   (normalize-storage-dir (get env "DATOMIC_STORAGE_DIR")
                                          (get-in default-config [:datomic :storage-dir])))
