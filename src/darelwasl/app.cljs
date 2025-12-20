@@ -341,7 +341,16 @@
              :status :idle
              :error nil
              :tag-entry ""
-             :form (assoc default-task-form :assignee (default-assignee-id assignees session))))) 
+             :form (assoc default-task-form :assignee (default-assignee-id assignees session)))))
+
+(defn- closed-detail
+  [assignees session]
+  (-> default-task-detail
+      (assoc :mode :closed
+             :status :idle
+             :error nil
+             :tag-entry ""
+             :form (assoc default-task-form :assignee (default-assignee-id assignees session)))))
 
 (rf/reg-fx
  ::apply-theme
@@ -586,7 +595,7 @@
                                                                            (default-assignee-id assignees (:session db)))]
                                                           (assoc form :assignee assignee)))))
                        selected-task (detail-from-task selected-task)
-                       :else (blank-detail assignees (:session db)))))
+                       :else (closed-detail assignees (:session db)))))
           (assoc-in [:tasks :status] (if (seq tasks) :ready :empty))
          (assoc-in [:tasks :error] nil)))))
 
@@ -1902,7 +1911,7 @@
          (assoc-in [:tasks :selected] task-id)
          (assoc-in [:tasks :detail] (if task
                                       (detail-from-task task)
-                                      (blank-detail assignees (:session db))))))))
+                                      (closed-detail assignees (:session db))))))))
 
 (rf/reg-event-fx
  ::set-task-page
@@ -1988,6 +1997,14 @@
      (assoc-in db [:tasks :detail] (if selected-task
                                      (detail-from-task selected-task)
                                      (blank-detail assignees (:session db)))))))
+
+(rf/reg-event-db
+ ::close-detail
+ (fn [db _]
+   (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+     (-> db
+         (assoc-in [:tasks :selected] nil)
+         (assoc-in [:tasks :detail] (closed-detail assignees (:session db)))))))
 
 (rf/reg-event-db
  ::update-detail-field

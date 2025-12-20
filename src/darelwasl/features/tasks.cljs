@@ -270,9 +270,7 @@
           create? (= mode :create)
           saving? (= detail-status :saving)
           available-assignees (if (seq assignees) assignees state/fallback-assignees)
-          close-sheet! #(do
-                          (rf/dispatch [:darelwasl.app/reset-detail])
-                          (rf/dispatch [:darelwasl.app/select-task nil]))]
+          close-sheet! #(rf/dispatch [:darelwasl.app/close-detail])]
       (let [placeholder (when (and (not create?) (nil? task))
                           [:div.placeholder-card
                            [:strong (:placeholder-title task-config)]
