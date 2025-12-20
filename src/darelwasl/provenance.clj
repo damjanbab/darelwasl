@@ -3,10 +3,21 @@
   (:require [clojure.string :as str])
   (:import (java.util Date)))
 
+(def ^:private surface->adapter
+  {:surface/http :adapter/web-ui
+   :surface/telegram :adapter/telegram
+   :surface/rule :adapter/rule
+   :surface/import :adapter/import})
+
+(defn- adapter-from-actor
+  [actor]
+  (or (:actor/adapter actor)
+      (get surface->adapter (:actor/surface actor))))
+
 (defn provenance
   "Build a provenance map for writes. Adapter defaults to web-ui; workspace defaults to \"default\".
   Optionally accepts a run-id for batch/rule contexts."
-  ([actor] (provenance actor :adapter/web-ui nil))
+  ([actor] (provenance actor (or (adapter-from-actor actor) :adapter/web-ui) nil))
   ([actor adapter] (provenance actor adapter nil))
   ([actor adapter run-id]
    (into {}
