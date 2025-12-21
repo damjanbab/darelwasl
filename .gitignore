@@ -5,6 +5,7 @@ public/js
 .DS_Store
 npm-debug.log*
 yarn-error.log*
+*.log
 scripts/load_github_token.sh
 target/
 classes/
