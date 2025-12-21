@@ -58,7 +58,7 @@
    :extended? false})
 
 (def default-task-detail
-  {:mode :edit
+  {:mode :closed
    :status :idle
    :error nil
    :tag-entry ""

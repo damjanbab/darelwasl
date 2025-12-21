@@ -7,8 +7,8 @@
  :user/roles [:role/admin :role/content-editor]}
  {:user/id #uuid "00000000-0000-0000-0000-000000000002"
   :entity/type :entity.type/user
-  :user/username "damjan"
-  :user/name "Damjan"
-  :user/password "Damjan1!"
-  :user/roles [:role/content-editor]}
+ :user/username "damjan"
+ :user/name "Damjan"
+ :user/password "Damjan1!"
+ :user/roles [:role/admin :role/content-editor]}
 ]

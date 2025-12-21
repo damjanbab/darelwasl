@@ -500,7 +500,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Process: when a change affects composability rules, update this section and the relevant registry entries in the same run; tasks must declare their composability impact.
 ## Fixtures and Test Data
 - :fixtures/users (`fixtures/users.edn`): two dev users (`huda` -> `00000000-0000-0000-0000-000000000001`, `damjan` -> `00000000-0000-0000-0000-000000000002`) sharing password `Damjan1!`. Used by auth/login action contracts and any seed tasks; registry checks ensure required keys, unique usernames/IDs, and that tasks reference these users.
--   Roles: fixtures carry `:user/roles` (huda = `:role/admin` + `:role/content-editor`, damjan = `:role/content-editor`) to gate the control panel and content actions.
+-   Roles: fixtures carry `:user/roles` (huda = `:role/admin` + `:role/content-editor`, damjan = `:role/admin` + `:role/content-editor`) to gate the control panel and content actions.
 - :fixtures/tags (`fixtures/tags.edn`): tag entities with fixed IDs and names (`Ops`, `Home`, `Finance`, `Urgent`) used by tasks and exposed via `/api/tags`.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tag references (lookup refs to `:tag/id`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
 - All fixtures include `:entity/type` (`:entity.type/user`, `:entity.type/task`, `:entity.type/tag`). A backfill helper sets this on existing DBs lacking it (inferred from identity attrs).

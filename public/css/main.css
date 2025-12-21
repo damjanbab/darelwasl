@@ -1504,6 +1504,18 @@ button.list-row .meta {
   flex-wrap: wrap;
 }
 
+.detail-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-scale-2);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.mobile-only {
+  display: none;
+}
+
 .detail-shell {
   position: relative;
   z-index: 25;
@@ -1666,6 +1678,16 @@ button.list-row .meta {
   }
 }
 @media (max-width: 960px) {
+  body.detail-open {
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  body.detail-open #app,
+  body.detail-open .app-shell {
+    height: 100vh;
+  }
+
   .main-grid {
     grid-template-columns: 1fr;
   }
@@ -1690,6 +1712,7 @@ button.list-row .meta {
     position: fixed;
     inset: 0;
     pointer-events: none;
+    z-index: 240;
   }
 
   .detail-sheet__backdrop {
@@ -1699,6 +1722,7 @@ button.list-row .meta {
     background: rgba(0, 0, 0, 0.35);
     opacity: 0;
     transition: opacity var(--motion-transition);
+    touch-action: none;
   }
 
   .detail-sheet__panel {
@@ -1708,13 +1732,21 @@ button.list-row .meta {
     bottom: 0;
     transform: translateY(100%);
     transition: transform var(--motion-transition);
-    max-height: 82vh;
+    height: 85vh;
+    max-height: 85vh;
     pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .detail-sheet__panel .panel {
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.16);
+    max-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .detail-shell.open {
@@ -1727,6 +1759,10 @@ button.list-row .meta {
 
   .detail-shell.open .detail-sheet__panel {
     transform: translateY(0);
+  }
+
+  .mobile-only {
+    display: inline-flex;
   }
 
   .more-filters__panel {

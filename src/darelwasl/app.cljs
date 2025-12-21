@@ -362,6 +362,14 @@
      (apply-theme! theme-id))))
 
 (rf/reg-fx
+ ::set-body-scroll-lock
+ (fn [locked?]
+   (let [class-list (.-classList js/document.body)]
+     (if locked?
+       (.add class-list "detail-open")
+       (.remove class-list "detail-open")))))
+
+(rf/reg-fx
  ::persist-last-route
  (fn [route]
    (when route
@@ -423,7 +431,8 @@
               (assoc-in [:nav :menu-open?] false)
               (assoc-in [:nav :last-route] safe-route))
       :dispatch-n dispatches
-      ::persist-last-route safe-route})))
+      ::persist-last-route safe-route
+      ::set-body-scroll-lock false})))
 
 (rf/reg-event-fx
  ::set-theme
@@ -1902,16 +1911,17 @@
    {:db (assoc-in db [:tasks :filters] default-task-filters)
     :dispatch [::fetch-tasks]}))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::select-task
- (fn [db [_ task-id]]
+ (fn [{:keys [db]} [_ task-id]]
    (let [task (some #(when (= (:task/id %) task-id) %) (get-in db [:tasks :items]))
          assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
-     (-> db
-         (assoc-in [:tasks :selected] task-id)
-         (assoc-in [:tasks :detail] (if task
-                                      (detail-from-task task)
-                                      (closed-detail assignees (:session db))))))))
+     {:db (-> db
+              (assoc-in [:tasks :selected] task-id)
+              (assoc-in [:tasks :detail] (if task
+                                           (detail-from-task task)
+                                           (closed-detail assignees (:session db)))))
+      ::set-body-scroll-lock (boolean task)})))
 
 (rf/reg-event-fx
  ::set-task-page
@@ -1979,13 +1989,14 @@
                                                                                             :method "POST"
                                                                                             :body {:task/archived? (:archived? form)}}))))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::start-new-task
- (fn [db _]
+ (fn [{:keys [db]} _]
    (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
-     (-> db
-         (assoc-in [:tasks :selected] nil)
-         (assoc-in [:tasks :detail] (blank-detail assignees (:session db)))))))
+     {:db (-> db
+              (assoc-in [:tasks :selected] nil)
+              (assoc-in [:tasks :detail] (blank-detail assignees (:session db))))
+      ::set-body-scroll-lock true})))
 
 (rf/reg-event-db
  ::reset-detail
@@ -1998,13 +2009,14 @@
                                      (detail-from-task selected-task)
                                      (blank-detail assignees (:session db)))))))
 
-(rf/reg-event-db
+(rf/reg-event-fx
  ::close-detail
- (fn [db _]
+ (fn [{:keys [db]} _]
    (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
-     (-> db
-         (assoc-in [:tasks :selected] nil)
-         (assoc-in [:tasks :detail] (closed-detail assignees (:session db)))))))
+     {:db (-> db
+              (assoc-in [:tasks :selected] nil)
+              (assoc-in [:tasks :detail] (closed-detail assignees (:session db))))
+      ::set-body-scroll-lock false})))
 
 (rf/reg-event-db
  ::update-detail-field

@@ -270,7 +270,10 @@
           create? (= mode :create)
           saving? (= detail-status :saving)
           available-assignees (if (seq assignees) assignees state/fallback-assignees)
-          close-sheet! #(rf/dispatch [:darelwasl.app/close-detail])]
+          close-sheet! #(rf/dispatch [:darelwasl.app/close-detail])
+          close-on-outside (fn [e]
+                             (when (nil? (.closest (.-target e) ".detail-sheet__panel"))
+                               (close-sheet!)))]
       (let [placeholder (when (and (not create?) (nil? task))
                           [:div.placeholder-card
                            [:strong (:placeholder-title task-config)]
@@ -291,14 +294,20 @@
                      :deleting [:span.pill "Deleting..."]
                      nil)
             sheet-open? (or create? (some? task))]
-        [:div.detail-shell {:class (when sheet-open? "open")}
-         [:div.detail-sheet__backdrop {:on-click close-sheet!}]
+        [:div.detail-shell {:class (when sheet-open? "open")
+                            :on-click close-on-outside}
+         [:div.detail-sheet__backdrop]
          [:div.detail-sheet__panel
           [ui/entity-detail
            {:title title
             :badge badge
             :meta meta
             :actions [:div.detail-header-actions
+                      [:button.button.secondary {:type "button"
+                                                 :class "mobile-only"
+                                                 :on-click close-sheet!
+                                                 :disabled saving?}
+                       "Back to list"]
                       [:button.button.secondary {:type "button"
                                                  :on-click #(rf/dispatch [:darelwasl.app/start-new-task])
                                                  :disabled saving?}
