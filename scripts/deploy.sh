@@ -25,6 +25,10 @@ if [[ "${1:-}" == "--no-build" ]]; then
 fi
 
 cd "$ROOT"
+if [[ ! -d .git || ! -w .git/objects ]]; then
+  echo "Deploy user lacks write access to .git/objects; fix ownership before deploy."
+  exit 1
+fi
 git fetch origin main
 git checkout main
 git pull origin main

@@ -37,4 +37,4 @@ jobs:
           HETZNER_SSH_USER: ${{ secrets.HETZNER_SSH_USER }}
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes "${HETZNER_SSH_USER}@${HETZNER_SSH_HOST}" "cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl && sudo systemctl --no-pager status darelwasl"
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes "${HETZNER_SSH_USER}@${HETZNER_SSH_HOST}" "sudo chown -R darelwasl:darelwasl /opt/darelwasl/.git && sudo chmod -R u+rwX /opt/darelwasl/.git/objects && cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl && sudo systemctl --no-pager status darelwasl"
