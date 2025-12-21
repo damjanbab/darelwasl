@@ -82,6 +82,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Determinism/Dependencies:
 - Related Capabilities and Proofs:
 - Gotchas (link to `docs/faq.md` entries if any):
+- Registry dump (admin-only): `GET /api/registries` with optional `?name=` for diagnostics; returns raw registry EDN.
 
 ### Theme
 - ID:
@@ -154,7 +155,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - CTA: one global footer CTA band above the footer (static) instead of per-page CTA cards.
 - Layout rhythm: dark hero on Home; rest of body is light; compact footer (not a second nav maze).
 - Data & ordering: render from existing v2 content entities (licenses, comparison rows, journey/activation, personas/support, FAQs, values/team, business/contact, hero stats/flows); respect visibility flags; deterministic ordering by `.../order` with stable fallback (id/label) when order missing.
-- Tokens only: no hardcoded colors/spacing/typography—use generated theme CSS variables. Public site uses `:theme/site-premium` tokens (v2) with `data-theme="theme-site-premium"`.
+- Tokens only: no hardcoded colors/spacing/typography—use generated theme CSS variables. Public site uses `:theme/site-premium` tokens (v2) with `data-theme="site-premium"`.
 - Responsive & a11y: centered max-width, no horizontal scroll; header/nav/CTA remain accessible on desktop/mobile; tap targets ≥44px; keyboard navigable menus; visible focus; no hover-only affordances.
 
 ## Patterns and Guidelines

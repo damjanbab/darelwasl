@@ -91,6 +91,16 @@
   :gotchas ["Runs importer against data/land/hrib_parcele_upisane_osobe.csv into a temp Datomic (:mem); dataset must be present."
             "Uses deterministic IDs; reruns are safe. Add --dry-run when calling manually to skip transact."]}
 
+ {:id :cap/tooling/registry-dump
+  :title "Registry dump endpoint"
+  :version "v1"
+  :invocation "GET /api/registries[?name=schema|actions|views|integrations|tooling|theme|automations]"
+  :scope {:writes? false :reads [:registries]}
+  :determinism :high
+  :enforces [:registry-readonly]
+  :related {:capabilities [:cap/tooling/edn-validate]}
+  :gotchas ["Admin session required; returns raw registry EDN content for diagnostics only."]}
+
  {:id :cap/tooling/site-process
   :title "Public Site Process"
   :version "v0"

@@ -71,15 +71,60 @@
            :warning "#F59E0B"
            :danger "#F97066"
            :success "#22C55E"
-           :focus "#0EA5E9"}
+           :focus "#0EA5E9"
+           :transparent "transparent"
+           :hero-pill-bg "rgba(255,255,255,0.12)"
+           :hero-strapline "rgba(248,251,252,0.86)"
+           :hero-card-bg "rgba(255,255,255,0.08)"
+           :hero-card-border "rgba(255,255,255,0.18)"
+           :hero-text-muted "rgba(248,251,252,0.7)"
+           :hero-step-border "rgba(255,255,255,0.2)"
+           :hero-step-bg "rgba(255,255,255,0.04)"}
   :typography {:font-family "Inter, \"IBM Plex Sans\", system-ui, -apple-system, sans-serif"
-               :font-sizes {:title "56px" :section "32px" :body "18px" :meta "14px"}
-               :line-heights {:title "64px" :section "40px" :body "28px" :meta "20px"}}
+               :font-sizes {:title "56px"
+                            :section "32px"
+                            :body "18px"
+                            :meta "14px"
+                            :hero-min "48px"
+                            :hero-light-min "36px"
+                            :hero-light-max "48px"
+                            :stat-min "24px"
+                            :stat-max "30px"}
+               :line-heights {:title "64px"
+                              :section "40px"
+                              :body "28px"
+                              :meta "20px"
+                              :hero "1.15"
+                              :hero-light "1.2"}
+               :letter-spacing {:caps-strong "0.08em"
+                                :caps "0.06em"}}
   :spacing {:base "4px"
-            :scale ["8px" "16px" "24px" "32px" "40px" "56px" "72px" "88px" "104px"]}
-  :radius {:sm "8px" :md "14px" :lg "18px"}
+            :scale ["8px" "16px" "24px" "32px" "40px" "56px" "72px" "88px" "104px"]
+            :layout {:max-width "1160px"
+                     :hero-min-height "70vh"}
+            :grid {:stats-min "200px"
+                   :card-min "260px"
+                   :timeline-min "240px"
+                   :team-min "220px"}
+            :component {:logo-height "72px"
+                        :step-index "36px"
+                        :rail-node "14px"}
+            :border {:thin "1px"
+                     :thick "2px"}
+            :size {:x6 "6px"
+                   :x10 "10px"
+                   :x12 "12px"
+                   :x14 "14px"
+                   :x18 "18px"}}
+  :radius {:sm "8px"
+           :md "14px"
+           :lg "18px"
+           :badge "10px"
+           :pill "999px"}
   :shadows {:card "0 16px 40px rgba(15,23,42,0.08)"}
-  :motion {:transition "160ms ease"}
+  :motion {:transition "160ms ease"
+           :backdrop-blur "10px"
+           :hover-lift "-1px"}
   :compatibility {:backward true :forward true :flags []}
   :related {:views [:cap/view/site-home
                     :cap/view/site-services
