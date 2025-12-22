@@ -120,6 +120,17 @@
           {:cursor (+ start to-read)
            :chunk (sanitize-output (String. buf "UTF-8"))})))))
 
+(defn- capture-output
+  [session max-bytes]
+  (let [text (tmux/capture-pane (:tmux session))
+        length (count text)
+        trimmed (if (> length max-bytes)
+                  (subs text (- length max-bytes))
+                  text)]
+    {:cursor length
+     :chunk trimmed
+     :mode :replace}))
+
  (defn create-session!
    [store cfg {:keys [name]}]
    (let [id (str (UUID/randomUUID))
@@ -196,9 +207,11 @@
    (tmux/send! (:tmux session) text)
    true)
 
- (defn output-since
-   [session cursor max-bytes]
-   (read-output (:chat-log session) cursor max-bytes))
+(defn output-since
+  [session cursor max-bytes]
+  (if (tmux/running? (:tmux session))
+    (capture-output session max-bytes)
+    (read-output (:chat-log session) cursor max-bytes)))
 
  (defn complete-session!
    [store session]

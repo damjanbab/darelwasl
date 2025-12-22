@@ -2052,12 +2052,14 @@
 (rf/reg-event-fx
  ::terminal-output-success
  (fn [{:keys [db]} [_ payload]]
-   (let [chunk (:chunk payload)
+   (let [chunk (or (:chunk payload) "")
          cursor (:cursor payload)
-         next-db (-> db
-                     (update-in [:terminal :output] str chunk)
-                     (assoc-in [:terminal :cursor] cursor)
-                     (assoc-in [:terminal :error] nil))
+         replace? (= :replace (:mode payload))
+         next-db (cond-> db
+                   replace? (assoc-in [:terminal :output] chunk)
+                   (and (not replace?) (seq chunk)) (update-in [:terminal :output] str chunk)
+                   true (assoc-in [:terminal :cursor] cursor)
+                   true (assoc-in [:terminal :error] nil))
          polling? (get-in next-db [:terminal :polling?])]
      (cond-> {:db next-db}
        polling? (assoc ::fx/dispatch-later {:ms 1000
