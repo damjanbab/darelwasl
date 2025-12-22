@@ -118,6 +118,13 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
 - Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
 
+## Odds API Integration (betting CLV)
+- Capabilities: :cap/integration/odds-api provides on-demand access to events, event odds, and scores for CLV references.
+- Auth/config: env var `ODDS_API_KEY` required; optional `ODDS_API_BASE_URL` (defaults to `https://api.the-odds-api.com/v4`) and `ODDS_API_TIMEOUT_MS` (default 3000).
+- Endpoints: `/sports/{sport_key}/events`, `/sports/{sport_key}/events/{id}/odds`, `/sports/{sport_key}/scores` (dateFormat defaults to ISO; oddsFormat defaults to decimal).
+- Guardrails: no polling scheduler; requests are user-triggered only; client reads rate-limit headers and returns quota state; 429 treated as rate-limit error.
+- CI: no live Odds API calls in CI; use stubs/fixtures in tests.
+
 ### Content Model v2 (Saudi license site – implemented schema)
 - Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
 - Entities:

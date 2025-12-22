@@ -90,7 +90,7 @@ Constraints: no guaranteed-profit claims; prioritize CLV feedback over outcome p
   - Reporting: Summarize schema shape and fixture coverage
 
 - Task ID: integration-odds-api
-  - Status: pending
+  - Status: done
   - Objective: Add an Odds API integration adapter for events, odds, and scores.
   - Scope: Integration registry entry; config via `ODDS_API_KEY`; client module for `/events`, `/events/{id}/odds`, `/scores`; basic error handling and rate-limit guardrails; no polling scheduler.
   - Out of Scope: Automated refresh jobs, ML, other data providers.

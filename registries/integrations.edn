@@ -50,10 +50,30 @@
   :compatibility {:backward true
                   :forward true
                   :flags [:telegram/webhook-enabled? :telegram/notifications-enabled?]}
-  :adapter {:library "Telegram Bot API (HTTPS)"
+ :adapter {:library "Telegram Bot API (HTTPS)"
             :notes "Use HTTP client wrapper with stubs; no live Telegram calls in CI"}
   :related {:actions [:cap/action/telegram-send-message
                       :cap/action/telegram-set-webhook
                       :cap/action/telegram-handle-update]
             :schema [:cap/schema/user]}}
+
+ {:id :cap/integration/odds-api
+  :title "Odds API"
+  :version "v1"
+  :external-system "The Odds API"
+  :contracts {:timeout_ms 3000
+              :rate_limit "header-based (x-requests-remaining/used); 429 signals backoff"
+              :endpoints ["/sports/{sport_key}/events"
+                          "/sports/{sport_key}/events/{id}/odds"
+                          "/sports/{sport_key}/scores"]}
+  :auth {:strategy :env-vars
+         :vars ["ODDS_API_KEY" "ODDS_API_BASE_URL" "ODDS_API_TIMEOUT_MS"]}
+  :failure-modes ["Missing API key" "429 rate limits" "Network timeouts/5xx" "Invalid sport/event ids"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "clj-http"
+            :notes "On-demand fetch only; no polling or scheduled refresh; no live calls in CI"}
+  :related {:actions []
+            :schema [:cap/schema/betting-event :cap/schema/betting-quote]}}
 ]

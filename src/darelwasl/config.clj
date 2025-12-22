@@ -13,6 +13,8 @@
               :http-timeout-ms 3000
               :link-token-ttl-ms 900000
               :auto-set-webhook? true}
+   :odds-api {:base-url "https://api.the-odds-api.com/v4"
+              :http-timeout-ms 3000}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -81,6 +83,12 @@
                                               (get-in default-config [:telegram :link-token-ttl-ms]))
                 :auto-set-webhook? (env-bool (get env "TELEGRAM_AUTO_SET_WEBHOOK")
                                              (get-in default-config [:telegram :auto-set-webhook?]))})
+        (assoc :odds-api
+               {:api-key (env-str (get env "ODDS_API_KEY") nil)
+                :base-url (env-str (get env "ODDS_API_BASE_URL")
+                                   (get-in default-config [:odds-api :base-url]))
+                :http-timeout-ms (parse-int (get env "ODDS_API_TIMEOUT_MS")
+                                            (get-in default-config [:odds-api :http-timeout-ms]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))
