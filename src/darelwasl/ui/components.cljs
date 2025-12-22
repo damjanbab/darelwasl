@@ -147,14 +147,16 @@
         list-class (or list-class "task-list")
         loading-node (or loading-node [loading-state])
         error-node (or error-node [error-state error])
-        empty-node (or empty-node [empty-state])]
+        empty-node (or empty-node [empty-state])
+        show-header? (or title meta (seq header-actions))]
    [:div.panel {:class panel-class}
-    [:div.section-header
-     [:div
-      [:h2 title]
-       (when meta [:span.meta meta])]
-     (when (seq header-actions)
-       (into [:div.controls] header-actions))]
+    (when show-header?
+      [:div.section-header
+       [:div
+        (when title [:h2 title])
+        (when meta [:span.meta meta])]
+       (when (seq header-actions)
+         (into [:div.controls] header-actions))])
     [chip-bar {:chips chips}]
     (case status
       :loading loading-node
@@ -171,15 +173,18 @@
          empty-node))]))
 
 (defn list-row
-  [{:keys [title meta selected? on-click trailing description]}]
-  [:button.list-row {:type "button"
-                     :class (when selected? "selected")
-                     :on-click on-click}
-   [:div
-    [:div.title title]
-    (when meta [:div.meta meta])
-    (when description [:div.meta description])]
-   (when trailing [:div.meta trailing])])
+  [{:keys [title meta selected? on-click trailing description class]}]
+  (let [row-class (->> [(when selected? "selected") class]
+                       (remove #(or (nil? %) (str/blank? %)))
+                       (str/join " "))]
+    [:button.list-row {:type "button"
+                       :class row-class
+                       :on-click on-click}
+     [:div.list-row__main
+      [:div.title title]
+      (when meta [:div.meta meta])
+      (when description [:div.meta description])]
+     (when trailing [:div.list-row__meta.meta trailing])]))
 
 (defn pagination-controls
   [{:keys [limit offset total current-count on-prev on-next]}]

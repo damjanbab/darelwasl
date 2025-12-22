@@ -1,26 +1,37 @@
 (ns darelwasl.ui.entity
-  (:require [darelwasl.ui.components :as ui]
+  (:require [clojure.string :as str]
+            [darelwasl.ui.components :as ui]
             [darelwasl.util :as util]))
 
 (def ^:private task-detail-copy
-  {:title "Task detail"
-   :create-title "Draft a new task"
-   :badge "Detail"
-   :create-badge "Compose"
-   :meta-create "Create a task with full fields and feature flag handling."
-   :meta-edit-default "Select a task to edit"
+  {:title "Task"
+   :create-title "New task"
+   :meta-edit-default "Select a task"
    :placeholder-title "Select a task"
-   :placeholder-copy "Choose a task from the list or start a fresh one. Full create/edit is available here."})
+   :placeholder-copy "Choose a task from the list or start a fresh one."})
 
 (def entity-view-config
   {:entity.type/task
    {:list {:title "Tasks"
            :key :task/id
            :meta-fn (fn [items] (str (count items) " items"))
-           :render-row (fn [task selected? {:keys [tag-index on-select]}]
-                         (let [handle-select (when on-select #(on-select task))]
-                           [ui/task-card task selected? tag-index
-                            {:on-select handle-select}]))}
+           :render-row (fn [task selected? {:keys [on-select]}]
+                         (let [{:task/keys [id title status priority due-date tags assignee archived?]} task
+                               handle-select (when on-select #(on-select task))
+                               status-label (if archived? "Archived" (when status (util/status-label status)))
+                               priority-label (when priority (util/priority-label priority))
+                               due-label (when due-date (str "Due " (util/format-date due-date)))
+                               assignee-label (or (:user/name assignee) (:user/username assignee))
+                               tag-label (when (seq tags)
+                                           (str (count tags) " tag" (when (not= 1 (count tags)) "s")))
+                               trailing (->> [status-label priority-label due-label assignee-label tag-label]
+                                             (remove #(or (nil? %) (str/blank? %)))
+                                             (str/join " · "))]
+                           [ui/list-row {:title (or title "Untitled")
+                                         :trailing trailing
+                                         :selected? selected?
+                                         :class "compact"
+                                         :on-click #(when handle-select (handle-select))}]))}
     :detail task-detail-copy}
 
    :entity.type/person

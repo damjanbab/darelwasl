@@ -40,7 +40,7 @@ generate() {
       theme-file (str root "/registries/theme.edn")
       themes (edn/read-string (slurp theme-file))
       default-id (read-string (System/getenv "THEME_ID"))
-      token-keys [:colors :typography :spacing :radius :shadows :motion]
+      token-keys [:colors :typography :spacing :radius :shadows :motion :components]
       flatten-tokens (fn flatten [prefix data]
                        (cond
                          (map? data) (mapcat (fn [[k v]]

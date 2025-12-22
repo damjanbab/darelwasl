@@ -565,11 +565,9 @@
  ::fetch-success
  (fn [db [_ payload]]
    (let [tasks (mapv normalize-task (:tasks payload))
-         selected (when (seq tasks)
-                    (let [current (get-in db [:tasks :selected])]
-                      (if (some #(= (:task/id %) current) tasks)
-                        current
-                        (:task/id (first tasks)))))
+         selected (let [current (get-in db [:tasks :selected])]
+                    (when (some #(= (:task/id %) current) tasks)
+                      current))
          assignees (let [opts (assignees-from-tasks tasks)]
                      (if (seq opts) opts fallback-assignees))
          pagination-raw (:pagination payload)
@@ -1921,7 +1919,7 @@
               (assoc-in [:tasks :detail] (if task
                                            (detail-from-task task)
                                            (closed-detail assignees (:session db)))))
-      ::set-body-scroll-lock (boolean task)})))
+      ::set-body-scroll-lock false})))
 
 (rf/reg-event-fx
  ::set-task-page
@@ -1996,7 +1994,7 @@
      {:db (-> db
               (assoc-in [:tasks :selected] nil)
               (assoc-in [:tasks :detail] (blank-detail assignees (:session db))))
-      ::set-body-scroll-lock true})))
+      ::set-body-scroll-lock false})))
 
 (rf/reg-event-db
  ::reset-detail

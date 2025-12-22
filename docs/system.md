@@ -155,7 +155,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - CTA: one global footer CTA band above the footer (static) instead of per-page CTA cards.
 - Layout rhythm: dark hero on Home; rest of body is light; compact footer (not a second nav maze).
 - Data & ordering: render from existing v2 content entities (licenses, comparison rows, journey/activation, personas/support, FAQs, values/team, business/contact, hero stats/flows); respect visibility flags; deterministic ordering by `.../order` with stable fallback (id/label) when order missing.
-- Tokens only: no hardcoded colors/spacing/typography—use generated theme CSS variables. Public site uses `:theme/site-premium` tokens (v2) with `data-theme="site-premium"`.
+- Tokens only: no hardcoded colors/spacing/typography or component sizing—use generated theme CSS variables (colors/typography/spacing/radius/shadows/motion/components). Public site uses `:theme/site-premium` tokens (v2) with `data-theme="site-premium"` and keeps its current visual tone.
 - Responsive & a11y: centered max-width, no horizontal scroll; header/nav/CTA remain accessible on desktop/mobile; tap targets ≥44px; keyboard navigable menus; visible focus; no hover-only affordances.
 
 ## Patterns and Guidelines
@@ -181,7 +181,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - New types must not break existing queries/views; defaults should be sensible when subtype/kind is absent.
 - Design standards (UI):
   - Use shared primitives: `form-input`/`select-field`/`button`, `entity-list` + `list-row`, `task-card`, `stat-group`/`stat-card`, `tag-highlights`, `assignee-pill`, land detail shells (`land-person-detail-view`, `land-parcel-detail-view`), and loading/empty/error states (`home-loading`, `loading-state`, `land-*`). Do not hand-roll new variants without extending the shared component lib.
-  - Tokens only: colors, spacing, radius, and typography must come from the theme CSS variables; no hardcoded hex/rgb/px outside the spacing/typography scale. Reuse existing classes (`panel`, `card`, `summary-cards`, `chip`, `badge`, `button`, `list-row`) instead of custom styling.
+  - Tokens only: colors, spacing, radius, typography, and component sizing must come from the theme CSS variables; no hardcoded hex/rgb/px outside the spacing/typography scale. Reuse existing classes (`panel`, `card`, `summary-cards`, `chip`, `badge`, `button`, `list-row`) instead of custom styling.
   - Layout defaults: two/three-column shells use the existing CSS grid (`home-layout`, `tasks-layout`, `land-layout`) and stack to single column on narrow screens; avoid horizontal scroll and fixed widths. Controls live in `.section-header` with right-aligned actions; footers via `app-shell`.
   - State handling: every view/list/detail renders explicit loading/empty/error UI (shared components) and must be resilient to empty collections. Keys for list items must be stable (entity IDs) with a deterministic fallback.
   - Accessibility & interaction: keep focusable controls as `<button>/<input>/<select>` with existing classes; ensure app switcher remains keyboard/focus friendly; avoid side effects in render (no async work in component bodies—dispatch effects in events/subs).
@@ -483,13 +483,14 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Overrides live in code, not registries; config maps keyed by type provide labels/formatters.
 
 ## Design Spec & Theming
-- Vibe: calm, professional; warm neutrals with teal accent.
-- Layout: desktop-first; list on left, detail side panel on right; mobile: stacked with slide-up detail.
-- Typography: clean sans (Inter/IBM Plex Sans), hierarchy for title/section/body/meta.
-- Components: buttons (primary/secondary/ghost), inputs/textarea/select, tag chips, status/priority badges, cards for list rows, empty/error states.
+- Vibe: calm, professional; cool neutrals with cobalt accent for the app; public site keeps its premium palette.
+- Layout: desktop mailbox for Tasks (list left, detail center, right spacer); mobile stacks content without slide-in panels for Tasks.
+- Typography: clean sans (Manrope/Plus Jakarta for app; site uses its own theme font), hierarchy for title/section/body/meta.
+- Components: buttons (primary/secondary/ghost), inputs/textarea/select, tag chips, status/priority badges, list rows, panels, empty/error states. Sizes and spacing come from component tokens.
 - Theming: tokens stored in `registries/theme.edn`; generate CSS vars; components must consume tokens/vars only (no hardcoded colors/spacing/fonts). Use radius/shadow/motion tokens for consistency. Light (`:theme/default`) and dark (`:theme/dark`) palettes ship together; UI exposes a sun/moon toggle.
 - Login: dedicated screen before tasks; uses same theme/tokens; shows error states clearly; supports shared password flow; minimal hero copy.
-- Theme tokens: default `:theme/default` uses background `#F7F4EF`, surface `#FFFFFF`, muted surface `#F0ECE6`, text `#1F2933/#52606D`, accent `#0FA3B1` with strong `#0B7E89`, focus color matches accent, warning/danger/success use `#F59E0B/#D14343/#2D9D78`. Typography uses `Inter, "IBM Plex Sans", system-ui, -apple-system, sans-serif` with sizes 20/16/14/12px and matching line heights 28/22/20/16px. Spacing base 4px with 4–32px scale, radius 4/8/12px, card shadow `0 6px 20px rgba(0,0,0,0.06)`, motion transition `150ms ease`.
+- Theme tokens: default `:theme/default` matches `registries/theme.edn` (“Soft linen + cobalt accent”: background `#F6F8FB`, surface `#FFFFFF`, muted surface `#EFF2F7`, text `#0F172A/#5E6B7B`, accent `#2563EB` with strong `#1D4ED8`; warning/danger/success `#D97706/#DC2626/#16A34A`). Typography uses `Manrope`, `Plus Jakarta Sans`, `Avenir Next` with sizes 22/18/15/12px and line heights 30/26/22/18px. Spacing base 4px with 4–32px scale, radius 6/10/14px, card shadow `0 1px 2px rgba(15,23,42,0.06)`, motion transition `140ms ease`.
+- Component tokens: theme exports `:components` (controls, compact controls, chips, list rows, panels, toolbars) to standardize sizing across app + site without changing the site’s look.
 - Theme CSS vars: `npm run theme:css-vars` writes `public/css/theme.css` from `registries/theme.edn` (defaults to `:theme/default`) and runs automatically before `npm run dev/build/check`; `public/index.html` loads it ahead of `public/css/main.css`, which uses only generated tokens (no hardcoded fallbacks).
 
 ## Composability Rules

@@ -50,12 +50,13 @@ header.site-header {
 }
 
 .nav-link {
-  padding: var(--spacing-size-x12) var(--spacing-scale-2);
-  border-radius: var(--radius-md);
+  padding: var(--components-control-padding-y) var(--components-control-padding-x);
+  border-radius: var(--components-control-radius);
   text-decoration: none;
   color: var(--colors-text-secondary);
   border: var(--spacing-border-thin) solid var(--colors-transparent);
   font-weight: 600;
+  font-size: var(--components-control-font-size);
   transition: all var(--motion-transition);
 }
 
@@ -83,9 +84,10 @@ header.site-header {
   display: none;
   background: none;
   border: var(--spacing-border-thin) solid var(--colors-border);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-size-x10) var(--spacing-size-x12);
+  border-radius: var(--components-control-compact-radius);
+  padding: var(--components-control-compact-padding-y) var(--components-control-compact-padding-x);
   color: var(--colors-text-primary);
+  font-size: var(--components-control-compact-font-size);
 }
 
 .mobile-menu {
@@ -254,12 +256,12 @@ section {
 .pill {
   display: inline-flex;
   align-items: center;
-  padding: var(--spacing-scale-1) var(--spacing-size-x12);
-  border-radius: var(--radius-pill);
+  padding: var(--components-chip-padding-y) var(--components-chip-padding-x);
+  border-radius: var(--components-chip-radius);
   background: var(--colors-surface-muted);
   color: var(--colors-text-secondary);
   font-weight: 600;
-  font-size: var(--typography-font-sizes-meta);
+  font-size: var(--components-chip-font-size);
 }
 
 .card-grid {
@@ -422,10 +424,11 @@ section {
 
 .cta {
   text-decoration: none;
-  padding: var(--spacing-size-x12) var(--spacing-scale-2);
-  border-radius: var(--radius-md);
+  padding: var(--components-control-padding-y) var(--components-control-padding-x);
+  border-radius: var(--components-control-radius);
   font-weight: 700;
   border: var(--spacing-border-thin) solid var(--colors-border);
+  font-size: var(--components-control-font-size);
 }
 
 .cta.primary {
@@ -447,14 +450,15 @@ section {
 }
 
 .tab {
-  padding: var(--spacing-size-x10) var(--spacing-size-x14);
-  border-radius: var(--radius-md);
+  padding: var(--components-control-compact-padding-y) var(--components-control-compact-padding-x);
+  border-radius: var(--components-control-compact-radius);
   border: var(--spacing-border-thin) solid var(--colors-border);
   background: var(--colors-surface);
   color: var(--colors-text-secondary);
   cursor: pointer;
   text-decoration: none;
   font-weight: 600;
+  font-size: var(--components-control-compact-font-size);
 }
 
 .tab.active {

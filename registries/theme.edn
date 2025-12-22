@@ -3,27 +3,67 @@
   :title "Soft linen + cobalt accent"
   :version "v1"
   :purpose "Minimalist base with quiet neutrals and a single blue accent"
-  :colors {:background "#F6F3EE"
+  :colors {:background "#F6F8FB"
            :surface "#FFFFFF"
-           :surface-muted "#EEE9E2"
-           :text-primary "#1B1C1E"
-           :text-secondary "#6A6F77"
-           :text-on-accent "#F7F8FB"
-           :border "#E3DED5"
-           :accent "#2A6AE6"
-           :accent-strong "#1F53BA"
-           :warning "#E1A243"
-           :danger "#D65A5A"
-           :success "#2E8C6A"
-           :focus "#2A6AE6"}
+           :surface-muted "#EFF2F7"
+           :text-primary "#0F172A"
+           :text-secondary "#5E6B7B"
+           :text-on-accent "#F8FAFC"
+           :border "#E2E8F0"
+           :border-strong "#CBD5E1"
+           :accent "#2563EB"
+           :accent-strong "#1D4ED8"
+           :warning "#D97706"
+           :danger "#DC2626"
+           :success "#16A34A"
+           :focus "#2563EB"
+           :focus-ring "rgba(37,99,235,0.18)"
+           :focus-ring-strong "rgba(37,99,235,0.28)"
+           :danger-soft "rgba(220,38,38,0.08)"
+           :chip-todo-bg "rgba(37,99,235,0.12)"
+           :chip-warning-bg "rgba(217,119,6,0.12)"
+           :chip-danger-bg "rgba(220,38,38,0.12)"
+           :chip-success-bg "rgba(22,163,74,0.12)"
+           :chip-neutral-bg "rgba(15,23,42,0.08)"
+           :chip-priority-high-bg "rgba(220,38,38,0.12)"
+           :chip-priority-medium-bg "rgba(217,119,6,0.12)"
+           :chip-priority-low-bg "rgba(22,163,74,0.12)"
+           :overlay "rgba(15,23,42,0.25)"
+           :overlay-strong "rgba(15,23,42,0.4)"}
   :typography {:font-family "\"Manrope\", \"Plus Jakarta Sans\", \"Avenir Next\", sans-serif"
-               :font-sizes {:title "20px" :section "16px" :body "14px" :meta "12px"}
-               :line-heights {:title "28px" :section "22px" :body "20px" :meta "16px"}}
+               :font-sizes {:title "22px" :section "18px" :body "15px" :meta "12px"}
+               :line-heights {:title "30px" :section "26px" :body "22px" :meta "18px"}}
   :spacing {:base "4px"
             :scale ["4px" "8px" "12px" "16px" "20px" "24px" "32px"]}
-  :radius {:sm "4px" :md "8px" :lg "12px"}
-  :shadows {:card "0 6px 20px rgba(0,0,0,0.06)"}
-  :motion {:transition "150ms ease"}
+  :radius {:sm "6px" :md "10px" :lg "14px"}
+  :shadows {:card "0 1px 2px rgba(15,23,42,0.06)"
+            :hover "0 6px 16px rgba(15,23,42,0.08)"
+            :focus "0 0 0 3px var(--colors-focus-ring)"
+            :sheet "-8px 0 24px rgba(15,23,42,0.12)"
+            :sheet-up "0 -12px 24px rgba(15,23,42,0.12)"}
+  :motion {:transition "140ms ease"}
+  :components {:control {:height 44
+                         :padding-x 12
+                         :padding-y 8
+                         :radius "var(--radius-sm)"
+                         :font-size "var(--typography-font-sizes-body)"}
+               :control-compact {:height 36
+                                 :padding-x 12
+                                 :padding-y 8
+                                 :radius "var(--radius-sm)"
+                                 :font-size "var(--typography-font-sizes-meta)"}
+               :chip {:padding-x 12
+                      :padding-y 8
+                      :radius "var(--radius-md)"
+                      :font-size "var(--typography-font-sizes-meta)"}
+               :list-row {:padding-x 16
+                          :padding-y 12
+                          :min-height 48}
+               :panel {:padding 20
+                       :radius "var(--radius-md)"}
+               :toolbar {:padding-x 20
+                         :padding-y 16
+                         :gap 12}}
   :compatibility {:backward true :forward true :flags []}
   :related {:views [:cap/view/login :cap/view/tasks]}}
 
@@ -31,27 +71,67 @@
   :title "Midnight cobalt"
   :version "v1"
   :purpose "Dark minimalist variant with subdued blues"
-  :colors {:background "#0F1114"
-           :surface "#171A1E"
-           :surface-muted "#121418"
-           :text-primary "#E8E9EC"
-           :text-secondary "#A2A7B0"
-           :text-on-accent "#0C1016"
-           :border "#2A2F37"
-           :accent "#5B8EEB"
-           :accent-strong "#4B78C9"
-           :warning "#E1A243"
-           :danger "#E16B6B"
-           :success "#2FA579"
-           :focus "#5B8EEB"}
+  :colors {:background "#0B0F1A"
+           :surface "#111827"
+           :surface-muted "#0F172A"
+           :text-primary "#E2E8F0"
+           :text-secondary "#94A3B8"
+           :text-on-accent "#0B0F1A"
+           :border "#1F2937"
+           :border-strong "#334155"
+           :accent "#60A5FA"
+           :accent-strong "#3B82F6"
+           :warning "#F59E0B"
+           :danger "#F87171"
+           :success "#34D399"
+           :focus "#60A5FA"
+           :focus-ring "rgba(96,165,250,0.22)"
+           :focus-ring-strong "rgba(96,165,250,0.32)"
+           :danger-soft "rgba(248,113,113,0.12)"
+           :chip-todo-bg "rgba(96,165,250,0.18)"
+           :chip-warning-bg "rgba(245,158,11,0.18)"
+           :chip-danger-bg "rgba(248,113,113,0.18)"
+           :chip-success-bg "rgba(52,211,153,0.18)"
+           :chip-neutral-bg "rgba(226,232,240,0.12)"
+           :chip-priority-high-bg "rgba(248,113,113,0.18)"
+           :chip-priority-medium-bg "rgba(245,158,11,0.18)"
+           :chip-priority-low-bg "rgba(52,211,153,0.18)"
+           :overlay "rgba(2,6,23,0.6)"
+           :overlay-strong "rgba(2,6,23,0.75)"}
   :typography {:font-family "\"Manrope\", \"Plus Jakarta Sans\", \"Avenir Next\", sans-serif"
-               :font-sizes {:title "20px" :section "16px" :body "14px" :meta "12px"}
-               :line-heights {:title "28px" :section "22px" :body "20px" :meta "16px"}}
+               :font-sizes {:title "22px" :section "18px" :body "15px" :meta "12px"}
+               :line-heights {:title "30px" :section "26px" :body "22px" :meta "18px"}}
   :spacing {:base "4px"
             :scale ["4px" "8px" "12px" "16px" "20px" "24px" "32px"]}
-  :radius {:sm "4px" :md "8px" :lg "12px"}
-  :shadows {:card "0 10px 28px rgba(0,0,0,0.25)"}
-  :motion {:transition "150ms ease"}
+  :radius {:sm "6px" :md "10px" :lg "14px"}
+  :shadows {:card "0 1px 2px rgba(2,6,23,0.4)"
+            :hover "0 8px 22px rgba(2,6,23,0.45)"
+            :focus "0 0 0 3px var(--colors-focus-ring)"
+            :sheet "-8px 0 24px rgba(2,6,23,0.5)"
+            :sheet-up "0 -12px 24px rgba(2,6,23,0.5)"}
+  :motion {:transition "140ms ease"}
+  :components {:control {:height 44
+                         :padding-x 12
+                         :padding-y 8
+                         :radius "var(--radius-sm)"
+                         :font-size "var(--typography-font-sizes-body)"}
+               :control-compact {:height 36
+                                 :padding-x 12
+                                 :padding-y 8
+                                 :radius "var(--radius-sm)"
+                                 :font-size "var(--typography-font-sizes-meta)"}
+               :chip {:padding-x 12
+                      :padding-y 8
+                      :radius "var(--radius-md)"
+                      :font-size "var(--typography-font-sizes-meta)"}
+               :list-row {:padding-x 16
+                          :padding-y 12
+                          :min-height 48}
+               :panel {:padding 20
+                       :radius "var(--radius-md)"}
+               :toolbar {:padding-x 20
+                         :padding-y 16
+                         :gap 12}}
  :compatibility {:backward true :forward true :flags []}
   :related {:views [:cap/view/login :cap/view/tasks]}}
 
@@ -125,6 +205,28 @@
   :motion {:transition "160ms ease"
            :backdrop-blur "10px"
            :hover-lift "-1px"}
+  :components {:control {:height 44
+                         :padding-x 16
+                         :padding-y 12
+                         :radius "var(--radius-md)"
+                         :font-size "var(--typography-font-sizes-body)"}
+               :control-compact {:height 40
+                                 :padding-x 14
+                                 :padding-y 10
+                                 :radius "var(--radius-md)"
+                                 :font-size "var(--typography-font-sizes-body)"}
+               :chip {:padding-x 12
+                      :padding-y 8
+                      :radius "var(--radius-pill)"
+                      :font-size "var(--typography-font-sizes-meta)"}
+               :list-row {:padding-x 16
+                          :padding-y 12
+                          :min-height 44}
+               :panel {:padding 32
+                       :radius "var(--radius-lg)"}
+               :toolbar {:padding-x 24
+                         :padding-y 16
+                         :gap 16}}
   :compatibility {:backward true :forward true :flags []}
   :related {:views [:cap/view/site-home
                     :cap/view/site-services
