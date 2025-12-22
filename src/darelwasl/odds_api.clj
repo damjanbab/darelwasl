@@ -13,7 +13,7 @@
       str/trim
       (str/replace #"/+$" "")))
 
-(defn- parse-long
+(defn- parse-header-long
   [value]
   (when (and (some? value) (not (str/blank? (str value))))
     (try
@@ -35,9 +35,9 @@
   [resp]
   (let [headers (:headers resp)]
     (compact-map
-     {:remaining (parse-long (get headers "x-requests-remaining"))
-      :used (parse-long (get headers "x-requests-used"))
-      :reset-seconds (parse-long (get headers "x-requests-reset"))})))
+     {:remaining (parse-header-long (get headers "x-requests-remaining"))
+      :used (parse-header-long (get headers "x-requests-used"))
+      :reset-seconds (parse-header-long (get headers "x-requests-reset"))})))
 
 (defn- parse-json-body
   [body]
