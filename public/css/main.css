@@ -1868,12 +1868,74 @@ button.list-row .meta {
 }
 
 @media (max-width: 900px) {
+  :root {
+    --components-control-height: 40px;
+    --components-control-padding-x: 10px;
+    --components-control-padding-y: 8px;
+    --components-control-compact-height: 32px;
+    --components-control-compact-padding-x: 10px;
+    --components-control-compact-padding-y: 6px;
+    --components-chip-padding-x: 10px;
+    --components-chip-padding-y: 6px;
+    --components-list-row-padding-x: 12px;
+    --components-list-row-padding-y: 10px;
+    --components-list-row-min-height: 44px;
+    --components-panel-padding: 16px;
+    --components-toolbar-padding-x: 16px;
+    --components-toolbar-padding-y: 12px;
+    --components-toolbar-gap: 8px;
+  }
+
   .login-panel {
     grid-template-columns: 1fr;
   }
+
+  .tasks-filter-bar {
+    gap: var(--spacing-scale-2);
+  }
+
+  .tasks-filter-bar__main {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: var(--spacing-scale-1);
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tasks-filter-bar__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .tasks-filter-group {
+    flex: 0 0 auto;
+  }
+
+  .tasks-filter-group .filter-select {
+    min-width: 140px;
+  }
+
+  .tasks-filter-bar .chip-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .task-pane {
+    gap: var(--spacing-scale-3);
+  }
+
   .tasks-layout {
     padding: var(--spacing-scale-4);
   }
+
+  .task-detail-empty {
+    display: none;
+  }
+
+  .detail-header-actions {
+    justify-content: flex-start;
+  }
+
   .tasks-layout.mailbox {
     display: flex;
     flex-direction: column;
