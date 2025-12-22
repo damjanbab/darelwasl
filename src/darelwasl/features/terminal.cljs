@@ -1,5 +1,6 @@
 (ns darelwasl.features.terminal
-   (:require [darelwasl.ui.components :as ui]
+   (:require [clojure.string :as str]
+             [darelwasl.ui.components :as ui]
              [darelwasl.ui.shell :as shell]
              [re-frame.core :as rf]))
 
@@ -11,7 +12,7 @@
      :complete "Complete"
      "Idle"))
 
- (defn- session-row
+(defn- session-row
    [session selected?]
    (let [ports (:ports session)
          meta (str (status-label session)
@@ -21,6 +22,24 @@
                    :selected? selected?
                    :class "terminal-session-row"
                    :on-click #(rf/dispatch [:darelwasl.app/terminal-select-session session])}]))
+
+(defn- quick-actions
+  [output]
+  (let [text (str/lower-case (or output ""))
+        allow? (str/includes? text "allow codex to work in this folder")
+        enter? (str/includes? text "press enter to continue")
+        actions (cond-> []
+                  allow? (conj [ui/button {:variant :secondary
+                                           :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["1" "Enter"]])}
+                                "Allow edits"]
+                               [ui/button {:variant :secondary
+                                           :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["2" "Enter"]])}
+                                "Ask for approval"])
+                  enter? (conj [ui/button {:variant :secondary
+                                           :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Enter"]])}
+                                "Press Enter"])))]
+    (when (seq actions)
+      (into [:div.terminal-quick-actions] actions))))
 
 (defn- terminal-list
   []
@@ -68,10 +87,12 @@
           [ui/button {:variant :danger
                       :on-click #(rf/dispatch [:darelwasl.app/terminal-complete-session])}
            "Complete"]]]
-        [:div.terminal-output
+       [:div.terminal-output
          [:pre output]
          (when error
            [:div.form-error error])]
+        (when-let [actions (quick-actions output)]
+          actions)
         [:div.terminal-input
          [ui/form-input {:value input
                          :placeholder "Send instructions..."

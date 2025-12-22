@@ -2081,7 +2081,8 @@
  (fn [{:keys [db]} [_ payload]]
    (let [chunk (or (:chunk payload) "")
          cursor (:cursor payload)
-         replace? (= :replace (:mode payload))
+         mode (:mode payload)
+         replace? (or (= :replace mode) (= "replace" mode))
          next-db (cond-> db
                    replace? (assoc-in [:terminal :output] chunk)
                    (and (not replace?) (seq chunk)) (update-in [:terminal :output] str chunk)
