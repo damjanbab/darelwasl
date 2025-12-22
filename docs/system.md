@@ -399,6 +399,33 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Multi-market coverage beyond the single selected market per bet in v1.
   - Profit/loss projection beyond the logged bet result.
 
+## Design Spec: Betting CLV Trainer (MVP)
+- Visual language: analytical and calm; use existing theme tokens with neutral surfaces and a single accent. No celebratory or "win" styling.
+- Layout:
+  - Desktop: two-pane shell with match list on the left and match detail on the right; bet log and CLV scoreboard sit inside the detail pane as stacked panels.
+  - Mobile: single column; match list first, then detail panel with price board, bet form, bet log, and scoreboard. Include a clear "Back to list" affordance at the top of detail.
+- Match list:
+  - Use `list-row` with one title line and one meta line (sport + start time + provider status).
+  - Status chip shows `Live`, `Upcoming`, or `Final`; no extra badges.
+- Match detail + price board:
+  - Reference odds panel shows market/side, best available price, and last updated time.
+  - Manual bookmaker odds input uses `form-input` with inline validation; disable "Log bet" until odds and stake are valid.
+  - "Refresh odds" and "Capture close" are primary and secondary `button`s; show a small loading state and last update time.
+- Bet log + CLV scoreboard:
+  - Bet log uses `list-row` with selection, stake, odds, and CLV status; include a small meta line for "Logged at" time.
+  - Scoreboard uses `stat-group`/`stat-card` for average CLV, % ahead of close, close coverage, and total bets.
+- CLV badges and copy:
+  - Status chips: `Awaiting close`, `Ahead of close`, `At close`, `Behind close`.
+  - Use success/warn/danger token colors with subtle tinted backgrounds; never imply profit or certainty.
+  - CLV value shows signed percent (e.g., +2.4%); hide numeric CLV until a close snapshot exists.
+- Interaction rules:
+  - All odds refreshes are user-triggered; show a cooldown hint if refresh happens too often.
+  - If reference odds are unavailable, show an empty state with a single "Refresh odds" action.
+  - Selection changes do not auto-log; user must explicitly log the bet.
+- Accessibility and density:
+  - Tap targets at least 44px tall; avoid multi-line rows beyond title + meta.
+  - Keyboard focus visible for inputs, chips, and actions; no hover-only affordances.
+
 ## Design Spec: Entity View Redesign (Task View v2)
 - Visual language: calm, low-contrast neutrals with one clear accent; generous whitespace; minimal ornament.
 - Typography: expressive but restrained. Use a serif or humanist for headings and a clean sans for body; meta text can use a subtle mono. Avoid default system stacks.

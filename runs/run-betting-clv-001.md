@@ -34,7 +34,7 @@ Constraints: no guaranteed-profit claims; prioritize CLV feedback over outcome p
   - Reporting: Summarize spec decisions and acceptance criteria
 
 - Task ID: design-spec-betting-clv
-  - Status: pending
+  - Status: done
   - Objective: Define the UX + visual design direction for the betting CLV surface in `docs/system.md`.
   - Scope: Layouts for list/detail/scoreboard; density rules; component usage (button/input/list-row/chip/panel); mobile behavior; CLV status badges and copy.
   - Out of Scope: Token implementation, CSS changes, UI code.
