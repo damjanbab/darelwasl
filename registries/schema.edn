@@ -1091,6 +1091,237 @@
   :enums []
   :invariants ["Channel remote-id must be unique per platform/workspace" "Entity type set to :entity.type/channel"]
   :history {:strategy :overwrite}
+ :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/betting-event
+  :title "Betting Event"
+  :version "v1"
+  :attributes
+  [{:ident :betting.event/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Betting event identity"}
+   {:ident :betting.event/external-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "External provider event id (e.g., Odds API event id)"}
+   {:ident :betting.event/sport-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Provider sport key (e.g., soccer_epl)"}
+   {:ident :betting.event/sport-title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Sport title label"}
+   {:ident :betting.event/commence-time
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Scheduled start time"}
+   {:ident :betting.event/home-team
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Home team name"}
+   {:ident :betting.event/away-team
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Away team name"}
+   {:ident :betting.event/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Event status"}
+   {:ident :betting.event/last-updated
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last time this event was refreshed"}]
+  :enums {:betting.event/status [:scheduled :live :final]}
+  :invariants ["External id unique"
+               "Commence time present"
+               "Entity type set to :entity.type/betting-event"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/betting-bookmaker
+  :title "Betting Bookmaker"
+  :version "v1"
+  :attributes
+  [{:ident :betting.bookmaker/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Bookmaker identity"}
+   {:ident :betting.bookmaker/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Bookmaker key (e.g., pinnacle)"}
+   {:ident :betting.bookmaker/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Display title"}]
+  :enums []
+  :invariants ["Bookmaker key unique"
+               "Entity type set to :entity.type/betting-bookmaker"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/betting-quote
+  :title "Betting Quote Snapshot"
+  :version "v1"
+  :attributes
+  [{:ident :betting.quote/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Quote snapshot identity"}
+   {:ident :betting.quote/event
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Event reference"}
+   {:ident :betting.quote/bookmaker
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Bookmaker reference"}
+   {:ident :betting.quote/market-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Market key (e.g., h2h)"}
+   {:ident :betting.quote/selection
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Outcome/selection label"}
+   {:ident :betting.quote/odds-decimal
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Decimal odds at capture time"}
+   {:ident :betting.quote/implied-prob
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Implied probability at capture time"}
+   {:ident :betting.quote/close?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Whether this snapshot is marked as close"}
+   {:ident :betting.quote/captured-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When this snapshot was captured"}]
+  :enums []
+  :invariants ["Event and bookmaker refs required"
+               "Odds and implied probability must be positive"
+               "Entity type set to :entity.type/betting-quote"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event :cap/schema/betting-bookmaker]}}
+
+ {:id :cap/schema/betting-bet
+  :title "Betting Bet"
+  :version "v1"
+  :attributes
+  [{:ident :betting.bet/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Bet identity"}
+   {:ident :betting.bet/event
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Event reference"}
+   {:ident :betting.bet/bookmaker
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Bookmaker reference (optional for manual odds)"}
+   {:ident :betting.bet/market-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Market key (e.g., h2h)"}
+   {:ident :betting.bet/selection
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Outcome/selection label"}
+   {:ident :betting.bet/odds-decimal
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Decimal odds at bet time"}
+   {:ident :betting.bet/implied-prob
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Implied probability at bet time"}
+   {:ident :betting.bet/stake
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Stake amount"}
+   {:ident :betting.bet/placed-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the bet was logged"}
+   {:ident :betting.bet/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Bet status"}
+   {:ident :betting.bet/settled-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the result was settled"}]
+  :enums {:betting.bet/status [:pending :won :lost :push]}
+  :invariants ["Event reference required"
+               "Odds and stake must be positive"
+               "Entity type set to :entity.type/betting-bet"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event :cap/schema/betting-bookmaker]}}
+
+ {:id :cap/schema/betting-fact
+  :title "Betting Fact"
+  :version "v1"
+  :attributes
+  [{:ident :betting.fact/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Betting fact identity"}
+   {:ident :betting.fact/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Fact type"}
+   {:ident :betting.fact/event
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Related event (optional)"}
+   {:ident :betting.fact/bet
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Related bet (optional)"}
+   {:ident :betting.fact/quote
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Related quote (optional)"}
+   {:ident :betting.fact/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the fact was recorded"}
+   {:ident :betting.fact/note
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Optional note or context"}]
+  :enums {:betting.fact/type [:bet-log :quote-capture :close-capture :settle]}
+  :invariants ["Fact type required"
+               "Entity type set to :entity.type/betting-fact"]
+  :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
                   :flags []}

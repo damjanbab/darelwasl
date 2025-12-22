@@ -77,7 +77,12 @@
                    [:hero.flow/id :entity.type/hero-flow]
                    [:faq/id :entity.type/faq]
                    [:value/id :entity.type/value]
-                   [:team.member/id :entity.type/team-member]]
+                   [:team.member/id :entity.type/team-member]
+                   [:betting.event/id :entity.type/betting-event]
+                   [:betting.bookmaker/id :entity.type/betting-bookmaker]
+                   [:betting.quote/id :entity.type/betting-quote]
+                   [:betting.bet/id :entity.type/betting-bet]
+                   [:betting.fact/id :entity.type/betting-fact]]
           tx-data (->> mapping
                        (mapcat (fn [[ident type-kw]]
                                  (let [eids (map first (d/q '[:find ?e

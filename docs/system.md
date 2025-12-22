@@ -511,6 +511,22 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Cross-links keep filter state when moving between people and parcels (e.g., from person detail to parcel detail and back).
   - Feature flag respected for routes and app switcher entry; if data import missing, show a friendly “Data not yet loaded” empty state instead of broken lists.
 
+## Schema: Betting CLV (Events/Bookmakers/Quotes/Bets/Facts)
+- Entities and identities:
+  - `:entity.type/betting-event` with `:betting.event/id` and unique `:betting.event/external-id` (Odds API event id), plus sport key/title, commence time, and home/away teams.
+  - `:entity.type/betting-bookmaker` with `:betting.bookmaker/id` and unique `:betting.bookmaker/key`, plus display title.
+  - `:entity.type/betting-quote` snapshot referencing event + bookmaker with market key, selection, odds-decimal, implied probability, capture time, and `:betting.quote/close?`.
+  - `:entity.type/betting-bet` referencing event + bookmaker with stake, odds, implied probability, status, placed-at, and settled-at.
+  - `:entity.type/betting-fact` for logged actions (bet log, quote capture, close capture, settle) with type + optional refs.
+- Invariants:
+  - External event IDs and bookmaker keys are unique; entity type is set on all betting entities.
+  - Quotes are immutable snapshots; `:betting.quote/close?` marks the final reference price used for CLV.
+  - Odds and stake values must be positive; CLV is derived from bet vs close implied probability (not stored on the bet).
+- Compatibility and history:
+  - Additive schema; overwrite history strategy; backward/forward compatible; no flags.
+- Fixtures and seeding:
+  - `fixtures/betting.edn` seeds one event, one bookmaker, one quote, one bet, and a representative fact.
+
 ## Schema: Land Registry (Person/Parcel/Ownership)
 - Entities and identities:
   - `:entity.type/person` with deterministic `:person/id` derived from normalized name+address; keeps provided `:person/name`/`:person/address` plus normalized forms and `:person/source-ref` for traceability.
@@ -567,8 +583,9 @@ Maintain stable IDs; reference them in tasks/PRs.
 -   Roles: fixtures carry `:user/roles` (huda = `:role/admin` + `:role/content-editor`, damjan = `:role/admin` + `:role/content-editor`) to gate the control panel and content actions.
 - :fixtures/tags (`fixtures/tags.edn`): tag entities with fixed IDs and names (`Ops`, `Home`, `Finance`, `Urgent`) used by tasks and exposed via `/api/tags`.
 - :fixtures/tasks (`fixtures/tasks.edn`): four tasks covering all status/priority enums and tag references (lookup refs to `:tag/id`), with due-date variety for sort/filter checks, one archived entry, and one flagged with `:task/extended?` true. Assignees reference the user fixture IDs.
+- :fixtures/betting (`fixtures/betting.edn`): minimal CLV seed data (one event, one bookmaker, one quote snapshot, one bet, one fact) for schema checks and demo states.
 - All fixtures include `:entity/type` (`:entity.type/user`, `:entity.type/task`, `:entity.type/tag`). A backfill helper sets this on existing DBs lacking it (inferred from identity attrs).
-- Loader tooling: `darelwasl.fixtures/seed-dev!` and CLI `clojure -M:seed [--temp]` load schema + fixtures (users first, then tasks with lookup refs). Use `darelwasl.fixtures/temp-db-with-fixtures!` or `with-temp-fixtures` to spin disposable DBs for checks.
+- Loader tooling: `darelwasl.fixtures/seed-dev!` and CLI `clojure -M:seed [--temp]` load schema + fixtures (users first, then tags/tasks/content/betting with lookup refs). Use `darelwasl.fixtures/temp-db-with-fixtures!` or `with-temp-fixtures` to spin disposable DBs for checks.
 - Determinism: fixture UUIDs and timestamps are fixed; loaders insert users before tasks to satisfy refs. Reuse fixtures in schema-load/action-contract/app-smoke checks for predictable state.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.

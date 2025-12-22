@@ -13,6 +13,7 @@
 (def default-tags-path "fixtures/tags.edn")
 (def default-tasks-path "fixtures/tasks.edn")
 (def default-content-path "fixtures/content.edn")
+(def default-betting-path "fixtures/betting.edn")
 (def seed-marker-id :darelwasl/system)
 
 (defn- read-fixture
@@ -25,15 +26,16 @@
       (edn/read r))))
 
 (defn load-fixtures
-  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...] :content {...}}.
+  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...] :content {...} :betting {...}}.
   Content includes tags/pages/blocks plus optional v2 entities (businesses, contacts, licenses, comparison rows, journey phases, activation steps, personas, support entries, hero stats/flows, faqs, values, team members).
-  Paths default to fixtures/users.edn, fixtures/tags.edn, fixtures/tasks.edn, and fixtures/content.edn."
-  ([] (load-fixtures default-users-path default-tags-path default-tasks-path default-content-path))
-  ([users-path tags-path tasks-path content-path]
+  Paths default to fixtures/users.edn, fixtures/tags.edn, fixtures/tasks.edn, fixtures/content.edn, and fixtures/betting.edn."
+  ([] (load-fixtures default-users-path default-tags-path default-tasks-path default-content-path default-betting-path))
+  ([users-path tags-path tasks-path content-path betting-path]
    {:users (read-fixture users-path)
     :tags (read-fixture tags-path)
     :tasks (read-fixture tasks-path)
-    :content (read-fixture content-path)}))
+    :content (read-fixture content-path)
+    :betting (read-fixture betting-path)}))
 
 (defn- task->tx
   "Prepare a task fixture for Datomic transact by converting the assignee UUID
@@ -61,7 +63,7 @@
   :users n :tags n :tasks n :content-tags n :content-pages n :content-blocks n ...} or {:error e} on failure."
   ([conn] (seed-conn! conn (load-fixtures) {}))
   ([conn fixtures] (seed-conn! conn fixtures {}))
-  ([conn {:keys [users tags tasks content]} {:keys [add-marker?] :or {add-marker? true}}]
+  ([conn {:keys [users tags tasks content betting]} {:keys [add-marker?] :or {add-marker? true}}]
    (let [content (or content {})
          content-tags (:tags content)
          content-pages (:pages content)
@@ -79,6 +81,12 @@
          faqs (:faqs content)
          values (:values content)
          team-members (:team-members content)
+         betting (or betting {})
+         betting-events (:events betting)
+         betting-bookmakers (:bookmakers betting)
+         betting-quotes (:quotes betting)
+         betting-bets (:bets betting)
+         betting-facts (:facts betting)
          page-blocks-tx (->> (or content-pages [])
                              (mapcat (fn [page]
                                        (let [page-id (:content.page/id page)
@@ -113,6 +121,11 @@
          (d/transact conn {:tx-data (map #(dissoc % :content.page/blocks) content-pages)}))
        (when (seq content-blocks) (d/transact conn {:tx-data content-blocks}))
        (when (seq page-blocks-tx) (d/transact conn {:tx-data page-blocks-tx}))
+       (when (seq betting-events) (d/transact conn {:tx-data betting-events}))
+       (when (seq betting-bookmakers) (d/transact conn {:tx-data betting-bookmakers}))
+       (when (seq betting-quotes) (d/transact conn {:tx-data betting-quotes}))
+       (when (seq betting-bets) (d/transact conn {:tx-data betting-bets}))
+       (when (seq betting-facts) (d/transact conn {:tx-data betting-facts}))
        (when add-marker?
          (d/transact conn {:tx-data [(seed-marker-tx)]}))
        {:status :ok
@@ -134,7 +147,12 @@
         :hero-flows (count hero-flows)
         :faqs (count faqs)
         :values (count values)
-        :team-members (count team-members)}
+        :team-members (count team-members)
+        :betting-events (count betting-events)
+        :betting-bookmakers (count betting-bookmakers)
+        :betting-quotes (count betting-quotes)
+        :betting-bets (count betting-bets)
+        :betting-facts (count betting-facts)}
        (catch Exception e
          (log/error e "Failed to seed fixtures into Datomic")
          {:error e})))))

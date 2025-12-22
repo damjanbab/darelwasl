@@ -143,7 +143,8 @@ check_edn_parse() {
       fixture-paths {:users (str root "/fixtures/users.edn")
                      :tasks (str root "/fixtures/tasks.edn")
                      :tags (str root "/fixtures/tags.edn")
-                     :content (str root "/fixtures/content.edn")}
+                     :content (str root "/fixtures/content.edn")
+                     :betting (str root "/fixtures/betting.edn")}
       _ (doseq [f registry-paths] (read-single-edn! f))
       fixtures (into {} (for [[k path] fixture-paths] [k (read-single-edn! path)]))
       users (:users fixtures)
@@ -153,6 +154,12 @@ check_edn_parse() {
       content-tags (or (:tags content) [])
       content-pages (or (:pages content) [])
       content-blocks (or (:blocks content) [])
+      betting (or (:betting fixtures) {})
+      betting-events (or (:events betting) [])
+      betting-bookmakers (or (:bookmakers betting) [])
+      betting-quotes (or (:quotes betting) [])
+      betting-bets (or (:bets betting) [])
+      betting-facts (or (:facts betting) [])
       required-user-keys #{:user/id :user/username :user/name :user/password}
       missing-keys (seq (for [u users
                               :let [missing (set/difference required-user-keys (set (keys u)))]
@@ -287,7 +294,96 @@ check_edn_parse() {
                                              (and block-page (not= block-page (:content.page/id p))))]
                                {:content.page/id (:content.page/id p)
                                 :block block-ref
-                                :reason "Block ref invalid or assigned to different page"}))]
+                                :reason "Block ref invalid or assigned to different page"}))
+      betting-event-ids (map :betting.event/id betting-events)
+      betting-event-id-set (set betting-event-ids)
+      duplicate-betting-event-ids (seq (for [[id freq] (frequencies betting-event-ids)
+                                             :when (> freq 1)]
+                                         id))
+      betting-external-ids (map :betting.event/external-id betting-events)
+      duplicate-betting-external-ids (seq (for [[id freq] (frequencies betting-external-ids)
+                                                :when (> freq 1)]
+                                            id))
+      invalid-betting-events (seq (for [e betting-events
+                                        :let [eid (:betting.event/id e)
+                                              ext (:betting.event/external-id e)
+                                              commence (:betting.event/commence-time e)]
+                                        :when (or (not (uuid? eid))
+                                                  (not (present-str? ext))
+                                                  (nil? commence))]
+                                    {:betting.event/id eid
+                                     :reason "Invalid id/external-id/commence-time"}))
+      betting-bookmaker-ids (map :betting.bookmaker/id betting-bookmakers)
+      betting-bookmaker-id-set (set betting-bookmaker-ids)
+      duplicate-betting-bookmaker-ids (seq (for [[id freq] (frequencies betting-bookmaker-ids)
+                                                 :when (> freq 1)]
+                                             id))
+      betting-bookmaker-keys (map :betting.bookmaker/key betting-bookmakers)
+      duplicate-betting-bookmaker-keys (seq (for [[key freq] (frequencies betting-bookmaker-keys)
+                                                  :when (> freq 1)]
+                                              key))
+      invalid-betting-bookmakers (seq (for [b betting-bookmakers
+                                            :let [bid (:betting.bookmaker/id b)
+                                                  key (:betting.bookmaker/key b)
+                                                  title (:betting.bookmaker/title b)]
+                                            :when (or (not (uuid? bid))
+                                                      (not (present-str? key))
+                                                      (not (present-str? title)))]
+                                        {:betting.bookmaker/id bid
+                                         :reason "Invalid id/key/title"}))
+      betting-quote-ids (map :betting.quote/id betting-quotes)
+      betting-quote-id-set (set betting-quote-ids)
+      duplicate-betting-quote-ids (seq (for [[id freq] (frequencies betting-quote-ids)
+                                             :when (> freq 1)]
+                                         id))
+      invalid-betting-quotes (seq (for [q betting-quotes
+                                        :let [qid (:betting.quote/id q)
+                                              event-id (lookup-id (:betting.quote/event q) :betting.event/id)
+                                              bookmaker-id (lookup-id (:betting.quote/bookmaker q) :betting.bookmaker/id)
+                                              odds (:betting.quote/odds-decimal q)
+                                              implied (:betting.quote/implied-prob q)]
+                                        :when (or (not (uuid? qid))
+                                                  (not (contains? betting-event-id-set event-id))
+                                                  (not (contains? betting-bookmaker-id-set bookmaker-id))
+                                                  (not (number? odds))
+                                                  (not (number? implied)))]
+                                    {:betting.quote/id qid
+                                     :reason "Invalid id/event/bookmaker/odds"}))
+      betting-bet-ids (map :betting.bet/id betting-bets)
+      betting-bet-id-set (set betting-bet-ids)
+      duplicate-betting-bet-ids (seq (for [[id freq] (frequencies betting-bet-ids)
+                                           :when (> freq 1)]
+                                       id))
+      invalid-betting-bets (seq (for [b betting-bets
+                                      :let [bid (:betting.bet/id b)
+                                            event-id (lookup-id (:betting.bet/event b) :betting.event/id)
+                                            bookmaker-id (lookup-id (:betting.bet/bookmaker b) :betting.bookmaker/id)
+                                            odds (:betting.bet/odds-decimal b)
+                                            stake (:betting.bet/stake b)]
+                                      :when (or (not (uuid? bid))
+                                                (not (contains? betting-event-id-set event-id))
+                                                (and bookmaker-id (not (contains? betting-bookmaker-id-set bookmaker-id)))
+                                                (not (number? odds))
+                                                (not (number? stake)))]
+                                  {:betting.bet/id bid
+                                   :reason "Invalid id/event/bookmaker/odds/stake"}))
+      betting-fact-ids (map :betting.fact/id betting-facts)
+      duplicate-betting-fact-ids (seq (for [[id freq] (frequencies betting-fact-ids)
+                                            :when (> freq 1)]
+                                        id))
+      invalid-betting-facts (seq (for [f betting-facts
+                                       :let [fid (:betting.fact/id f)
+                                             ftype (:betting.fact/type f)
+                                             event-id (lookup-id (:betting.fact/event f) :betting.event/id)
+                                             bet-id (lookup-id (:betting.fact/bet f) :betting.bet/id)
+                                             quote-id (lookup-id (:betting.fact/quote f) :betting.quote/id)]
+                                       :when (or (not (uuid? fid))
+                                                 (not (keyword? ftype))
+                                                 (and event-id (not (contains? betting-event-id-set event-id)))
+                                                 (and bet-id (not (contains? betting-bet-id-set bet-id)))
+                                                 (and quote-id (not (contains? betting-quote-id-set quote-id))))]
+                                   {:betting.fact/id fid
+                                    :reason "Invalid id/type/ref"}))]
   (when missing-keys
     (doseq [m missing-keys]
       (println "User fixture missing keys" m))
@@ -352,9 +448,55 @@ check_edn_parse() {
     (doseq [err page-block-ref-errors]
       (println "Content page block reference invalid" err))
     (System/exit 1))
+  (when duplicate-betting-event-ids
+    (println "Duplicate betting event IDs in fixtures:" duplicate-betting-event-ids)
+    (System/exit 1))
+  (when duplicate-betting-external-ids
+    (println "Duplicate betting event external IDs in fixtures:" duplicate-betting-external-ids)
+    (System/exit 1))
+  (when invalid-betting-events
+    (doseq [err invalid-betting-events]
+      (println "Invalid betting event fixture" err))
+    (System/exit 1))
+  (when duplicate-betting-bookmaker-ids
+    (println "Duplicate betting bookmaker IDs in fixtures:" duplicate-betting-bookmaker-ids)
+    (System/exit 1))
+  (when duplicate-betting-bookmaker-keys
+    (println "Duplicate betting bookmaker keys in fixtures:" duplicate-betting-bookmaker-keys)
+    (System/exit 1))
+  (when invalid-betting-bookmakers
+    (doseq [err invalid-betting-bookmakers]
+      (println "Invalid betting bookmaker fixture" err))
+    (System/exit 1))
+  (when duplicate-betting-quote-ids
+    (println "Duplicate betting quote IDs in fixtures:" duplicate-betting-quote-ids)
+    (System/exit 1))
+  (when invalid-betting-quotes
+    (doseq [err invalid-betting-quotes]
+      (println "Invalid betting quote fixture" err))
+    (System/exit 1))
+  (when duplicate-betting-bet-ids
+    (println "Duplicate betting bet IDs in fixtures:" duplicate-betting-bet-ids)
+    (System/exit 1))
+  (when invalid-betting-bets
+    (doseq [err invalid-betting-bets]
+      (println "Invalid betting bet fixture" err))
+    (System/exit 1))
+  (when duplicate-betting-fact-ids
+    (println "Duplicate betting fact IDs in fixtures:" duplicate-betting-fact-ids)
+    (System/exit 1))
+  (when invalid-betting-facts
+    (doseq [err invalid-betting-facts]
+      (println "Invalid betting fact fixture" err))
+    (System/exit 1))
   (println "User fixtures validated (count" (count users) ") and referenced by tasks.")
   (println "Tag fixtures validated (count" (count tags) ") and referenced by tasks.")
-  (println "Content fixtures validated (tags" (count content-tags) ", pages" (count content-pages) ", blocks" (count content-blocks) ")."))
+  (println "Content fixtures validated (tags" (count content-tags) ", pages" (count content-pages) ", blocks" (count content-blocks) ").")
+  (println "Betting fixtures validated (events" (count betting-events)
+           ", bookmakers" (count betting-bookmakers)
+           ", quotes" (count betting-quotes)
+           ", bets" (count betting-bets)
+           ", facts" (count betting-facts) ")."))
 CLJ
 }
 

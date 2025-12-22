@@ -62,7 +62,7 @@ Constraints: no guaranteed-profit claims; prioritize CLV feedback over outcome p
   - Reporting: Note visual + interaction decisions
 
 - Task ID: schema-betting-core
-  - Status: pending
+  - Status: done
   - Objective: Add the betting CLV data model to Datomic and registries.
   - Scope: Schema for event, bookmaker, quote snapshot, bet, and fact entities; uniqueness/indexes for event IDs and bookmaker keys; minimal fixtures for one event, one bookmaker, one quote, one bet; update `registries/schema.edn` + `docs/system.md`.
   - Out of Scope: Odds API integration, UI changes, automated jobs.
