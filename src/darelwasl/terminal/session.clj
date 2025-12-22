@@ -91,8 +91,9 @@
    [chat-file text]
    (spit chat-file (str text "\n") :append true))
 
-(def ^:private ansi-csi-re #"\u001B\\[[0-?]*[ -/]*[@-~]")
+(def ^:private ansi-csi-re #"\u001B\[[0-?]*[ -/]*[@-~]")
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
+(def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
 
 (defn- sanitize-output
   [text]
@@ -100,6 +101,7 @@
       (str/replace "\r" "")
       (str/replace ansi-osc-re "")
       (str/replace ansi-csi-re "")
+      (str/replace ansi-single-re "")
       (str/replace "\u001B(B" "")))
 
 (defn- read-output
