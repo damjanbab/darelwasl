@@ -29,15 +29,15 @@
         allow? (str/includes? text "allow codex to work in this folder")
         enter? (str/includes? text "press enter to continue")
         actions (cond-> []
-                  allow? (conj [ui/button {:variant :secondary
-                                           :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["1" "Enter"]])}
-                                "Allow edits"]
-                               [ui/button {:variant :secondary
-                                           :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["2" "Enter"]])}
-                                "Ask for approval"])
+                  allow? (into [[ui/button {:variant :secondary
+                                            :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["1" "Enter"]])}
+                                 "Allow edits"]
+                                [ui/button {:variant :secondary
+                                            :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["2" "Enter"]])}
+                                 "Ask for approval"]])
                   enter? (conj [ui/button {:variant :secondary
                                            :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Enter"]])}
-                                "Press Enter"])))]
+                                "Press Enter"]))]
     (when (seq actions)
       (into [:div.terminal-quick-actions] actions))))
 
