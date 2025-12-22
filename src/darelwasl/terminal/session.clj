@@ -91,21 +91,32 @@
    [chat-file text]
    (spit chat-file (str text "\n") :append true))
 
- (defn- read-output
-   [file cursor max-bytes]
-   (let [f (io/file file)]
-     (if-not (.exists f)
-       {:cursor cursor :chunk ""}
-       (with-open [raf (RandomAccessFile. f "r")]
-         (let [size (.length raf)
-               start (long (min cursor size))
-               remaining (- size start)
-               to-read (int (min remaining max-bytes))
-               buf (byte-array to-read)]
-           (.seek raf start)
-           (.readFully raf buf)
-           {:cursor (+ start to-read)
-            :chunk (String. buf "UTF-8")})))))
+(def ^:private ansi-csi-re #"\u001B\\[[0-?]*[ -/]*[@-~]")
+(def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
+
+(defn- sanitize-output
+  [text]
+  (-> text
+      (str/replace "\r" "")
+      (str/replace ansi-osc-re "")
+      (str/replace ansi-csi-re "")
+      (str/replace "\u001B(B" "")))
+
+(defn- read-output
+  [file cursor max-bytes]
+  (let [f (io/file file)]
+    (if-not (.exists f)
+      {:cursor cursor :chunk ""}
+      (with-open [raf (RandomAccessFile. f "r")]
+        (let [size (.length raf)
+              start (long (min cursor size))
+              remaining (- size start)
+              to-read (int (min remaining max-bytes))
+              buf (byte-array to-read)]
+          (.seek raf start)
+          (.readFully raf buf)
+          {:cursor (+ start to-read)
+           :chunk (sanitize-output (String. buf "UTF-8"))})))))
 
  (defn create-session!
    [store cfg {:keys [name]}]
