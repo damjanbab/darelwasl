@@ -81,7 +81,20 @@
                                          (rf/dispatch [:darelwasl.app/terminal-send-input]))}]
          [ui/button {:disabled sending?
                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-input])}
-          (if sending? "Sending..." "Send")]]])))
+          (if sending? "Sending..." "Send")]
+         [:div.terminal-keys
+          [ui/button {:variant :secondary
+                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Up"]])}
+           "↑"]
+          [ui/button {:variant :secondary
+                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Down"]])}
+           "↓"]
+          [ui/button {:variant :secondary
+                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Enter"]])}
+           "Enter"]
+          [ui/button {:variant :secondary
+                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-keys ["Escape"]])}
+           "Esc"]]]])))
 
 (defn terminal-shell
   []

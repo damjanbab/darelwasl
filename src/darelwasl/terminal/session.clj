@@ -122,7 +122,7 @@
 
 (defn- capture-output
   [session max-bytes]
-  (let [text (tmux/capture-pane (:tmux session))
+  (let [text (sanitize-output (tmux/capture-pane (:tmux session)))
         length (count text)
         trimmed (if (> length max-bytes)
                   (subs text (- length max-bytes))
@@ -199,13 +199,20 @@
                 :status status)
          (dissoc :repo-dir :datomic-dir :work-dir :env-file :chat-log))))
 
- (defn send-input!
-   [session text]
-   (when-not (tmux/running? (:tmux session))
-     (throw (ex-info "Session not running" {:id (:id session)})))
-   (append-chat! (:chat-log session) (str "> " text))
-   (tmux/send! (:tmux session) text)
-   true)
+(defn send-input!
+  [session text]
+  (when-not (tmux/running? (:tmux session))
+    (throw (ex-info "Session not running" {:id (:id session)})))
+  (append-chat! (:chat-log session) (str "> " text))
+  (tmux/send! (:tmux session) text)
+  true)
+
+(defn send-keys!
+  [session keys]
+  (when-not (tmux/running? (:tmux session))
+    (throw (ex-info "Session not running" {:id (:id session)})))
+  (tmux/send-keys! (:tmux session) keys)
+  true)
 
 (defn output-since
   [session cursor max-bytes]

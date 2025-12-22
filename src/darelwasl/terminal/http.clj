@@ -89,6 +89,33 @@
             (log/warn e "Failed to send input" {:id session-id})
             (error-response 500 "Failed to send input")))))))
 
+(defn- normalize-keys
+  [keys]
+  (cond
+    (nil? keys) []
+    (string? keys) [(str keys)]
+    (sequential? keys) (mapv str keys)
+    :else []))
+
+(defn send-keys-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          keys (or (get-in request [:body-params :keys])
+                   (get-in request [:body-params "keys"]))
+          keys (normalize-keys keys)
+          session (find-session (:terminal/store state) session-id)]
+      (cond
+        (nil? session) (error-response 404 "Session not found")
+        (empty? keys) (error-response 400 "Missing keys")
+        :else
+        (try
+          (session/send-keys! session keys)
+          (ok {:status "ok"})
+          (catch Exception e
+            (log/warn e "Failed to send keys" {:id session-id})
+            (error-response 500 "Failed to send keys")))))))
+
 (defn output-handler
   [state]
   (fn [request]
@@ -123,6 +150,8 @@
     {:get (session-detail-handler state)}]
    ["/sessions/:id/input"
     {:post (send-input-handler state)}]
+   ["/sessions/:id/keys"
+    {:post (send-keys-handler state)}]
    ["/sessions/:id/output"
     {:get (output-handler state)}]
    ["/sessions/:id/complete"

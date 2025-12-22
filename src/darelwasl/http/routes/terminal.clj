@@ -45,6 +45,15 @@
        (handle-terminal-result
         (terminal/request (:config state) :post (str "/sessions/" session-id "/input") {:text text})))))
 
+(defn send-keys-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          keys (or (get-in request [:body-params :keys])
+                   (get-in request [:body-params "keys"]))]
+      (handle-terminal-result
+       (terminal/request (:config state) :post (str "/sessions/" session-id "/keys") {:keys keys})))))
+
  (defn output-handler
    [state]
    (fn [request]
@@ -70,5 +79,6 @@
                    :post (create-session-handler state)}]
      ["/sessions/:id" {:get (session-detail-handler state)}]
      ["/sessions/:id/input" {:post (send-input-handler state)}]
+     ["/sessions/:id/keys" {:post (send-keys-handler state)}]
      ["/sessions/:id/output" {:get (output-handler state)}]
      ["/sessions/:id/complete" {:post (complete-handler state)}]]])

@@ -46,6 +46,11 @@
   [session text]
   (run-cmd ["send-keys" "-t" session "--" text "Enter"]))
 
+(defn send-keys!
+  [session keys]
+  (let [keys (mapv str keys)]
+    (run-cmd (into ["send-keys" "-t" session "--"] keys))))
+
 (defn capture-pane
   [session]
   (run-cmd ["capture-pane" "-p" "-J" "-t" session "-S" "-32768"]))

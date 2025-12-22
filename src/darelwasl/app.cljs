@@ -2004,7 +2004,8 @@
          text (str/trim (get-in db [:terminal :input] ""))]
      (cond
        (nil? session-id) {:db db}
-       (str/blank? text) {:db db}
+       (str/blank? text) {:db db
+                          :dispatch [::terminal-send-keys ["Enter"]]}
        :else
        {:db (-> db
                 (assoc-in [:terminal :input] "")
@@ -2026,6 +2027,32 @@
    (-> db
        (assoc-in [:terminal :sending?] false)
        (assoc-in [:terminal :error] (or (:error body) "Unable to send input.")))))
+
+(rf/reg-event-fx
+ ::terminal-send-keys
+ (fn [{:keys [db]} [_ keys]]
+   (let [session-id (get-in db [:terminal :selected :id])
+         keys (->> keys (map str) (remove str/blank?) vec)]
+     (if (and session-id (seq keys))
+       {:db (assoc-in db [:terminal :sending?] true)
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/keys")
+                   :method "POST"
+                   :body {:keys keys}
+                   :on-success [::terminal-keys-sent]
+                   :on-error [::terminal-keys-failed]}}
+       {:db db}))))
+
+(rf/reg-event-db
+ ::terminal-keys-sent
+ (fn [db _]
+   (assoc-in db [:terminal :sending?] false)))
+
+(rf/reg-event-db
+ ::terminal-keys-failed
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :sending?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to send keys.")))))
 
 (rf/reg-event-fx
  ::terminal-start-poll
