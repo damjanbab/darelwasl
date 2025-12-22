@@ -359,14 +359,14 @@ check_edn_parse() {
                                             event-id (lookup-id (:betting.bet/event b) :betting.event/id)
                                             bookmaker-id (lookup-id (:betting.bet/bookmaker b) :betting.bookmaker/id)
                                             odds (:betting.bet/odds-decimal b)
-                                            stake (:betting.bet/stake b)]
+                                            implied (:betting.bet/implied-prob b)]
                                       :when (or (not (uuid? bid))
                                                 (not (contains? betting-event-id-set event-id))
                                                 (and bookmaker-id (not (contains? betting-bookmaker-id-set bookmaker-id)))
-                                                (not (number? odds))
-                                                (not (number? stake)))]
+                                                (and odds (not (number? odds)))
+                                                (not (number? implied)))]
                                   {:betting.bet/id bid
-                                   :reason "Invalid id/event/bookmaker/odds/stake"}))
+                                   :reason "Invalid id/event/bookmaker/odds/implied-prob"}))
       betting-fact-ids (map :betting.fact/id betting-facts)
       duplicate-betting-fact-ids (seq (for [[id freq] (frequencies betting-fact-ids)
                                             :when (> freq 1)]

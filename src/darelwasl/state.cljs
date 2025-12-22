@@ -210,6 +210,37 @@
    :selected {:person nil :parcel nil}
    :filters default-land-filters})
 
+(def default-betting-form
+  {:market-key "1x2"
+   :selection nil
+   :error nil
+   :status :idle})
+
+(def default-betting-odds
+  {:status :idle
+   :error nil
+   :summary nil
+   :captured-at nil})
+
+(def default-betting-bets
+  {:items []
+   :status :idle
+   :error nil
+   :scoreboard nil})
+
+(def default-betting-state
+  {:status :idle
+   :error nil
+   :day 0
+   :groups []
+   :matches []
+   :selected nil
+   :cached? false
+   :fetched-at-ms nil
+   :odds default-betting-odds
+   :bets default-betting-bets
+   :form default-betting-form})
+
 (def default-db
   {:route :login
    :session nil
@@ -220,6 +251,7 @@
    :login default-login-state
    :tasks default-task-state
    :land default-land-state
+   :betting default-betting-state
    :control default-control-state})
 
 (def base-app-options
@@ -229,6 +261,9 @@
            {:id :tasks
             :label "Tasks"
             :desc "Workboard"}
+           {:id :betting
+            :label "Betting CLV"
+            :desc "Browse odds and log bets"}
            {:id :control-panel
             :label "Control panel"
             :desc "Website content"}]
@@ -247,10 +282,23 @@
                    set)]
     (boolean (some #{:role/content-editor :role/admin} roles))))
 
+(defn betting-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (contains? roles :role/betting-engineer)))
+
 (defn app-options
   "Return available app options filtered by session roles/flags."
   [session]
   (cond->> base-app-options
+    (not (betting-enabled? session))
+    (remove #(= (:id %) :betting))
     (not (control-enabled? session))
     (remove #(= (:id %) :control-panel))))
 

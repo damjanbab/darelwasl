@@ -13,8 +13,18 @@
               :http-timeout-ms 3000
               :link-token-ttl-ms 900000
               :auto-set-webhook? true}
-   :odds-api {:base-url "https://api.the-odds-api.com/v4"
-              :http-timeout-ms 3000}
+   :rezultati {:base-url "https://m.rezultati.com"
+               :http-timeout-ms 3000
+               :cache-ttl-ms 30000}
+   :supersport {:base-url "https://www.supersport.hr"
+                :http-timeout-ms 5000}
+   :betting {:reference-books ["pinnacle" "betfair" "sbobet" "bet365" "unibet"]
+             :fallback-books ["bet365" "unibet"]
+             :execution-book "supersport.hr"
+             :close-offset-minutes 10
+             :event-horizon-hours 72
+             :scheduler-enabled? true
+             :scheduler-poll-ms 60000}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -41,6 +51,15 @@
     default
     (let [lower (str/lower-case env-value)]
       (contains? #{"1" "true" "yes" "y" "on"} lower))))
+
+(defn- env-csv
+  [env-value default]
+  (if (or (nil? env-value) (str/blank? env-value))
+    default
+    (->> (str/split env-value #",")
+         (map str/trim)
+         (remove str/blank?)
+         vec)))
 
 (defn- normalize-storage-dir
   [env-value default]
@@ -83,12 +102,33 @@
                                               (get-in default-config [:telegram :link-token-ttl-ms]))
                 :auto-set-webhook? (env-bool (get env "TELEGRAM_AUTO_SET_WEBHOOK")
                                              (get-in default-config [:telegram :auto-set-webhook?]))})
-        (assoc :odds-api
-               {:api-key (env-str (get env "ODDS_API_KEY") nil)
-                :base-url (env-str (get env "ODDS_API_BASE_URL")
-                                   (get-in default-config [:odds-api :base-url]))
-                :http-timeout-ms (parse-int (get env "ODDS_API_TIMEOUT_MS")
-                                            (get-in default-config [:odds-api :http-timeout-ms]))})
+        (assoc :rezultati
+               {:base-url (env-str (get env "REZULTATI_BASE_URL")
+                                   (get-in default-config [:rezultati :base-url]))
+                :http-timeout-ms (parse-int (get env "REZULTATI_TIMEOUT_MS")
+                                            (get-in default-config [:rezultati :http-timeout-ms]))
+                :cache-ttl-ms (parse-int (get env "REZULTATI_CACHE_TTL_MS")
+                                         (get-in default-config [:rezultati :cache-ttl-ms]))})
+        (assoc :supersport
+               {:base-url (env-str (get env "SUPERSPORT_BASE_URL")
+                                   (get-in default-config [:supersport :base-url]))
+                :http-timeout-ms (parse-int (get env "SUPERSPORT_TIMEOUT_MS")
+                                            (get-in default-config [:supersport :http-timeout-ms]))})
+        (assoc :betting
+               {:reference-books (env-csv (get env "BETTING_REFERENCE_BOOKS")
+                                          (get-in default-config [:betting :reference-books]))
+                :fallback-books (env-csv (get env "BETTING_FALLBACK_BOOKS")
+                                         (get-in default-config [:betting :fallback-books]))
+                :execution-book (env-str (get env "BETTING_EXECUTION_BOOK")
+                                         (get-in default-config [:betting :execution-book]))
+                :close-offset-minutes (parse-int (get env "BETTING_CLOSE_OFFSET_MINUTES")
+                                                 (get-in default-config [:betting :close-offset-minutes]))
+                :event-horizon-hours (parse-int (get env "BETTING_EVENT_HORIZON_HOURS")
+                                                (get-in default-config [:betting :event-horizon-hours]))
+                :scheduler-enabled? (env-bool (get env "BETTING_SCHEDULER_ENABLED")
+                                              (get-in default-config [:betting :scheduler-enabled?]))
+                :scheduler-poll-ms (parse-int (get env "BETTING_SCHEDULER_POLL_MS")
+                                              (get-in default-config [:betting :scheduler-poll-ms]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))

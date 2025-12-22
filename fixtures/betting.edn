@@ -1,9 +1,9 @@
 {:events [
   {:betting.event/id #uuid "80000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/betting-event
-   :betting.event/external-id "evt_2025_01"
-   :betting.event/sport-key "soccer_epl"
-   :betting.event/sport-title "EPL"
+   :betting.event/external-id "rezultati:demo_match_01"
+   :betting.event/sport-key "soccer"
+   :betting.event/sport-title "Soccer"
    :betting.event/commence-time #inst "2025-12-20T15:00:00.000Z"
    :betting.event/home-team "Liverpool"
    :betting.event/away-team "Arsenal"
@@ -13,15 +13,15 @@
  :bookmakers [
   {:betting.bookmaker/id #uuid "81000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/betting-bookmaker
-   :betting.bookmaker/key "pinnacle"
-   :betting.bookmaker/title "Pinnacle"}]
+   :betting.bookmaker/key "bet365"
+   :betting.bookmaker/title "bet365"}]
 
  :quotes [
   {:betting.quote/id #uuid "82000000-0000-0000-0000-000000000001"
    :entity/type :entity.type/betting-quote
    :betting.quote/event [:betting.event/id #uuid "80000000-0000-0000-0000-000000000001"]
    :betting.quote/bookmaker [:betting.bookmaker/id #uuid "81000000-0000-0000-0000-000000000001"]
-   :betting.quote/market-key "h2h"
+   :betting.quote/market-key "1x2"
    :betting.quote/selection "Liverpool"
    :betting.quote/odds-decimal 1.95
    :betting.quote/implied-prob 0.5128
@@ -33,11 +33,10 @@
    :entity/type :entity.type/betting-bet
    :betting.bet/event [:betting.event/id #uuid "80000000-0000-0000-0000-000000000001"]
    :betting.bet/bookmaker [:betting.bookmaker/id #uuid "81000000-0000-0000-0000-000000000001"]
-   :betting.bet/market-key "h2h"
+   :betting.bet/market-key "1x2"
    :betting.bet/selection "Liverpool"
    :betting.bet/odds-decimal 2.05
    :betting.bet/implied-prob 0.4878
-   :betting.bet/stake 100.0
    :betting.bet/placed-at #inst "2025-12-19T10:10:00.000Z"
    :betting.bet/status :pending}]
 

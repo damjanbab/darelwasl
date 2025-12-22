@@ -1109,7 +1109,7 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :unique :db.unique/value
-    :doc "External provider event id (e.g., Odds API event id)"}
+    :doc "External provider event id (e.g., Rezultati match id)"}
    {:ident :betting.event/sport-key
     :type :db.type/string
     :cardinality :db.cardinality/one
@@ -1202,12 +1202,12 @@
     :doc "Outcome/selection label"}
    {:ident :betting.quote/odds-decimal
     :type :db.type/double
-    :cardinality :db.cardinality/one
-    :doc "Decimal odds at capture time"}
+   :cardinality :db.cardinality/one
+   :doc "Decimal odds at capture time"}
    {:ident :betting.quote/implied-prob
     :type :db.type/double
     :cardinality :db.cardinality/one
-    :doc "Implied probability at capture time"}
+    :doc "No-vig implied probability at capture time"}
    {:ident :betting.quote/close?
     :type :db.type/boolean
     :cardinality :db.cardinality/one
@@ -1253,16 +1253,12 @@
     :doc "Outcome/selection label"}
    {:ident :betting.bet/odds-decimal
     :type :db.type/double
-    :cardinality :db.cardinality/one
-    :doc "Decimal odds at bet time"}
+   :cardinality :db.cardinality/one
+    :doc "Decimal odds at bet time (optional)"}
    {:ident :betting.bet/implied-prob
     :type :db.type/double
     :cardinality :db.cardinality/one
-    :doc "Implied probability at bet time"}
-   {:ident :betting.bet/stake
-    :type :db.type/double
-    :cardinality :db.cardinality/one
-    :doc "Stake amount"}
+    :doc "Reference no-vig probability at bet time"}
    {:ident :betting.bet/placed-at
     :type :db.type/instant
     :cardinality :db.cardinality/one
@@ -1277,7 +1273,7 @@
     :doc "When the result was settled"}]
   :enums {:betting.bet/status [:pending :won :lost :push]}
   :invariants ["Event reference required"
-               "Odds and stake must be positive"
+               "Reference probability must be positive"
                "Entity type set to :entity.type/betting-bet"]
   :history {:strategy :overwrite}
   :compatibility {:backward true

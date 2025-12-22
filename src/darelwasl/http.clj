@@ -2,6 +2,7 @@
   (:require [darelwasl.http.common :as common]
             [darelwasl.http.routes.actions :as actions-routes]
             [darelwasl.http.routes.auth :as auth-routes]
+            [darelwasl.http.routes.betting :as betting-routes]
             [darelwasl.http.routes.content :as content-routes]
             [darelwasl.http.routes.events :as events-routes]
             [darelwasl.http.routes.land :as land-routes]
@@ -34,6 +35,7 @@
         (concat
          (auth-routes/routes state)
          (actions-routes/routes state)
+         (betting-routes/routes state)
          (events-routes/routes state)
          (task-routes/routes state)
          (content-routes/routes state)

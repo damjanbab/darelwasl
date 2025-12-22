@@ -42,6 +42,33 @@
                   :flags [:task/extended?]}
   :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
 
+ {:id :cap/view/betting
+  :title "Betting CLV Trainer"
+  :version "v1"
+  :data {:sources [{:id :betting/events
+                    :source :cap/schema/betting-event
+                   :pull [:betting.event/id :betting.event/home-team :betting.event/away-team :betting.event/commence-time]}
+                   {:id :betting/bets
+                    :source :cap/schema/betting-bet
+                    :pull [:betting.bet/id
+                           :betting.bet/selection
+                           :betting.bet/odds-decimal
+                           :betting.bet/implied-prob
+                           :betting.bet/status]}]}
+  :actions [:cap/action/betting-events
+            :cap/action/betting-odds
+            :cap/action/betting-bet-log
+            :cap/action/betting-close
+            :cap/action/betting-settle]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "list + detail" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event :cap/schema/betting-bet :cap/schema/betting-quote]}}
+
  {:id :cap/view/home
   :title "Home summary"
   :version "v1"

@@ -1,5 +1,6 @@
 (ns darelwasl.app
   (:require [clojure.string :as str]
+            [darelwasl.features.betting :as betting-ui]
             [darelwasl.features.home :as home]
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
@@ -34,6 +35,10 @@
 (def land-enabled? state/land-enabled?)
 (def default-land-filters state/default-land-filters)
 (def default-land-state state/default-land-state)
+(def default-betting-state state/default-betting-state)
+(def default-betting-form state/default-betting-form)
+(def default-betting-odds state/default-betting-odds)
+(def default-betting-bets state/default-betting-bets)
 (def default-page-form state/default-page-form)
 (def default-block-form state/default-block-form)
 (def default-tag-form state/default-tag-form)
@@ -122,6 +127,15 @@
     (number? v) (long v)
     (string? v) (let [s (str/trim v)
                       n (js/parseInt s 10)]
+                  (when-not (js/isNaN n) n))
+    :else nil))
+
+(defn- parse-double-safe
+  [v]
+  (cond
+    (number? v) (double v)
+    (string? v) (let [s (-> v str/trim (str/replace #"," "."))
+                      n (js/parseFloat s)]
                   (when-not (js/isNaN n) n))
     :else nil))
 
@@ -425,6 +439,7 @@
                        (= safe-route :home) (conj [::fetch-home])
                        (= safe-route :tasks) (conj [::fetch-tasks])
                        (= safe-route :land) (conj [::fetch-land])
+                       (= safe-route :betting) (conj [::fetch-betting-events])
                        (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
@@ -493,16 +508,19 @@
                  (assoc :route preferred-route)
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
+                 (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
                  (assoc-in [:login :error] nil))]
-    {:db db'
-     ::persist-last-route preferred-route
-     :dispatch-n [[::fetch-tags]
-                  [::fetch-home]
-                  [::fetch-tasks]]})))
+    (let [dispatches (cond-> [[::fetch-tags]
+                              [::fetch-home]
+                              [::fetch-tasks]]
+                       (= preferred-route :betting) (conj [::fetch-betting-events]))]
+      {:db db'
+       ::persist-last-route preferred-route
+       :dispatch-n dispatches}))))
 
 (rf/reg-event-db
  ::login-failure
@@ -543,8 +561,9 @@
             (assoc :session nil
                    :route :login
                    :nav default-nav-state
-                   :tasks default-task-state
-                   :control default-control-state
+            :tasks default-task-state
+            :betting default-betting-state
+            :control default-control-state
                    :tags default-tags-state
                    :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
@@ -1649,6 +1668,226 @@
            (assoc :session nil
                   :route :login))))))
 
+;; Betting CLV events
+(rf/reg-event-fx
+ ::fetch-betting-events
+ (fn [{:keys [db]} _]
+   (let [day (get-in db [:betting :day] 0)
+         qs (str "?day=" day)]
+     {:db (-> db
+              (assoc-in [:betting :status] :loading)
+              (assoc-in [:betting :error] nil))
+      ::fx/http {:url (str "/api/betting/events" qs)
+                 :method "GET"
+                 :on-success [::betting-events-success]
+                 :on-error [::betting-events-failure]}})))
+
+(rf/reg-event-fx
+ ::betting-events-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [matches (vec (:matches payload))
+         groups (vec (:groups payload))
+         selected-id (get-in db [:betting :selected :event-id])
+         selected (some #(when (= (:event-id %) selected-id) %) matches)
+         next-selected (or selected (first matches))
+         db' (-> db
+                 (assoc-in [:betting :matches] matches)
+                 (assoc-in [:betting :groups] groups)
+                 (assoc-in [:betting :cached?] (boolean (:cached? payload)))
+                 (assoc-in [:betting :fetched-at-ms] (:fetched-at-ms payload))
+                 (assoc-in [:betting :status] (if (seq matches) :ready :empty))
+                 (assoc-in [:betting :error] nil))]
+     {:db db'
+      :dispatch-n (cond-> []
+                    next-selected (conj [::select-betting-match next-selected]))})))
+
+(rf/reg-event-db
+ ::betting-events-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load betting events.")]
+     (-> db
+         (assoc-in [:betting :status] :error)
+         (assoc-in [:betting :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::select-betting-match
+ (fn [{:keys [db]} [_ match]]
+   (let [event-id (:event-id match)
+         form (-> default-betting-form
+                  (assoc :selection (:home match)))]
+     {:db (-> db
+              (assoc-in [:betting :selected] match)
+              (assoc-in [:betting :form] form)
+              (assoc-in [:betting :odds] default-betting-odds)
+              (assoc-in [:betting :bets] default-betting-bets))
+      :dispatch-n (cond-> []
+                    event-id (conj [::fetch-betting-odds event-id false]
+                                   [::fetch-betting-bets event-id]))})))
+
+(rf/reg-event-fx
+ ::fetch-betting-odds
+ (fn [{:keys [db]} [_ event-id refresh?]]
+   (let [eid (or event-id (get-in db [:betting :selected :event-id]))
+         qs (when refresh? "?refresh=true")]
+     (if-not eid
+       {:db db}
+       {:db (-> db
+                (assoc-in [:betting :odds :status] :loading)
+                (assoc-in [:betting :odds :error] nil))
+        ::fx/http {:url (str "/api/betting/events/" eid "/odds" (or qs ""))
+                   :method "GET"
+                   :on-success [::betting-odds-success]
+                   :on-error [::betting-odds-failure]}}))))
+
+(rf/reg-event-db
+ ::betting-odds-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:betting :odds :summary] (:odds payload))
+       (assoc-in [:betting :odds :captured-at] (:captured-at payload))
+       (assoc-in [:betting :odds :status] (if (:odds payload) :ready :empty))
+       (assoc-in [:betting :odds :error] nil))))
+
+(rf/reg-event-db
+ ::betting-odds-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load odds.")]
+     (-> db
+         (assoc-in [:betting :odds :status] :error)
+         (assoc-in [:betting :odds :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::capture-betting-close
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:betting :selected :event-id])]
+     (if-not eid
+       {:db db}
+       {:db (-> db
+                (assoc-in [:betting :odds :status] :loading)
+                (assoc-in [:betting :odds :error] nil))
+        ::fx/http {:url (str "/api/betting/events/" eid "/close")
+                   :method "POST"
+                   :on-success [::betting-close-success]
+                   :on-error [::betting-odds-failure]}}))))
+
+(rf/reg-event-fx
+ ::betting-close-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [eid (get-in db [:betting :selected :event-id])]
+     {:db (-> db
+              (assoc-in [:betting :odds :summary] (:odds payload))
+              (assoc-in [:betting :odds :captured-at] (:close-captured-at payload))
+              (assoc-in [:betting :odds :status] (if (:odds payload) :ready :empty))
+              (assoc-in [:betting :odds :error] nil))
+      :dispatch-n (cond-> []
+                    eid (conj [::fetch-betting-bets eid]))})))
+
+(rf/reg-event-db
+ ::update-betting-form
+ (fn [db [_ k v]]
+   (-> db
+       (assoc-in [:betting :form k] v)
+       (assoc-in [:betting :form :error] nil)
+       (assoc-in [:betting :form :status] :idle))))
+
+(rf/reg-event-fx
+ ::submit-betting-bet
+ (fn [{:keys [db]} _]
+   (let [form (get-in db [:betting :form])
+         event-id (get-in db [:betting :selected :event-id])
+         selection (:selection form)
+         summary (get-in db [:betting :odds :summary])]
+     (cond
+       (nil? event-id)
+       {:db (assoc-in db [:betting :form :error] "Select a match first.")}
+
+       (str/blank? (str selection))
+       {:db (assoc-in db [:betting :form :error] "Select a side to log.")}
+
+       (nil? summary)
+       {:db (assoc-in db [:betting :form :error] "Refresh odds before logging a bet.")}
+
+       :else
+       {:db (-> db
+                (assoc-in [:betting :form :status] :loading)
+                (assoc-in [:betting :form :error] nil))
+        ::fx/http {:url "/api/betting/bets"
+                   :method "POST"
+                   :body {:event-id event-id
+                          :market-key (:market-key form)
+                          :selection selection}
+                   :on-success [::betting-bet-success]
+                   :on-error [::betting-bet-failure]}}))))
+
+(rf/reg-event-fx
+ ::betting-bet-success
+ (fn [{:keys [db]} _]
+   (let [eid (get-in db [:betting :selected :event-id])
+         selection (get-in db [:betting :form :selection])]
+     {:db (-> db
+              (assoc-in [:betting :form] (assoc default-betting-form :selection selection))
+              (assoc-in [:betting :form :status] :success))
+      :dispatch-n (cond-> []
+                    eid (conj [::fetch-betting-bets eid]))})))
+
+(rf/reg-event-db
+ ::betting-bet-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to log bet.")]
+     (-> db
+         (assoc-in [:betting :form :status] :error)
+         (assoc-in [:betting :form :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::fetch-betting-bets
+ (fn [{:keys [db]} [_ event-id]]
+   (let [eid (or event-id (get-in db [:betting :selected :event-id]))
+         qs (when eid (str "?event-id=" eid))]
+     {:db (-> db
+              (assoc-in [:betting :bets :status] :loading)
+              (assoc-in [:betting :bets :error] nil))
+      ::fx/http {:url (str "/api/betting/bets" (or qs ""))
+                 :method "GET"
+                 :on-success [::betting-bets-success]
+                 :on-error [::betting-bets-failure]}})))
+
+(rf/reg-event-db
+ ::betting-bets-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:betting :bets :items] (vec (:bets payload)))
+       (assoc-in [:betting :bets :scoreboard] (:scoreboard payload))
+       (assoc-in [:betting :bets :status] (if (seq (:bets payload)) :ready :empty))
+       (assoc-in [:betting :bets :error] nil))))
+
+(rf/reg-event-db
+ ::betting-bets-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load bet log.")]
+     (-> db
+         (assoc-in [:betting :bets :status] :error)
+         (assoc-in [:betting :bets :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
 (rf/reg-event-db
  ::land-update-filter
  (fn [db [_ k v]]
@@ -2166,6 +2405,7 @@
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
 (rf/reg-sub ::home (fn [db _] (:home db)))
 (rf/reg-sub ::land (fn [db _] (:land db)))
+(rf/reg-sub ::betting (fn [db _] (:betting db)))
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
@@ -2185,6 +2425,7 @@
      (if session
        (case route
          :home [home/home-shell]
+         :betting [betting-ui/betting-shell]
          :control-panel [control-panel/control-panel-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])

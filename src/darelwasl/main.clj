@@ -7,6 +7,7 @@
             [darelwasl.server :as server]
             [darelwasl.site.server :as site-server]
             [darelwasl.telegram :as telegram]
+            [darelwasl.workers.betting-scheduler :as betting-scheduler]
             [darelwasl.workers.outbox :as outbox-worker]))
 
 (defonce system-state (atom nil))
@@ -40,8 +41,13 @@
                                (log/info "Outbox worker stopped"))
                              (catch Exception e
                                (log/error e "Outbox worker crashed")))))
+         betting-enabled? (get-in cfg [:betting :scheduler-enabled?])
+         betting-future (when (and betting-enabled? (not (:error db-state)))
+                          (betting-scheduler/start! {:config cfg
+                                                     :db db-state}))
          started (cond-> started
-                   worker-future (assoc :outbox/worker worker-future))]
+                   worker-future (assoc :outbox/worker worker-future)
+                   betting-future (assoc :betting/scheduler betting-future))]
      (telegram/auto-set-webhook! (:telegram cfg))
      (reset! system-state started)
      started)))
@@ -51,6 +57,8 @@
   []
   (when-let [state @system-state]
     (when-let [worker (:outbox/worker state)]
+      (future-cancel worker))
+    (when-let [worker (:betting/scheduler state)]
       (future-cancel worker))
     (-> state
         (site-server/stop)

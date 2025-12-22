@@ -57,18 +57,17 @@
                       :cap/action/telegram-handle-update]
             :schema [:cap/schema/user]}}
 
- {:id :cap/integration/odds-api
-  :title "Odds API"
+ {:id :cap/integration/rezultati
+  :title "Rezultati (mobile)"
   :version "v1"
-  :external-system "The Odds API"
+  :external-system "Rezultati mobile odds pages"
   :contracts {:timeout_ms 3000
-              :rate_limit "header-based (x-requests-remaining/used); 429 signals backoff"
-              :endpoints ["/sports/{sport_key}/events"
-                          "/sports/{sport_key}/events/{id}/odds"
-                          "/sports/{sport_key}/scores"]}
+              :rate_limit "no explicit headers; treat 403/429 as backoff"
+              :endpoints ["/?d={day}&s=5"
+                          "/utakmica/{id}/?s=5"]}
   :auth {:strategy :env-vars
-         :vars ["ODDS_API_KEY" "ODDS_API_BASE_URL" "ODDS_API_TIMEOUT_MS"]}
-  :failure-modes ["Missing API key" "429 rate limits" "Network timeouts/5xx" "Invalid sport/event ids"]
+         :vars ["REZULTATI_BASE_URL" "REZULTATI_TIMEOUT_MS"]}
+  :failure-modes ["Blocked/geo-restricted access" "Network timeouts/5xx" "HTML changes" "Invalid match ids"]
   :compatibility {:backward true
                   :forward true
                   :flags []}

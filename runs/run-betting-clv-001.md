@@ -1,174 +1,56 @@
 # Run run-betting-clv-001
 
-Goal: ship a minimal CLV-first betting trainer app (web UI + backend) that lets a user log bets against reference odds, compute CLV, and learn pockets where they beat the close. The MVP must work with manual bookmaker odds and The Odds API for event/odds/scores, with no ML and no automation beyond on-demand refresh.
+Goal: ship a minimal CLV-first betting trainer that uses no-vig reference probabilities, a configured reference basket, Rezultati bookmaker odds, and scheduled close snapshots (kickoff - 10 min). No manual odds or stake entry.
 
-Constraints: no guaranteed-profit claims; prioritize CLV feedback over outcome prediction; keep data model explicit and minimal; do not over-poll Odds API; use existing UI primitives and theme tokens; avoid building schedulers or background daemons in v1.
+Constraints: no guaranteed-profit claims; CLV feedback only; low-frequency scheduler only; keep the data model explicit and minimal; avoid high-frequency polling.
 
 ## Tasks
-- Task ID: product-spec-betting-clv
+- Task ID: product-spec-betting-clv-v2
   - Status: done
-  - Objective: Define the MVP product spec for the CLV trainer app in `docs/system.md` (flows, acceptance criteria, data flow, constraints).
-  - Scope: Screens (match list, match detail + price board + manual odds input, bet log + CLV scoreboard), CLV-first goals, on-demand odds refresh, data retention rules, and non-goals (no outcome model, no auto-betting).
-  - Out of Scope: Implementation, schema, API changes, UI code.
-  - Capabilities Touched: docs/spec (narrative only).
-  - Parallel Safety:
-    - Exclusive Capabilities: system product spec doc
-    - Shared/Read-only Capabilities: registries (read), existing views/actions docs
-    - Sequencing Constraints: must precede all implementation tasks
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: view/app UX contract, data capture patterns
-    - New composability rules needed: none
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: add a new betting trainer surface focused on CLV feedback
-    - Compatibility expectation: backward compatible
-    - Flag/Rollout plan: none
-  - Breaking/Deprecation:
-    - Breaking change? No; doc-only
-  - Dependencies: none
-  - Deliverables: Updated `docs/system.md` product sections covering the betting CLV MVP
-  - Proof Plan: Consistency review; no code proofs
-  - Fixtures/Data Assumptions: None
-  - Protocol/System Updates: Update system doc narrative only
-  - FAQ Updates: None
-  - Tooling/Automation: None
-  - Reporting: Summarize spec decisions and acceptance criteria
+  - Objective: Update `docs/system.md` for no-vig true %, reference basket + execution book, scheduled close capture, and no manual odds/stake entry.
+  - Scope: Product + design spec bullets, CLV formula, acceptance criteria, config notes.
+  - Out of Scope: Implementation.
+  - Capabilities Touched: docs/spec.
+  - Dependencies: none.
+  - Deliverables: Updated betting CLV spec in `docs/system.md`.
+  - Proof Plan: Consistency review.
 
-- Task ID: design-spec-betting-clv
+- Task ID: schema-betting-v2
   - Status: done
-  - Objective: Define the UX + visual design direction for the betting CLV surface in `docs/system.md`.
-  - Scope: Layouts for list/detail/scoreboard; density rules; component usage (button/input/list-row/chip/panel); mobile behavior; CLV status badges and copy.
-  - Out of Scope: Token implementation, CSS changes, UI code.
-  - Capabilities Touched: docs/design (view UX narrative only).
-  - Parallel Safety:
-    - Exclusive Capabilities: design spec doc
-    - Shared/Read-only Capabilities: theme registry (read), system doc
-    - Sequencing Constraints: after product-spec-betting-clv; before implementation tasks
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: view patterns, shared UI components
-    - New composability rules needed: none
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: establish UI behavior for CLV training (no outcome promises)
-    - Compatibility expectation: backward compatible
-    - Flag/Rollout plan: none
-  - Breaking/Deprecation:
-    - Breaking change? No; doc-only
-  - Dependencies: product-spec-betting-clv
-  - Deliverables: Updated design sections in `docs/system.md`
-  - Proof Plan: Consistency review
-  - Fixtures/Data Assumptions: None
-  - Protocol/System Updates: None
-  - FAQ Updates: None
-  - Tooling/Automation: None
-  - Reporting: Note visual + interaction decisions
+  - Objective: Remove stake and align implied probability semantics to no-vig reference.
+  - Scope: `registries/schema.edn`, fixtures, and related registry docs.
+  - Out of Scope: UI.
+  - Capabilities Touched: :cap/schema/betting-bet, :cap/schema/betting-quote.
+  - Dependencies: product-spec-betting-clv-v2.
+  - Deliverables: Updated schema + fixtures.
+  - Proof Plan: `scripts/checks.sh registries`.
 
-- Task ID: schema-betting-core
+- Task ID: backend-betting-v2
+  - Status: in-progress
+  - Objective: Compute no-vig probabilities, reference medians, best/execution odds, and use them for bet logging + CLV.
+  - Scope: `src/darelwasl/betting.clj`, actions/routes wiring, Rezultati adapter normalization.
+  - Out of Scope: Full Supersport API reverse engineering.
+  - Capabilities Touched: :cap/action/betting-odds, :cap/action/betting-bet-log, :cap/action/betting-close.
+  - Dependencies: schema-betting-v2.
+  - Deliverables: New odds summary payloads + updated CLV computation.
+  - Proof Plan: `scripts/checks.sh registries` and app smoke.
+
+- Task ID: scheduler-betting-close
   - Status: done
-  - Objective: Add the betting CLV data model to Datomic and registries.
-  - Scope: Schema for event, bookmaker, quote snapshot, bet, and fact entities; uniqueness/indexes for event IDs and bookmaker keys; minimal fixtures for one event, one bookmaker, one quote, one bet; update `registries/schema.edn` + `docs/system.md`.
-  - Out of Scope: Odds API integration, UI changes, automated jobs.
-  - Capabilities Touched: :cap/schema/betting-event, :cap/schema/betting-bookmaker, :cap/schema/betting-quote, :cap/schema/betting-bet, :cap/schema/betting-fact.
-  - Parallel Safety:
-    - Exclusive Capabilities: schema registry, fixtures
-    - Shared/Read-only Capabilities: actions/views
-    - Sequencing Constraints: after product-spec-betting-clv and design-spec-betting-clv
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: schema, fixtures, entity modeling
-    - New composability rules needed: event IDs map to external API IDs; quotes are immutable snapshots
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: store events, odds, and bets to compute CLV
-    - Compatibility expectation: backward compatible (new domain)
-    - Flag/Rollout plan: none
-  - Breaking/Deprecation:
-    - Breaking change? No
-  - Dependencies: product-spec-betting-clv, design-spec-betting-clv
-  - Deliverables: Schema + registry entries; fixtures; system doc updates
-  - Proof Plan: `scripts/checks.sh schema`; `clojure -M:seed --temp` if fixtures added
-  - Fixtures/Data Assumptions: add minimal betting fixtures for checks
-  - Protocol/System Updates: update schema sections in `docs/system.md`
-  - FAQ Updates: None
-  - Tooling/Automation: None
-  - Reporting: Summarize schema shape and fixture coverage
+  - Objective: Add a low-frequency scheduler to capture close snapshots automatically.
+  - Scope: new worker + startup wiring; close offset/horizon config.
+  - Out of Scope: High-frequency polling.
+  - Capabilities Touched: :cap/action/betting-close.
+  - Dependencies: backend-betting-v2.
+  - Deliverables: Scheduler in `src/darelwasl/workers/betting_scheduler.clj` wired in `main.clj`.
+  - Proof Plan: Local smoke run + logs.
 
-- Task ID: integration-odds-api
-  - Status: done
-  - Objective: Add an Odds API integration adapter for events, odds, and scores.
-  - Scope: Integration registry entry; config via `ODDS_API_KEY`; client module for `/events`, `/events/{id}/odds`, `/scores`; basic error handling and rate-limit guardrails; no polling scheduler.
-  - Out of Scope: Automated refresh jobs, ML, other data providers.
-  - Capabilities Touched: :cap/integration/odds-api, :cap/tooling/http-client (if extended).
-  - Parallel Safety:
-    - Exclusive Capabilities: integration adapter module
-    - Shared/Read-only Capabilities: schema registry, views
-    - Sequencing Constraints: after schema-betting-core
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: integration adapters and config
-    - New composability rules needed: on-demand fetch only; no background polling in v1
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: add external odds provider for reference prices
-    - Compatibility expectation: backward compatible
-    - Flag/Rollout plan: env-gated (ODDS_API_KEY)
-  - Breaking/Deprecation:
-    - Breaking change? No
-  - Dependencies: schema-betting-core
-  - Deliverables: Integration registry entry, client module, docs/system.md config note
-  - Proof Plan: `scripts/checks.sh actions` (if adapter is used by actions); unit-level contract checks if present
-  - Fixtures/Data Assumptions: Use stubbed responses in tests; no live API calls in CI
-  - Protocol/System Updates: Document env vars in `docs/system.md`
-  - FAQ Updates: Add Odds API quota note if needed
-  - Tooling/Automation: None
-  - Reporting: Summarize endpoints implemented and config
-
-- Task ID: actions-betting-core
-  - Status: pending
-  - Objective: Implement the core betting actions + API endpoints for the CLV loop.
-  - Scope: Actions + routes to list events (cached), fetch odds for an event, log manual bet, store quote snapshots, compute CLV when a closing snapshot is available, and settle results via scores; update `registries/actions.edn` + `docs/system.md`.
-  - Out of Scope: Full automation/schedulers, bankroll management, outcome prediction.
-  - Capabilities Touched: :cap/action/betting-events, :cap/action/betting-odds, :cap/action/betting-bet-log, :cap/action/betting-close, :cap/action/betting-settle, :cap/view/betting.
-  - Parallel Safety:
-    - Exclusive Capabilities: betting actions/routes
-    - Shared/Read-only Capabilities: integration adapter, schema
-    - Sequencing Constraints: after integration-odds-api and schema-betting-core
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: actions, contracts, API surface
-    - New composability rules needed: CLV computed from reference close (Pinnacle/median basket); store both implied prob and raw odds
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: support CLV feedback loop with on-demand snapshots
-    - Compatibility expectation: backward compatible (new endpoints)
-    - Flag/Rollout plan: none
-  - Breaking/Deprecation:
-    - Breaking change? No
-  - Dependencies: schema-betting-core, integration-odds-api
-  - Deliverables: Actions + routes + registry updates; docs/system.md behavior notes
-  - Proof Plan: `scripts/checks.sh actions`; `scripts/checks.sh app-smoke` if UI integration lands in same PR
-  - Fixtures/Data Assumptions: Seed data for one event and one bet; stub Odds API responses
-  - Protocol/System Updates: Update action sections in `docs/system.md`
-  - FAQ Updates: None
-  - Tooling/Automation: None
-  - Reporting: Summarize endpoints and CLV calculation logic
-
-- Task ID: view-betting-app
-  - Status: pending
-  - Objective: Build the CLV trainer UI surface inside the app shell.
-  - Scope: New app switcher entry; match list (from cached events), match detail (price board + manual odds input + edge indicator), bet log + CLV scoreboard; use existing UI primitives and theme tokens; responsive layout for mobile/desktop.
-  - Out of Scope: Outcome prediction UI, advanced analytics, multi-market betting.
-  - Capabilities Touched: :cap/view/betting, shared UI components.
-  - Parallel Safety:
-    - Exclusive Capabilities: CLJS betting view
-    - Shared/Read-only Capabilities: shared UI components, theme tokens
-    - Sequencing Constraints: after actions-betting-core
-  - Composability Impact:
-    - Layers affected / patterns reused/extended: views/app UX contract, entity list patterns
-    - New composability rules needed: use CLV as primary feedback metric in UI
-  - Requirement Change & Compatibility:
-    - Requirement change and rationale: add betting CLV surface to app switcher
-    - Compatibility expectation: backward compatible
-    - Flag/Rollout plan: none
-  - Breaking/Deprecation:
-    - Breaking change? No
-  - Dependencies: actions-betting-core
-  - Deliverables: CLJS view + routing; CSS updates as needed; docs/system.md view listing
-  - Proof Plan: `npm run check`; `scripts/checks.sh app-smoke`
-  - Fixtures/Data Assumptions: Use seeded events/bets for empty states and demos
-  - Protocol/System Updates: Update views list in `docs/system.md`
-  - FAQ Updates: None
-  - Tooling/Automation: None
-  - Reporting: UI behavior summary + screenshots if applicable
+- Task ID: ui-betting-v2
+  - Status: in-progress
+  - Objective: Remove manual odds/stake inputs and surface true % + best/execution odds + CLV in pp.
+  - Scope: `src/darelwasl/features/betting.cljs`, state updates, and CSS adjustments.
+  - Out of Scope: Design system rework.
+  - Capabilities Touched: :cap/view/betting.
+  - Dependencies: backend-betting-v2.
+  - Deliverables: Updated betting UI + styles.
+  - Proof Plan: App smoke.

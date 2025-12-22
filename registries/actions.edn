@@ -724,9 +724,109 @@
           :fields [:telegram/update-id :telegram/chat-id :telegram/command]}
   :idempotency {:strategy :dedupe-on
                 :keys [:telegram/update-id]}
-  :contracts {:fixtures []}
-  :compatibility {:backward true :forward true :flags [:telegram/webhook-enabled? :telegram/commands-enabled?]}
+ :contracts {:fixtures []}
+ :compatibility {:backward true :forward true :flags [:telegram/webhook-enabled? :telegram/commands-enabled?]}
   :related {:schema [:cap/schema/user]
             :views []}
+  :tooling []}
+
+ {:id :cap/action/betting-events
+  :title "Betting Events (Rezultati)"
+  :version "v1"
+  :inputs {:day-offset :long?
+           :sport-path :string?
+           :refresh? :boolean?}
+  :outputs {:events :list}
+  :side-effects ["Fetch Rezultati odds list" "Upsert betting events"]
+  :adapter {:integration :cap/integration/rezultati}
+  :audit {:records [:betting/events]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/betting]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event]
+            :views [:cap/view/betting]}
+  :tooling []}
+
+ {:id :cap/action/betting-odds
+  :title "Betting Odds Snapshot"
+  :version "v1"
+ :inputs {:betting.event/id :uuid
+           :sport-path :string?
+           :refresh? :boolean?}
+ :outputs {:quotes :list}
+  :side-effects ["Fetch Rezultati match odds" "Fetch execution book odds" "Store quote snapshots"]
+  :adapter {:integration :cap/integration/rezultati}
+  :audit {:records [:betting/quote-capture]
+          :fields [:betting.event/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/betting]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event :cap/schema/betting-quote]
+            :views [:cap/view/betting]}
+  :tooling []}
+
+ {:id :cap/action/betting-bet-log
+  :title "Betting Log Bet"
+  :version "v1"
+ :inputs {:betting.event/id :uuid
+           :betting.bet/market-key :string?
+           :betting.bet/selection :string
+           :betting.bet/odds-decimal :double?
+           :betting.bookmaker/key :string?}
+  :outputs {:betting.bet/id :uuid}
+  :side-effects ["Persist bet and fact"]
+  :adapter {:integration :local/db}
+  :audit {:records [:betting/bet-log]
+          :fields [:betting.event/id :betting.bet/selection]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/betting]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-bet :cap/schema/betting-fact]
+            :views [:cap/view/betting]}
+  :tooling []}
+
+ {:id :cap/action/betting-close
+  :title "Betting Capture Close"
+  :version "v1"
+ :inputs {:betting.event/id :uuid
+           :sport-path :string?
+           :refresh? :boolean?}
+ :outputs {:quotes :list}
+  :side-effects ["Fetch Rezultati match odds" "Fetch execution book odds" "Store close snapshots"]
+  :adapter {:integration :cap/integration/rezultati}
+  :audit {:records [:betting/close-capture]
+          :fields [:betting.event/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/betting]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-event :cap/schema/betting-quote]
+            :views [:cap/view/betting]}
+  :tooling []}
+
+ {:id :cap/action/betting-settle
+  :title "Betting Settle Bet"
+  :version "v1"
+  :inputs {:betting.bet/id :uuid
+           :betting.bet/status :keyword}
+  :outputs {:betting.bet/id :uuid}
+  :side-effects ["Persist bet settlement and fact"]
+  :adapter {:integration :local/db}
+  :audit {:records [:betting/settle]
+          :fields [:betting.bet/id :betting.bet/status]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/betting]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/betting-bet :cap/schema/betting-fact]
+            :views [:cap/view/betting]}
   :tooling []}
 ]

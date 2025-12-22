@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [darelwasl.automations :as automations]
+            [darelwasl.betting :as betting]
             [darelwasl.events :as events]
             [darelwasl.tasks :as tasks]))
 
@@ -85,6 +86,52 @@
         task-id (:task/id body)]
     (tasks/delete-task! (conn state) task-id actor)))
 
+(defn- betting-events
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (betting/list-events (conn state)
+                         (:config state)
+                         {:day-offset (or (:day-offset body) (:day body) 0)
+                          :sport-path (or (:sport-path body) (:sport body) "")
+                          :refresh? (:refresh? body)})))
+
+(defn- betting-odds
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (betting/fetch-event-odds! (conn state)
+                               (:config state)
+                               {:event-id (or (:event-id body) (:betting.event/id body))
+                                :sport-path (or (:sport-path body) (:sport body) "")
+                                :refresh? (:refresh? body)})))
+
+(defn- betting-bet-log
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (betting/log-bet! (conn state)
+                      (:config state)
+                      {:event-id (or (:event-id body) (:betting.event/id body))
+                       :market-key (or (:market-key body) (:betting.bet/market-key body))
+                       :selection (or (:selection body) (:betting.bet/selection body))
+                       :odds (or (:odds body) (:betting.bet/odds-decimal body))
+                       :bookmaker-key (:bookmaker-key body)})))
+
+(defn- betting-close
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (betting/capture-close! (conn state)
+                            (:config state)
+                            {:event-id (or (:event-id body) (:betting.event/id body))
+                             :sport-path (or (:sport-path body) (:sport body) "")
+                             :refresh? (:refresh? body)})))
+
+(defn- betting-settle
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (betting/settle-bet! (conn state)
+                         (:config state)
+                         {:bet-id (or (:bet-id body) (:betting.bet/id body))
+                          :status (or (:status body) (:betting.bet/status body))})))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -93,7 +140,12 @@
    :cap/action/task-set-due task-set-due
    :cap/action/task-set-tags task-set-tags
    :cap/action/task-archive task-archive
-   :cap/action/task-delete task-delete})
+   :cap/action/task-delete task-delete
+   :cap/action/betting-events betting-events
+   :cap/action/betting-odds betting-odds
+   :cap/action/betting-bet-log betting-bet-log
+   :cap/action/betting-close betting-close
+   :cap/action/betting-settle betting-settle})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:

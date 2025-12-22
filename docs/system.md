@@ -118,12 +118,17 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Notifications: when enabled and a chat is mapped, task events enqueue to the outbox; the worker delivers Telegram messages with retries/backoff. Messages are short and idempotent by `message-key`.
 - Ops: use `TELEGRAM_WEBHOOK_BASE_URL` with `telegram-set-webhook`; verify via `getWebhookInfo`. Keep webhook disabled by default; enable flags and secrets explicitly before production use.
 
-## Odds API Integration (betting CLV)
-- Capabilities: :cap/integration/odds-api provides on-demand access to events, event odds, and scores for CLV references.
-- Auth/config: env var `ODDS_API_KEY` required; optional `ODDS_API_BASE_URL` (defaults to `https://api.the-odds-api.com/v4`) and `ODDS_API_TIMEOUT_MS` (default 3000).
-- Endpoints: `/sports/{sport_key}/events`, `/sports/{sport_key}/events/{id}/odds`, `/sports/{sport_key}/scores` (dateFormat defaults to ISO; oddsFormat defaults to decimal).
-- Guardrails: no polling scheduler; requests are user-triggered only; client reads rate-limit headers and returns quota state; 429 treated as rate-limit error.
-- CI: no live Odds API calls in CI; use stubs/fixtures in tests.
+## Rezultati Integration (betting CLV)
+- Capabilities: :cap/integration/rezultati provides on-demand access to daily match lists and bookmaker odds (1X2) for reference baskets.
+- Auth/config: optional `REZULTATI_BASE_URL` (defaults to `https://m.rezultati.com`), `REZULTATI_TIMEOUT_MS` (default 3000), and `REZULTATI_CACHE_TTL_MS` (default 30000).
+- Endpoints: `/?d={day}&s=5` (daily soccer odds list), `/utakmica/{id}/?s=5` (match detail odds).
+- Guardrails: no high-frequency polling; user-triggered refresh only. A lightweight scheduler may capture close snapshots near kickoff.
+- CI: no live Rezultati calls in CI; use stubs/fixtures in tests.
+
+## Betting Config (CLV)
+- Reference basket: `BETTING_REFERENCE_BOOKS` (CSV), fallback via `BETTING_FALLBACK_BOOKS` (CSV). Defaults to Pinnacle, Betfair Exchange, SBO/SBOBET, bet365, Unibet (fallback bet365 + Unibet).
+- Execution book: `BETTING_EXECUTION_BOOK` (default `supersport.hr`) and Supersport base/timeout via `SUPERSPORT_BASE_URL`, `SUPERSPORT_TIMEOUT_MS`.
+- Close scheduler: `BETTING_SCHEDULER_ENABLED` (default true), `BETTING_SCHEDULER_POLL_MS` (default 60000), `BETTING_CLOSE_OFFSET_MINUTES` (default 10), `BETTING_EVENT_HORIZON_HOURS` (default 72).
 
 ### Content Model v2 (Saudi license site – implemented schema)
 - Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
@@ -375,16 +380,23 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Goal: a CLV-first betting trainer that lets users log bets against reference odds and learn where they consistently beat the close, without implying guaranteed profit or outcome prediction.
 - Screens:
   - Match list: upcoming/recent events with sport, start time, and provider status; on-demand refresh only.
-  - Match detail: price board (reference odds + manual bookmaker odds input), selection picker, and "log bet" action; show implied probability and CLV-ready status.
-  - Bet log + CLV scoreboard: list of logged bets with stake, odds, close status, CLV %, and result (pending/win/loss/push).
+  - Match detail: price board with no-vig reference %, best price, execution price (if available), selection picker, and "log bet" action.
+  - Bet log + CLV scoreboard: list of logged bets with entry reference %, execution odds (if available), close status, CLV (pp), and result (pending/win/loss/push).
 - Core flow:
   - User opens match list, selects an event, and optionally refreshes odds on demand.
-  - In match detail, user enters bookmaker odds (decimal) and stake, selects a market/side, then logs the bet.
-  - User captures a closing snapshot on demand ("Capture close" or manual close entry). Once a close snapshot exists, CLV is computed for all bets tied to that event and market.
+  - In match detail, user selects a side; the app logs the bet using current reference median and execution odds if available.
+  - Close snapshots are captured automatically by a scheduler at kickoff minus a fixed offset (default 10 min); manual "Capture close" remains as a fallback.
+- API surface (betting):
+  - `GET /api/betting/events` (Rezultati daily list + event upsert)
+  - `GET /api/betting/events/{id}/odds` (reference odds snapshot)
+  - `POST /api/betting/events/{id}/close` (close snapshot)
+  - `GET /api/betting/bets` + `POST /api/betting/bets` (bet log)
 - Data flow and CLV rules:
-  - Reference odds come from the Odds API on-demand; no polling or schedulers.
-  - Bets store the exact odds format used (decimal) and an implied probability (1 / odds) at log time.
-  - Close snapshot is the last on-demand reference odds capture marked as close; CLV % = (close implied probability - bet implied probability) / bet implied probability.
+  - Reference odds come from Rezultati bookmaker lists; cached and fetched on demand.
+  - Per-book no-vig probabilities are computed and the reference median is taken across the configured basket.
+  - Reference basket = Pinnacle, Betfair Exchange, SBO/SBOBET, bet365, Unibet; fallback to bet365 + Unibet if none available.
+  - Bets store the reference median implied probability at entry; execution odds are stored if the execution book is available.
+  - Close snapshot is the last capture ≤ kickoff − offset; CLV = close reference prob − entry reference prob (percentage points).
   - If no close snapshot exists, CLV remains "pending" and is not displayed as a number.
 - Data retention:
   - Bets are retained indefinitely by default; no automatic deletion in v1.
@@ -393,16 +405,17 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Constraints:
   - No guaranteed-profit language; CLV is presented as a feedback metric only.
   - No outcome prediction or automated betting.
-  - No background refresh; all updates are user-triggered and rate-limited by UI.
+  - No high-frequency polling; only low-frequency close capture scheduling plus user-triggered refresh.
   - Use existing UI primitives and theme tokens; keep data model explicit and minimal.
 - Acceptance criteria:
-  - A user can log a bet with manual bookmaker odds and see it in the bet log immediately.
-  - A user can capture a closing snapshot and see CLV computed for affected bets.
+  - A user can log a bet with a single selection click (no manual odds/stake entry).
+  - Reference basket and true % are visible; execution odds appear when the execution book is available.
+  - Close snapshots are auto-captured, and CLV is computed for affected bets once close exists.
   - The match list, match detail, and bet log screens show clear loading/empty/error states.
   - CLV is shown only after a closing snapshot exists; otherwise the bet shows "Awaiting close".
-  - Odds refresh is user-triggered only, with visible last-updated time.
+  - Odds refresh is user-triggered, with visible last-updated time.
 - Non-goals:
-  - Any ML/edge prediction, automated betting, bankroll management, or automated odds polling.
+  - Any ML/edge prediction, automated betting, bankroll management, or high-frequency odds polling.
   - Multi-market coverage beyond the single selected market per bet in v1.
   - Profit/loss projection beyond the logged bet result.
 
@@ -415,18 +428,18 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Use `list-row` with one title line and one meta line (sport + start time + provider status).
   - Status chip shows `Live`, `Upcoming`, or `Final`; no extra badges.
 - Match detail + price board:
-  - Reference odds panel shows market/side, best available price, and last updated time.
-  - Manual bookmaker odds input uses `form-input` with inline validation; disable "Log bet" until odds and stake are valid.
+  - Reference panel shows no-vig % per outcome, best available price, and execution price when available.
+  - Selection picker + "Log bet" button; no manual odds/stake inputs.
   - "Refresh odds" and "Capture close" are primary and secondary `button`s; show a small loading state and last update time.
 - Bet log + CLV scoreboard:
-  - Bet log uses `list-row` with selection, stake, odds, and CLV status; include a small meta line for "Logged at" time.
+  - Bet log uses `list-row` with selection, entry reference %, execution odds, and CLV status; include a small meta line for "Logged at" time.
   - Scoreboard uses `stat-group`/`stat-card` for average CLV, % ahead of close, close coverage, and total bets.
 - CLV badges and copy:
   - Status chips: `Awaiting close`, `Ahead of close`, `At close`, `Behind close`.
   - Use success/warn/danger token colors with subtle tinted backgrounds; never imply profit or certainty.
-  - CLV value shows signed percent (e.g., +2.4%); hide numeric CLV until a close snapshot exists.
+  - CLV value shows signed percent points (e.g., +2.4pp); hide numeric CLV until a close snapshot exists.
 - Interaction rules:
-  - All odds refreshes are user-triggered; show a cooldown hint if refresh happens too often.
+  - Odds refreshes are user-triggered; close capture may be automated on a schedule.
   - If reference odds are unavailable, show an empty state with a single "Refresh odds" action.
   - Selection changes do not auto-log; user must explicitly log the bet.
 - Accessibility and density:
@@ -520,15 +533,15 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Schema: Betting CLV (Events/Bookmakers/Quotes/Bets/Facts)
 - Entities and identities:
-  - `:entity.type/betting-event` with `:betting.event/id` and unique `:betting.event/external-id` (Odds API event id), plus sport key/title, commence time, and home/away teams.
+  - `:entity.type/betting-event` with `:betting.event/id` and unique `:betting.event/external-id` (Rezultati match id), plus sport key/title, commence time, and home/away teams.
   - `:entity.type/betting-bookmaker` with `:betting.bookmaker/id` and unique `:betting.bookmaker/key`, plus display title.
   - `:entity.type/betting-quote` snapshot referencing event + bookmaker with market key, selection, odds-decimal, implied probability, capture time, and `:betting.quote/close?`.
-  - `:entity.type/betting-bet` referencing event + bookmaker with stake, odds, implied probability, status, placed-at, and settled-at.
+  - `:entity.type/betting-bet` referencing event + bookmaker with execution odds (optional), reference implied probability, status, placed-at, and settled-at.
   - `:entity.type/betting-fact` for logged actions (bet log, quote capture, close capture, settle) with type + optional refs.
 - Invariants:
   - External event IDs and bookmaker keys are unique; entity type is set on all betting entities.
   - Quotes are immutable snapshots; `:betting.quote/close?` marks the final reference price used for CLV.
-  - Odds and stake values must be positive; CLV is derived from bet vs close implied probability (not stored on the bet).
+  - Odds and implied probability must be positive; CLV is derived from entry vs close reference implied probability (not stored on the bet).
 - Compatibility and history:
   - Additive schema; overwrite history strategy; backward/forward compatible; no flags.
 - Fixtures and seeding:
