@@ -10,5 +10,5 @@
  :user/username "damjan"
  :user/name "Damjan"
  :user/password "Damjan1!"
- :user/roles [:role/admin :role/content-editor :role/betting-engineer]}
+ :user/roles [:role/admin :role/content-editor :role/betting-engineer :role/codex-terminal]}
 ]

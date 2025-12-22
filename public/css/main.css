@@ -2212,3 +2212,86 @@ button.list-row .meta {
     margin: 0;
   }
 }
+
+/* Terminal */
+.terminal-layout {
+  padding: var(--spacing-scale-5);
+}
+
+.terminal-list-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.terminal-session-list {
+  display: grid;
+  gap: var(--spacing-scale-2);
+}
+
+.terminal-chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.terminal-chat__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--spacing-scale-3);
+}
+
+.terminal-back {
+  border: 1px solid var(--colors-border);
+  background: var(--colors-surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-scale-2) var(--spacing-scale-3);
+  cursor: pointer;
+}
+
+.terminal-title {
+  font-size: var(--typography-font-sizes-section);
+  font-weight: 700;
+}
+
+.terminal-meta {
+  font-size: var(--typography-font-sizes-meta);
+  color: var(--colors-text-secondary);
+}
+
+.terminal-output {
+  border: 1px solid var(--colors-border);
+  background: var(--colors-surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-scale-3);
+  min-height: 45vh;
+  max-height: 60vh;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.terminal-output pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.terminal-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--spacing-scale-2);
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .terminal-layout {
+    padding: var(--spacing-scale-4);
+  }
+
+  .terminal-input {
+    grid-template-columns: 1fr;
+  }
+}

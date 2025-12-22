@@ -13,6 +13,8 @@
  :aliases {:dev {:main-opts ["-m" "darelwasl.main"]
                  :jvm-opts ["-Dclojure.main.report=stderr"]
                  :exec-fn darelwasl.main/-main}
+           :terminal {:main-opts ["-m" "darelwasl.terminal.main"]
+                      :jvm-opts ["-Dclojure.main.report=stderr"]}
            :seed {:main-opts ["-m" "darelwasl.fixtures"]
                   :jvm-opts ["-Dclojure.main.report=stderr"]}
            :import {:main-opts ["-m" "darelwasl.importer"]

@@ -25,6 +25,19 @@
              :event-horizon-hours 72
              :scheduler-enabled? true
              :scheduler-poll-ms 60000}
+   :terminal {:host "127.0.0.1"
+              :port 4010
+              :base-url "http://127.0.0.1:4010"
+              :data-dir "data/terminal"
+              :work-dir "data/terminal/sessions"
+              :logs-dir "data/terminal/logs"
+              :repo-url "https://github.com/damjanbab/darelwasl.git"
+              :tmux-prefix "codex"
+              :codex-command "codex"
+              :port-range-start 4100
+              :port-range-end 4199
+              :poll-ms 1000
+              :max-output-bytes 20000}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -129,6 +142,36 @@
                                               (get-in default-config [:betting :scheduler-enabled?]))
                 :scheduler-poll-ms (parse-int (get env "BETTING_SCHEDULER_POLL_MS")
                                               (get-in default-config [:betting :scheduler-poll-ms]))})
+        (assoc :terminal
+               (let [host (env-str (get env "TERMINAL_HOST")
+                                   (get-in default-config [:terminal :host]))
+                     port (parse-int (get env "TERMINAL_PORT")
+                                     (get-in default-config [:terminal :port]))
+                     base-url (env-str (get env "TERMINAL_API_URL")
+                                       (str "http://" host ":" port))]
+                 {:host host
+                  :port port
+                  :base-url base-url
+                  :data-dir (env-str (get env "TERMINAL_DATA_DIR")
+                                     (get-in default-config [:terminal :data-dir]))
+                  :work-dir (env-str (get env "TERMINAL_WORK_DIR")
+                                     (get-in default-config [:terminal :work-dir]))
+                  :logs-dir (env-str (get env "TERMINAL_LOG_DIR")
+                                     (get-in default-config [:terminal :logs-dir]))
+                  :repo-url (env-str (get env "TERMINAL_REPO_URL")
+                                     (get-in default-config [:terminal :repo-url]))
+                  :tmux-prefix (env-str (get env "TERMINAL_TMUX_PREFIX")
+                                        (get-in default-config [:terminal :tmux-prefix]))
+                  :codex-command (env-str (get env "TERMINAL_CODEX_CMD")
+                                          (get-in default-config [:terminal :codex-command]))
+                  :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
+                                               (get-in default-config [:terminal :port-range-start]))
+                  :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
+                                             (get-in default-config [:terminal :port-range-end]))
+                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
+                                      (get-in default-config [:terminal :poll-ms]))
+                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
+                                               (get-in default-config [:terminal :max-output-bytes]))}))
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))

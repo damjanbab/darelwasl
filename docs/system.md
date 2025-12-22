@@ -130,6 +130,26 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Execution book: `BETTING_EXECUTION_BOOK` (default `supersport.hr`) and Supersport base/timeout via `SUPERSPORT_BASE_URL`, `SUPERSPORT_TIMEOUT_MS`.
 - Close scheduler: `BETTING_SCHEDULER_ENABLED` (default true), `BETTING_SCHEDULER_POLL_MS` (default 60000), `BETTING_CLOSE_OFFSET_MINUTES` (default 10), `BETTING_EVENT_HORIZON_HOURS` (default 72).
 
+## Terminal Service (Codex Sessions)
+- Separate daemon (not tied to the main app). Sessions survive app restarts and UI closes.
+- Access gated by role `:role/codex-terminal` (only Damjan for now).
+- Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
+- Sessions are finite: on complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
+- Session storage:
+  - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
+  - Logs/worklogs: `TERMINAL_LOG_DIR` (default `data/terminal/logs`) retained forever
+- Terminal config envs:
+  - `TERMINAL_API_URL` (optional override of base url)
+  - `TERMINAL_DATA_DIR`
+  - `TERMINAL_WORK_DIR`
+  - `TERMINAL_LOG_DIR`
+  - `TERMINAL_REPO_URL` (repo clone for sessions)
+  - `TERMINAL_CODEX_CMD` (default `codex`)
+  - `TERMINAL_TMUX_BIN` (optional full path to tmux binary)
+  - `TERMINAL_PORT_RANGE_START`, `TERMINAL_PORT_RANGE_END` (per-session app/site ports)
+  - `TERMINAL_POLL_MS` (output polling interval)
+  - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
+
 ### Content Model v2 (Saudi license site – implemented schema)
 - Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
 - Entities:
@@ -316,10 +336,32 @@ Maintain stable IDs; reference them in tasks/PRs.
   WantedBy=multi-user.target
   ```
   Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-site`.
+- Terminal Systemd unit (`/etc/systemd/system/darelwasl-terminal.service`):
+  ```
+  [Unit]
+  Description=DarelWasl terminal service
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=darelwasl
+  WorkingDirectory=/opt/darelwasl
+  EnvironmentFile=/etc/darelwasl/app.env
+  ExecStart=/opt/darelwasl/scripts/run-terminal.sh
+  Restart=on-failure
+  RestartSec=5
+  StandardOutput=journal
+  StandardError=journal
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-terminal`.
 - CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl darelwasl-site`.
 - Service ops (Hetzner):
   - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl darelwasl-site`.
-  - Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`; same for `darelwasl-site`.
+- Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`; same for `darelwasl-site`.
+  - Terminal: `systemctl status darelwasl-terminal`, `journalctl -u darelwasl-terminal -f`, `systemctl restart darelwasl-terminal`.
   - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed) and `curl http://127.0.0.1:3200/` (site).
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 

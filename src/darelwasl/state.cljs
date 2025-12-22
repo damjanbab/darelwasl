@@ -241,6 +241,18 @@
    :bets default-betting-bets
    :form default-betting-form})
 
+(def default-terminal-state
+  {:status :idle
+   :error nil
+   :sessions []
+   :selected nil
+   :output ""
+   :cursor 0
+   :input ""
+   :sending? false
+   :polling? false
+   :list-polling? false})
+
 (def default-db
   {:route :login
    :session nil
@@ -252,6 +264,7 @@
    :tasks default-task-state
    :land default-land-state
    :betting default-betting-state
+   :terminal default-terminal-state
    :control default-control-state})
 
 (def base-app-options
@@ -264,6 +277,9 @@
            {:id :betting
             :label "Betting CLV"
             :desc "Browse odds and log bets"}
+           {:id :terminal
+            :label "Terminal"
+            :desc "Codex sessions"}
            {:id :control-panel
             :label "Control panel"
             :desc "Website content"}]
@@ -293,12 +309,25 @@
                    set)]
     (contains? roles :role/betting-engineer)))
 
+(defn terminal-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (contains? roles :role/codex-terminal)))
+
 (defn app-options
   "Return available app options filtered by session roles/flags."
   [session]
   (cond->> base-app-options
     (not (betting-enabled? session))
     (remove #(= (:id %) :betting))
+    (not (terminal-enabled? session))
+    (remove #(= (:id %) :terminal))
     (not (control-enabled? session))
     (remove #(= (:id %) :control-panel))))
 

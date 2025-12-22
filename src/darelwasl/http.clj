@@ -8,6 +8,7 @@
             [darelwasl.http.routes.land :as land-routes]
             [darelwasl.http.routes.registries :as registries-routes]
             [darelwasl.http.routes.tasks :as task-routes]
+            [darelwasl.http.routes.terminal :as terminal-routes]
             [darelwasl.http.routes.telegram :as telegram-routes]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
@@ -40,6 +41,7 @@
          (task-routes/routes state)
          (content-routes/routes state)
          (registries-routes/routes state)
+         (terminal-routes/routes state)
          (telegram-routes/routes state)
          (land-routes/routes state))))
 

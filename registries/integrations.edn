@@ -75,4 +75,26 @@
             :notes "On-demand fetch only; no polling or scheduled refresh; no live calls in CI"}
   :related {:actions []
             :schema [:cap/schema/betting-event :cap/schema/betting-quote]}}
+
+ {:id :cap/integration/terminal-service
+  :title "Codex Terminal Service"
+  :version "v1"
+  :external-system "Local terminal session daemon (tmux-backed)"
+  :contracts {:transport "HTTP JSON"
+              :session-store "EDN file on disk"
+              :runtime "tmux + codex CLI"}
+  :auth {:strategy :local-only
+         :secrets "none (localhost or private network)"}
+  :failure-modes ["Terminal service unavailable" "tmux session missing" "Repo clone failures" "Port allocation failure"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "clj-http"
+            :notes "Main app proxies requests to the terminal service"}
+  :related {:actions [:cap/action/terminal-sessions
+                      :cap/action/terminal-session-create
+                      :cap/action/terminal-session-input
+                      :cap/action/terminal-session-output
+                      :cap/action/terminal-session-complete]
+            :schema []}}
 ]

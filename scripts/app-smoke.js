@@ -7,8 +7,11 @@ const { request } = require("playwright");
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
 const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
+const LOG_DIR = process.env.TERMINAL_LOG_DIR || ARTIFACT_DIR;
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
 const A11Y_REPORT_PATH = path.join(ARTIFACT_DIR, "app-a11y.json");
+const CONSOLE_LOG_PATH = path.join(LOG_DIR, "app-console.log");
+const NETWORK_LOG_PATH = path.join(LOG_DIR, "app-network.log");
 
 async function waitForHealth(baseURL) {
   const api = await request.newContext({ baseURL });
@@ -118,8 +121,43 @@ async function ensureLogin(page) {
 
 async function run() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+  fs.mkdirSync(LOG_DIR, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  const appendLog = (file, line) => {
+    try {
+      fs.appendFileSync(file, `${line}\n`);
+    } catch (_) {
+      // Non-blocking log write failures.
+    }
+  };
+  const formatLocation = (location) => {
+    if (!location || !location.url) return "";
+    return `${location.url}:${location.lineNumber}:${location.columnNumber}`;
+  };
+  page.on("console", (msg) => {
+    const loc = formatLocation(msg.location());
+    const suffix = loc ? ` (${loc})` : "";
+    appendLog(
+      CONSOLE_LOG_PATH,
+      `[${new Date().toISOString()}] [${msg.type()}] ${msg.text()}${suffix}`
+    );
+  });
+  page.on("pageerror", (err) => {
+    appendLog(
+      CONSOLE_LOG_PATH,
+      `[${new Date().toISOString()}] [pageerror] ${err && err.message ? err.message : err}`
+    );
+  });
+  page.on("requestfailed", (request) => {
+    const failure = request.failure();
+    appendLog(
+      NETWORK_LOG_PATH,
+      `[${new Date().toISOString()}] ${request.method()} ${request.url()} ${
+        failure ? failure.errorText : ""
+      }`
+    );
+  });
   page.on("dialog", (dialog) => dialog.accept());
   // Proactively clear cookies/storage to avoid stale sessions causing redirects mid-login.
   await page.context().clearCookies();

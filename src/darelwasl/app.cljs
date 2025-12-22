@@ -5,6 +5,7 @@
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
             [darelwasl.features.control-panel :as control-panel]
+            [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.tasks :as tasks-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
@@ -39,6 +40,7 @@
 (def default-betting-form state/default-betting-form)
 (def default-betting-odds state/default-betting-odds)
 (def default-betting-bets state/default-betting-bets)
+(def default-terminal-state state/default-terminal-state)
 (def default-page-form state/default-page-form)
 (def default-block-form state/default-block-form)
 (def default-tag-form state/default-tag-form)
@@ -440,6 +442,7 @@
                        (= safe-route :tasks) (conj [::fetch-tasks])
                        (= safe-route :land) (conj [::fetch-land])
                        (= safe-route :betting) (conj [::fetch-betting-events])
+                       (= safe-route :terminal) (conj [::fetch-terminal-sessions])
                        (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
@@ -510,6 +513,7 @@
                  (assoc :tasks default-task-state)
                  (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
+                 (assoc :terminal default-terminal-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
@@ -517,7 +521,8 @@
     (let [dispatches (cond-> [[::fetch-tags]
                               [::fetch-home]
                               [::fetch-tasks]]
-                       (= preferred-route :betting) (conj [::fetch-betting-events]))]
+                       (= preferred-route :betting) (conj [::fetch-betting-events])
+                       (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
       {:db db'
        ::persist-last-route preferred-route
        :dispatch-n dispatches}))))
@@ -1888,6 +1893,208 @@
            (assoc :session nil
                   :route :login))))))
 
+(rf/reg-event-fx
+ ::fetch-terminal-sessions
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:terminal :status] :loading)
+            (assoc-in [:terminal :error] nil))
+    ::fx/http {:url "/api/terminal/sessions"
+               :method "GET"
+               :on-success [::terminal-sessions-success]
+               :on-error [::terminal-sessions-failure]}}))
+
+(rf/reg-event-db
+ ::terminal-sessions-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:terminal :sessions] (vec (:sessions payload)))
+       (assoc-in [:terminal :status] (if (seq (:sessions payload)) :ready :empty))
+       (assoc-in [:terminal :error] nil))))
+
+(rf/reg-event-db
+ ::terminal-sessions-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load sessions.")]
+     (-> db
+         (assoc-in [:terminal :status] :error)
+         (assoc-in [:terminal :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::terminal-create-session
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:terminal :status] :loading)
+            (assoc-in [:terminal :error] nil))
+    ::fx/http {:url "/api/terminal/sessions"
+               :method "POST"
+               :body {}
+               :on-success [::terminal-session-created]
+               :on-error [::terminal-sessions-failure]}}))
+
+(rf/reg-event-fx
+ ::terminal-session-created
+ (fn [{:keys [db]} [_ payload]]
+   (let [session (:session payload)]
+     {:db (-> db
+              (assoc-in [:terminal :selected] session)
+              (assoc-in [:terminal :output] "")
+              (assoc-in [:terminal :cursor] 0)
+              (assoc-in [:terminal :input] "")
+              (assoc-in [:terminal :status] :ready))
+      :dispatch-n [[::fetch-terminal-sessions]
+                   [::terminal-start-poll]]})))
+
+(rf/reg-event-fx
+ ::terminal-select-session
+ (fn [{:keys [db]} [_ session]]
+   {:db (-> db
+            (assoc-in [:terminal :selected] session)
+            (assoc-in [:terminal :output] "")
+            (assoc-in [:terminal :cursor] 0)
+            (assoc-in [:terminal :input] "")
+            (assoc-in [:terminal :error] nil))
+    :dispatch-n [[::terminal-start-poll]
+                 [::terminal-fetch-session (:id session)]]}))
+
+(rf/reg-event-fx
+ ::terminal-fetch-session
+ (fn [{:keys [db]} [_ session-id]]
+   {:db db
+    ::fx/http {:url (str "/api/terminal/sessions/" session-id)
+               :method "GET"
+               :on-success [::terminal-session-detail]
+               :on-error [::terminal-session-failure]}}))
+
+(rf/reg-event-db
+ ::terminal-session-detail
+ (fn [db [_ payload]]
+   (if-let [session (:session payload)]
+     (assoc-in db [:terminal :selected] session)
+     db)))
+
+(rf/reg-event-db
+ ::terminal-session-failure
+ (fn [db [_ {:keys [body]}]]
+   (assoc-in db [:terminal :error] (or (:error body) "Unable to load session."))))
+
+(rf/reg-event-db
+ ::terminal-back
+ (fn [db _]
+   (-> db
+       (assoc-in [:terminal :selected] nil)
+       (assoc-in [:terminal :polling?] false)
+       (assoc-in [:terminal :output] "")
+       (assoc-in [:terminal :cursor] 0))))
+
+(rf/reg-event-db
+ ::terminal-update-input
+ (fn [db [_ value]]
+   (assoc-in db [:terminal :input] value)))
+
+(rf/reg-event-fx
+ ::terminal-send-input
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])
+         text (str/trim (get-in db [:terminal :input] ""))]
+     (cond
+       (nil? session-id) {:db db}
+       (str/blank? text) {:db db}
+       :else
+       {:db (-> db
+                (assoc-in [:terminal :input] "")
+                (assoc-in [:terminal :sending?] true))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/input")
+                   :method "POST"
+                   :body {:text text}
+                   :on-success [::terminal-input-sent]
+                   :on-error [::terminal-input-failed]}}))))
+
+(rf/reg-event-db
+ ::terminal-input-sent
+ (fn [db _]
+   (assoc-in db [:terminal :sending?] false)))
+
+(rf/reg-event-db
+ ::terminal-input-failed
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :sending?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to send input.")))))
+
+(rf/reg-event-fx
+ ::terminal-start-poll
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (assoc-in db [:terminal :polling?] true)
+        :dispatch [::terminal-fetch-output]}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-fetch-output
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])
+         cursor (get-in db [:terminal :cursor] 0)]
+     (if (and session-id (get-in db [:terminal :polling?]))
+       {:db db
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/output?cursor=" cursor)
+                   :method "GET"
+                   :on-success [::terminal-output-success]
+                   :on-error [::terminal-output-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-output-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [chunk (:chunk payload)
+         cursor (:cursor payload)
+         next-db (-> db
+                     (update-in [:terminal :output] str chunk)
+                     (assoc-in [:terminal :cursor] cursor)
+                     (assoc-in [:terminal :error] nil))
+         polling? (get-in next-db [:terminal :polling?])]
+     (cond-> {:db next-db}
+       polling? (assoc ::fx/dispatch-later {:ms 1000
+                                            :dispatch [::terminal-fetch-output]})))))
+
+(rf/reg-event-fx
+ ::terminal-output-failure
+ (fn [{:keys [db]} [_ {:keys [body]}]]
+   (let [next-db (assoc-in db [:terminal :error] (or (:error body) "Unable to fetch output."))
+         polling? (get-in next-db [:terminal :polling?])]
+     (cond-> {:db next-db}
+       polling? (assoc ::fx/dispatch-later {:ms 2000
+                                            :dispatch [::terminal-fetch-output]})))))
+
+(rf/reg-event-fx
+ ::terminal-complete-session
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (assoc-in db [:terminal :status] :loading)
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/complete")
+                   :method "POST"
+                   :body {}
+                   :on-success [::terminal-complete-success]
+                   :on-error [::terminal-sessions-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-complete-success
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:terminal :selected] nil)
+            (assoc-in [:terminal :polling?] false)
+            (assoc-in [:terminal :output] "")
+            (assoc-in [:terminal :cursor] 0))
+    :dispatch [::fetch-terminal-sessions]}))
+
 (rf/reg-event-db
  ::land-update-filter
  (fn [db [_ k v]]
@@ -2406,6 +2613,7 @@
 (rf/reg-sub ::home (fn [db _] (:home db)))
 (rf/reg-sub ::land (fn [db _] (:land db)))
 (rf/reg-sub ::betting (fn [db _] (:betting db)))
+(rf/reg-sub ::terminal (fn [db _] (:terminal db)))
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
@@ -2426,6 +2634,7 @@
        (case route
          :home [home/home-shell]
          :betting [betting-ui/betting-shell]
+         :terminal [terminal-ui/terminal-shell]
          :control-panel [control-panel/control-panel-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])

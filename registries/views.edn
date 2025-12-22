@@ -67,7 +67,27 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/betting-event :cap/schema/betting-bet :cap/schema/betting-quote]}}
+ :related {:schema [:cap/schema/betting-event :cap/schema/betting-bet :cap/schema/betting-quote]}}
+
+ {:id :cap/view/terminal
+  :title "Terminal Sessions"
+  :version "v1"
+  :data {:sources [{:id :terminal/sessions
+                    :source :cap/integration/terminal-service
+                    :pull []}]}
+  :actions [:cap/action/terminal-sessions
+            :cap/action/terminal-session-create
+            :cap/action/terminal-session-input
+            :cap/action/terminal-session-output
+            :cap/action/terminal-session-complete]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:mobile "list -> chat" :desktop "single panel"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
 
  {:id :cap/view/home
   :title "Home summary"
@@ -88,7 +108,7 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
+ :related {:schema [:cap/schema/task :cap/schema/user :cap/schema/tag]}}
 
  {:id :cap/view/land-registry
   :title "Land Registry"

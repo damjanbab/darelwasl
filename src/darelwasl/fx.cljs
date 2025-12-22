@@ -43,3 +43,9 @@
           (fn [_]
             (rf/dispatch (conj on-error {:status nil
                                          :body {:error "Network error. Please try again."}}))))))))
+
+(rf/reg-fx
+ ::dispatch-later
+ (fn [{:keys [ms dispatch]}]
+   (when (and (number? ms) dispatch)
+     (js/setTimeout #(rf/dispatch dispatch) ms))))

@@ -829,4 +829,96 @@
   :related {:schema [:cap/schema/betting-bet :cap/schema/betting-fact]
             :views [:cap/view/betting]}
   :tooling []}
+
+ {:id :cap/action/terminal-sessions
+  :title "Terminal Sessions"
+  :version "v1"
+  :inputs {}
+  :outputs {:sessions :list}
+  :side-effects ["Read terminal session store"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/sessions]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/terminal-session-create
+  :title "Terminal Session Create"
+  :version "v1"
+  :inputs {:terminal.session/name :string?}
+  :outputs {:terminal.session/id :string}
+  :side-effects ["Clone repo" "Allocate ports" "Start tmux + codex session"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-create]
+          :fields [:terminal.session/name]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/terminal-session-input
+  :title "Terminal Session Input"
+  :version "v1"
+  :inputs {:terminal.session/id :string
+           :terminal.input/text :string}
+  :outputs {:status :string}
+  :side-effects ["Send input to tmux session"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-input]
+          :fields [:terminal.session/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/terminal-session-output
+  :title "Terminal Session Output"
+  :version "v1"
+  :inputs {:terminal.session/id :string
+           :terminal.output/cursor :long?}
+  :outputs {:terminal.output/chunk :string
+            :terminal.output/cursor :long}
+  :side-effects ["Read terminal session output buffer"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-output]
+          :fields [:terminal.session/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/terminal-session-complete
+  :title "Terminal Session Complete"
+  :version "v1"
+  :inputs {:terminal.session/id :string}
+  :outputs {:status :string}
+  :side-effects ["Stop tmux session" "Delete repo/db/chat transcript" "Retain logs"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-complete]
+          :fields [:terminal.session/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
 ]
