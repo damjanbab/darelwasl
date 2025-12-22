@@ -364,6 +364,41 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Mobile detail flows require at most two taps to reach status/priority/assignee controls.
   - Desktop view remains functional for power users but visually quiet; no layout regressions for Home/Control panel/Land views.
 
+## Product Spec: Betting CLV Trainer (MVP)
+- Goal: a CLV-first betting trainer that lets users log bets against reference odds and learn where they consistently beat the close, without implying guaranteed profit or outcome prediction.
+- Screens:
+  - Match list: upcoming/recent events with sport, start time, and provider status; on-demand refresh only.
+  - Match detail: price board (reference odds + manual bookmaker odds input), selection picker, and "log bet" action; show implied probability and CLV-ready status.
+  - Bet log + CLV scoreboard: list of logged bets with stake, odds, close status, CLV %, and result (pending/win/loss/push).
+- Core flow:
+  - User opens match list, selects an event, and optionally refreshes odds on demand.
+  - In match detail, user enters bookmaker odds (decimal) and stake, selects a market/side, then logs the bet.
+  - User captures a closing snapshot on demand ("Capture close" or manual close entry). Once a close snapshot exists, CLV is computed for all bets tied to that event and market.
+- Data flow and CLV rules:
+  - Reference odds come from the Odds API on-demand; no polling or schedulers.
+  - Bets store the exact odds format used (decimal) and an implied probability (1 / odds) at log time.
+  - Close snapshot is the last on-demand reference odds capture marked as close; CLV % = (close implied probability - bet implied probability) / bet implied probability.
+  - If no close snapshot exists, CLV remains "pending" and is not displayed as a number.
+- Data retention:
+  - Bets are retained indefinitely by default; no automatic deletion in v1.
+  - Odds snapshots and event metadata are retained for audit and CLV review; no automated pruning in v1.
+  - Manual deletion/cleanup is a future tool (out of scope).
+- Constraints:
+  - No guaranteed-profit language; CLV is presented as a feedback metric only.
+  - No outcome prediction or automated betting.
+  - No background refresh; all updates are user-triggered and rate-limited by UI.
+  - Use existing UI primitives and theme tokens; keep data model explicit and minimal.
+- Acceptance criteria:
+  - A user can log a bet with manual bookmaker odds and see it in the bet log immediately.
+  - A user can capture a closing snapshot and see CLV computed for affected bets.
+  - The match list, match detail, and bet log screens show clear loading/empty/error states.
+  - CLV is shown only after a closing snapshot exists; otherwise the bet shows "Awaiting close".
+  - Odds refresh is user-triggered only, with visible last-updated time.
+- Non-goals:
+  - Any ML/edge prediction, automated betting, bankroll management, or automated odds polling.
+  - Multi-market coverage beyond the single selected market per bet in v1.
+  - Profit/loss projection beyond the logged bet result.
+
 ## Design Spec: Entity View Redesign (Task View v2)
 - Visual language: calm, low-contrast neutrals with one clear accent; generous whitespace; minimal ornament.
 - Typography: expressive but restrained. Use a serif or humanist for headings and a clean sans for body; meta text can use a subtle mono. Avoid default system stacks.

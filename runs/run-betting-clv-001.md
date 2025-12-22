@@ -6,7 +6,7 @@ Constraints: no guaranteed-profit claims; prioritize CLV feedback over outcome p
 
 ## Tasks
 - Task ID: product-spec-betting-clv
-  - Status: pending
+  - Status: done
   - Objective: Define the MVP product spec for the CLV trainer app in `docs/system.md` (flows, acceptance criteria, data flow, constraints).
   - Scope: Screens (match list, match detail + price board + manual odds input, bet log + CLV scoreboard), CLV-first goals, on-demand odds refresh, data retention rules, and non-goals (no outcome model, no auto-betting).
   - Out of Scope: Implementation, schema, API changes, UI code.
