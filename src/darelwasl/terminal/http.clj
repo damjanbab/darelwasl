@@ -126,7 +126,24 @@
           session (find-session (:terminal/store state) session-id)
           max-bytes (get-in state [:terminal/config :max-output-bytes] 20000)]
       (if session
-        (ok (session/output-since session cursor max-bytes))
+        (let [output (session/output-since session cursor max-bytes)
+              text (str/lower-case (or (:chunk output) ""))
+              auto-approval? (get session :auto-approval? false)
+              auto-continue? (get session :auto-continue? false)
+              next-session (cond-> session
+                             (and (not auto-approval?)
+                                  (str/includes? text "allow codex to work in this folder"))
+                             (do
+                               (session/send-keys! session ["1" "Enter"])
+                               (assoc :auto-approval? true))
+                             (and (not auto-continue?)
+                                  (str/includes? text "press enter to continue"))
+                             (do
+                               (session/send-keys! session ["Enter"])
+                               (assoc :auto-continue? true)))]
+          (when (not= session next-session)
+            (store/upsert-session! (:terminal/store state) next-session))
+          (ok output))
         (error-response 404 "Session not found")))))
 
 (defn complete-handler
