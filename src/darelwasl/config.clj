@@ -37,7 +37,7 @@
               :port-range-start 4100
               :port-range-end 4199
               :auto-start-app? true
-              :auto-start-site? true
+              :auto-start-site? false
               :poll-ms 1000
               :max-output-bytes 20000}
    :outbox {:worker-enabled? false
