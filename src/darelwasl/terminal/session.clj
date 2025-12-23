@@ -62,8 +62,8 @@
        (let [block [port (inc port)]]
          (if (and (every? port-free? block)
                   (empty? (set/intersection used (set block))))
-           {:app (inc port)
-            :site port}
+           {:app port
+            :site (inc port)}
            (recur (+ port 2)))))))
 
  (defn- run!
@@ -291,6 +291,9 @@
          env-file (io/file session-root "session.env")
          logs-dir (io/file logs-root id)
          ports (allocate-ports cfg (store/list-sessions store))
+         site-enabled? (true? (:auto-start-site? cfg))
+         ports (cond-> ports
+                 (not site-enabled?) (assoc :site nil))
          tmux-session (tmux/session-name (:tmux-prefix cfg) id)
          branch (str "terminal/" (subs id 0 8))
          now (now-ms)]
@@ -305,15 +308,15 @@
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
      (write-agents! repo-dir)
      (write-env! env-file (cond-> {"APP_HOST" "0.0.0.0"
-                                   "SITE_HOST" "0.0.0.0"
                                    "APP_PORT" (:app ports)
-                                   "SITE_PORT" (:site ports)
                                    "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
                                    "DATOMIC_SYSTEM" "darelwasl"
                                    "DATOMIC_DB_NAME" "darelwasl"
                                    "ALLOW_FIXTURE_SEED" "true"
                                    "TERMINAL_SESSION_ID" id
                                    "TERMINAL_LOG_DIR" (.getPath logs-dir)}
+                            site-enabled? (assoc "SITE_HOST" "0.0.0.0"
+                                                 "SITE_PORT" (:site ports))
                             openai-key (assoc "OPENAI_API_KEY" openai-key)
                             github-token (assoc "GITHUB_TOKEN" github-token
                                                 "GH_TOKEN" github-token)))

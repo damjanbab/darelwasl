@@ -26,9 +26,9 @@
                :db db-state
                :auth/users users
                :auth/user-index user-index}
-         started (-> base
-                     (server/start-http)
-                     (site-server/start))
+        terminal-session? (some? (System/getenv "TERMINAL_SESSION_ID"))
+        started (cond-> (server/start-http base)
+                   (not terminal-session?) (site-server/start))
          outbox-enabled? (get-in cfg [:outbox :worker-enabled?])
          worker-future (when (and outbox-enabled? (not (:error db-state)))
                          (future
