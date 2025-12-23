@@ -157,6 +157,23 @@
             [ui/button {:variant :danger
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-complete-session])}
              "Complete"]]]
+          [:div.terminal-link-row
+           [:span.meta "App:"]
+           (if app-port
+             [:a.terminal-link-text
+              {:href app-link
+               :target "_blank"
+               :rel "noreferrer"}
+              app-link]
+             [:span.meta "Unavailable"])
+           [:span.meta "Site:"]
+           (if site-port
+             [:a.terminal-link-text
+              {:href site-link
+               :target "_blank"
+               :rel "noreferrer"}
+              site-link]
+             [:span.meta "Unavailable"])]
           [terminal-output {:output output
                             :error error}]
           (when-let [actions (quick-actions output)]
