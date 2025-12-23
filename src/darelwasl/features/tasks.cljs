@@ -27,6 +27,7 @@
      [:span.tasks-filter-label label]
      [:select.filter-select
       {:value current
+       :aria-label label
        :on-change #(on-change (.. % -target -value))}
       (for [{:keys [id label]} options
             :let [option-val (cond
@@ -69,8 +70,9 @@
                       :on-change #(rf/dispatch [:darelwasl.app/update-filter :tag (when-not (str/blank? %) %)])}]
       [:div.tasks-filter-group
        [:span.tasks-filter-label "Archived"]
-       [:select.filter-select
+      [:select.filter-select
         {:value archived-value
+         :aria-label "Archived"
          :on-change #(let [val (.. % -target -value)
                            next (case val
                                   "archived" true

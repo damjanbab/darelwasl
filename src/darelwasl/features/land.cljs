@@ -61,11 +61,12 @@
                       :status status
                       :error error
                       :selected selected-id
-                      :panel-class "list-panel"
-                      :list-class "list"
-                      :key-fn (or (:key list-config) :person/id)
+                     :panel-class "list-panel"
+                     :list-class "list"
+                     :key-fn (or (:key list-config) :person/id)
                      :header-actions [[:input.form-input {:type "search"
                                                           :placeholder "Search people"
+                                                          :aria-label "Search people"
                                                           :value current-search
                                                           :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :people-search (.. % -target -value)])}]
                                       [:select.form-input {:value (or (:people-page-size filters) 25)
@@ -125,14 +126,16 @@
                       :status status
                       :error error
                       :selected selected-id
-                      :panel-class "list-panel"
-                      :list-class "list"
-                      :key-fn (or (:key list-config) :parcel/id)
+                     :panel-class "list-panel"
+                     :list-class "list"
+                     :key-fn (or (:key list-config) :parcel/id)
                      :header-actions [[:input.form-input {:type "search"
                                                           :placeholder "Parcel number"
+                                                          :aria-label "Parcel number"
                                                           :value parcel-number
                                                           :on-change #(rf/dispatch [:darelwasl.app/land-update-filter :parcel-number (.. % -target -value)])}]
                                       [:select.form-input {:value (or (some-> completeness name) "")
+                                                           :aria-label "Share completeness"
                                                            :on-change #(let [v (.. % -target -value)]
                                                                          (rf/dispatch [:darelwasl.app/land-update-filter :completeness (when-not (str/blank? v) (keyword v))]))}
                                        (for [{:keys [id label]} land-completeness-options]

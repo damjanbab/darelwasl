@@ -246,8 +246,9 @@ async function run() {
     );
     await page.reload({ waitUntil: "networkidle" });
     await ensureLogin(page);
-    await page.waitForSelector(`.task-card:has-text("${newTitle}")`, { timeout: 15000 });
-    await page.click(`.task-card:has-text("${newTitle}")`);
+    const taskRow = page.locator(".task-card, .list-row").filter({ hasText: newTitle });
+    await taskRow.first().waitFor({ timeout: 15000 });
+    await taskRow.first().click();
     await page.waitForSelector("#task-status", { timeout: 5000 });
     await page.selectOption("#task-status", { value: "done" });
     const statusUpdate = page.waitForResponse((resp) => {
@@ -258,16 +259,21 @@ async function run() {
     await statusUpdate;
 
     // Delete the task
-    await page.click(`.task-card:has-text("${newTitle}")`);
+    await taskRow.first().click();
     await page.waitForSelector("#task-status", { timeout: 5000 });
     const deleteResp = page.waitForResponse((resp) => resp.request().method() === "DELETE" && resp.url().includes("/api/tasks/") && resp.ok(), { timeout: 15000 }).catch(() => null);
     const deleteButton = page.locator(".task-preview .detail-actions .button.danger").first();
     await deleteButton.click();
     await deleteResp;
-    await page.waitForSelector('.state.empty, .task-card', { timeout: 5000 });
+    await page.waitForSelector(".state.empty, .task-card, .list-row", { timeout: 5000 });
     await page.reload({ waitUntil: "networkidle" });
     await ensureLogin(page);
-    const taskStillThere = await page.$(`.task-card:has-text("${newTitle}")`);
+    const taskStillThere = await page
+      .locator(".task-card, .list-row")
+      .filter({ hasText: newTitle })
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (taskStillThere) {
       throw new Error("Deleted task still present after reload");
     }

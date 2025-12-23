@@ -2,7 +2,8 @@
    (:require [clojure.string :as str]
              [darelwasl.ui.components :as ui]
              [darelwasl.ui.shell :as shell]
-             [re-frame.core :as rf]))
+             [re-frame.core :as rf]
+             [reagent.core :as r]))
 
  (defn- status-label
    [session]
@@ -65,6 +66,43 @@
            ^{:key (:id session)}
            [session-row session false])])]))
 
+(defn- scroll-to-bottom!
+  [node]
+  (set! (.-scrollTop node) (.-scrollHeight node)))
+
+(def terminal-output
+  (let [node (atom nil)
+        stick? (r/atom true)]
+    (r/create-class
+      {:display-name "terminal-output"
+       :component-did-mount
+       (fn [_]
+         (when-let [el @node]
+           (scroll-to-bottom! el)))
+       :component-did-update
+       (fn [this old-argv]
+         (let [old-props (second old-argv)
+               new-props (second (r/argv this))
+               old-output (:output old-props)
+               new-output (:output new-props)]
+           (when (and (not= old-output new-output) (empty? new-output))
+             (reset! stick? true))
+           (when (and @stick? @node)
+             (scroll-to-bottom! @node))))
+       :reagent-render
+       (fn [{:keys [output error]}]
+         [:div.terminal-output
+          {:ref (fn [el] (reset! node el))
+           :on-scroll (fn [event]
+                        (let [el (.-target event)
+                              distance (- (.-scrollHeight el)
+                                          (.-scrollTop el)
+                                          (.-clientHeight el))]
+                          (reset! stick? (<= distance 40))))}
+          [:pre output]
+          (when error
+            [:div.form-error error])])})))
+
  (defn- terminal-chat
    []
    (let [{:keys [selected output input error sending?]} @(rf/subscribe [:darelwasl.app/terminal])]
@@ -87,10 +125,8 @@
           [ui/button {:variant :danger
                       :on-click #(rf/dispatch [:darelwasl.app/terminal-complete-session])}
            "Complete"]]]
-       [:div.terminal-output
-         [:pre output]
-         (when error
-           [:div.form-error error])]
+       [terminal-output {:output output
+                         :error error}]
         (when-let [actions (quick-actions output)]
           actions)
         [:div.terminal-input
