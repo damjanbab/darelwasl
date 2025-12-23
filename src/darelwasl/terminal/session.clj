@@ -372,6 +372,8 @@
     (capture-output session max-bytes)
     (read-output (:chat-log session) cursor max-bytes)))
 
+(declare complete-session!)
+
 (defn verify-session!
   [store session]
   (let [repo-dir (:repo-dir session)
