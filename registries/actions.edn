@@ -900,6 +900,42 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
+ :related {:schema []
+            :views [:cap/view/terminal]}
+ :tooling []}
+
+ {:id :cap/action/terminal-session-resume
+  :title "Terminal Session Resume"
+  :version "v1"
+  :inputs {:terminal.session/id :string}
+  :outputs {:status :string}
+  :side-effects ["Start tmux session" "Reattach output pipe" "Restart app/site windows if configured"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-resume]
+          :fields [:terminal.session/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/terminal-session-restart-app
+  :title "Terminal Session Restart App"
+  :version "v1"
+  :inputs {:terminal.session/id :string}
+  :outputs {:status :string}
+  :side-effects ["Restart terminal app window"]
+  :adapter {:integration :cap/integration/terminal-service}
+  :audit {:records [:terminal/session-restart-app]
+          :fields [:terminal.session/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:schema []
             :views [:cap/view/terminal]}
   :tooling []}

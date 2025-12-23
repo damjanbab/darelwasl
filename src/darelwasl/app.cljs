@@ -1688,6 +1688,20 @@
                  :on-error [::betting-events-failure]}})))
 
 (rf/reg-event-fx
+ ::shift-betting-day
+ (fn [{:keys [db]} [_ delta]]
+   (let [current (get-in db [:betting :day] 0)
+         next-day (+ current (or delta 0))]
+     {:db (-> db
+              (assoc-in [:betting :day] next-day)
+              (assoc-in [:betting :selected] nil)
+              (assoc-in [:betting :matches] [])
+              (assoc-in [:betting :groups] [])
+              (assoc-in [:betting :odds] default-betting-odds)
+              (assoc-in [:betting :bets] default-betting-bets))
+      :dispatch [::fetch-betting-events]})))
+
+(rf/reg-event-fx
  ::betting-events-success
  (fn [{:keys [db]} [_ payload]]
    (let [matches (vec (:matches payload))
@@ -1947,6 +1961,8 @@
               (assoc-in [:terminal :cursor] 0)
               (assoc-in [:terminal :input] "")
               (assoc-in [:terminal :app-ready?] false)
+              (assoc-in [:terminal :resuming?] false)
+              (assoc-in [:terminal :restarting?] false)
               (assoc-in [:terminal :status] :ready)
               (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
@@ -1961,6 +1977,8 @@
             (assoc-in [:terminal :cursor] 0)
             (assoc-in [:terminal :input] "")
             (assoc-in [:terminal :app-ready?] false)
+            (assoc-in [:terminal :resuming?] false)
+            (assoc-in [:terminal :restarting?] false)
             (assoc-in [:terminal :error] nil)
             (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
@@ -1996,6 +2014,8 @@
        (assoc-in [:terminal :output] "")
        (assoc-in [:terminal :cursor] 0)
        (assoc-in [:terminal :app-ready?] false)
+       (assoc-in [:terminal :resuming?] false)
+       (assoc-in [:terminal :restarting?] false)
        (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
@@ -2146,7 +2166,9 @@
             (assoc-in [:terminal :polling?] false)
             (assoc-in [:terminal :output] "")
             (assoc-in [:terminal :cursor] 0)
-            (assoc-in [:terminal :app-ready?] false))
+            (assoc-in [:terminal :app-ready?] false)
+            (assoc-in [:terminal :resuming?] false)
+            (assoc-in [:terminal :restarting?] false))
     :dispatch [::fetch-terminal-sessions]}))
 
 (rf/reg-event-fx
@@ -2163,6 +2185,8 @@
               (assoc-in [:terminal :cursor] 0)
               (assoc-in [:terminal :app-ready?] false)
               (assoc-in [:terminal :verifying?] false)
+              (assoc-in [:terminal :resuming?] false)
+              (assoc-in [:terminal :restarting?] false)
               (assoc-in [:terminal :notice] notice))
       :dispatch [::fetch-terminal-sessions]})))
 
@@ -2172,6 +2196,74 @@
    (-> db
        (assoc-in [:terminal :verifying?] false)
        (assoc-in [:terminal :error] (or (:error body) "Unable to verify session.")))))
+
+(rf/reg-event-fx
+ ::terminal-resume-session
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (-> db
+                (assoc-in [:terminal :resuming?] true)
+                (assoc-in [:terminal :app-ready?] false)
+                (assoc-in [:terminal :error] nil))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/resume")
+                   :method "POST"
+                   :body {}
+                   :on-success [::terminal-resume-success]
+                   :on-error [::terminal-resume-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-resume-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [session (:session payload)]
+     {:db (-> db
+              (assoc-in [:terminal :selected] session)
+              (assoc-in [:terminal :resuming?] false)
+              (assoc-in [:terminal :error] nil))
+      :dispatch-n [[::fetch-terminal-sessions]
+                   [::terminal-start-poll]]})))
+
+(rf/reg-event-db
+ ::terminal-resume-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :resuming?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to resume session.")))))
+
+(rf/reg-event-fx
+ ::terminal-restart-app
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (-> db
+                (assoc-in [:terminal :restarting?] true)
+                (assoc-in [:terminal :app-ready?] false)
+                (assoc-in [:terminal :error] nil))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/restart-app")
+                   :method "POST"
+                   :body {}
+                   :on-success [::terminal-restart-success]
+                   :on-error [::terminal-restart-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-restart-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [session (:session payload)]
+     {:db (-> db
+              (assoc-in [:terminal :selected] session)
+              (assoc-in [:terminal :restarting?] false)
+              (assoc-in [:terminal :error] nil))
+      :dispatch-n [[::fetch-terminal-sessions]
+                   [::terminal-start-poll]]})))
+
+(rf/reg-event-db
+ ::terminal-restart-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :restarting?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to restart app.")))))
 
 (rf/reg-event-db
  ::land-update-filter

@@ -264,23 +264,23 @@
     {}))
 
 (defn- upsert-events!
-  [conn {:keys [day-offset sport-path]} matches]
+  [conn {:keys [day-offset]} matches]
   (let [db (d/db conn)
         external-ids (mapv (comp match-external-id :match-id) matches)
         existing (existing-event-ids db external-ids)
         now (now-inst)
-        sport-key (sport-key-from-path sport-path)
-        sport-title (sport-title-from-path sport-path)
-        tx-data (mapv (fn [{:keys [match-id home away time status]}]
+        tx-data (mapv (fn [{:keys [match-id home away time status sport-key sport-title sport-path]}]
                         (let [external-id (match-external-id match-id)
                               existing-id (get existing external-id)
                               event-id (or existing-id (UUID/randomUUID))
-                              commence (or (parse-commence-time day-offset time) now)]
+                              commence (or (parse-commence-time day-offset time) now)
+                              key (or sport-key (sport-key-from-path sport-path))
+                              title (or sport-title (sport-title-from-path sport-path))]
                           {:betting.event/id event-id
                            :entity/type :entity.type/betting-event
                            :betting.event/external-id external-id
-                           :betting.event/sport-key sport-key
-                           :betting.event/sport-title sport-title
+                           :betting.event/sport-key key
+                           :betting.event/sport-title title
                            :betting.event/commence-time commence
                            :betting.event/home-team home
                            :betting.event/away-team away
@@ -294,6 +294,21 @@
               (let [external-id (match-external-id (:match-id match))]
                 (assoc match :event-id (get updated external-id))))
             matches))))
+
+(defn- group-by-sport
+  [groups]
+  (->> groups
+       (group-by (fn [group]
+                   [(:sport-key group) (:sport-title group) (:sport-path group)]))
+       (mapv (fn [[[sport-key sport-title sport-path] items]]
+               {:sport-key sport-key
+                :sport-title sport-title
+                :sport-path sport-path
+                :leagues (mapv (fn [group]
+                                 {:league (:league group)
+                                  :matches (vec (:matches group))})
+                               items)}))
+       (sort-by (fn [group] (str (:sport-title group) (:sport-key group))))))
 
 (defn- lookup-bookmaker-id
   [db key]
@@ -525,27 +540,34 @@
   (if-let [err (ensure-conn conn)]
     err
     (try
-      (let [res (rezultati/fetch-daily-odds-cached (rezultati-config cfg) {:day-offset day-offset
-                                                        :sport-path sport-path
-                                                        :refresh? refresh?})]
+      (let [cfg* (rezultati-config cfg)
+            use-all? (str/blank? sport-path)
+            res (if use-all?
+                  (rezultati/fetch-daily-odds-all-sports-cached cfg* {:day-offset day-offset
+                                                                      :refresh? refresh?})
+                  (rezultati/fetch-daily-odds-cached cfg* {:day-offset day-offset
+                                                          :sport-path sport-path
+                                                          :refresh? refresh?}))]
         (if-let [err (:error res)]
           (error (or (:status res) 502) err (dissoc res :error))
           (let [data (:data res)
                 matches (:matches data)
                 groups (:groups data)
-                matches' (upsert-events! conn {:day-offset day-offset :sport-path sport-path} matches)
+                matches' (upsert-events! conn {:day-offset day-offset} matches)
                 match-map (into {} (map (fn [m] [(:match-id m) m]) matches'))
                 groups' (mapv (fn [group]
                                 (update group :matches
                                         (fn [ms]
                                           (mapv (fn [m] (get match-map (:match-id m) m)) ms))))
-                              groups)]
+                              groups)
+                sport-groups (group-by-sport groups')]
             {:day-offset day-offset
-             :sport-path sport-path
+             :sport-path (if use-all? "all" sport-path)
              :cached? (:cached? res)
              :fetched-at-ms (:fetched-at-ms res)
              :matches matches'
-             :groups groups'})))
+             :groups sport-groups
+             :sports (:sports data)})))
       (catch clojure.lang.ExceptionInfo e
         (log/error e "Failed to list betting events" (ex-data e))
         (error 500 "Betting events failed" {:exception (ex-message e)

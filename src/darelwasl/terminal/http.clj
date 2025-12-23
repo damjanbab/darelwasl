@@ -175,6 +175,42 @@
                               (assoc :data (ex-data e))))))
         (error-response 404 "Session not found")))))
 
+(defn resume-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (try
+          (let [next-session (session/resume-session! (:terminal/store state)
+                                                     (:terminal/config state)
+                                                     session)]
+            (ok {:session (session/present-session next-session)}))
+          (catch Exception e
+            (log/warn e "Failed to resume session" {:id session-id})
+            (error-response 500 "Failed to resume session"
+                            (cond-> {:message (.getMessage e)}
+                              (instance? clojure.lang.ExceptionInfo e)
+                              (assoc :data (ex-data e))))))
+        (error-response 404 "Session not found")))))
+
+(defn restart-app-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (try
+          (let [next-session (session/restart-app! (:terminal/store state) session)]
+            (ok {:session (session/present-session next-session)}))
+          (catch Exception e
+            (log/warn e "Failed to restart app" {:id session-id})
+            (error-response 500 "Failed to restart app"
+                            (cond-> {:message (.getMessage e)}
+                              (instance? clojure.lang.ExceptionInfo e)
+                              (assoc :data (ex-data e))))))
+        (error-response 404 "Session not found")))))
+
 (defn routes
   [state]
   [["/health" {:get (health-handler state)}]
@@ -192,7 +228,11 @@
    ["/sessions/:id/complete"
     {:post (complete-handler state)}]
    ["/sessions/:id/verify"
-    {:post (verify-handler state)}]])
+    {:post (verify-handler state)}]
+   ["/sessions/:id/resume"
+    {:post (resume-handler state)}]
+   ["/sessions/:id/restart-app"
+    {:post (restart-app-handler state)}]])
 
 (defn app
   [state]

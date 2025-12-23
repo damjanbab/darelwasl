@@ -60,6 +60,21 @@
   [session]
   (run-cmd ["capture-pane" "-p" "-J" "-t" session "-S" "-32768"]))
 
+(defn window-names
+  [session]
+  (try
+    (let [out (run-cmd ["list-windows" "-t" session "-F" "#{window_name}"])]
+      (->> (str/split-lines out)
+           (map str/trim)
+           (remove str/blank?)
+           set))
+    (catch Exception _ #{})))
+
+(defn kill-window!
+  [session name]
+  (when (contains? (window-names session) name)
+    (run-cmd ["kill-window" "-t" (str session ":" name)])))
+
  (defn kill!
    [session]
    (when (running? session)

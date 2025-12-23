@@ -150,6 +150,10 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
 
+## Auth Sessions
+- Session cookies are backed by an on-disk store so restarts do not log users out.
+- Configure `SESSION_STORE_PATH` (default `data/sessions.edn`) to control where session data is persisted.
+
 ### Content Model v2 (Saudi license site – implemented schema)
 - Goal: structure the intuitionsite content into first-class entities while keeping current content pages/blocks valid. All new fields are additive/optional; existing content renders without v2 data.
 - Entities:
@@ -257,7 +261,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Schema/migration check: `scripts/checks.sh schema` also runs a backfill check that strips `:entity/type` in a temp DB seeded with fixtures and ensures the migration repopulates it.
 - App smoke run: `scripts/checks.sh app-smoke` (or `all`) seeds fixtures into a temp Datomic storage under `.cpcache/datomic-smoke-*`, builds the frontend (`npm run check`), starts the backend on `APP_PORT` (default 3100), and runs Playwright headless login + task rendering. Requires Node/npm and initial Playwright browser download.
 - Health check: `curl http://localhost:3000/health` returns JSON with service status and Datomic readiness.
-- Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by an in-memory store; server restarts clear sessions.
+- Auth login: `POST http://localhost:3000/api/login` with JSON `{"user/username":"huda","user/password":"Damjan1!"}` (fixtures/users.edn) returns `{ :session/token ..., :user/id ..., :user/username ... }` and sets an http-only SameSite=Lax session cookie backed by the on-disk store (`SESSION_STORE_PATH`); server restarts keep sessions.
 - Land registry API (auth + flag gating via client): GET `/api/land/people` (query params: `q`, `sort=area|parcels`), GET `/api/land/people/:id`, GET `/api/land/parcels` (filters: `cadastral-id`, `parcel-number`, `min-area`, `max-area`, `completeness=complete|incomplete`, `sort=area|owners`), GET `/api/land/parcels/:id`, GET `/api/land/stats`.
 - Task API (requires session cookie from `/api/login`):
   - GET `/api/tasks` supports filters `status`, `priority`, `tag`, `assignee`, `archived` (defaults to active tasks; use `archived=all` to include archived) and sort/order (`updated` default desc, `due` default asc, `priority` default desc).

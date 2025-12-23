@@ -95,6 +95,8 @@
                       :cap/action/terminal-session-create
                       :cap/action/terminal-session-input
                       :cap/action/terminal-session-output
+                      :cap/action/terminal-session-resume
+                      :cap/action/terminal-session-restart-app
                       :cap/action/terminal-session-complete]
             :schema []}}
 ]

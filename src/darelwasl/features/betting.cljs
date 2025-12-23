@@ -51,6 +51,34 @@
         away (format-odds (:away odds))]
     (str home " · " draw " · " away)))
 
+(defn- day-label
+  [day]
+  (cond
+    (= day 0) "Today"
+    (= day -1) "Yesterday"
+    (= day 1) "Tomorrow"
+    (pos? day) (str "+" day " days")
+    :else (str day " days")))
+
+(defn- match-meta
+  [{:keys [time status score]}]
+  (let [status-text (status-label status)
+        time-text (some-> time str/trim)
+        score-text (when (and score (not= status :scheduled)) score)]
+    (cond
+      (= status :scheduled)
+      (str (or time-text "—") " · " status-text)
+
+      (= status :live)
+      (str status-text
+           (when (seq time-text) (str " · " time-text))
+           (when score-text (str " · " score-text)))
+
+      (= status :final)
+      (str status-text (when score-text (str " · " score-text)))
+
+      :else status-text)))
+
 (defn- format-odds-with-book
   [odds book]
   (if (number? odds)
@@ -67,8 +95,8 @@
 
 (defn- match-row
   [match selected?]
-  (let [{:keys [home away time status odds]} match
-        meta (str (or time "—") " · " (status-label status))
+  (let [{:keys [home away odds]} match
+        meta (match-meta match)
         trailing (odds-string odds)]
     [ui/list-row {:title (str home " - " away)
                   :meta meta
@@ -79,7 +107,7 @@
 
 (defn- betting-list
   []
-  (let [{:keys [groups status error cached? selected]} @(rf/subscribe [:darelwasl.app/betting])
+  (let [{:keys [groups status error cached? selected day]} @(rf/subscribe [:darelwasl.app/betting])
         loading? (= status :loading)
         selected-id (:event-id selected)]
     [:div.panel.betting-list-panel
@@ -88,6 +116,16 @@
        [:h2 "Matches"]
        [:span.meta (if cached? "Cached feed" "Live fetch")]]
       [:div.controls
+       [:div.betting-day-nav
+        [ui/button {:variant :secondary
+                    :disabled loading?
+                    :on-click #(rf/dispatch [:darelwasl.app/shift-betting-day -1])}
+         "<"]
+        [:span.meta (day-label (or day 0))]
+        [ui/button {:variant :secondary
+                    :disabled loading?
+                    :on-click #(rf/dispatch [:darelwasl.app/shift-betting-day 1])}
+         ">"]]
        [ui/button {:variant :secondary
                    :disabled loading?
                    :on-click #(rf/dispatch [:darelwasl.app/fetch-betting-events])}
@@ -97,13 +135,17 @@
        :error [ui/error-state error #(rf/dispatch [:darelwasl.app/fetch-betting-events])]
        :empty [ui/empty-state "No odds yet" "Try refreshing the feed."]
        [:div.betting-leagues
-        (for [{:keys [league matches]} groups]
-          ^{:key (str "league-" league)}
-          [:div.betting-league
-           [:div.betting-league__title (or league "League")]
-           (for [match matches]
-             ^{:key (str "match-" (:match-id match))}
-             [match-row match (= (:event-id match) selected-id)])])])]))
+        (for [{:keys [sport-title sport-key leagues]} groups]
+          ^{:key (str "sport-" (or sport-key sport-title))}
+          [:div.betting-sport
+           [:div.betting-sport__title (or sport-title "Sport")]
+           (for [{:keys [league matches]} leagues]
+             ^{:key (str "league-" league)}
+             [:div.betting-league
+              [:div.betting-league__title (or league "League")]
+              (for [match matches]
+                ^{:key (str "match-" (:match-id match))}
+                [match-row match (= (:event-id match) selected-id)])])])])]))
 
 (defn- odds-board
   [match summary captured-at loading?]
@@ -277,9 +319,13 @@
      (if-not selected
        [ui/empty-state "Select a match" "Choose a match from the list to view odds and log bets."]
        [:<>
-        [:div.betting-header
-         [:h2 (str (:home selected) " - " (:away selected))]
-         [:div.meta (str (or (:league selected) "League") " · " (or (:time selected) "—"))]]
+       [:div.betting-header
+        [:h2 (str (:home selected) " - " (:away selected))]
+        [:div.meta (str (or (:sport-title selected) "Sport")
+                        " · "
+                        (or (:league selected) "League")
+                        " · "
+                        (match-meta selected))]]
         [odds-board selected summary captured-at odds-loading?]
         (when summary
           [bookmakers-panel summary])
@@ -291,5 +337,4 @@
   [shell/app-shell
    [:main.betting-layout
     [betting-list]
-    [betting-detail]]
-   [:span "Rezultati odds · No-vig reference basket · Close snapshots scheduled."]])
+    [betting-detail]]])

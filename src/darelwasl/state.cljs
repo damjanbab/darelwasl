@@ -252,6 +252,8 @@
    :input ""
    :sending? false
    :verifying? false
+   :resuming? false
+   :restarting? false
    :polling? false
    :app-ready? false
    :list-polling? false})

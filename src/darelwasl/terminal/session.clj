@@ -245,6 +245,22 @@
   (when-let [resource (io/resource agents-resource)]
     (spit (io/file repo-dir "AGENTS.md") (slurp resource))))
 
+(defn- start-app-window!
+  [session]
+  (tmux/new-window! (:tmux session)
+                    "app"
+                    (:repo-dir session)
+                    (:env-file session)
+                    "scripts/run-service.sh"))
+
+(defn- start-site-window!
+  [session]
+  (tmux/new-window! (:tmux session)
+                    "site"
+                    (:repo-dir session)
+                    (:env-file session)
+                    "scripts/run-site.sh"))
+
  (defn- list-session-dirs
    [work-dir]
    (let [root (ensure-dir! work-dir)
@@ -278,11 +294,11 @@
                (update-log-closed! logs-dir id)
                (log/info "Deleted orphaned session dir" {:id id}))))))))
 
- (defn create-session!
-   [store cfg {:keys [name]}]
-   (let [id (str (UUID/randomUUID))
-         session-name (or (some-> name str/trim not-empty)
-                          (str "session-" (subs id 0 8)))
+(defn create-session!
+  [store cfg {:keys [name]}]
+  (let [id (str (UUID/randomUUID))
+        session-name (or (some-> name str/trim not-empty)
+                         (str "session-" (subs id 0 8)))
          env (System/getenv)
          openai-key (or (get env "TERMINAL_OPENAI_API_KEY")
                         (get env "OPENAI_API_KEY"))
@@ -299,7 +315,9 @@
          env-file (io/file session-root "session.env")
          logs-dir (io/file logs-root id)
          ports (allocate-ports cfg (store/list-sessions store))
-         site-enabled? (true? (:auto-start-site? cfg))
+         auto-start-app? (true? (:auto-start-app? cfg))
+         auto-start-site? (true? (:auto-start-site? cfg))
+         site-enabled? auto-start-site?
          ports (cond-> ports
                  (not site-enabled?) (assoc :site nil))
          tmux-session (tmux/session-name (:tmux-prefix cfg) id)
@@ -330,10 +348,14 @@
                                                 "GH_TOKEN" github-token)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
-     (when (:auto-start-app? cfg)
-       (tmux/new-window! tmux-session "app" (.getPath repo-dir) (.getPath env-file) "scripts/run-service.sh"))
-     (when (:auto-start-site? cfg)
-       (tmux/new-window! tmux-session "site" (.getPath repo-dir) (.getPath env-file) "scripts/run-site.sh"))
+     (when auto-start-app?
+       (start-app-window! {:tmux tmux-session
+                           :repo-dir (.getPath repo-dir)
+                           :env-file (.getPath env-file)}))
+     (when auto-start-site?
+       (start-site-window! {:tmux tmux-session
+                            :repo-dir (.getPath repo-dir)
+                            :env-file (.getPath env-file)}))
      (let [session {:id id
                     :name session-name
                     :status :running
@@ -347,7 +369,9 @@
                     :chat-log (.getPath chat-file)
                     :env-file (.getPath env-file)
                     :tmux tmux-session
-                    :branch branch}]
+                    :branch branch
+                    :auto-start-app? auto-start-app?
+                    :auto-start-site? auto-start-site?}]
        (store/upsert-session! store session))))
 
  (defn present-session
@@ -389,6 +413,54 @@
   [session]
   (when-let [port (get-in session [:ports :app])]
     (port-open? "127.0.0.1" port 200)))
+
+(defn resume-session!
+  [store cfg session]
+  (when (= :complete (:status session))
+    (throw (ex-info "Session already completed" {:id (:id session)})))
+  (when (tmux/running? (:tmux session))
+    (throw (ex-info "Session already running" {:id (:id session)})))
+  (doseq [[label path] [[:repo-dir (:repo-dir session)]
+                        [:env-file (:env-file session)]
+                        [:chat-log (:chat-log session)]]]
+    (when (or (nil? path) (not (.exists (io/file path))))
+      (throw (ex-info "Session files missing; cannot resume"
+                      {:id (:id session) :missing label}))))
+  (let [auto-start-app? (get session :auto-start-app? (:auto-start-app? cfg))
+        auto-start-site? (get session :auto-start-site? (:auto-start-site? cfg))
+        site-enabled? (and auto-start-site?
+                           (some? (get-in session [:ports :site])))]
+    (tmux/start! (:tmux session) (:repo-dir session) (:env-file session) (:codex-command cfg))
+    (tmux/pipe-output! (:tmux session) (:chat-log session))
+    (when auto-start-app?
+      (start-app-window! session))
+    (when site-enabled?
+      (start-site-window! session))
+    (let [now (now-ms)
+          next-session (assoc session
+                              :status :running
+                              :updated-at now)]
+      (update-manifest! (:logs-dir session)
+                        (fn [m]
+                          (assoc (or m {})
+                                 :resumed-at now)))
+      (store/upsert-session! store next-session))))
+
+(defn restart-app!
+  [store session]
+  (when-not (tmux/running? (:tmux session))
+    (throw (ex-info "Session not running" {:id (:id session)})))
+  (when-not (get-in session [:ports :app])
+    (throw (ex-info "Session has no app port" {:id (:id session)})))
+  (tmux/kill-window! (:tmux session) "app")
+  (start-app-window! session)
+  (let [now (now-ms)
+        next-session (assoc session :updated-at now)]
+    (update-manifest! (:logs-dir session)
+                      (fn [m]
+                        (assoc (or m {})
+                               :app-restarted-at now)))
+    (store/upsert-session! store next-session)))
 
 (declare complete-session!)
 

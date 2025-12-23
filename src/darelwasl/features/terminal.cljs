@@ -105,14 +105,14 @@
           (when error
             [:div.form-error error])])})))
 
- (defn- terminal-chat
-   []
-   (let [{:keys [selected output input error sending? verifying? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
-     (if-not selected
-       [:div.panel.terminal-empty
-        [:div.state.empty
-         [:strong "Select a session"]
-         [:p "Choose a session to view output and send commands."]]]
+(defn- terminal-chat
+  []
+  (let [{:keys [selected output input error sending? verifying? resuming? restarting? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
+    (if-not selected
+      [:div.panel.terminal-empty
+       [:div.state.empty
+        [:strong "Select a session"]
+        [:p "Choose a session to view output and send commands."]]]
        (let [protocol (if (= "https:" (.-protocol js/window.location))
                         "http:"
                         (.-protocol js/window.location))
@@ -125,7 +125,7 @@
              site-link (if site-port
                          (str protocol "//" host ":" site-port "/")
                          "#")]
-         [:div.terminal-chat
+          [:div.terminal-chat
           [:div.terminal-chat__header
            [:button.terminal-back
             {:type "button"
@@ -150,6 +150,16 @@
                 :target "_blank"
                 :rel "noreferrer"}
                "Open site"])
+            (when-not (:running? selected)
+              [ui/button {:variant :secondary
+                          :disabled resuming?
+                          :on-click #(rf/dispatch [:darelwasl.app/terminal-resume-session])}
+               (if resuming? "Resuming..." "Resume session")])
+            (when (:running? selected)
+              [ui/button {:variant :secondary
+                          :disabled restarting?
+                          :on-click #(rf/dispatch [:darelwasl.app/terminal-restart-app])}
+               (if restarting? "Restarting..." "Restart app")])
             [ui/button {:variant :secondary
                         :disabled verifying?
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}

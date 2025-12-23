@@ -78,16 +78,32 @@
       (handle-terminal-result
        (terminal/request (:config state) :post (str "/sessions/" session-id "/verify"))))))
 
- (defn routes
-   [state]
-   [["/terminal"
-     {:middleware [common/require-session
-                   (common/require-roles #{:role/codex-terminal})]}
-     ["/sessions" {:get (list-sessions-handler state)
-                   :post (create-session-handler state)}]
-     ["/sessions/:id" {:get (session-detail-handler state)}]
-     ["/sessions/:id/input" {:post (send-input-handler state)}]
-     ["/sessions/:id/keys" {:post (send-keys-handler state)}]
-     ["/sessions/:id/output" {:get (output-handler state)}]
-     ["/sessions/:id/complete" {:post (complete-handler state)}]
-     ["/sessions/:id/verify" {:post (verify-handler state)}]]])
+(defn resume-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])]
+      (handle-terminal-result
+       (terminal/request (:config state) :post (str "/sessions/" session-id "/resume"))))))
+
+(defn restart-app-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])]
+      (handle-terminal-result
+       (terminal/request (:config state) :post (str "/sessions/" session-id "/restart-app"))))))
+
+(defn routes
+  [state]
+  [["/terminal"
+    {:middleware [common/require-session
+                  (common/require-roles #{:role/codex-terminal})]}
+    ["/sessions" {:get (list-sessions-handler state)
+                  :post (create-session-handler state)}]
+    ["/sessions/:id" {:get (session-detail-handler state)}]
+    ["/sessions/:id/input" {:post (send-input-handler state)}]
+    ["/sessions/:id/keys" {:post (send-keys-handler state)}]
+    ["/sessions/:id/output" {:get (output-handler state)}]
+    ["/sessions/:id/complete" {:post (complete-handler state)}]
+    ["/sessions/:id/verify" {:post (verify-handler state)}]
+    ["/sessions/:id/resume" {:post (resume-handler state)}]
+    ["/sessions/:id/restart-app" {:post (restart-app-handler state)}]]])

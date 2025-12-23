@@ -2,13 +2,15 @@
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
             [darelwasl.db :as db]
-            [ring.middleware.session.memory :refer [memory-store]]))
+            [darelwasl.http.session-store :as session-store]))
 
 (def session-opts
-  {:store (memory-store)
-   :cookie-attrs {:http-only true
-                  :same-site :lax
-                  :path "/"}})
+  (let [store-path (or (System/getenv "SESSION_STORE_PATH")
+                       "data/sessions.edn")]
+    {:store (session-store/file-session-store store-path)
+     :cookie-attrs {:http-only true
+                    :same-site :lax
+                    :path "/"}}))
 
 (defn error-response
   [status message & [details]]

@@ -17,6 +17,18 @@
   gap: var(--spacing-scale-3);
 }
 
+.betting-day-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-scale-2);
+}
+
+.betting-sport__title {
+  margin: var(--spacing-scale-4) 0 var(--spacing-scale-2);
+  font-size: var(--typography-font-sizes-section);
+  font-weight: 700;
+}
+
 .betting-league__title {
   margin: var(--spacing-scale-3) 0 var(--spacing-scale-2);
   font-weight: 700;
