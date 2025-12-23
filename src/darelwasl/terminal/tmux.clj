@@ -38,6 +38,11 @@
     (run-cmd ["new-session" "-d" "-x" "200" "-y" "60" "-s" session "-c" repo-dir "bash" "-lc" shell-cmd])
     (run-cmd ["set-option" "-t" session "history-limit" "20000"])))
 
+(defn new-window!
+  [session name repo-dir env-file cmd]
+  (let [shell-cmd (format "set -a; source %s; set +a; %s" env-file cmd)]
+    (run-cmd ["new-window" "-d" "-t" session "-n" name "-c" repo-dir "bash" "-lc" shell-cmd])))
+
  (defn pipe-output!
    [session log-file]
    (run-cmd ["pipe-pane" "-o" "-t" session (str "cat >> " log-file)]))

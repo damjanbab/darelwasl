@@ -36,6 +36,8 @@
               :codex-command "codex"
               :port-range-start 4100
               :port-range-end 4199
+              :auto-start-app? true
+              :auto-start-site? true
               :poll-ms 1000
               :max-output-bytes 20000}
    :outbox {:worker-enabled? false
@@ -164,13 +166,17 @@
                                         (get-in default-config [:terminal :tmux-prefix]))
                   :codex-command (env-str (get env "TERMINAL_CODEX_CMD")
                                           (get-in default-config [:terminal :codex-command]))
-                  :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
+                 :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
                                                (get-in default-config [:terminal :port-range-start]))
-                  :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
+                 :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
                                              (get-in default-config [:terminal :port-range-end]))
-                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
+                 :auto-start-app? (env-bool (get env "TERMINAL_AUTO_START_APP")
+                                            (get-in default-config [:terminal :auto-start-app?]))
+                 :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
+                                             (get-in default-config [:terminal :auto-start-site?]))
+                 :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
                                       (get-in default-config [:terminal :poll-ms]))
-                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
+                 :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
                                                (get-in default-config [:terminal :max-output-bytes]))}))
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")

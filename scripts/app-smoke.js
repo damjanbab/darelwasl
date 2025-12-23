@@ -15,13 +15,13 @@ const NETWORK_LOG_PATH = path.join(LOG_DIR, "app-network.log");
 
 async function waitForHealth(baseURL) {
   const api = await request.newContext({ baseURL });
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 20; i++) {
     const resp = await api.get("/health").catch(() => null);
     if (resp && resp.ok()) {
       await api.dispose();
       return;
     }
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 750));
   }
   await api.dispose();
   throw new Error("Health check did not become ready");

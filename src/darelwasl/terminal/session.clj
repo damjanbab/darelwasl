@@ -317,6 +317,10 @@
                                                 "GH_TOKEN" github-token)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
+     (when (:auto-start-app? cfg)
+       (tmux/new-window! tmux-session "app" (.getPath repo-dir) (.getPath env-file) "scripts/run-service.sh"))
+     (when (:auto-start-site? cfg)
+       (tmux/new-window! tmux-session "site" (.getPath repo-dir) (.getPath env-file) "scripts/run-site.sh"))
      (let [session {:id id
                     :name session-name
                     :status :running
