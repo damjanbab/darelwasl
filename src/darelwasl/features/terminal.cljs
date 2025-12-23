@@ -134,34 +134,27 @@
             [:div.terminal-title (:name selected)]
             [:div.terminal-meta (status-label selected)]]
            [:div.terminal-actions
+            [:a.terminal-action-link.button.secondary
+             {:href app-link
+              :target "_blank"
+              :rel "noreferrer"
+              :aria-disabled (not app-port)
+              :on-click #(when-not app-port (.preventDefault %))}
+             "Open app"]
+            [:a.terminal-action-link.button.secondary
+             {:href site-link
+              :target "_blank"
+              :rel "noreferrer"
+              :aria-disabled (not site-port)
+              :on-click #(when-not site-port (.preventDefault %))}
+             "Open site"]
+            [ui/button {:variant :secondary
+                        :disabled verifying?
+                        :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
+             (if verifying? "Creating PR..." "Verify & create PR")]
             [ui/button {:variant :danger
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-complete-session])}
              "Complete"]]]
-          [:div.terminal-verify
-           [:div.meta "Verify auto-scroll before completing this session."]
-           [:div.terminal-links
-            [:a {:href app-link
-                 :target "_blank"
-                 :rel "noreferrer"
-                 :aria-disabled (not app-port)
-                 :on-click #(when-not app-port (.preventDefault %))}
-             "Open session app"]
-            [:span.meta "·"]
-            [:a {:href site-link
-                 :target "_blank"
-                 :rel "noreferrer"
-                 :aria-disabled (not site-port)
-                 :on-click #(when-not site-port (.preventDefault %))}
-             "Open session site"]]
-           [:ol.terminal-verify-steps
-            [:li "Open the session app link in a new tab."]
-            [:li "Go to Terminal → open this session."]
-            [:li "Send a multi-line command (e.g. `seq 1 200`)."]
-            [:li "Confirm output stays pinned to the bottom while new lines arrive."]]
-           [ui/button {:variant :secondary
-                       :disabled verifying?
-                       :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
-            (if verifying? "Creating PR..." "Verify & create PR")]]
           [terminal-output {:output output
                             :error error}]
           (when-let [actions (quick-actions output)]
@@ -184,5 +177,4 @@
      [:main.terminal-layout
       (if selected
         [terminal-chat]
-        [terminal-list])]
-     [:span "Sessions run independently; output streams even when you leave."]]))
+        [terminal-list])]]))

@@ -2242,6 +2242,23 @@ button.list-row .meta {
   gap: var(--spacing-scale-3);
 }
 
+.terminal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-scale-2);
+}
+
+.terminal-action-link {
+  text-decoration: none;
+}
+
+.terminal-action-link[aria-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .terminal-back {
   border: 1px solid var(--colors-border);
   background: var(--colors-surface);
