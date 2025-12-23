@@ -113,7 +113,9 @@
         [:div.state.empty
          [:strong "Select a session"]
          [:p "Choose a session to view output and send commands."]]]
-       (let [protocol (.-protocol js/window.location)
+       (let [protocol (if (= "https:" (.-protocol js/window.location))
+                        "http:"
+                        (.-protocol js/window.location))
              host (.-hostname js/window.location)
              app-port (get-in selected [:ports :app])
              site-port (get-in selected [:ports :site])
