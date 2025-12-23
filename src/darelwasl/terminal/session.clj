@@ -62,8 +62,8 @@
        (let [block [port (inc port)]]
          (if (and (every? port-free? block)
                   (empty? (set/intersection used (set block))))
-           {:app port
-            :site (inc port)}
+           {:app (inc port)
+            :site port}
            (recur (+ port 2)))))))
 
  (defn- run!
