@@ -196,12 +196,14 @@
 
 (defn- sanitize-output
   [text]
-  (-> text
-      (str/replace "\r" "")
-      (str/replace ansi-osc-re "")
-      (str/replace ansi-csi-re "")
-      (str/replace ansi-single-re "")
-      (str/replace "\u001B(B" "")))
+  (let [safe-text (or text "")]
+    (-> safe-text
+        (str/replace "\r" "")
+        (str/replace ansi-osc-re "")
+        (str/replace ansi-csi-re "")
+        (str/replace ansi-single-re "")
+        (str/replace "\u001B(B" "")
+        (str/trimr))))
 
 (defn- read-output
   [file cursor max-bytes]
