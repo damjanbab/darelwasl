@@ -13,4 +13,7 @@ TMUX_LIB="$HOME/.local/tmux-lib/usr/lib/x86_64-linux-gnu"
 if [ -d "$TMUX_LIB" ]; then
   export LD_LIBRARY_PATH="$TMUX_LIB:${LD_LIBRARY_PATH:-}"
 fi
+if [ -z "${TERMINAL_CODEX_CMD:-}" ]; then
+  export TERMINAL_CODEX_CMD="codex --dangerously-bypass-approvals-and-sandbox"
+fi
 exec clojure -M:terminal

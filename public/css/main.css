@@ -2296,14 +2296,6 @@ button.list-row .meta {
   align-items: center;
 }
 
-.terminal-keys {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-scale-2);
-  justify-content: flex-end;
-}
-
 @media (max-width: 768px) {
   .terminal-layout {
     padding: var(--spacing-scale-4);
@@ -2311,9 +2303,5 @@ button.list-row .meta {
 
   .terminal-input {
     grid-template-columns: 1fr;
-  }
-
-  .terminal-keys {
-    justify-content: flex-start;
   }
 }

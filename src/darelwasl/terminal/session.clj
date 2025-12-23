@@ -79,21 +79,15 @@
                  (str k "=" v))]
      (spit file (str/join "\n" lines))))
 
- (defn- protocol-lines
-   []
-   (when-let [resource (io/resource "terminal/protocol.txt")]
-     (->> (slurp resource)
-          (str/split-lines)
-          (remove str/blank?)
-          vec)))
-
- (defn- append-chat!
-   [chat-file text]
-   (spit chat-file (str text "\n") :append true))
+(defn- append-chat!
+  [chat-file text]
+  (spit chat-file (str text "\n") :append true))
 
 (def ^:private ansi-csi-re #"\u001B\[[0-?]*[ -/]*[@-~]")
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
 (def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
+(def ^:private input-submit-delay-ms 200)
+ (def ^:private agents-resource "terminal/AGENTS.md")
 
 (defn- sanitize-output
   [text]
@@ -131,6 +125,44 @@
      :chunk trimmed
      :mode :replace}))
 
+(defn- write-agents!
+  [repo-dir]
+  (when-let [resource (io/resource agents-resource)]
+    (spit (io/file repo-dir "AGENTS.md") (slurp resource))))
+
+ (defn- list-session-dirs
+   [work-dir]
+   (let [root (ensure-dir! work-dir)
+         entries (or (.listFiles root) [])]
+     (->> entries
+          (filter #(.isDirectory ^java.io.File %))
+          (map (fn [dir]
+                 {:id (.getName ^java.io.File dir)
+                  :dir dir}))
+          (sort-by :id))))
+
+ (defn- update-log-closed!
+   [logs-dir session-id]
+   (let [dir (io/file logs-dir session-id)]
+     (when (.exists dir)
+       (update-manifest! dir (fn [m] (assoc (or m {}) :closed-at (now-ms)))))))
+
+ (defn reconcile-orphaned-sessions!
+   [store cfg]
+   (let [work-dir (:work-dir cfg)
+         logs-dir (:logs-dir cfg)
+         tmux-prefix (:tmux-prefix cfg)
+         stored-ids (set (keys @(:sessions store)))]
+     (doseq [{:keys [id dir]} (list-session-dirs work-dir)]
+       (when-not (contains? stored-ids id)
+         (let [tmux-session (tmux/session-name tmux-prefix id)]
+           (if (tmux/running? tmux-session)
+             (log/warn "Skipping orphaned session with active tmux" {:id id :tmux tmux-session})
+             (do
+               (run! ["rm" "-rf" (.getPath ^java.io.File dir)])
+               (update-log-closed! logs-dir id)
+               (log/info "Deleted orphaned session dir" {:id id}))))))))
+
  (defn create-session!
    [store cfg {:keys [name]}]
    (let [id (str (UUID/randomUUID))
@@ -160,6 +192,7 @@
                                 :ports ports})
      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
+     (write-agents! repo-dir)
      (write-env! env-file (cond-> {"APP_HOST" "0.0.0.0"
                                    "SITE_HOST" "0.0.0.0"
                                    "APP_PORT" (:app ports)
@@ -173,8 +206,6 @@
                             openai-key (assoc "OPENAI_API_KEY" openai-key)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
-     (doseq [line (protocol-lines)]
-       (tmux/send! tmux-session line))
      (let [session {:id id
                     :name session-name
                     :status :running
@@ -208,7 +239,9 @@
   (when-not (tmux/running? (:tmux session))
     (throw (ex-info "Session not running" {:id (:id session)})))
   (append-chat! (:chat-log session) (str "> " text))
-  (tmux/send! (:tmux session) text)
+  (tmux/send-keys! (:tmux session) [text])
+  (Thread/sleep input-submit-delay-ms)
+  (tmux/send-keys! (:tmux session) ["Enter"])
   true)
 
 (defn send-keys!
