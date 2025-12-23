@@ -157,6 +157,22 @@
           (ok {:status "ok"}))
         (error-response 404 "Session not found")))))
 
+(defn verify-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (try
+          (ok (session/verify-session! (:terminal/store state) session))
+          (catch Exception e
+            (log/warn e "Failed to verify session" {:id session-id})
+            (error-response 500 "Failed to verify session"
+                            (cond-> {:message (.getMessage e)}
+                              (instance? clojure.lang.ExceptionInfo e)
+                              (assoc :data (ex-data e))))))
+        (error-response 404 "Session not found")))))
+
 (defn routes
   [state]
   [["/health" {:get (health-handler state)}]
@@ -172,7 +188,9 @@
    ["/sessions/:id/output"
     {:get (output-handler state)}]
    ["/sessions/:id/complete"
-    {:post (complete-handler state)}]])
+    {:post (complete-handler state)}]
+   ["/sessions/:id/verify"
+    {:post (verify-handler state)}]])
 
 (defn app
   [state]

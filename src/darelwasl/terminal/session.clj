@@ -1,5 +1,7 @@
 (ns darelwasl.terminal.session
-  (:require [clojure.java.io :as io]
+  (:require [clj-http.client :as http]
+            [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.set :as set]
             [clojure.string :as str]
@@ -72,6 +74,93 @@
      (when (seq err)
        (log/debug "Command stderr" {:args args :err err}))
      out))
+
+(defn- git-porcelain
+  [repo-dir]
+  (str/trim (run! ["git" "status" "--porcelain"] {:dir repo-dir})))
+
+(defn- git-remote-url
+  [repo-dir]
+  (str/trim (run! ["git" "config" "--get" "remote.origin.url"] {:dir repo-dir})))
+
+(defn- git-latest-subject
+  [repo-dir]
+  (str/trim (run! ["git" "log" "-1" "--pretty=%s"] {:dir repo-dir})))
+
+(defn- parse-github-repo
+  [remote-url]
+  (when-let [match (re-find #"github\.com[:/](.+?)(?:\\.git)?$" (str remote-url))]
+    (let [path (second match)
+          [owner repo] (str/split path #"/" 2)]
+      (when (and owner repo)
+        {:owner owner :repo repo}))))
+
+(defn- credential-fill
+  [repo-dir host]
+  (let [{:keys [exit out err]} (sh/sh "git" "credential" "fill"
+                                      :dir repo-dir
+                                      :in (str "protocol=https\nhost=" host "\n\n"))]
+    (when-not (zero? exit)
+      (throw (ex-info "Credential lookup failed" {:exit exit :err err})))
+    (let [pairs (->> (str/split-lines out)
+                     (map #(str/split % #"=" 2))
+                     (filter #(= 2 (count %)))
+                     (map (fn [[k v]] [(keyword k) v]))
+                     (into {}))]
+      (when (seq pairs) pairs))))
+
+(defn- github-auth-token
+  [repo-dir]
+  (when-let [creds (credential-fill repo-dir "github.com")]
+    (or (:password creds) (:oauth-token creds))))
+
+(defn- github-request
+  [{:keys [token method url body]}]
+  (let [resp (http/request (cond-> {:method method
+                                    :url url
+                                    :throw-exceptions false
+                                    :headers {"Accept" "application/vnd.github+json"
+                                              "User-Agent" "darelwasl-terminal"}
+                                    :as :json}
+                             token (assoc-in [:headers "Authorization"] (str "token " token))
+                             body (assoc :content-type :json
+                                         :body (json/write-str body))))
+        status (:status resp)
+        parsed (:body resp)]
+    {:status status :body parsed}))
+
+(defn- find-existing-pr
+  [{:keys [token owner repo head]}]
+  (let [url (str "https://api.github.com/repos/" owner "/" repo "/pulls?head=" head)
+        resp (github-request {:token token :method :get :url url})]
+    (when (<= 200 (:status resp) 299)
+      (-> resp :body first :html_url))))
+
+(defn- create-pr!
+  [{:keys [repo-dir owner repo branch]}]
+  (let [token (github-auth-token repo-dir)
+        _ (when-not token
+            (throw (ex-info "Missing GitHub credentials" {:host "github.com"})))
+        title (or (not-empty (git-latest-subject repo-dir))
+                  (str "Terminal session " branch))
+        body {:title title
+              :head branch
+              :base "main"
+              :body (str "Automated PR from terminal session `" branch "`.")}
+        url (str "https://api.github.com/repos/" owner "/" repo "/pulls")
+        resp (github-request {:token token :method :post :url url :body body})
+        status (:status resp)
+        pr-url (get-in resp [:body :html_url])]
+    (cond
+      (and (<= 200 status 299) pr-url) pr-url
+      (= status 422) (or (find-existing-pr {:token token
+                                            :owner owner
+                                            :repo repo
+                                            :head (str owner ":" branch)})
+                         (throw (ex-info "Pull request already exists but could not be resolved"
+                                         {:status status :body (:body resp)})))
+      :else (throw (ex-info "Failed to create pull request"
+                            {:status status :body (:body resp)})))))
 
  (defn- write-env!
    [file env-map]
@@ -278,6 +367,31 @@
   (if (tmux/running? (:tmux session))
     (capture-output session max-bytes)
     (read-output (:chat-log session) cursor max-bytes)))
+
+(defn verify-session!
+  [store session]
+  (let [repo-dir (:repo-dir session)
+        branch (:branch session)
+        dirty? (not (str/blank? (git-porcelain repo-dir)))]
+    (when dirty?
+      (throw (ex-info "Uncommitted changes present" {:branch branch})))
+    (run! ["git" "push" "-u" "origin" branch] {:dir repo-dir})
+    (let [remote-url (git-remote-url repo-dir)
+          {:keys [owner repo]} (parse-github-repo remote-url)]
+      (when-not (and owner repo)
+        (throw (ex-info "Unsupported remote URL" {:remote remote-url})))
+      (let [pr-url (create-pr! {:repo-dir repo-dir
+                                :owner owner
+                                :repo repo
+                                :branch branch})]
+        (update-manifest! (:logs-dir session)
+                          (fn [m]
+                            (assoc (or m {})
+                                   :verified-at (now-ms)
+                                   :pr-url pr-url)))
+        (complete-session! store session)
+        {:status "ok"
+         :pr-url pr-url}))))
 
  (defn complete-session!
    [store session]

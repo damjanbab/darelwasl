@@ -1946,7 +1946,8 @@
               (assoc-in [:terminal :output] "")
               (assoc-in [:terminal :cursor] 0)
               (assoc-in [:terminal :input] "")
-              (assoc-in [:terminal :status] :ready))
+              (assoc-in [:terminal :status] :ready)
+              (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
                    [::terminal-start-poll]]})))
 
@@ -1958,7 +1959,8 @@
             (assoc-in [:terminal :output] "")
             (assoc-in [:terminal :cursor] 0)
             (assoc-in [:terminal :input] "")
-            (assoc-in [:terminal :error] nil))
+            (assoc-in [:terminal :error] nil)
+            (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
                  [::terminal-fetch-session (:id session)]]}))
 
@@ -1990,7 +1992,8 @@
        (assoc-in [:terminal :selected] nil)
        (assoc-in [:terminal :polling?] false)
        (assoc-in [:terminal :output] "")
-       (assoc-in [:terminal :cursor] 0))))
+       (assoc-in [:terminal :cursor] 0)
+       (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
  ::terminal-update-input
@@ -2116,6 +2119,21 @@
        {:db db}))))
 
 (rf/reg-event-fx
+ ::terminal-verify-session
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (-> db
+                (assoc-in [:terminal :verifying?] true)
+                (assoc-in [:terminal :error] nil))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/verify")
+                   :method "POST"
+                   :body {}
+                   :on-success [::terminal-verify-success]
+                   :on-error [::terminal-verify-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
  ::terminal-complete-success
  (fn [{:keys [db]} _]
    {:db (-> db
@@ -2124,6 +2142,29 @@
             (assoc-in [:terminal :output] "")
             (assoc-in [:terminal :cursor] 0))
     :dispatch [::fetch-terminal-sessions]}))
+
+(rf/reg-event-fx
+ ::terminal-verify-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [pr-url (:pr-url payload)
+         notice (if pr-url
+                  (str "PR created: " pr-url)
+                  "Verification complete and session closed.")]
+     {:db (-> db
+              (assoc-in [:terminal :selected] nil)
+              (assoc-in [:terminal :polling?] false)
+              (assoc-in [:terminal :output] "")
+              (assoc-in [:terminal :cursor] 0)
+              (assoc-in [:terminal :verifying?] false)
+              (assoc-in [:terminal :notice] notice))
+      :dispatch [::fetch-terminal-sessions]})))
+
+(rf/reg-event-db
+ ::terminal-verify-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :verifying?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to verify session.")))))
 
 (rf/reg-event-db
  ::land-update-filter

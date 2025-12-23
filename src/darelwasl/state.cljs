@@ -244,12 +244,14 @@
 (def default-terminal-state
   {:status :idle
    :error nil
+   :notice nil
    :sessions []
    :selected nil
    :output ""
    :cursor 0
    :input ""
    :sending? false
+   :verifying? false
    :polling? false
    :list-polling? false})
 
