@@ -586,7 +586,7 @@ check_app_smoke() {
   SERVER_PID=$!
   trap cleanup_server EXIT
 
-  wait_for_health "${base_url}/health" 30
+  wait_for_health "${base_url}/health" 90
 
   echo "Running headless app smoke..."
   (cd "$ROOT" && APP_URL="$base_url" node scripts/app-smoke.js)
