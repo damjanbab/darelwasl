@@ -113,16 +113,9 @@
         [:div.state.empty
          [:strong "Select a session"]
          [:p "Choose a session to view output and send commands."]]]
-       (let [protocol (.-protocol js/window.location)
-             host (.-hostname js/window.location)
-             app-port (get-in selected [:ports :app])
-             site-port (get-in selected [:ports :site])
-             app-link (if app-port
-                        (str protocol "//" host ":" app-port "/")
-                        "#")
-             site-link (if site-port
-                         (str protocol "//" host ":" site-port "/")
-                         "#")]
+       (let [origin (.-origin js/window.location)
+             app-link (str origin "/api/terminal/sessions/" (:id selected) "/app/")
+             site-link (str origin "/api/terminal/sessions/" (:id selected) "/site/")]
          [:div.terminal-chat
           [:div.terminal-chat__header
            [:button.terminal-back
@@ -143,15 +136,15 @@
             [:a {:href app-link
                  :target "_blank"
                  :rel "noreferrer"
-                 :aria-disabled (not app-port)
-                 :on-click #(when-not app-port (.preventDefault %))}
+                 :aria-disabled (nil? (:id selected))
+                 :on-click #(when-not (:id selected) (.preventDefault %))}
              "Open session app"]
             [:span.meta "·"]
             [:a {:href site-link
                  :target "_blank"
                  :rel "noreferrer"
-                 :aria-disabled (not site-port)
-                 :on-click #(when-not site-port (.preventDefault %))}
+                 :aria-disabled (nil? (:id selected))
+                 :on-click #(when-not (:id selected) (.preventDefault %))}
              "Open session site"]]
            [:ol.terminal-verify-steps
             [:li "Open the session app link in a new tab."]
