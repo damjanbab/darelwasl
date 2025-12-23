@@ -136,6 +136,9 @@
    (let [id (str (UUID/randomUUID))
          session-name (or (some-> name str/trim not-empty)
                           (str "session-" (subs id 0 8)))
+         env (System/getenv)
+         openai-key (or (get env "TERMINAL_OPENAI_API_KEY")
+                        (get env "OPENAI_API_KEY"))
          work-root (ensure-dir! (:work-dir cfg))
          logs-root (ensure-dir! (:logs-dir cfg))
          session-root (io/file work-root id)
@@ -157,16 +160,17 @@
                                 :ports ports})
      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
-     (write-env! env-file {"APP_HOST" "0.0.0.0"
-                           "SITE_HOST" "0.0.0.0"
-                           "APP_PORT" (:app ports)
-                           "SITE_PORT" (:site ports)
-                           "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
-                           "DATOMIC_SYSTEM" "darelwasl"
-                           "DATOMIC_DB_NAME" "darelwasl"
-                           "ALLOW_FIXTURE_SEED" "true"
-                           "TERMINAL_SESSION_ID" id
-                           "TERMINAL_LOG_DIR" (.getPath logs-dir)})
+     (write-env! env-file (cond-> {"APP_HOST" "0.0.0.0"
+                                   "SITE_HOST" "0.0.0.0"
+                                   "APP_PORT" (:app ports)
+                                   "SITE_PORT" (:site ports)
+                                   "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
+                                   "DATOMIC_SYSTEM" "darelwasl"
+                                   "DATOMIC_DB_NAME" "darelwasl"
+                                   "ALLOW_FIXTURE_SEED" "true"
+                                   "TERMINAL_SESSION_ID" id
+                                   "TERMINAL_LOG_DIR" (.getPath logs-dir)}
+                            openai-key (assoc "OPENAI_API_KEY" openai-key)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
      (doseq [line (protocol-lines)]
