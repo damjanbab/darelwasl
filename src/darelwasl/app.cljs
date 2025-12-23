@@ -2089,14 +2089,13 @@
          cursor (:cursor payload)
          mode (:mode payload)
          replace? (or (= :replace mode) (= "replace" mode))
-         app-ready? (boolean (re-find #"HTTP server listening on http://0\\.0\\.0\\.0:\\d+"
-                                      chunk))
+         app-ready? (:app-ready payload)
          next-db (cond-> db
                    replace? (assoc-in [:terminal :output] chunk)
                    (and (not replace?) (seq chunk)) (update-in [:terminal :output] str chunk)
                    true (assoc-in [:terminal :cursor] cursor)
                    true (assoc-in [:terminal :error] nil)
-                   app-ready? (assoc-in [:terminal :app-ready?] true))
+                   (some? app-ready?) (assoc-in [:terminal :app-ready?] (boolean app-ready?)))
          polling? (get-in next-db [:terminal :polling?])]
      (cond-> {:db next-db}
        polling? (assoc ::fx/dispatch-later {:ms 1000

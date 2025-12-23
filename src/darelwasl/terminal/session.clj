@@ -9,7 +9,7 @@
             [darelwasl.terminal.store :as store]
             [darelwasl.terminal.tmux :as tmux])
   (:import (java.io RandomAccessFile)
-           (java.net ServerSocket)
+           (java.net InetSocketAddress ServerSocket Socket)
            (java.util UUID)))
 
  (defn- now-ms [] (System/currentTimeMillis))
@@ -36,12 +36,20 @@
          next (f (or current {}))]
      (write-manifest! dir next)))
 
- (defn- port-free?
-   [port]
-   (try
-     (with-open [socket (ServerSocket. port)]
-       true)
-     (catch Exception _ false)))
+(defn- port-free?
+  [port]
+  (try
+    (with-open [socket (ServerSocket. port)]
+      true)
+    (catch Exception _ false)))
+
+(defn- port-open?
+  [host port timeout-ms]
+  (try
+    (with-open [socket (Socket.)]
+      (.connect socket (InetSocketAddress. host port) timeout-ms)
+      true)
+    (catch Exception _ false)))
 
  (defn- used-ports
    [sessions]
@@ -376,6 +384,11 @@
   (if (tmux/running? (:tmux session))
     (capture-output session max-bytes)
     (read-output (:chat-log session) cursor max-bytes)))
+
+(defn app-ready?
+  [session]
+  (when-let [port (get-in session [:ports :app])]
+    (port-open? "127.0.0.1" port 200)))
 
 (declare complete-session!)
 

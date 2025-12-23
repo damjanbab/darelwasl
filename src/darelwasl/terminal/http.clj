@@ -127,6 +127,8 @@
           max-bytes (get-in state [:terminal/config :max-output-bytes] 20000)]
       (if session
         (let [output (session/output-since session cursor max-bytes)
+              app-ready? (session/app-ready? session)
+              output (assoc output :app-ready app-ready?)
               text (str/lower-case (or (:chunk output) ""))
               auto-approval? (get session :auto-approval? false)
               auto-continue? (get session :auto-continue? false)
