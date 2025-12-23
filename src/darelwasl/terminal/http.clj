@@ -130,20 +130,20 @@
               text (str/lower-case (or (:chunk output) ""))
               auto-approval? (get session :auto-approval? false)
               auto-continue? (get session :auto-continue? false)
-              next-session (cond-> session
-                             (and (not auto-approval?)
-                                  (str/includes? text "allow codex to work in this folder"))
-                             (do
-                               (session/send-keys! session ["1" "Enter"])
-                               (assoc :auto-approval? true))
-                             (and (not auto-continue?)
-                                  (str/includes? text "press enter to continue"))
-                             (do
-                               (session/send-keys! session ["Enter"])
-                               (assoc :auto-continue? true)))]
-          (when (not= session next-session)
-            (store/upsert-session! (:terminal/store state) next-session))
-          (ok output))
+              needs-approval? (and (not auto-approval?)
+                                   (str/includes? text "allow codex to work in this folder"))
+              needs-continue? (and (not auto-continue?)
+                                   (str/includes? text "press enter to continue"))]
+          (when needs-approval?
+            (session/send-keys! session ["1" "Enter"]))
+          (when needs-continue?
+            (session/send-keys! session ["Enter"]))
+          (let [next-session (cond-> session
+                               needs-approval? (assoc :auto-approval? true)
+                               needs-continue? (assoc :auto-continue? true))]
+            (when (not= session next-session)
+              (store/upsert-session! (:terminal/store state) next-session))
+            (ok output)))
         (error-response 404 "Session not found")))))
 
 (defn complete-handler
