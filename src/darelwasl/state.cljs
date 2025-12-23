@@ -253,6 +253,7 @@
    :sending? false
    :verifying? false
    :polling? false
+   :app-ready? false
    :list-polling? false})
 
 (def default-db

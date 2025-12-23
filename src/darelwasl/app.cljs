@@ -1946,6 +1946,7 @@
               (assoc-in [:terminal :output] "")
               (assoc-in [:terminal :cursor] 0)
               (assoc-in [:terminal :input] "")
+              (assoc-in [:terminal :app-ready?] false)
               (assoc-in [:terminal :status] :ready)
               (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
@@ -1959,6 +1960,7 @@
             (assoc-in [:terminal :output] "")
             (assoc-in [:terminal :cursor] 0)
             (assoc-in [:terminal :input] "")
+            (assoc-in [:terminal :app-ready?] false)
             (assoc-in [:terminal :error] nil)
             (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
@@ -1993,6 +1995,7 @@
        (assoc-in [:terminal :polling?] false)
        (assoc-in [:terminal :output] "")
        (assoc-in [:terminal :cursor] 0)
+       (assoc-in [:terminal :app-ready?] false)
        (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
@@ -2086,11 +2089,14 @@
          cursor (:cursor payload)
          mode (:mode payload)
          replace? (or (= :replace mode) (= "replace" mode))
+         app-ready? (boolean (re-find #"HTTP server listening on http://0\\.0\\.0\\.0:\\d+"
+                                      chunk))
          next-db (cond-> db
                    replace? (assoc-in [:terminal :output] chunk)
                    (and (not replace?) (seq chunk)) (update-in [:terminal :output] str chunk)
                    true (assoc-in [:terminal :cursor] cursor)
-                   true (assoc-in [:terminal :error] nil))
+                   true (assoc-in [:terminal :error] nil)
+                   app-ready? (assoc-in [:terminal :app-ready?] true))
          polling? (get-in next-db [:terminal :polling?])]
      (cond-> {:db next-db}
        polling? (assoc ::fx/dispatch-later {:ms 1000
@@ -2140,7 +2146,8 @@
             (assoc-in [:terminal :selected] nil)
             (assoc-in [:terminal :polling?] false)
             (assoc-in [:terminal :output] "")
-            (assoc-in [:terminal :cursor] 0))
+            (assoc-in [:terminal :cursor] 0)
+            (assoc-in [:terminal :app-ready?] false))
     :dispatch [::fetch-terminal-sessions]}))
 
 (rf/reg-event-fx
@@ -2155,6 +2162,7 @@
               (assoc-in [:terminal :polling?] false)
               (assoc-in [:terminal :output] "")
               (assoc-in [:terminal :cursor] 0)
+              (assoc-in [:terminal :app-ready?] false)
               (assoc-in [:terminal :verifying?] false)
               (assoc-in [:terminal :notice] notice))
       :dispatch [::fetch-terminal-sessions]})))

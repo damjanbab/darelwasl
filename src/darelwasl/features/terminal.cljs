@@ -107,7 +107,7 @@
 
  (defn- terminal-chat
    []
-   (let [{:keys [selected output input error sending? verifying?]} @(rf/subscribe [:darelwasl.app/terminal])]
+   (let [{:keys [selected output input error sending? verifying? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
      (if-not selected
        [:div.panel.terminal-empty
         [:div.state.empty
@@ -140,16 +140,16 @@
              {:href app-link
               :target "_blank"
               :rel "noreferrer"
-              :aria-disabled (not app-port)
-              :on-click #(when-not app-port (.preventDefault %))}
+              :aria-disabled (or (not app-port) (not app-ready?))
+              :on-click #(when (or (not app-port) (not app-ready?))
+                           (.preventDefault %))}
              "Open app"]
-            [:a.terminal-action-link.button.secondary
-             {:href site-link
-              :target "_blank"
-              :rel "noreferrer"
-              :aria-disabled (not site-port)
-              :on-click #(when-not site-port (.preventDefault %))}
-             "Open site"]
+            (when site-port
+              [:a.terminal-action-link.button.secondary
+               {:href site-link
+                :target "_blank"
+                :rel "noreferrer"}
+               "Open site"])
             [ui/button {:variant :secondary
                         :disabled verifying?
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
@@ -159,21 +159,22 @@
              "Complete"]]]
           [:div.terminal-link-row
            [:span.meta "App:"]
-           (if app-port
-             [:a.terminal-link-text
-              {:href app-link
-               :target "_blank"
-               :rel "noreferrer"}
-              app-link]
-             [:span.meta "Unavailable"])
-           [:span.meta "Site:"]
-           (if site-port
-             [:a.terminal-link-text
-              {:href site-link
-               :target "_blank"
-               :rel "noreferrer"}
-              site-link]
-             [:span.meta "Unavailable"])]
+           (cond
+             (not app-port) [:span.meta "Unavailable"]
+             (not app-ready?) [:span.meta "Starting..."]
+             :else [:a.terminal-link-text
+                    {:href app-link
+                     :target "_blank"
+                     :rel "noreferrer"}
+                    app-link])
+           (when site-port
+             [:<>
+              [:span.meta "Site:"]
+              [:a.terminal-link-text
+               {:href site-link
+                :target "_blank"
+                :rel "noreferrer"}
+               site-link]])]
           [terminal-output {:output output
                             :error error}]
           (when-let [actions (quick-actions output)]
