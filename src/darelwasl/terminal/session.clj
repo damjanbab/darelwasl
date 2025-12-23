@@ -91,13 +91,19 @@
 
 (defn- read-github-token
   []
-  (let [home (System/getProperty "user.home")
-        cred-file (io/file home ".git-credentials")]
-    (when (.exists cred-file)
-      (some->> (slurp cred-file)
-               (re-seq #"https://[^:]+:([^@]+)@github\.com")
-               first
-               second))))
+  (let [env (System/getenv)
+        home (or (get env "HOME") (System/getProperty "user.home"))
+        candidates (->> [home "/home/darelwasl" "/root"]
+                        (remove nil?)
+                        distinct)]
+    (some (fn [base]
+            (let [cred-file (io/file base ".git-credentials")]
+              (when (.exists cred-file)
+                (some->> (slurp cred-file)
+                         (re-seq #"https://[^:]+:([^@]+)@github\.com")
+                         first
+                         second))))
+          candidates)))
 
 (defn- sanitize-output
   [text]
