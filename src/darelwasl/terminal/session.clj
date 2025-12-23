@@ -87,7 +87,17 @@
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
 (def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
 (def ^:private input-submit-delay-ms 200)
- (def ^:private agents-resource "terminal/AGENTS.md")
+(def ^:private agents-resource "terminal/AGENTS.md")
+
+(defn- read-github-token
+  []
+  (let [home (System/getProperty "user.home")
+        cred-file (io/file home ".git-credentials")]
+    (when (.exists cred-file)
+      (some->> (slurp cred-file)
+               (re-seq #"https://[^:]+:([^@]+)@github\.com")
+               first
+               second))))
 
 (defn- sanitize-output
   [text]
@@ -171,6 +181,10 @@
          env (System/getenv)
          openai-key (or (get env "TERMINAL_OPENAI_API_KEY")
                         (get env "OPENAI_API_KEY"))
+         github-token (or (get env "GITHUB_TOKEN")
+                          (get env "GH_TOKEN")
+                          (get env "DARELWASL_GITHUB_TOKEN")
+                          (read-github-token))
          work-root (ensure-dir! (:work-dir cfg))
          logs-root (ensure-dir! (:logs-dir cfg))
          session-root (io/file work-root id)
@@ -203,7 +217,9 @@
                                    "ALLOW_FIXTURE_SEED" "true"
                                    "TERMINAL_SESSION_ID" id
                                    "TERMINAL_LOG_DIR" (.getPath logs-dir)}
-                            openai-key (assoc "OPENAI_API_KEY" openai-key)))
+                            openai-key (assoc "OPENAI_API_KEY" openai-key)
+                            github-token (assoc "GITHUB_TOKEN" github-token
+                                                "GH_TOKEN" github-token)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
      (let [session {:id id
