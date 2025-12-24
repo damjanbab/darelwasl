@@ -447,7 +447,7 @@
         display-name (str/trim (or (:name form) ""))
         roles (->> (or (:roles form) #{})
                    (map kw)
-                   (sort-by clojure.core/name)
+                   (sort-by name)
                    vec)]
     (cond-> {:user/username username
              :user/name (when (not (str/blank? display-name)) display-name)

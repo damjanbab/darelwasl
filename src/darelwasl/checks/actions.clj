@@ -4,7 +4,8 @@
             [darelwasl.auth :as auth]
             [darelwasl.content :as content]
             [darelwasl.fixtures :as fixtures]
-            [darelwasl.tasks :as tasks])
+            [darelwasl.tasks :as tasks]
+            [darelwasl.users :as users])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -122,7 +123,19 @@
 (defn- check-mutations
   [conn failures {:keys [user-index actor tag-index]}]
   (when (and conn actor)
-    (let [assignee-huda (:user/id (get user-index "huda"))
+    (let [user-body {:user/username "contract-user"
+                     :user/password "Contract1!"
+                     :user/roles [:role/content-editor]}
+          created-user (some-> (ensure-success failures "Create user" (users/create-user! conn user-body actor))
+                               :user)
+          updated-user (when created-user
+                         (some-> (ensure-success failures "Update user"
+                                                 (users/update-user! conn (:user/id created-user)
+                                                                     {:user/name "Contract User"
+                                                                      :user/roles [:role/admin]}
+                                                                     actor))
+                                 :user))
+          assignee-huda (:user/id (get user-index "huda"))
            assignee-damjan (:user/id (get user-index "damjan"))
            tag-ops (:ops tag-index)
            tag-urgent (:urgent tag-index)
@@ -135,6 +148,14 @@
                         :task/due-date "2025-12-20T10:00:00Z"}
            created (tasks/create-task! conn create-body actor)
            created-task (some-> (ensure-success failures "Create task" created) :task)]
+       (when created-user
+         (when-not (= "contract-user" (:user/username created-user))
+           (fail! failures "Create user should echo username" created-user)))
+       (when updated-user
+         (when-not (= "Contract User" (:user/name updated-user))
+           (fail! failures "Update user should change display name" updated-user))
+         (when-not (= #{:role/admin} (set (:user/roles updated-user)))
+           (fail! failures "Update user should replace roles" updated-user)))
        (when created-task
          (when-not (= :todo (:task/status created-task))
            (fail! failures "Create should set provided status" created-task))
