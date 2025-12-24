@@ -10,6 +10,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Read relevant sections of `darelwasl/docs/system.md` before making ops changes.
 - Log the exact commands used and outcomes.
 - If code changes are required, open a PR; otherwise report actions only.
+ - Verify service status and at least one relevant endpoint (health or feature-specific).
 
 ## PR workflow (only if code changes)
 - Git credentials are preconfigured in the session environment; do NOT ask for a token.

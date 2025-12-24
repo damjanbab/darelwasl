@@ -15,6 +15,15 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Fail closed on test errors and report exact failures only after fixing them.
 - Provide a concise status summary before asking for review.
 
+## Verification matrix (required)
+- Identify touched areas and run the corresponding proofs:
+  - registries/schema: `scripts/checks.sh registries` and `scripts/checks.sh schema`
+  - actions/backend: `scripts/checks.sh actions` + a targeted API call for the change
+  - UI: `scripts/checks.sh app-smoke` (or `node scripts/app-smoke.js`) + verify a key UI state
+  - terminal: create a session, confirm app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
+  - integrations (GitHub/Rezultati/Supersport/Telegram): perform a minimal call that validates auth + response shape
+- Do not claim done unless all required proofs pass; if blocked by creds or infra, report and stop.
+
 ## PR workflow (required)
 - Git credentials are preconfigured in the session environment; do NOT ask for a token.
 - Make commits normally and run `git push -u origin <branch>`.

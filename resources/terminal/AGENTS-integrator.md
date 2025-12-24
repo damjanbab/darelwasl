@@ -9,7 +9,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed.
 - Create `integration/<YYYY-MM-DD>` and merge the requested PR branches.
-- Run full checks before opening the integration PR.
+- Run full checks before opening the integration PR (`scripts/checks.sh all` or registries+schema+actions+app-smoke).
 - Provide a concise status summary before asking for review.
 
 ## PR workflow (required)
