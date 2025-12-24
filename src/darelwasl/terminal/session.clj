@@ -121,8 +121,9 @@
 
 (defn- parse-github-repo
   [remote-url]
-  (when-let [match (re-find #"github\.com[:/](.+?)(?:\\.git)?$" (str remote-url))]
-    (let [path (second match)
+  (when-let [match (re-find #"github\.com[:/](.+)$" (str remote-url))]
+    (let [path (-> (second match)
+                   (str/replace #"\.git$" ""))
           [owner repo] (str/split path #"/" 2)]
       (when (and owner repo)
         {:owner owner :repo repo}))))
@@ -148,7 +149,15 @@
       (present-env (System/getenv "GH_TOKEN"))
       (present-env (System/getenv "DARELWASL_GITHUB_TOKEN"))
       (when-let [creds (credential-fill repo-dir "github.com")]
-        (or (:password creds) (:oauth-token creds)))))
+        (let [password (present-env (:password creds))
+              username (present-env (:username creds))
+              oauth-token (present-env (:oauth-token creds))]
+          (cond
+            oauth-token oauth-token
+            (and password (not= password "x-oauth-basic")) password
+            (and username (= password "x-oauth-basic")) username
+            (and username (re-find #"^(ghp_|github_pat_)" username)) username
+            :else nil)))))
 
 (defn- github-request
   [{:keys [token method url body]}]
@@ -157,12 +166,16 @@
                                     :throw-exceptions false
                                     :headers {"Accept" "application/vnd.github+json"
                                               "User-Agent" "darelwasl-terminal"}
-                                    :as :json}
+                                    :as :text}
                              token (assoc-in [:headers "Authorization"] (str "token " token))
                              body (assoc :content-type :json
                                          :body (json/write-str body))))
         status (:status resp)
-        parsed (:body resp)]
+        raw (:body resp)
+        parsed (when (and raw (not (str/blank? raw)))
+                 (try
+                   (json/read-str raw :key-fn keyword)
+                   (catch Exception _ nil)))]
     {:status status :body parsed}))
 
 (defn- find-existing-pr
