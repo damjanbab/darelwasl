@@ -1,6 +1,7 @@
 ;; GitHub API client helpers for PR overview.
 (ns darelwasl.github
   (:require [clj-http.client :as http]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
 
@@ -26,6 +27,39 @@
     (cond
       (#{"open" "closed" "all"} raw) raw
       :else nil)))
+
+(defn- parse-github-repo
+  [remote-url]
+  (when-let [match (re-find #"github\.com[:/](.+)$" (str remote-url))]
+    (let [path (-> (second match)
+                   (str/replace #"\.git$" ""))
+          [owner repo] (str/split path #"/" 2)]
+      (when (and owner repo)
+        {:owner owner :repo repo}))))
+
+(defn- git-config-origin-url
+  []
+  (let [cfg (io/file ".git" "config")]
+    (when (.exists cfg)
+      (let [raw (slurp cfg)
+            match (re-find #"(?m)^\s*url\s*=\s*(.+)$" raw)]
+        (some-> match second str/trim)))))
+
+(defn- resolve-repo
+  [cfg]
+  (let [github (:github cfg)
+        owner (:repo-owner github)
+        repo (:repo-name github)
+        terminal-url (get-in cfg [:terminal :repo-url])]
+    (cond
+      (and (seq (or owner "")) (seq (or repo "")))
+      {:owner owner :repo repo}
+
+      (seq terminal-url)
+      (parse-github-repo terminal-url)
+
+      :else
+      (some-> (git-config-origin-url) parse-github-repo))))
 
 (defn- request-json
   [{:keys [api-url token timeout-ms]} path query]
@@ -79,18 +113,18 @@
 (defn list-pulls
   [cfg params]
   (let [github (:github cfg)
-        owner (:repo-owner github)
-        repo (:repo-name github)
+        resolved (resolve-repo cfg)
         state (normalize-state (or (:pr/state params) (:state params)))]
     (cond
-      (or (str/blank? (or owner "")) (str/blank? (or repo "")))
+      (nil? resolved)
       (error 500 "GitHub repo not configured")
 
       (nil? state)
       (error 400 "Invalid PR state")
 
       :else
-      (let [per-page (max 1 (or (:prs-per-page github) 20))
+      (let [{:keys [owner repo]} resolved
+            per-page (max 1 (or (:prs-per-page github) 20))
             commits-limit (max 1 (or (:commits-per-pr github) 10))
             pulls-resp (request-json github
                                      (str "/repos/" owner "/" repo "/pulls")
