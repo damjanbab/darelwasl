@@ -444,13 +444,13 @@
 (defn- user-form->payload
   [form {:keys [include-password?]}]
   (let [username (str/trim (or (:username form) ""))
-        name (str/trim (or (:name form) ""))
+        display-name (str/trim (or (:name form) ""))
         roles (->> (or (:roles form) #{})
                    (map kw)
-                   (sort-by name)
+                   (sort-by clojure.core/name)
                    vec)]
     (cond-> {:user/username username
-             :user/name (when (not (str/blank? name)) name)
+             :user/name (when (not (str/blank? display-name)) display-name)
              :user/roles roles}
       include-password? (assoc :user/password (:password form)))))
 
