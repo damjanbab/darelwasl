@@ -144,6 +144,37 @@ Goal: deliver a full minimalist redesign of the Task view (mobile-first, tap-fir
   - Tooling/Automation: None
   - Reporting: Summarize UX changes and proofs run
 
+## Workflow
+
+- Task ID: pr-workflow-test
+  - Status: blocked (Codex, 2025-12-24 09:40 UTC)
+  - Blocker: `scripts/terminal-verify.sh` returns `java.lang.AssertionError`; PR creation blocked.
+  - Objective: Validate PR creation workflow by making a minimal, non-functional change.
+  - Scope: Add a small report file documenting the PR workflow test.
+  - Out of Scope: Any code, registry, or schema changes.
+  - Capabilities Touched: none (process-only)
+  - Parallel Safety:
+    - Exclusive Capabilities: none
+    - Shared/Read-only Capabilities: all
+    - Sequencing Constraints: none
+  - Composability Impact:
+    - Layers affected: docs/process only
+    - Patterns/registries reused or extended: none
+    - New composability rule: none
+  - Requirement Change & Compatibility:
+    - Requirement change: none (workflow validation only)
+    - Compatibility expectation: none
+    - Flag/Rollout plan: none
+  - Breaking/Deprecation: none
+  - Dependencies: none
+  - Deliverables: report_pr_workflow_test.md
+  - Proof Plan: none (process-only)
+  - Fixtures/Data Assumptions: none
+  - Protocol/System Updates: none
+  - FAQ Updates: none
+  - Tooling/Automation: none
+  - Reporting: PR link plus short confirmation that the workflow test completed.
+
 ## Notes
 - Palette refresh is a full visual reset; keep other views readable and consistent with updated tokens.
 - Filters UI will be minimal chip bar + “More” drawer unless product spec dictates otherwise.
