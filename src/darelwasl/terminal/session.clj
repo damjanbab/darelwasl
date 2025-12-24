@@ -564,6 +564,8 @@
   (when-let [port (get-in session [:ports :app])]
     (port-open? "127.0.0.1" port 200)))
 
+(declare restart-app!)
+
 (defn ensure-app-running!
   [store session]
   (let [tmux-session (:tmux session)
