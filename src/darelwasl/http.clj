@@ -6,6 +6,7 @@
             [darelwasl.http.routes.content :as content-routes]
             [darelwasl.http.routes.events :as events-routes]
             [darelwasl.http.routes.files :as files-routes]
+            [darelwasl.http.routes.github :as github-routes]
             [darelwasl.http.routes.land :as land-routes]
             [darelwasl.http.routes.registries :as registries-routes]
             [darelwasl.http.routes.tasks :as task-routes]
@@ -42,6 +43,7 @@
          (betting-routes/routes state)
          (events-routes/routes state)
          (files-routes/routes state)
+         (github-routes/routes state)
          (task-routes/routes state)
          (content-routes/routes state)
          (registries-routes/routes state)

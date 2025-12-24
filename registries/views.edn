@@ -91,6 +91,22 @@
                   :flags []}
   :related {:schema []}}
 
+ {:id :cap/view/pr-overview
+  :title "PR Overview"
+  :version "v1"
+  :data {:sources [{:id :github/pulls
+                    :source :cap/action/github-pulls
+                    :pull [:pulls]}]}
+  :actions [:cap/action/github-pulls]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "list + detail" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}
+
  {:id :cap/view/home
   :title "Home summary"
   :version "v1"

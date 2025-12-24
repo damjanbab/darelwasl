@@ -41,6 +41,13 @@
               :auto-start-site? false
               :poll-ms 1000
               :max-output-bytes 20000}
+   :github {:api-url "https://api.github.com"
+            :timeout-ms 3000
+            :repo-owner nil
+            :repo-name nil
+            :token nil
+            :prs-per-page 20
+            :commits-per-pr 10}
    :files {:storage-dir "data/files"}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
@@ -178,9 +185,24 @@
                  :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
                                              (get-in default-config [:terminal :auto-start-site?]))
                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
-                                      (get-in default-config [:terminal :poll-ms]))
+                                     (get-in default-config [:terminal :poll-ms]))
                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
                                                (get-in default-config [:terminal :max-output-bytes]))}))
+        (assoc :github
+               {:api-url (env-str (get env "GITHUB_API_URL")
+                                  (get-in default-config [:github :api-url]))
+                :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")
+                                       (get-in default-config [:github :timeout-ms]))
+                :repo-owner (env-str (get env "GITHUB_REPO_OWNER")
+                                     (get-in default-config [:github :repo-owner]))
+                :repo-name (env-str (get env "GITHUB_REPO_NAME")
+                                    (get-in default-config [:github :repo-name]))
+                :token (env-str (get env "GITHUB_TOKEN")
+                                (get-in default-config [:github :token]))
+                :prs-per-page (parse-int (get env "GITHUB_PRS_PER_PAGE")
+                                         (get-in default-config [:github :prs-per-page]))
+                :commits-per-pr (parse-int (get env "GITHUB_COMMITS_PER_PR")
+                                           (get-in default-config [:github :commits-per-pr]))})
         (assoc :files
                {:storage-dir (env-str (get env "FILES_STORAGE_DIR")
                                       (get-in default-config [:files :storage-dir]))})

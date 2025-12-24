@@ -887,6 +887,24 @@
             :views [:cap/view/file-library]}
   :tooling []}
 
+ {:id :cap/action/github-pulls
+  :title "GitHub Pull Requests"
+  :version "v1"
+  :inputs {:pr/state :string?}
+  :outputs {:pulls :list}
+  :side-effects ["Fetch PR data from GitHub API"]
+  :adapter {:integration :cap/integration/github}
+  :audit {:records [:github/pulls]
+          :fields [:pr/state]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/pr-overview]}
+  :tooling []}
+
  {:id :cap/action/terminal-session-create
   :title "Terminal Session Create"
   :version "v1"

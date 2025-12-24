@@ -6,6 +6,7 @@
             [darelwasl.betting :as betting]
             [darelwasl.events :as events]
             [darelwasl.files :as files]
+            [darelwasl.github :as github]
             [darelwasl.tasks :as tasks]))
 
 (defn actor-from-session
@@ -152,6 +153,10 @@
     (files/delete-file! (conn state)
                         (:file/id body)
                         storage-dir)))
+(defn- github-pulls
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (github/list-pulls (:config state) body)))
 
 (def ^:private handlers
   {:cap/action/task-create task-create
@@ -168,7 +173,8 @@
    :cap/action/betting-close betting-close
    :cap/action/betting-settle betting-settle
    :cap/action/file-upload file-upload
-   :cap/action/file-delete file-delete})
+   :cap/action/file-delete file-delete
+   :cap/action/github-pulls github-pulls})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:

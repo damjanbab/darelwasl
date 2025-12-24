@@ -5,6 +5,7 @@
             [darelwasl.features.home :as home]
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
+            [darelwasl.features.prs :as prs-ui]
             [darelwasl.features.control-panel :as control-panel]
             [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.tasks :as tasks-ui]
@@ -30,6 +31,7 @@
 (def default-task-form state/default-task-form)
 (def default-task-detail state/default-task-detail)
 (def default-task-state state/default-task-state)
+(def default-prs-state state/default-prs-state)
 (def default-home-state state/default-home-state)
 (def default-tags-state state/default-tags-state)
 (def default-files-state state/default-files-state)
@@ -130,6 +132,13 @@
   (when-let [q (present-str query)]
     (let [sp (js/URLSearchParams.)]
       (.append sp "q" q)
+      (.toString sp))))
+
+(defn- build-prs-query
+  [{:keys [state]}]
+  (when-let [s (present-str state)]
+    (let [sp (js/URLSearchParams.)]
+      (.append sp "state" s)
       (.toString sp))))
 
 (defn- parse-long-safe
@@ -340,6 +349,10 @@
   (-> file
       (update :file/type kw)))
 
+(defn- normalize-pr
+  [pr]
+  (update pr :pr/state kw))
+
 (defn- task->form
   [task]
   (merge default-task-form
@@ -451,13 +464,14 @@
  (fn [{:keys [db]} [_ route]]
    (let [allowed (state/allowed-routes (:session db))
          safe-route (if (contains? allowed route) route :home)
-         dispatches (cond-> []
-                       (= safe-route :home) (conj [::fetch-home])
-                       (= safe-route :tasks) (conj [::fetch-tasks])
-                       (= safe-route :files) (conj [::fetch-files])
-                       (= safe-route :land) (conj [::fetch-land])
-                       (= safe-route :betting) (conj [::fetch-betting-events])
-                       (= safe-route :terminal) (conj [::fetch-terminal-sessions])
+        dispatches (cond-> []
+                      (= safe-route :home) (conj [::fetch-home])
+                      (= safe-route :tasks) (conj [::fetch-tasks])
+                      (= safe-route :files) (conj [::fetch-files])
+                      (= safe-route :prs) (conj [::fetch-prs])
+                      (= safe-route :land) (conj [::fetch-land])
+                      (= safe-route :betting) (conj [::fetch-betting-events])
+                      (= safe-route :terminal) (conj [::fetch-terminal-sessions])
                        (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
@@ -527,6 +541,7 @@
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
                  (assoc :files default-files-state)
+                 (assoc :prs default-prs-state)
                  (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
                  (assoc :terminal default-terminal-state)
@@ -538,6 +553,7 @@
                               [::fetch-home]
                               [::fetch-tasks]]
                        (= preferred-route :files) (conj [::fetch-files])
+                       (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
                        (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
       {:db db'
@@ -581,13 +597,14 @@
  (fn [{:keys [db]} _]
    {:db (-> db
             (assoc :session nil
-           :route :login
-           :nav default-nav-state
-           :tasks default-task-state
-           :files default-files-state
-           :betting default-betting-state
-           :control default-control-state
-           :tags default-tags-state
+                   :route :login
+                   :nav default-nav-state
+                   :tasks default-task-state
+                   :files default-files-state
+                   :prs default-prs-state
+                   :betting default-betting-state
+                   :control default-control-state
+                   :tags default-tags-state
                    :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
                                                                    (get-in db [:login :username])
@@ -747,6 +764,42 @@
            (assoc :session nil
                   :route :login))))))
 
+;; PR overview
+(rf/reg-event-fx
+ ::fetch-prs
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:prs :filters])]
+     {:db (state/mark-loading db [:prs])
+      ::fx/http {:url (str "/api/github/pulls"
+                           (when-let [qs (build-prs-query filters)] (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-prs-success]
+                 :on-error [::fetch-prs-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-prs-success
+ (fn [db [_ payload]]
+   (let [prs (mapv normalize-pr (:pulls payload))
+         selected (let [current (get-in db [:prs :selected])]
+                    (when (some #(= (:pr/number %) current) prs)
+                      current))]
+     (-> db
+         (assoc-in [:prs :items] prs)
+         (assoc-in [:prs :selected] (or selected (:pr/number (first prs))))
+         (assoc-in [:prs :status] (if (seq prs) :ready :empty))
+         (assoc-in [:prs :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-prs-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load pull requests.")]
+     (-> (state/mark-error db [:prs] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
 (rf/reg-event-db
  ::select-file
  (fn [db [_ file-id]]
@@ -852,6 +905,16 @@
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
+
+(rf/reg-event-db
+ ::select-pr
+ (fn [db [_ pr-number]]
+   (assoc-in db [:prs :selected] pr-number)))
+
+(rf/reg-event-db
+ ::set-pr-state
+ (fn [db [_ value]]
+   (assoc-in db [:prs :filters :state] value)))
 
 ;; Control panel content
 (rf/reg-event-fx
@@ -2973,6 +3036,7 @@
 (rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
 (rf/reg-sub ::files (fn [db _] (:files db)))
+(rf/reg-sub ::prs (fn [db _] (:prs db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::control (fn [db _] (:control db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
@@ -2992,7 +3056,13 @@
  (fn [db _]
    (let [selected (get-in db [:files :selected])
          items (get-in db [:files :items])]
-     (some #(when (= (:file/id %) selected) %) items))))
+    (some #(when (= (:file/id %) selected) %) items))))
+(rf/reg-sub
+ ::selected-pr
+ (fn [db _]
+   (let [selected (get-in db [:prs :selected])
+         items (get-in db [:prs :items])]
+    (some #(when (= (:pr/number %) selected) %) items))))
 (rf/reg-sub ::task-detail (fn [db _] (get-in db [:tasks :detail])))
 
 
@@ -3009,6 +3079,7 @@
          :terminal [terminal-ui/terminal-shell]
          :control-panel [control-panel/control-panel-shell]
          :files [files-ui/file-library-shell]
+         :prs [prs-ui/prs-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])
        [login/login-page])

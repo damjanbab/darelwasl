@@ -74,6 +74,25 @@
   :related {:actions [:cap/action/file-upload :cap/action/file-delete]
             :schema [:cap/schema/file]}}
 
+ {:id :cap/integration/github
+  :title "GitHub API"
+  :version "v1"
+  :external-system "GitHub REST API"
+  :contracts {:base-url "GITHUB_API_URL (default https://api.github.com)"
+              :timeout_ms 3000
+              :endpoints ["/repos/{owner}/{repo}/pulls"
+                          "/repos/{owner}/{repo}/pulls/{number}/commits"]}
+  :auth {:strategy :env-vars
+         :vars ["GITHUB_TOKEN" "GITHUB_REPO_OWNER" "GITHUB_REPO_NAME"]}
+  :failure-modes ["Missing repo config" "Rate limits" "Invalid token" "Network timeouts/5xx"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "clj-http"
+            :notes "Reads PR lists and commits; token optional for public repos"}
+  :related {:actions [:cap/action/github-pulls]
+            :schema []}}
+
  {:id :cap/integration/rezultati
   :title "Rezultati (mobile)"
   :version "v1"
