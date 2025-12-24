@@ -5,6 +5,7 @@
             [darelwasl.http.routes.betting :as betting-routes]
             [darelwasl.http.routes.content :as content-routes]
             [darelwasl.http.routes.events :as events-routes]
+            [darelwasl.http.routes.files :as files-routes]
             [darelwasl.http.routes.land :as land-routes]
             [darelwasl.http.routes.registries :as registries-routes]
             [darelwasl.http.routes.tasks :as task-routes]
@@ -15,11 +16,13 @@
             [reitit.ring.middleware.exception :as exception]
             [reitit.ring.middleware.muuntaja :as muuntaja]
             [reitit.ring.middleware.parameters :as parameters]
+            [ring.middleware.multipart-params :as multipart]
             [ring.middleware.session :as session]))
 
 (def default-middleware
   [[common/wrap-logging]
    [session/wrap-session common/session-opts]
+   multipart/wrap-multipart-params
    parameters/parameters-middleware
    muuntaja/format-negotiate-middleware
    muuntaja/format-response-middleware
@@ -38,6 +41,7 @@
          (actions-routes/routes state)
          (betting-routes/routes state)
          (events-routes/routes state)
+         (files-routes/routes state)
          (task-routes/routes state)
          (content-routes/routes state)
          (registries-routes/routes state)

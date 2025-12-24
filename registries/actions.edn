@@ -847,6 +847,46 @@
             :views [:cap/view/terminal]}
   :tooling []}
 
+ {:id :cap/action/file-upload
+  :title "Upload File"
+  :version "v1"
+  :inputs {:file/upload :binary
+           :file/slug :string?}
+  :outputs {:file/id :uuid
+            :file/slug :string
+            :file/type :keyword}
+  :side-effects ["Store file on local disk" "Persist file metadata in Datomic"]
+  :adapter {:integration :cap/integration/local-file-store}
+  :audit {:records [:file/change]
+          :fields [:file/id :file/slug :file/type]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/file :cap/schema/user]
+            :views [:cap/view/file-library]}
+  :tooling []}
+
+ {:id :cap/action/file-delete
+  :title "Delete File"
+  :version "v1"
+  :inputs {:file/id :uuid}
+  :outputs {:file/id :uuid}
+  :side-effects ["Delete file from disk" "Remove metadata from Datomic"]
+  :adapter {:integration :cap/integration/local-file-store}
+  :audit {:records [:file/change]
+          :fields [:file/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:file/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling []}
+
  {:id :cap/action/terminal-session-create
   :title "Terminal Session Create"
   :version "v1"

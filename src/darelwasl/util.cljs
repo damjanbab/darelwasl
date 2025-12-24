@@ -83,6 +83,17 @@
   (let [n (or m2 0)]
     (-> n js/Math.round (.toLocaleString "en-US"))))
 
+(defn format-bytes
+  [bytes]
+  (let [n (double (or bytes 0))
+        units ["B" "KB" "MB" "GB"]
+        idx (loop [i 0 v n]
+              (if (and (< i (dec (count units))) (>= v 1024))
+                (recur (inc i) (/ v 1024))
+                i))
+        value (if (zero? n) 0 (/ n (js/Math.pow 1024 idx)))]
+    (str (.toFixed value (if (>= value 100) 0 1)) " " (nth units idx))))
+
 (defn parcel-title
   [{:parcel/keys [cadastral-id number cadastral-name address id]}]
   (or (when (or cadastral-id number)

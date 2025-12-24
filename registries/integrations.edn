@@ -52,10 +52,27 @@
                   :flags [:telegram/webhook-enabled? :telegram/notifications-enabled?]}
  :adapter {:library "Telegram Bot API (HTTPS)"
             :notes "Use HTTP client wrapper with stubs; no live Telegram calls in CI"}
-  :related {:actions [:cap/action/telegram-send-message
+ :related {:actions [:cap/action/telegram-send-message
                       :cap/action/telegram-set-webhook
                       :cap/action/telegram-handle-update]
             :schema [:cap/schema/user]}}
+
+ {:id :cap/integration/local-file-store
+  :title "Local file storage"
+  :version "v1"
+  :external-system "Local filesystem storage"
+  :contracts {:storage-dir "FILES_STORAGE_DIR (default data/files)"
+              :allowed-types ["image/*" "application/pdf"]}
+  :auth {:strategy :local-fs
+         :secrets "none"}
+  :failure-modes ["Missing storage directory" "Filesystem permission errors" "Invalid MIME types"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "java.io + ring multipart"
+            :notes "Stores uploads on disk and persists metadata in Datomic"}
+  :related {:actions [:cap/action/file-upload :cap/action/file-delete]
+            :schema [:cap/schema/file]}}
 
  {:id :cap/integration/rezultati
   :title "Rezultati (mobile)"
