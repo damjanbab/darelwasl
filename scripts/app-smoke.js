@@ -6,6 +6,8 @@ const path = require("path");
 const { request } = require("playwright");
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
+const HEALTH_ATTEMPTS = Number.parseInt(process.env.APP_SMOKE_HEALTH_ATTEMPTS || "120", 10);
+const HEALTH_INTERVAL_MS = Number.parseInt(process.env.APP_SMOKE_HEALTH_INTERVAL_MS || "750", 10);
 const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
 const LOG_DIR = process.env.TERMINAL_LOG_DIR || ARTIFACT_DIR;
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
@@ -15,13 +17,13 @@ const NETWORK_LOG_PATH = path.join(LOG_DIR, "app-network.log");
 
 async function waitForHealth(baseURL) {
   const api = await request.newContext({ baseURL });
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < HEALTH_ATTEMPTS; i++) {
     const resp = await api.get("/health").catch(() => null);
     if (resp && resp.ok()) {
       await api.dispose();
       return;
     }
-    await new Promise((r) => setTimeout(r, 750));
+    await new Promise((r) => setTimeout(r, HEALTH_INTERVAL_MS));
   }
   await api.dispose();
   throw new Error("Health check did not become ready");
