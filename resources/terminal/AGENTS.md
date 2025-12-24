@@ -19,6 +19,7 @@ You are Codex running in a per-session clone of this repo. Follow this protocol.
 - Git credentials are preconfigured in the session environment; do NOT ask for a token.
 - Make commits normally and run `git push -u origin <branch>`.
 - Create the PR by running `scripts/terminal-verify.sh` (uses `TERMINAL_API_URL` + `TERMINAL_SESSION_ID`).
+ - `AGENTS.md` is injected into the session and ignored by git; do not add it to commits.
 
 ## Cleanup policy
 - Once the PR exists on remote, the session can be completed (repo + datomic + chat transcript deleted; logs remain).

@@ -88,9 +88,28 @@
        (log/debug "Command stderr" {:args args :err err}))
      out))
 
-(defn- git-porcelain
+(def ^:private ignored-porcelain-files
+  #{"AGENTS.md"})
+
+(defn- porcelain-path
+  [line]
+  (when-let [[_ raw] (re-find #"^.. (.+)$" line)]
+    (let [path (-> raw
+                   (str/replace #"^\"|\"$" "")
+                   (str/replace #"\\\"" "\"")
+                   (str/replace #"^.+ -> " "")
+                   str/trim)]
+      path)))
+
+(defn- git-dirty?
   [repo-dir]
-  (str/trim (run! ["git" "status" "--porcelain"] {:dir repo-dir})))
+  (let [output (run! ["git" "status" "--porcelain"] {:dir repo-dir})
+        lines (remove str/blank? (str/split-lines output))
+        relevant (remove (fn [line]
+                           (when-let [path (porcelain-path line)]
+                             (contains? ignored-porcelain-files path)))
+                         lines)]
+    (boolean (seq relevant))))
 
 (defn- git-remote-url
   [repo-dir]
@@ -263,7 +282,12 @@
 (defn- write-agents!
   [repo-dir]
   (when-let [resource (io/resource agents-resource)]
-    (spit (io/file repo-dir "AGENTS.md") (slurp resource))))
+    (spit (io/file repo-dir "AGENTS.md") (slurp resource))
+    (let [exclude-file (io/file repo-dir ".git" "info" "exclude")]
+      (when (.exists exclude-file)
+        (let [current (slurp exclude-file)]
+          (when-not (str/includes? current "AGENTS.md")
+            (spit exclude-file (str current "\nAGENTS.md\n"))))))))
 
 (defn- start-app-window!
   [session]
@@ -526,7 +550,7 @@
   [store session]
   (let [repo-dir (:repo-dir session)
         branch (:branch session)
-        dirty? (not (str/blank? (git-porcelain repo-dir)))]
+        dirty? (git-dirty? repo-dir)]
     (when dirty?
       (throw (ex-info "Uncommitted changes present" {:branch branch})))
     (run! ["git" "push" "-u" "origin" branch] {:dir repo-dir})
