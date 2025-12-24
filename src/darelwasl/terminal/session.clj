@@ -381,6 +381,7 @@
                      "ALLOW_FIXTURE_SEED" "true"
                      "TERMINAL_SESSION_ID" id
                      "TERMINAL_LOG_DIR" (.getPath logs-dir)
+                     "TERMINAL_API_URL" (:base-url cfg)
                      "GIT_AUTHOR_NAME" git-name
                      "GIT_AUTHOR_EMAIL" git-email
                      "GIT_COMMITTER_NAME" git-name
