@@ -155,6 +155,16 @@
                         (:file/id body)
                         storage-dir)))
 
+(defn- file-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        file-id (:file/id body)]
+    (files/update-file! (conn state)
+                        file-id
+                        {:slug (:file/slug body)
+                         :ref (:file/ref body)}
+                        actor)))
+
 (defn- user-list
   [state _]
   (users/list-users (conn state)))
@@ -194,6 +204,7 @@
    :cap/action/betting-close betting-close
    :cap/action/betting-settle betting-settle
    :cap/action/file-upload file-upload
+   :cap/action/file-update file-update
    :cap/action/file-delete file-delete
    :cap/action/github-pulls github-pulls
    :cap/action/user-list user-list

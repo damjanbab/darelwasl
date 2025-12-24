@@ -120,7 +120,11 @@
 
 (defn- preview-panel
   []
-  (let [file @(rf/subscribe [:darelwasl.app/selected-file])]
+  (let [file @(rf/subscribe [:darelwasl.app/selected-file])
+        {:keys [detail]} @(rf/subscribe [:darelwasl.app/files])
+        {:keys [form status error]} detail
+        saving? (= status :saving)
+        success? (= status :success)]
     [:div.panel.files-detail
      [:div.section-header
       [:div
@@ -157,6 +161,31 @@
          [:div.meta-row
           [:span.meta-label "Uploaded"]
           [:span.meta-value (or (util/format-date (:file/created-at file)) "—")]]]
+        [:div.files-edit
+         [:div.field-group
+          [:label {:for "file-detail-reference"} "Reference"]
+          [ui/form-input {:id "file-detail-reference"
+                          :placeholder "file:hero-banner"
+                          :value (or (:reference form) "")
+                          :disabled saving?
+                          :on-change #(rf/dispatch [:darelwasl.app/set-file-detail-reference (.. % -target -value)])}]
+          [:div.meta "Use the file: prefix to set a reference."]]
+         [:div.field-group
+          [:label {:for "file-detail-slug"} "Slug"]
+          [ui/form-input {:id "file-detail-slug"
+                          :placeholder "hero-banner"
+                          :value (or (:slug form) "")
+                          :disabled saving?
+                          :on-change #(rf/dispatch [:darelwasl.app/set-file-detail-slug (.. % -target -value)])}]
+          [:div.meta "Reference updates automatically when you edit the slug."]]
+         (when error
+           [:div.form-error {:role "alert"} error])
+         (when success?
+           [:div.form-success {:aria-live "polite"} "Reference updated."])
+         [:div.button-row
+          [ui/button {:disabled saving?
+                      :on-click #(rf/dispatch [:darelwasl.app/update-file])}
+           (if saving? "Saving..." "Update")]]]
         [:div.button-row
          [:a.button.secondary {:href (:file/url file)
                                :target "_blank"

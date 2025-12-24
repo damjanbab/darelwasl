@@ -14,14 +14,11 @@
             [darelwasl.state :as state]
             [darelwasl.shared.block-types :as block-types]
             [darelwasl.ui.components :as ui]
-            [darelwasl.ui.shell :as shell]
             [darelwasl.util :as util]
             [re-frame.core :as rf]
             [reagent.dom.client :as rdom]))
 
-(def theme-storage-key state/theme-storage-key)
 (def nav-storage-key state/nav-storage-key)
-(def theme-options state/theme-options)
 (def status-options state/status-options)
 (def priority-options state/priority-options)
 (def task-status-options state/task-status-options)
@@ -36,7 +33,8 @@
 (def default-home-state state/default-home-state)
 (def default-tags-state state/default-tags-state)
 (def default-files-state state/default-files-state)
-(def default-theme-state state/default-theme-state)
+(def default-file-form state/default-file-form)
+(def default-file-detail state/default-file-detail)
 (def default-nav-state state/default-nav-state)
 (def land-enabled? state/land-enabled?)
 (def default-land-filters state/default-land-filters)
@@ -56,29 +54,6 @@
 (def default-db state/default-db)
 
 (def distinct-by util/distinct-by)
-
-(defn- theme-slug [theme-id]
-  (-> theme-id
-      name
-      (str/replace "/" "-")
-      (str/replace "_" "-")))
-
-(defn- resolve-theme-id
-  [value]
-  (let [candidate (cond
-                    (keyword? value) value
-                    (string? value) (-> value
-                                        (str/replace #"^:" "")
-                                        keyword)
-                    :else nil)
-        allowed (set (map :id theme-options))]
-    (if (contains? allowed candidate) candidate :theme/default)))
-
-(defn- apply-theme!
-  [theme-id]
-  (when-let [root (.-documentElement js/document)]
-    (.setAttribute root "data-theme" (theme-slug theme-id))
-    (set! (.-colorScheme (.-style root)) (if (= theme-id :theme/dark) "dark" "light"))))
 
 (def clean-tag-name util/clean-tag-name)
 (def tag-slug util/tag-slug)
@@ -130,6 +105,33 @@
   [s]
   (let [trimmed (str/trim (or s ""))]
     (when-not (str/blank? trimmed) trimmed)))
+
+(defn- file-reference-from-slug
+  [slug]
+  (when-let [s (present-str slug)]
+    (str "file:" s)))
+
+(defn- file-slug-from-reference
+  [reference]
+  (let [ref (present-str reference)]
+    (cond
+      (nil? ref) nil
+      (str/starts-with? ref "file:") (present-str (subs ref 5))
+      :else ref)))
+
+(defn- file->form
+  [file]
+  (if-not file
+    default-file-form
+    {:id (:file/id file)
+     :slug (or (:file/slug file) "")
+     :reference (or (:file/ref file) "")}))
+
+(defn- file-detail
+  [file]
+  {:form (file->form file)
+   :status :idle
+   :error nil})
 
 (defn- build-file-query
   [{:keys [query]}]
@@ -455,15 +457,6 @@
       include-password? (assoc :user/password (:password form)))))
 
 (rf/reg-fx
- ::apply-theme
- (fn [theme-id]
-   (when theme-id
-     (try
-       (.setItem js/localStorage theme-storage-key (name theme-id))
-       (catch :default _))
-     (apply-theme! theme-id))))
-
-(rf/reg-fx
  ::set-body-scroll-lock
  (fn [locked?]
    (let [class-list (.-classList js/document.body)]
@@ -482,20 +475,14 @@
 (rf/reg-event-fx
  ::initialize
  (fn [_ _]
-   (let [stored (try
-                 (.getItem js/localStorage theme-storage-key)
-                 (catch :default _ nil))
-        stored-route (try
+   (let [stored-route (try
                        (.getItem js/localStorage nav-storage-key)
                        (catch :default _ nil))
        allowed-routes (state/allowed-routes nil)
         last-route (let [cand (some-> stored-route (str/replace #"^:" "") keyword)]
-                     (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))
-        theme-id (resolve-theme-id stored)]
+                     (if (contains? allowed-routes cand) cand (:last-route default-nav-state)))]
     {:db (-> default-db
-             (assoc :nav (assoc default-nav-state :last-route last-route))
-             (assoc-in [:theme :id] theme-id))
-     ::apply-theme theme-id
+             (assoc :nav (assoc default-nav-state :last-route last-route)))
       :dispatch [::restore-session]})))
 
 (rf/reg-event-db
@@ -540,13 +527,6 @@
       :dispatch-n dispatches
       ::persist-last-route safe-route
       ::set-body-scroll-lock false})))
-
-(rf/reg-event-fx
- ::set-theme
- (fn [{:keys [db]} [_ theme-id]]
-   (let [tid (resolve-theme-id theme-id)]
-     {:db (assoc-in db [:theme :id] tid)
-      ::apply-theme tid})))
 
 (rf/reg-event-db
  ::update-login-field
@@ -838,10 +818,13 @@
    (let [files (mapv normalize-file (:files payload))
          selected (let [current (get-in db [:files :selected])]
                     (when (some #(= (:file/id %) current) files)
-                      current))]
+                      current))
+         next-selected (or selected (:file/id (first files)))
+         selected-file (some #(when (= (:file/id %) next-selected) %) files)]
      (-> db
          (assoc-in [:files :items] files)
-         (assoc-in [:files :selected] (or selected (:file/id (first files))))
+         (assoc-in [:files :selected] next-selected)
+         (assoc-in [:files :detail] (file-detail selected-file))
          (assoc-in [:files :status] (if (seq files) :ready :empty))
          (assoc-in [:files :error] nil)))))
 
@@ -1063,7 +1046,10 @@
 (rf/reg-event-db
  ::select-file
  (fn [db [_ file-id]]
-   (assoc-in db [:files :selected] file-id)))
+   (let [file (some #(when (= (:file/id %) file-id) %) (get-in db [:files :items]))]
+     (-> db
+         (assoc-in [:files :selected] file-id)
+         (assoc-in [:files :detail] (file-detail file))))))
 
 (rf/reg-event-db
  ::set-file-query
@@ -1081,6 +1067,26 @@
  ::set-upload-slug
  (fn [db [_ value]]
    (assoc-in db [:files :upload :slug] value)))
+
+(rf/reg-event-db
+ ::set-file-detail-slug
+ (fn [db [_ value]]
+   (let [slug (or value "")
+         reference (or (file-reference-from-slug slug) "")]
+     (-> db
+         (assoc-in [:files :detail :form :slug] slug)
+         (assoc-in [:files :detail :form :reference] reference)
+         (assoc-in [:files :detail :error] nil)))))
+
+(rf/reg-event-db
+ ::set-file-detail-reference
+ (fn [db [_ value]]
+   (let [reference (or value "")
+         slug (or (file-slug-from-reference reference) "")]
+     (-> db
+         (assoc-in [:files :detail :form :reference] reference)
+         (assoc-in [:files :detail :form :slug] slug)
+         (assoc-in [:files :detail :error] nil)))))
 
 (rf/reg-event-db
  ::clear-upload
@@ -1127,6 +1133,60 @@
      (-> db
          (assoc-in [:files :upload :status] :error)
          (assoc-in [:files :upload :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::update-file
+ (fn [{:keys [db]} _]
+   (let [{:keys [form]} (get-in db [:files :detail])
+         {:keys [id slug reference]} form
+         slug-val (present-str slug)
+         ref-val (present-str reference)]
+     (cond
+       (nil? id)
+       {:db (assoc-in db [:files :detail :error] "Select a file to update")}
+
+       (nil? slug-val)
+       {:db (assoc-in db [:files :detail :error] "Slug is required")}
+
+       :else
+       {:db (-> db
+                (assoc-in [:files :detail :status] :saving)
+                (assoc-in [:files :detail :error] nil))
+        ::fx/http {:url (str "/api/files/" id)
+                   :method "PUT"
+                   :body (cond-> {:file/slug slug-val}
+                           ref-val (assoc :file/ref ref-val))
+                   :on-success [::update-file-success]
+                   :on-error [::update-file-failure]}}))))
+
+(rf/reg-event-db
+ ::update-file-success
+ (fn [db [_ payload]]
+   (let [file (normalize-file (:file payload))
+         items (get-in db [:files :items])
+         updated? (some #(= (:file/id %) (:file/id file)) items)
+         next-items (if updated?
+                      (mapv (fn [f] (if (= (:file/id f) (:file/id file)) file f)) items)
+                      (conj (vec items) file))]
+     (-> db
+         (assoc-in [:files :items] next-items)
+         (assoc-in [:files :selected] (:file/id file))
+         (assoc-in [:files :detail] (assoc (file-detail file) :status :success))
+         (assoc-in [:files :status] (if (seq next-items) :ready :empty))
+         (assoc-in [:files :error] nil)))))
+
+(rf/reg-event-db
+ ::update-file-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to update file.")]
+     (-> db
+         (assoc-in [:files :detail :status] :error)
+         (assoc-in [:files :detail :error] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -3300,7 +3360,6 @@
 (rf/reg-sub ::users (fn [db _] (:users db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::control (fn [db _] (:control db)))
-(rf/reg-sub ::theme (fn [db _] (:theme db)))
 (rf/reg-sub ::home (fn [db _] (:home db)))
 (rf/reg-sub ::land (fn [db _] (:land db)))
 (rf/reg-sub ::betting (fn [db _] (:betting db)))
@@ -3350,9 +3409,7 @@
          :prs [prs-ui/prs-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])
-       [login/login-page])
-     [:div.theme-toggle-container
-      [shell/theme-toggle]]]))
+       [login/login-page])]))
 
 (defn mount-root []
   (when-let [root (.getElementById js/document "app")]
