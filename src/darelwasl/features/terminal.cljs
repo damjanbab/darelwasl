@@ -128,102 +128,107 @@
 
 (defn- terminal-chat
   []
-  (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
+  (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting? app-ready?]}
+        @(rf/subscribe [:darelwasl.app/terminal])]
     (if-not selected
       [:div.panel.terminal-empty
        [:div.state.empty
         [:strong "Select a session"]
         [:p "Choose a session to view output and send commands."]]]
-       (let [protocol (if (= "https:" (.-protocol js/window.location))
-                        "http:"
-                        (.-protocol js/window.location))
-             host (.-hostname js/window.location)
-             app-port (get-in selected [:ports :app])
-             site-port (get-in selected [:ports :site])
-             app-link (if app-port
-                        (str protocol "//" host ":" app-port "/")
+      (let [protocol (if (= "https:" (.-protocol js/window.location))
+                       "http:"
+                       (.-protocol js/window.location))
+            host (.-hostname js/window.location)
+            app-port (get-in selected [:ports :app])
+            site-port (get-in selected [:ports :site])
+            app-link (if app-port
+                       (str protocol "//" host ":" app-port "/")
+                       "#")
+            site-link (if site-port
+                        (str protocol "//" host ":" site-port "/")
                         "#")
-             site-link (if site-port
-                         (str protocol "//" host ":" site-port "/")
-                         "#")
-             type-label (session-type-label selected)
-             meta (str (status-label selected)
-                       (when type-label (str " · " type-label)))]
-          [:div.terminal-chat
-          [:div.terminal-chat__header
-           [:button.terminal-back
-            {:type "button"
-             :aria-label "Back to sessions"
-             :on-click #(rf/dispatch [:darelwasl.app/terminal-back])}
-            "←"]
-           [:div
-            [:div.terminal-title (:name selected)]
-            [:div.terminal-meta meta]]
-           [:div.terminal-actions
-            [:a.terminal-action-link.button.secondary
-             {:href app-link
-              :target "_blank"
-              :rel "noreferrer"
-              :aria-disabled (or (not app-port) (not app-ready?))
-              :on-click #(when (or (not app-port) (not app-ready?))
-                           (.preventDefault %))}
-             "Open app"]
-            (when site-port
-              [:a.terminal-action-link.button.secondary
-               {:href site-link
-                :target "_blank"
-                :rel "noreferrer"}
-               "Open site"])
-            (when-not (:running? selected)
-              [ui/button {:variant :secondary
-                          :disabled resuming?
-                          :on-click #(rf/dispatch [:darelwasl.app/terminal-resume-session])}
-               (if resuming? "Resuming..." "Resume session")])
-            (when (:running? selected)
-              [ui/button {:variant :secondary
-                          :disabled restarting?
-                          :on-click #(rf/dispatch [:darelwasl.app/terminal-restart-app])}
-               (if restarting? "Restarting..." "Restart app")])
-            [ui/button {:variant :danger
-                        :disabled interrupting?
-                        :on-click #(rf/dispatch [:darelwasl.app/terminal-interrupt-session])}
-             (if interrupting? "Stopping..." "Stop")]
-            [ui/button {:variant :secondary
-                        :disabled verifying?
-                        :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
-             (if verifying? "Creating PR..." "Verify & create PR")]]]
-          [:div.terminal-link-row
-           [:span.meta "App:"]
-           (cond
-             (not app-port) [:span.meta "Unavailable"]
-             (not app-ready?) [:span.meta "Starting..."]
-             :else [:a.terminal-link-text
-                    {:href app-link
-                     :target "_blank"
-                     :rel "noreferrer"}
-                    app-link])
+            type-label (session-type-label selected)
+            meta (str (status-label selected)
+                      (when type-label (str " · " type-label)))]
+        [:div.terminal-chat
+         [:div.terminal-chat__header
+          [:button.terminal-back
+           {:type "button"
+            :aria-label "Back to sessions"
+            :on-click #(rf/dispatch [:darelwasl.app/terminal-back])}
+           "←"]
+          [:div
+           [:div.terminal-title (:name selected)]
+           [:div.terminal-meta meta]]
+          [:div.terminal-actions
+           [:a.terminal-action-link.button.secondary
+            {:href app-link
+             :target "_blank"
+             :rel "noreferrer"
+             :aria-disabled (or (not app-port) (not app-ready?))
+             :on-click #(when (or (not app-port) (not app-ready?))
+                          (.preventDefault %))}
+            "Open app"]
            (when site-port
-             [:<>
-              [:span.meta "Site:"]
-              [:a.terminal-link-text
-               {:href site-link
-                :target "_blank"
-                :rel "noreferrer"}
-               site-link]])]
-          [terminal-output {:output output
-                            :error error}]
-          (when-let [actions (quick-actions output)]
-            actions)
-          [:div.terminal-input
-           [ui/form-input {:value input
-                           :placeholder "Send instructions..."
-                           :on-change #(rf/dispatch [:darelwasl.app/terminal-update-input (.. % -target -value)])
-                           :on-key-down #(when (= "Enter" (.-key %))
-                                           (.preventDefault %)
-                                           (rf/dispatch [:darelwasl.app/terminal-send-input]))}]
-           [ui/button {:disabled sending?
-                       :on-click #(rf/dispatch [:darelwasl.app/terminal-send-input])}
-            (if sending? "Sending..." "Send")]]]))))
+             [:a.terminal-action-link.button.secondary
+              {:href site-link
+               :target "_blank"
+               :rel "noreferrer"}
+              "Open site"])
+           (when-not (:running? selected)
+             [ui/button {:variant :secondary
+                         :disabled resuming?
+                         :on-click #(rf/dispatch [:darelwasl.app/terminal-resume-session])}
+              (if resuming? "Resuming..." "Resume session")])
+           (when (:running? selected)
+             [ui/button {:variant :secondary
+                         :disabled restarting?
+                         :on-click #(rf/dispatch [:darelwasl.app/terminal-restart-app])}
+              (if restarting? "Restarting..." "Restart app")])
+           [ui/button {:variant :danger
+                       :disabled interrupting?
+                       :on-click #(rf/dispatch [:darelwasl.app/terminal-interrupt-session])}
+            (if interrupting? "Stopping..." "Stop")]
+           [ui/button {:variant :secondary
+                       :disabled verifying?
+                       :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
+            (if verifying? "Creating PR..." "Verify & create PR")]
+           [ui/button {:variant :danger
+                       :on-click #(when (js/confirm "Complete this session? This deletes the repo, datomic, and chat log.")
+                                    (rf/dispatch [:darelwasl.app/terminal-complete-session]))}
+            "Complete"]]]
+         [:div.terminal-link-row
+          [:span.meta "App:"]
+          (cond
+            (not app-port) [:span.meta "Unavailable"]
+            (not app-ready?) [:span.meta "Starting..."]
+            :else [:a.terminal-link-text
+                   {:href app-link
+                    :target "_blank"
+                    :rel "noreferrer"}
+                   app-link])
+          (when site-port
+            [:<>
+             [:span.meta "Site:"]
+             [:a.terminal-link-text
+              {:href site-link
+               :target "_blank"
+               :rel "noreferrer"}
+              site-link]])]
+         [terminal-output {:output output
+                           :error error}]
+         (when-let [actions (quick-actions output)]
+           actions)
+         [:div.terminal-input
+          [ui/form-input {:value input
+                          :placeholder "Send instructions..."
+                          :on-change #(rf/dispatch [:darelwasl.app/terminal-update-input (.. % -target -value)])
+                          :on-key-down #(when (= "Enter" (.-key %))
+                                          (.preventDefault %)
+                                          (rf/dispatch [:darelwasl.app/terminal-send-input]))}]
+          [ui/button {:disabled sending?
+                      :on-click #(rf/dispatch [:darelwasl.app/terminal-send-input])}
+           (if sending? "Sending..." "Send")]]]))))
 
 (defn terminal-shell
   []

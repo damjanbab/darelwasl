@@ -2189,14 +2189,7 @@
                   (str "PR created: " pr-url)
                   "Verification complete and session closed.")]
      {:db (-> db
-              (assoc-in [:terminal :selected] nil)
-              (assoc-in [:terminal :polling?] false)
-              (assoc-in [:terminal :output] "")
-              (assoc-in [:terminal :cursor] 0)
-              (assoc-in [:terminal :app-ready?] false)
               (assoc-in [:terminal :verifying?] false)
-              (assoc-in [:terminal :resuming?] false)
-              (assoc-in [:terminal :restarting?] false)
               (assoc-in [:terminal :notice] notice))
       :dispatch [::fetch-terminal-sessions]})))
 
