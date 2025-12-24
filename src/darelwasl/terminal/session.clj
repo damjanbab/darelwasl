@@ -26,6 +26,11 @@
    [dir data]
    (spit (io/file dir "manifest.edn") (pr-str data)))
 
+(defn- present-env
+  [value]
+  (when (and (string? value) (not (str/blank? value)))
+    value))
+
  (defn- update-manifest!
    [dir f]
    (let [file (io/file dir "manifest.edn")
@@ -119,8 +124,12 @@
 
 (defn- github-auth-token
   [repo-dir]
-  (when-let [creds (credential-fill repo-dir "github.com")]
-    (or (:password creds) (:oauth-token creds))))
+  (or (present-env (System/getenv "TERMINAL_GITHUB_TOKEN"))
+      (present-env (System/getenv "GITHUB_TOKEN"))
+      (present-env (System/getenv "GH_TOKEN"))
+      (present-env (System/getenv "DARELWASL_GITHUB_TOKEN"))
+      (when-let [creds (credential-fill repo-dir "github.com")]
+        (or (:password creds) (:oauth-token creds)))))
 
 (defn- github-request
   [{:keys [token method url body]}]
@@ -175,6 +184,17 @@
    (let [lines (for [[k v] env-map]
                  (str k "=" v))]
      (spit file (str/join "\n" lines))))
+
+(defn- write-askpass!
+  [file token]
+  (let [script (str "#!/usr/bin/env bash\n"
+                    "case \"$1\" in\n"
+                    "  *Username*) echo \"x-access-token\" ;;\n"
+                    "  *Password*) echo \"" token "\" ;;\n"
+                    "  *) echo \"\" ;;\n"
+                    "esac\n")]
+    (spit file script)
+    (.setExecutable (io/file file) true)))
 
 (defn- append-chat!
   [chat-file text]
@@ -294,18 +314,33 @@
                (update-log-closed! logs-dir id)
                (log/info "Deleted orphaned session dir" {:id id}))))))))
 
-(defn create-session!
-  [store cfg {:keys [name]}]
-  (let [id (str (UUID/randomUUID))
-        session-name (or (some-> name str/trim not-empty)
-                         (str "session-" (subs id 0 8)))
+ (defn create-session!
+   [store cfg {:keys [name]}]
+   (let [id (str (UUID/randomUUID))
+         session-name (or (some-> name str/trim not-empty)
+                          (str "session-" (subs id 0 8)))
          env (System/getenv)
+         git-name (or (present-env (get env "TERMINAL_GIT_NAME"))
+                      (present-env (get env "GIT_AUTHOR_NAME"))
+                      "darelwasl-bot")
+         git-email (or (present-env (get env "TERMINAL_GIT_EMAIL"))
+                       (present-env (get env "GIT_AUTHOR_EMAIL"))
+                       "bot@darelwasl.local")
          openai-key (or (get env "TERMINAL_OPENAI_API_KEY")
                         (get env "OPENAI_API_KEY"))
-         github-token (or (get env "GITHUB_TOKEN")
-                          (get env "GH_TOKEN")
-                          (get env "DARELWASL_GITHUB_TOKEN")
+         github-token (or (present-env (get env "TERMINAL_GITHUB_TOKEN"))
+                          (present-env (get env "GITHUB_TOKEN"))
+                          (present-env (get env "GH_TOKEN"))
+                          (present-env (get env "DARELWASL_GITHUB_TOKEN"))
                           (read-github-token))
+         telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
+         telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
+         telegram-dev-base-url (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL"))
+         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
+         telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
+         telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
+         telegram-dev-timeout (present-env (get env "TELEGRAM_DEV_HTTP_TIMEOUT_MS"))
+         telegram-dev-ttl (present-env (get env "TELEGRAM_DEV_LINK_TOKEN_TTL_MS"))
          work-root (ensure-dir! (:work-dir cfg))
          logs-root (ensure-dir! (:logs-dir cfg))
          session-root (io/file work-root id)
@@ -313,6 +348,7 @@
          datomic-dir (io/file session-root "datomic")
          chat-file (io/file session-root "chat.log")
          env-file (io/file session-root "session.env")
+         askpass-file (io/file session-root "git-askpass.sh")
          logs-dir (io/file logs-root id)
          ports (allocate-ports cfg (store/list-sessions store))
          auto-start-app? (true? (:auto-start-app? cfg))
@@ -332,20 +368,41 @@
                                 :ports ports})
      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
+     (run! ["git" "config" "user.name" git-name] {:dir repo-dir})
+     (run! ["git" "config" "user.email" git-email] {:dir repo-dir})
      (write-agents! repo-dir)
-     (write-env! env-file (cond-> {"APP_HOST" "0.0.0.0"
-                                   "APP_PORT" (:app ports)
-                                   "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
-                                   "DATOMIC_SYSTEM" "darelwasl"
-                                   "DATOMIC_DB_NAME" "darelwasl"
-                                   "ALLOW_FIXTURE_SEED" "true"
-                                   "TERMINAL_SESSION_ID" id
-                                   "TERMINAL_LOG_DIR" (.getPath logs-dir)}
-                            site-enabled? (assoc "SITE_HOST" "0.0.0.0"
-                                                 "SITE_PORT" (:site ports))
-                            openai-key (assoc "OPENAI_API_KEY" openai-key)
-                            github-token (assoc "GITHUB_TOKEN" github-token
-                                                "GH_TOKEN" github-token)))
+     (when github-token
+       (write-askpass! askpass-file github-token))
+     (let [base-env {"APP_HOST" "0.0.0.0"
+                     "APP_PORT" (:app ports)
+                     "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
+                     "DATOMIC_SYSTEM" "darelwasl"
+                     "DATOMIC_DB_NAME" "darelwasl"
+                     "ALLOW_FIXTURE_SEED" "true"
+                     "TERMINAL_SESSION_ID" id
+                     "TERMINAL_LOG_DIR" (.getPath logs-dir)
+                     "GIT_AUTHOR_NAME" git-name
+                     "GIT_AUTHOR_EMAIL" git-email
+                     "GIT_COMMITTER_NAME" git-name
+                     "GIT_COMMITTER_EMAIL" git-email}
+           base-env (cond-> base-env
+                      site-enabled? (assoc "SITE_HOST" "0.0.0.0"
+                                           "SITE_PORT" (:site ports))
+                      openai-key (assoc "OPENAI_API_KEY" openai-key)
+                      github-token (assoc "GITHUB_TOKEN" github-token
+                                          "GH_TOKEN" github-token
+                                          "GIT_ASKPASS" (.getPath askpass-file)
+                                          "GIT_TERMINAL_PROMPT" "0"))
+           telegram-env (cond-> {}
+                          telegram-dev-token (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
+                                                    "TELEGRAM_WEBHOOK_ENABLED" (or telegram-dev-webhook-enabled "false")
+                                                    "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
+                                                    "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
+                          telegram-dev-secret (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
+                          telegram-dev-base-url (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
+                          telegram-dev-timeout (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
+                          telegram-dev-ttl (assoc "TELEGRAM_LINK_TOKEN_TTL_MS" telegram-dev-ttl))]
+       (write-env! env-file (merge base-env telegram-env)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
      (when auto-start-app?

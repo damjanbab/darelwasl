@@ -146,9 +146,15 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_REPO_URL` (repo clone for sessions)
   - `TERMINAL_CODEX_CMD` (default `codex`)
   - `TERMINAL_TMUX_BIN` (optional full path to tmux binary)
+  - `TERMINAL_GIT_NAME`, `TERMINAL_GIT_EMAIL` (git identity for session commits)
+  - `TERMINAL_GITHUB_TOKEN` (token used for git push + PR creation inside sessions)
   - `TERMINAL_PORT_RANGE_START`, `TERMINAL_PORT_RANGE_END` (per-session app/site ports)
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
+  - `TELEGRAM_DEV_BOT_TOKEN` (use dev bot for terminal sessions)
+  - `TELEGRAM_DEV_WEBHOOK_SECRET`, `TELEGRAM_DEV_WEBHOOK_BASE_URL` (optional dev webhook config)
+  - `TELEGRAM_DEV_WEBHOOK_ENABLED`, `TELEGRAM_DEV_COMMANDS_ENABLED`, `TELEGRAM_DEV_NOTIFICATIONS_ENABLED` (optional dev flags)
+  - `TELEGRAM_DEV_HTTP_TIMEOUT_MS`, `TELEGRAM_DEV_LINK_TOKEN_TTL_MS` (optional dev overrides)
 
 ## Auth Sessions
 - Session cookies are backed by an on-disk store so restarts do not log users out.
