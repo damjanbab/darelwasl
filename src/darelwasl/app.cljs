@@ -335,6 +335,11 @@
         (update :fact/adapter kw)
         (update :task/provenance kw-provenance))))
 
+(defn- normalize-file
+  [file]
+  (-> file
+      (update :file/type kw)))
+
 (defn- task->form
   [task]
   (merge default-task-form
@@ -721,7 +726,7 @@
 (rf/reg-event-db
  ::fetch-files-success
  (fn [db [_ payload]]
-   (let [files (vec (:files payload))
+   (let [files (mapv normalize-file (:files payload))
          selected (let [current (get-in db [:files :selected])]
                     (when (some #(= (:file/id %) current) files)
                       current))]
