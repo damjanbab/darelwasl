@@ -296,6 +296,19 @@
         (str/replace "\u001B(B" "")
         (str/trimr))))
 
+(defn- codex-idle?
+  [session]
+  (let [raw (tmux/capture-pane (:tmux session))
+        text (sanitize-output raw)
+        last-line (->> (str/split-lines text)
+                       reverse
+                       (drop-while str/blank?)
+                       first)
+        prompt? (boolean (and last-line (re-find #"^[›>].*" last-line)))
+        context? (str/includes? (str/lower-case text) "100% context left")
+        ready? (str/includes? (str/lower-case text) "to get started")]
+    (or prompt? context? ready?)))
+
 (defn- read-output
   [file cursor max-bytes]
   (let [f (io/file file)]
@@ -599,7 +612,8 @@
   [store session]
   (when-not (tmux/running? (:tmux session))
     (throw (ex-info "Session not running" {:id (:id session)})))
-  (tmux/send-keys! (:tmux session) ["C-c"])
+  (when-not (codex-idle? session)
+    (tmux/send-keys! (:tmux session) ["C-c"]))
   (let [now (now-ms)
         next-session (assoc session
                             :updated-at now

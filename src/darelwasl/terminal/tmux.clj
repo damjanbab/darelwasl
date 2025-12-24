@@ -3,6 +3,11 @@
              [clojure.string :as str]
              [clojure.tools.logging :as log]))
 
+(def ^:private codex-window "codex")
+
+(declare window-names)
+(declare target)
+
 (defn- tmux-bin
   []
   (let [env (System/getenv)
@@ -35,7 +40,7 @@
 (defn start!
   [session repo-dir env-file cmd]
   (let [shell-cmd (format "set -a; source %s; set +a; %s" env-file cmd)]
-    (run-cmd ["new-session" "-d" "-x" "200" "-y" "60" "-s" session "-c" repo-dir "bash" "-lc" shell-cmd])
+    (run-cmd ["new-session" "-d" "-x" "200" "-y" "60" "-s" session "-n" codex-window "-c" repo-dir "bash" "-lc" shell-cmd])
     (run-cmd ["set-option" "-t" session "history-limit" "20000"])))
 
 (defn new-window!
@@ -43,22 +48,22 @@
   (let [shell-cmd (format "set -a; source %s; set +a; %s" env-file cmd)]
     (run-cmd ["new-window" "-d" "-t" session "-n" name "-c" repo-dir "bash" "-lc" shell-cmd])))
 
- (defn pipe-output!
-   [session log-file]
-   (run-cmd ["pipe-pane" "-o" "-t" session (str "cat >> " log-file)]))
+(defn pipe-output!
+  [session log-file]
+  (run-cmd ["pipe-pane" "-o" "-t" (target session) (str "cat >> " log-file)]))
 
 (defn send!
   [session text]
-  (run-cmd ["send-keys" "-t" session "--" text "Enter"]))
+  (run-cmd ["send-keys" "-t" (target session) "--" text "Enter"]))
 
 (defn send-keys!
   [session keys]
   (let [keys (mapv str keys)]
-    (run-cmd (into ["send-keys" "-t" session "--"] keys))))
+    (run-cmd (into ["send-keys" "-t" (target session) "--"] keys))))
 
 (defn capture-pane
   [session]
-  (run-cmd ["capture-pane" "-p" "-J" "-t" session "-S" "-32768"]))
+  (run-cmd ["capture-pane" "-p" "-J" "-t" (target session) "-S" "-32768"]))
 
 (defn window-names
   [session]
@@ -69,6 +74,12 @@
            (remove str/blank?)
            set))
     (catch Exception _ #{})))
+
+(defn- target
+  [session]
+  (if (contains? (window-names session) codex-window)
+    (str session ":" codex-window)
+    session))
 
 (defn kill-window!
   [session name]
