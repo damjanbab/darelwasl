@@ -17,9 +17,91 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/user]
+ :related {:schema [:cap/schema/user]
             :views [:cap/view/login]}
   :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/user-list
+  :title "List Users"
+  :version "v1"
+  :inputs {}
+  :outputs {:users :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:user/read]
+          :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/user-management]}
+  :tooling []}
+
+ {:id :cap/action/user-create
+  :title "Create User"
+  :version "v1"
+  :inputs {:user/username :string
+           :user/password :string
+           :user/name :string?
+           :user/roles [:set :keyword]}
+  :outputs {:user/id :uuid}
+  :side-effects ["Persist user"]
+  :adapter {:integration :local/db}
+  :audit {:records [:user/change]
+          :fields [:user/id :user/username]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:user/username]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/user-management]}
+  :tooling []}
+
+ {:id :cap/action/user-update
+  :title "Update User"
+  :version "v1"
+  :inputs {:user/id :uuid
+           :user/username :string?
+           :user/password :string?
+           :user/name :string?
+           :user/roles [:set :keyword]}
+  :outputs {:user/id :uuid}
+  :side-effects ["Persist user updates"]
+  :adapter {:integration :local/db}
+  :audit {:records [:user/change]
+          :fields [:user/id :user/username]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:user/id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/user-management]}
+  :tooling []}
+
+ {:id :cap/action/user-delete
+  :title "Delete User"
+  :version "v1"
+  :inputs {:user/id :uuid}
+  :outputs {:user/id :uuid}
+  :side-effects ["Remove user"]
+  :adapter {:integration :local/db}
+  :audit {:records [:user/change]
+          :fields [:user/id :user/username]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:user/id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/user-management]}
+  :tooling []}
 
  {:id :cap/action/task-create
   :title "Create Task"

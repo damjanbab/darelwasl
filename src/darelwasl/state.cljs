@@ -286,6 +286,26 @@
    :app-ready? false
    :list-polling? false})
 
+(def default-user-form
+  {:id nil
+   :username ""
+   :name ""
+   :password ""
+   :roles #{}})
+
+(def default-user-detail
+  {:form default-user-form
+   :mode :create
+   :status :idle
+   :error nil})
+
+(def default-users-state
+  {:items []
+   :status :idle
+   :error nil
+   :selected nil
+   :detail default-user-detail})
+
 (def default-db
   {:route :login
    :session nil
@@ -300,6 +320,7 @@
    :land default-land-state
    :betting default-betting-state
    :terminal default-terminal-state
+   :users default-users-state
    :control default-control-state})
 
 (def base-app-options
@@ -321,6 +342,9 @@
            {:id :prs
             :label "PRs"
             :desc "Repo overview"}
+           {:id :users
+            :label "Users"
+            :desc "Accounts + roles"}
            {:id :control-panel
             :label "Control panel"
             :desc "Website content"}]
@@ -379,6 +403,17 @@
                           (cond
                             (keyword? r) r
                             (string? r) (-> r (str/replace #"^:" "") keyword)
+                    :else r)))
+                   set)]
+    (contains? roles :role/admin)))
+
+(defn users-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
                             :else r)))
                    set)]
     (contains? roles :role/admin)))
@@ -395,6 +430,8 @@
     (remove #(= (:id %) :terminal))
     (not (prs-enabled? session))
     (remove #(= (:id %) :prs))
+    (not (users-enabled? session))
+    (remove #(= (:id %) :users))
     (not (control-enabled? session))
     (remove #(= (:id %) :control-panel))))
 

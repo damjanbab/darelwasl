@@ -8,6 +8,7 @@
             [darelwasl.features.prs :as prs-ui]
             [darelwasl.features.control-panel :as control-panel]
             [darelwasl.features.terminal :as terminal-ui]
+            [darelwasl.features.users :as users-ui]
             [darelwasl.features.tasks :as tasks-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
@@ -45,6 +46,9 @@
 (def default-betting-odds state/default-betting-odds)
 (def default-betting-bets state/default-betting-bets)
 (def default-terminal-state state/default-terminal-state)
+(def default-user-form state/default-user-form)
+(def default-user-detail state/default-user-detail)
+(def default-users-state state/default-users-state)
 (def default-page-form state/default-page-form)
 (def default-block-form state/default-block-form)
 (def default-tag-form state/default-tag-form)
@@ -395,6 +399,61 @@
              :tag-entry ""
              :form (assoc default-task-form :assignee (default-assignee-id assignees session)))))
 
+(defn- normalize-user
+  [user]
+  (-> user
+      (update :user/roles (fn [roles]
+                            (->> roles
+                                 (map kw)
+                                 vec)))))
+
+(defn- user->form
+  [user]
+  (merge default-user-form
+         {:id (:user/id user)
+          :username (or (:user/username user) "")
+          :name (or (:user/name user) "")
+          :password ""
+          :roles (set (:user/roles user))}))
+
+(defn- user-detail
+  [user]
+  (-> default-user-detail
+      (assoc :mode :edit
+             :status :idle
+             :error nil
+             :form (user->form user))))
+
+(defn- blank-user-detail
+  []
+  (-> default-user-detail
+      (assoc :mode :create
+             :status :idle
+             :error nil
+             :form default-user-form)))
+
+(defn- validate-user-form
+  [form mode]
+  (let [username (str/trim (or (:username form) ""))
+        password (:password form)]
+    (cond
+      (str/blank? username) "Username is required"
+      (and (= mode :create) (str/blank? (str password))) "Password is required"
+      :else nil)))
+
+(defn- user-form->payload
+  [form {:keys [include-password?]}]
+  (let [username (str/trim (or (:username form) ""))
+        name (str/trim (or (:name form) ""))
+        roles (->> (or (:roles form) #{})
+                   (map kw)
+                   (sort-by name)
+                   vec)]
+    (cond-> {:user/username username
+             :user/name (when (not (str/blank? name)) name)
+             :user/roles roles}
+      include-password? (assoc :user/password (:password form)))))
+
 (rf/reg-fx
  ::apply-theme
  (fn [theme-id]
@@ -468,6 +527,7 @@
                       (= safe-route :home) (conj [::fetch-home])
                       (= safe-route :tasks) (conj [::fetch-tasks])
                       (= safe-route :files) (conj [::fetch-files])
+                      (= safe-route :users) (conj [::fetch-users])
                       (= safe-route :prs) (conj [::fetch-prs])
                       (= safe-route :land) (conj [::fetch-land])
                       (= safe-route :betting) (conj [::fetch-betting-events])
@@ -544,6 +604,7 @@
                  (assoc :prs default-prs-state)
                  (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
+                 (assoc :users default-users-state)
                  (assoc :terminal default-terminal-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
@@ -553,6 +614,7 @@
                               [::fetch-home]
                               [::fetch-tasks]]
                        (= preferred-route :files) (conj [::fetch-files])
+                       (= preferred-route :users) (conj [::fetch-users])
                        (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
                        (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
@@ -603,6 +665,7 @@
                    :files default-files-state
                    :prs default-prs-state
                    :betting default-betting-state
+                   :users default-users-state
                    :control default-control-state
                    :tags default-tags-state
                    :home default-home-state)
@@ -825,6 +888,174 @@
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load pull requests.")]
      (-> (state/mark-error db [:prs] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+;; Users
+(rf/reg-event-fx
+ ::fetch-users
+ (fn [{:keys [db]} _]
+   {:db (state/mark-loading db [:users])
+    ::fx/http {:url "/api/users"
+               :method "GET"
+               :on-success [::fetch-users-success]
+               :on-error [::fetch-users-failure]}}))
+
+(rf/reg-event-db
+ ::fetch-users-success
+ (fn [db [_ payload]]
+   (let [users (mapv normalize-user (:users payload))
+         selected (let [current (get-in db [:users :selected])]
+                    (when (some #(= (:user/id %) current) users)
+                      current))
+         detail (get-in db [:users :detail])
+         detail (if (and (= :edit (:mode detail)) (nil? selected))
+                  (blank-user-detail)
+                  detail)]
+     (-> db
+         (assoc-in [:users :items] users)
+         (assoc-in [:users :selected] selected)
+         (assoc-in [:users :detail] detail)
+         (assoc-in [:users :status] (if (seq users) :ready :empty))
+         (assoc-in [:users :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-users-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load users.")]
+     (-> (state/mark-error db [:users] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::select-user
+ (fn [db [_ user-id]]
+   (let [users (get-in db [:users :items])
+         selected (some #(when (= (:user/id %) user-id) %) users)]
+     (cond-> db
+       selected (assoc-in [:users :selected] user-id)
+       selected (assoc-in [:users :detail] (user-detail selected))))))
+
+(rf/reg-event-db
+ ::new-user
+ (fn [db _]
+   (-> db
+       (assoc-in [:users :selected] nil)
+       (assoc-in [:users :detail] (blank-user-detail)))))
+
+(rf/reg-event-db
+ ::set-user-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:users :detail :form field] value)
+       (assoc-in [:users :detail :status] :idle)
+       (assoc-in [:users :detail :error] nil))))
+
+(rf/reg-event-db
+ ::toggle-user-role
+ (fn [db [_ role]]
+   (let [current (or (get-in db [:users :detail :form :roles]) #{})
+         next (if (contains? current role) (disj current role) (conj current role))]
+     (-> db
+         (assoc-in [:users :detail :form :roles] next)
+         (assoc-in [:users :detail :status] :idle)
+         (assoc-in [:users :detail :error] nil)))))
+
+(rf/reg-event-fx
+ ::save-user
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:users :detail])
+         id (:id form)
+         validation (validate-user-form form mode)
+         include-password? (not (str/blank? (str (:password form))))
+         body (user-form->payload form {:include-password? include-password?})]
+     (cond
+       validation {:db (-> db
+                           (assoc-in [:users :detail :status] :error)
+                           (assoc-in [:users :detail :error] validation))}
+       (= mode :create)
+       {:db (-> db
+                (assoc-in [:users :detail :status] :saving)
+                (assoc-in [:users :detail :error] nil))
+        ::fx/http {:url "/api/users"
+                   :method "POST"
+                   :body body
+                   :on-success [::user-save-success]
+                   :on-error [::user-operation-failure]}}
+       :else
+       {:db (-> db
+                (assoc-in [:users :detail :status] :saving)
+                (assoc-in [:users :detail :error] nil))
+        ::fx/http {:url (str "/api/users/" id)
+                   :method "PUT"
+                   :body body
+                   :on-success [::user-save-success]
+                   :on-error [::user-operation-failure]}}))))
+
+(rf/reg-event-fx
+ ::user-save-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [user (normalize-user (:user payload))
+         uid (:user/id user)
+         items (get-in db [:users :items])
+         exists? (some #(= (:user/id %) uid) items)
+         next-items (->> (if exists?
+                           (mapv (fn [u] (if (= (:user/id u) uid) user u)) items)
+                           (conj items user))
+                         (sort-by (comp str/lower-case str :user/username))
+                         vec)
+         detail (-> (user-detail user)
+                    (assoc :status :success
+                           :error nil))]
+     {:db (-> db
+              (assoc-in [:users :items] next-items)
+              (assoc-in [:users :selected] uid)
+              (assoc-in [:users :detail] detail)
+              (assoc-in [:users :status] (if (seq next-items) :ready :empty))
+              (assoc-in [:users :error] nil))})))
+
+(rf/reg-event-fx
+ ::delete-user
+ (fn [{:keys [db]} _]
+   (let [id (get-in db [:users :detail :form :id])]
+     (if (nil? id)
+       {:db (assoc-in db [:users :detail :error] "Select a user to delete")}
+       {:db (-> db
+                (assoc-in [:users :detail :status] :deleting)
+                (assoc-in [:users :detail :error] nil))
+        ::fx/http {:url (str "/api/users/" id)
+                   :method "DELETE"
+                   :on-success [::user-delete-success id]
+                   :on-error [::user-operation-failure]}}))))
+
+(rf/reg-event-fx
+ ::user-delete-success
+ (fn [{:keys [db]} [_ user-id _payload]]
+   (let [remaining (->> (get-in db [:users :items])
+                        (remove #(= (:user/id %) user-id))
+                        vec)
+         next-user (first remaining)
+         next-detail (if next-user (user-detail next-user) (blank-user-detail))]
+     {:db (-> db
+              (assoc-in [:users :items] remaining)
+              (assoc-in [:users :selected] (:user/id next-user))
+              (assoc-in [:users :detail] next-detail)
+              (assoc-in [:users :status] (if (seq remaining) :ready :empty))
+              (assoc-in [:users :error] nil))})))
+
+(rf/reg-event-db
+ ::user-operation-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "User action failed.")]
+     (-> db
+         (assoc-in [:users :detail :status] :error)
+         (assoc-in [:users :detail :error] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -3066,6 +3297,7 @@
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
 (rf/reg-sub ::files (fn [db _] (:files db)))
 (rf/reg-sub ::prs (fn [db _] (:prs db)))
+(rf/reg-sub ::users (fn [db _] (:users db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::control (fn [db _] (:control db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
@@ -3092,6 +3324,12 @@
    (let [selected (get-in db [:prs :selected])
          items (get-in db [:prs :items])]
     (some #(when (= (:pr/number %) selected) %) items))))
+(rf/reg-sub
+ ::selected-user
+ (fn [db _]
+   (let [selected (get-in db [:users :selected])
+         items (get-in db [:users :items])]
+     (some #(when (= (:user/id %) selected) %) items))))
 (rf/reg-sub ::task-detail (fn [db _] (get-in db [:tasks :detail])))
 
 
@@ -3108,6 +3346,7 @@
          :terminal [terminal-ui/terminal-shell]
          :control-panel [control-panel/control-panel-shell]
          :files [files-ui/file-library-shell]
+         :users [users-ui/users-shell]
          :prs [prs-ui/prs-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])

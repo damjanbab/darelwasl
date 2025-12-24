@@ -66,8 +66,13 @@
  :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:actions [:cap/action/auth-login]
-            :views [:cap/view/login]}}
+  :related {:actions [:cap/action/auth-login
+                      :cap/action/user-list
+                      :cap/action/user-create
+                      :cap/action/user-update
+                      :cap/action/user-delete]
+            :views [:cap/view/login
+                    :cap/view/user-management]}}
 
 {:id :cap/schema/outbox
   :title "Outbox"
