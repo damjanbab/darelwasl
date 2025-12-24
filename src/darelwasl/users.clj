@@ -1,5 +1,6 @@
 (ns darelwasl.users
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.validation :as v])
@@ -146,7 +147,7 @@
                                            :user/name name
                                            :user/roles roles})})
                   (catch Exception e
-                    (error 500 "Unable to create user" {:exception (.getMessage e)})))))))))
+                    (error 500 "Unable to create user" {:exception (.getMessage e)}))))))))))
 
 (defn update-user!
   [conn user-id params actor]
@@ -187,12 +188,13 @@
                     existing-roles (set (:user/roles current))
                     updates (if (nil? roles)
                               updates
-                              (let [retracts (mapv (fn [role]
+                              (let [next-roles (set (or roles #{}))
+                                    retracts (mapv (fn [role]
                                                      [:db/retract [:user/id uid] :user/roles role])
-                                                   existing-roles)
+                                                   (set/difference existing-roles next-roles))
                                     adds (mapv (fn [role]
                                                  [:db/add [:user/id uid] :user/roles role])
-                                               (or roles #{}))]
+                                               (set/difference next-roles existing-roles))]
                                 (into (vec updates) (concat retracts adds))))]
                 (if (empty? updates)
                   (error 400 "No updates provided")
@@ -237,5 +239,4 @@
                 {:user/id uid
                  :deleted true}
                 (catch Exception e
-                  (error 500 "Unable to delete user" {:exception (.getMessage e)}))))))))
-  ))
+                  (error 500 "Unable to delete user" {:exception (.getMessage e)})))))))))
