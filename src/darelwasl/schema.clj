@@ -78,6 +78,7 @@
                    [:faq/id :entity.type/faq]
                    [:value/id :entity.type/value]
                    [:team.member/id :entity.type/team-member]
+                   [:file/id :entity.type/file]
                    [:betting.event/id :entity.type/betting-event]
                    [:betting.bookmaker/id :entity.type/betting-bookmaker]
                    [:betting.quote/id :entity.type/betting-quote]

@@ -84,6 +84,23 @@
    :status :idle
    :error nil})
 
+(def default-files-filters
+  {:query ""})
+
+(def default-files-upload
+  {:file nil
+   :slug ""
+   :status :idle
+   :error nil})
+
+(def default-files-state
+  {:items []
+   :status :idle
+   :error nil
+   :filters default-files-filters
+   :selected nil
+   :upload default-files-upload})
+
 (def default-content-list-state
   {:items []
    :status :idle
@@ -269,6 +286,7 @@
    :home default-home-state
    :login default-login-state
    :tasks default-task-state
+   :files default-files-state
    :land default-land-state
    :betting default-betting-state
    :terminal default-terminal-state
@@ -281,6 +299,9 @@
            {:id :tasks
             :label "Tasks"
             :desc "Workboard"}
+           {:id :files
+            :label "Library"
+            :desc "Images + PDFs"}
            {:id :betting
             :label "Betting CLV"
             :desc "Browse odds and log bets"}
@@ -316,6 +337,17 @@
                    set)]
     (contains? roles :role/betting-engineer)))
 
+(defn file-library-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (boolean (some #{:role/file-library :role/admin} roles))))
+
 (defn terminal-enabled?
   [session]
   (let [roles (->> (get-in session [:user :roles])
@@ -333,6 +365,8 @@
   (cond->> base-app-options
     (not (betting-enabled? session))
     (remove #(= (:id %) :betting))
+    (not (file-library-enabled? session))
+    (remove #(= (:id %) :files))
     (not (terminal-enabled? session))
     (remove #(= (:id %) :terminal))
     (not (control-enabled? session))

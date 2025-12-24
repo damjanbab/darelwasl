@@ -2348,3 +2348,120 @@ button.list-row .meta {
     grid-template-columns: 1fr;
   }
 }
+
+.files-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-4);
+  padding: var(--spacing-scale-5);
+  width: 100%;
+}
+
+.files-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(520px, 1fr);
+  gap: var(--spacing-scale-4);
+  align-items: start;
+}
+
+.files-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.files-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-scale-3);
+}
+
+.files-search {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-scale-3);
+  flex-wrap: wrap;
+  margin: var(--spacing-scale-3) 0;
+}
+
+.files-search .controls {
+  display: inline-flex;
+  gap: var(--spacing-scale-2);
+  flex-wrap: wrap;
+}
+
+.files-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-2);
+}
+
+.files-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.files-preview {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--colors-border);
+  background: var(--colors-surface-muted);
+  padding: var(--spacing-scale-3);
+  min-height: 220px;
+}
+
+.files-preview img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  display: block;
+}
+
+.files-preview iframe {
+  width: 100%;
+  height: 420px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--colors-surface);
+}
+
+.files-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-2);
+}
+
+.files-meta .meta-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) 1fr;
+  gap: var(--spacing-scale-2);
+  align-items: center;
+}
+
+.files-meta .meta-label {
+  font-size: var(--typography-font-sizes-meta);
+  color: var(--colors-text-secondary);
+}
+
+.files-meta code {
+  background: var(--colors-surface);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  border: 1px solid var(--colors-border);
+  font-size: var(--typography-font-sizes-meta);
+}
+
+@media (max-width: 900px) {
+  .files-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .files-upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .files-preview iframe {
+    height: 320px;
+  }
+}

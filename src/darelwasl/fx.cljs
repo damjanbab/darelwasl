@@ -45,6 +45,20 @@
                                          :body {:error "Network error. Please try again."}}))))))))
 
 (rf/reg-fx
+ ::http-form
+ (fn [{:keys [url method form-data headers credentials on-success on-error]}]
+   (let [opts (clj->js (cond-> {:method (or method "POST")
+                                :credentials (or credentials "same-origin")
+                                :headers (ensure-headers headers false nil)}
+                         form-data (assoc :body form-data)))]
+     (-> (js/fetch url opts)
+         (.then #(handle-response % on-success on-error))
+         (.catch
+          (fn [_]
+            (rf/dispatch (conj on-error {:status nil
+                                         :body {:error "Network error. Please try again."}}))))))))
+
+(rf/reg-fx
  ::dispatch-later
  (fn [{:keys [ms dispatch]}]
    (when (and (number? ms) dispatch)

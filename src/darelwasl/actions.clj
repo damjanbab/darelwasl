@@ -5,6 +5,7 @@
             [darelwasl.automations :as automations]
             [darelwasl.betting :as betting]
             [darelwasl.events :as events]
+            [darelwasl.files :as files]
             [darelwasl.tasks :as tasks]))
 
 (defn actor-from-session
@@ -132,6 +133,26 @@
                          {:bet-id (or (:bet-id body) (:betting.bet/id body))
                           :status (or (:status body) (:betting.bet/status body))})))
 
+(defn- file-upload
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        storage-dir (or (:storage-dir body)
+                        (get-in state [:config :files :storage-dir]))]
+    (files/create-file! (conn state)
+                        {:file (:file/upload body)
+                         :slug (:file/slug body)}
+                        actor
+                        storage-dir)))
+
+(defn- file-delete
+  [state {:keys [input]}]
+  (let [body (or input {})
+        storage-dir (or (:storage-dir body)
+                        (get-in state [:config :files :storage-dir]))]
+    (files/delete-file! (conn state)
+                        (:file/id body)
+                        storage-dir)))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -145,7 +166,9 @@
    :cap/action/betting-odds betting-odds
    :cap/action/betting-bet-log betting-bet-log
    :cap/action/betting-close betting-close
-   :cap/action/betting-settle betting-settle})
+   :cap/action/betting-settle betting-settle
+   :cap/action/file-upload file-upload
+   :cap/action/file-delete file-delete})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:

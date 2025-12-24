@@ -159,6 +159,23 @@
        :toggles [:light-dark-switch]}
  :compatibility {:backward true :forward true :flags []}
   :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}
+
+ {:id :cap/view/file-library
+  :title "File Library"
+  :version "v1"
+  :data {:sources [{:id :files/library
+                    :source :cap/schema/file
+                    :pull [:file/id :file/name :file/slug :file/type :file/mime :file/size-bytes :file/created-at]}]}
+  :actions [:cap/action/file-upload :cap/action/file-delete]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 250
+                     :pagination {:default-limit 25 :max-limit 200}}
+       :state-model :finite
+       :layout {:desktop "list + preview" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/file]}}
  {:id :cap/view/site-home
   :title "Public Site · Home"
   :version "v1"

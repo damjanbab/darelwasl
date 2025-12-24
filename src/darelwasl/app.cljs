@@ -1,6 +1,7 @@
 (ns darelwasl.app
   (:require [clojure.string :as str]
             [darelwasl.features.betting :as betting-ui]
+            [darelwasl.features.files :as files-ui]
             [darelwasl.features.home :as home]
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
@@ -31,6 +32,7 @@
 (def default-task-state state/default-task-state)
 (def default-home-state state/default-home-state)
 (def default-tags-state state/default-tags-state)
+(def default-files-state state/default-files-state)
 (def default-theme-state state/default-theme-state)
 (def default-nav-state state/default-nav-state)
 (def land-enabled? state/land-enabled?)
@@ -122,6 +124,13 @@
   [s]
   (let [trimmed (str/trim (or s ""))]
     (when-not (str/blank? trimmed) trimmed)))
+
+(defn- build-file-query
+  [{:keys [query]}]
+  (when-let [q (present-str query)]
+    (let [sp (js/URLSearchParams.)]
+      (.append sp "q" q)
+      (.toString sp))))
 
 (defn- parse-long-safe
   [v]
@@ -440,6 +449,7 @@
          dispatches (cond-> []
                        (= safe-route :home) (conj [::fetch-home])
                        (= safe-route :tasks) (conj [::fetch-tasks])
+                       (= safe-route :files) (conj [::fetch-files])
                        (= safe-route :land) (conj [::fetch-land])
                        (= safe-route :betting) (conj [::fetch-betting-events])
                        (= safe-route :terminal) (conj [::fetch-terminal-sessions])
@@ -511,6 +521,7 @@
                  (assoc :route preferred-route)
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
+                 (assoc :files default-files-state)
                  (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
                  (assoc :terminal default-terminal-state)
@@ -521,6 +532,7 @@
     (let [dispatches (cond-> [[::fetch-tags]
                               [::fetch-home]
                               [::fetch-tasks]]
+                       (= preferred-route :files) (conj [::fetch-files])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
                        (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
       {:db db'
@@ -564,12 +576,13 @@
  (fn [{:keys [db]} _]
    {:db (-> db
             (assoc :session nil
-                   :route :login
-                   :nav default-nav-state
-            :tasks default-task-state
-            :betting default-betting-state
-            :control default-control-state
-                   :tags default-tags-state
+           :route :login
+           :nav default-nav-state
+           :tasks default-task-state
+           :files default-files-state
+           :betting default-betting-state
+           :control default-control-state
+           :tags default-tags-state
                    :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
                                                                    (get-in db [:login :username])
@@ -690,6 +703,147 @@
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load home data.")]
      (-> (state/mark-error db [:home] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+;; File library
+(rf/reg-event-fx
+ ::fetch-files
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:files :filters])]
+     {:db (state/mark-loading db [:files])
+      ::fx/http {:url (str "/api/files" (when-let [qs (build-file-query filters)] (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-files-success]
+                 :on-error [::fetch-files-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-files-success
+ (fn [db [_ payload]]
+   (let [files (vec (:files payload))
+         selected (let [current (get-in db [:files :selected])]
+                    (when (some #(= (:file/id %) current) files)
+                      current))]
+     (-> db
+         (assoc-in [:files :items] files)
+         (assoc-in [:files :selected] (or selected (:file/id (first files))))
+         (assoc-in [:files :status] (if (seq files) :ready :empty))
+         (assoc-in [:files :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-files-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load files.")]
+     (-> (state/mark-error db [:files] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::select-file
+ (fn [db [_ file-id]]
+   (assoc-in db [:files :selected] file-id)))
+
+(rf/reg-event-db
+ ::set-file-query
+ (fn [db [_ value]]
+   (assoc-in db [:files :filters :query] value)))
+
+(rf/reg-event-db
+ ::set-upload-file
+ (fn [db [_ file]]
+   (-> db
+       (assoc-in [:files :upload :file] file)
+       (assoc-in [:files :upload :error] nil))))
+
+(rf/reg-event-db
+ ::set-upload-slug
+ (fn [db [_ value]]
+   (assoc-in db [:files :upload :slug] value)))
+
+(rf/reg-event-db
+ ::clear-upload
+ (fn [db _]
+   (assoc-in db [:files :upload] {:file nil :slug "" :status :idle :error nil})))
+
+(rf/reg-event-fx
+ ::upload-file
+ (fn [{:keys [db]} _]
+   (let [{:keys [file slug]} (get-in db [:files :upload])]
+     (if-not file
+       {:db (assoc-in db [:files :upload :error] "Choose a file to upload")}
+       (let [form (js/FormData.)]
+         (.append form "file" file)
+         (when (present-str slug)
+           (.append form "slug" slug))
+         {:db (-> db
+                  (assoc-in [:files :upload :status] :uploading)
+                  (assoc-in [:files :upload :error] nil))
+          ::fx/http-form {:url "/api/files"
+                          :method "POST"
+                          :form-data form
+                          :on-success [::upload-success]
+                          :on-error [::upload-failure]}})))))
+
+(rf/reg-event-fx
+ ::upload-success
+ (fn [{:keys [db]} [_ payload]]
+   {:db (-> db
+            (assoc-in [:files :upload :status] :success)
+            (assoc-in [:files :upload :error] nil)
+            (assoc-in [:files :upload :file] nil)
+            (assoc-in [:files :upload :slug] ""))
+    :dispatch-n [[::fetch-files]]
+    ::fx/dispatch-later {:ms 1500
+                         :dispatch [::clear-upload]}}))
+
+(rf/reg-event-db
+ ::upload-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to upload file.")]
+     (-> db
+         (assoc-in [:files :upload :status] :error)
+         (assoc-in [:files :upload :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::delete-file
+ (fn [{:keys [db]} [_ file-id]]
+   (if-not file-id
+     {:db (assoc-in db [:files :error] "Select a file to delete")}
+     {:db (assoc-in db [:files :status] :deleting)
+      ::fx/http {:url (str "/api/files/" file-id)
+                 :method "DELETE"
+                 :on-success [::delete-file-success file-id]
+                 :on-error [::delete-file-failure]}})))
+
+(rf/reg-event-fx
+ ::delete-file-success
+ (fn [{:keys [db]} [_ file-id _payload]]
+   (let [remaining (->> (get-in db [:files :items])
+                        (remove #(= (:file/id %) file-id))
+                        vec)
+         next-file (first remaining)]
+     {:db (-> db
+              (assoc-in [:files :items] remaining)
+              (assoc-in [:files :selected] (:file/id next-file))
+              (assoc-in [:files :status] (if (seq remaining) :ready :empty))
+              (assoc-in [:files :error] nil))})))
+
+(rf/reg-event-db
+ ::delete-file-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to delete file.")]
+     (-> (state/mark-error db [:files] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -2813,6 +2967,7 @@
 (rf/reg-sub ::session (fn [db _] (:session db)))
 (rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
+(rf/reg-sub ::files (fn [db _] (:files db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::control (fn [db _] (:control db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
@@ -2827,6 +2982,12 @@
    (let [selected (get-in db [:tasks :selected])
          items (get-in db [:tasks :items])]
      (some #(when (= (:task/id %) selected) %) items))))
+(rf/reg-sub
+ ::selected-file
+ (fn [db _]
+   (let [selected (get-in db [:files :selected])
+         items (get-in db [:files :items])]
+     (some #(when (= (:file/id %) selected) %) items))))
 (rf/reg-sub ::task-detail (fn [db _] (get-in db [:tasks :detail])))
 
 
@@ -2842,6 +3003,7 @@
          :betting [betting-ui/betting-shell]
          :terminal [terminal-ui/terminal-shell]
          :control-panel [control-panel/control-panel-shell]
+         :files [files-ui/file-library-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])
        [login/login-page])

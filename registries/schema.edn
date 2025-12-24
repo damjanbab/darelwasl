@@ -1468,4 +1468,62 @@
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/file
+  :title "File Library Asset"
+  :version "v1"
+  :attributes
+  [{:ident :file/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "File identity"}
+   {:ident :file/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Original filename"}
+   {:ident :file/slug
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Stable slug for referencing the file"}
+   {:ident :file/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "File type enum"}
+   {:ident :file/mime
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "MIME type"}
+   {:ident :file/size-bytes
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "File size in bytes"}
+   {:ident :file/checksum
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "SHA-256 checksum of the stored file"}
+   {:ident :file/storage-path
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Relative storage path on disk"}
+   {:ident :file/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :file/created-by
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "User who uploaded the file"}]
+  :enums {:file/type [:file.type/image :file.type/pdf]}
+  :invariants ["File id and slug must be unique"
+               "File entities set :entity/type to :entity.type/file"
+               "Storage path points to a locally stored file"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:actions [:cap/action/file-upload :cap/action/file-delete]
+            :views [:cap/view/file-library]
+            :schema [:cap/schema/entity :cap/schema/user]}}
 ]

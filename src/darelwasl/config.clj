@@ -41,6 +41,7 @@
               :auto-start-site? false
               :poll-ms 1000
               :max-output-bytes 20000}
+   :files {:storage-dir "data/files"}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -180,6 +181,9 @@
                                       (get-in default-config [:terminal :poll-ms]))
                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
                                                (get-in default-config [:terminal :max-output-bytes]))}))
+        (assoc :files
+               {:storage-dir (env-str (get env "FILES_STORAGE_DIR")
+                                      (get-in default-config [:files :storage-dir]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))
