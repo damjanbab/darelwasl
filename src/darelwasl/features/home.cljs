@@ -1,8 +1,20 @@
 (ns darelwasl.features.home
-  (:require [darelwasl.ui.components :as ui]
+  (:require [clojure.string :as str]
+            [darelwasl.ui.components :as ui]
             [darelwasl.ui.entity :as entity]
             [darelwasl.ui.shell :as shell]
             [re-frame.core :as rf]))
+
+(defn- admin-session?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (contains? roles :role/admin)))
 
 (defn status-count-cards
   [{:keys [todo in-progress pending done]}]
@@ -25,8 +37,13 @@
 
 (defn home-view []
   (let [home @(rf/subscribe [:darelwasl.app/home])
+        session @(rf/subscribe [:darelwasl.app/session])
         tags @(rf/subscribe [:darelwasl.app/tags])
-        tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (or (:items tags) [])))]
+        tag-index (into {} (map (fn [t] [(:tag/id t) (:tag/name t)]) (or (:items tags) [])))
+        restarting? (:restarting? home)
+        restart-error (:restart-error home)
+        restart-notice (:restart-notice home)
+        admin? (admin-session? session)]
     (when (= :pending (:status home))
       (rf/dispatch [:darelwasl.app/fetch-home]))
     [:div.home
@@ -46,7 +63,16 @@
                               :on-click #(do
                                            (rf/dispatch [:darelwasl.app/navigate :tasks])
                                            (rf/dispatch [:darelwasl.app/start-new-task]))}
-                   "New task"]]]
+                   "New task"]
+                  (when admin?
+                    [ui/button {:variant :danger
+                                :disabled restarting?
+                                :on-click #(rf/dispatch [:darelwasl.app/restart-main-server])}
+                     (if restarting? "Restarting..." "Restart server")])]
+                 (when restart-error
+                   [:div.form-error restart-error])
+                 (when restart-notice
+                   [:div.helper-text restart-notice])]
                  [status-count-cards counts]
                  [:div.home-section
                   [:h3 "Recent"]

@@ -77,7 +77,10 @@
   {:status :pending
    :error nil
    :recent []
-   :counts {:todo 0 :in-progress 0 :pending 0 :done 0}})
+   :counts {:todo 0 :in-progress 0 :pending 0 :done 0}
+   :restarting? false
+   :restart-error nil
+   :restart-notice nil})
 
 (def default-tags-state
   {:items []

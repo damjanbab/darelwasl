@@ -12,6 +12,8 @@
 
 (defonce system-state (atom nil))
 
+(declare start! stop!)
+
 (defn start!
   "Start the application with optional config override."
   ([] (start! (config/load-config)))
@@ -22,10 +24,18 @@
          user-index (auth/user-index-by-username users)
          _ (when (:error db-state)
              (log/warn (:error db-state) "Datomic dev-local not ready; health endpoint will report error"))
+         restart-fn (fn []
+                      (future
+                        (log/info "Restart requested; stopping service")
+                        (Thread/sleep 200)
+                        (stop!)
+                        (log/info "Restarting service")
+                        (start! cfg)))
          base {:config cfg
                :db db-state
                :auth/users users
-               :auth/user-index user-index}
+               :auth/user-index user-index
+               :app/restart! restart-fn}
         terminal-session? (some? (System/getenv "TERMINAL_SESSION_ID"))
         started (cond-> (server/start-http base)
                    (not terminal-session?) (site-server/start))

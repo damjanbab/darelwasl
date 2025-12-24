@@ -729,6 +729,35 @@
            (assoc :session nil
                   :route :login))))))
 
+(rf/reg-event-fx
+ ::restart-main-server
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:home :restarting?] true)
+            (assoc-in [:home :restart-error] nil)
+            (assoc-in [:home :restart-notice] nil))
+    ::fx/http {:url "/api/system/restart"
+               :method "POST"
+               :body {}
+               :on-success [::restart-main-server-success]
+               :on-error [::restart-main-server-failure]}}))
+
+(rf/reg-event-db
+ ::restart-main-server-success
+ (fn [db _]
+   (-> db
+       (assoc-in [:home :restarting?] false)
+       (assoc-in [:home :restart-error] nil)
+       (assoc-in [:home :restart-notice] "Restart started. Refresh in a few seconds."))))
+
+(rf/reg-event-db
+ ::restart-main-server-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:home :restarting?] false)
+       (assoc-in [:home :restart-error] (or (:error body) "Unable to restart server."))
+       (assoc-in [:home :restart-notice] nil))))
+
 ;; File library
 (rf/reg-event-fx
  ::fetch-files
