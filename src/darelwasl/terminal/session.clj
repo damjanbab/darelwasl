@@ -256,6 +256,9 @@
    :integrator "terminal/AGENTS-integrator.md"
    :ops "terminal/AGENTS-ops.md"})
 
+(def ^:private app-start-timeout-ms (* 5 60 1000))
+(def ^:private app-restart-min-interval-ms 15000)
+
 (defn- normalize-session-type
   [value]
   (let [text (cond
@@ -517,6 +520,7 @@
                     :branch branch
                     :auto-start-app? auto-start-app?
                     :auto-start-site? auto-start-site?
+                    :app-started-at (when auto-start-app? now)
                     :auto-continue-enabled? true}]
        (store/upsert-session! store session))))
 
@@ -560,6 +564,48 @@
   (when-let [port (get-in session [:ports :app])]
     (port-open? "127.0.0.1" port 200)))
 
+(defn ensure-app-running!
+  [store session]
+  (let [tmux-session (:tmux session)
+        app-port (get-in session [:ports :app])
+        auto-start? (get session :auto-start-app? true)]
+    (if (and auto-start? app-port (tmux/running? tmux-session))
+      (let [now (now-ms)
+            ready? (app-ready? session)
+            window? (contains? (tmux/window-names tmux-session) "app")
+            last-attempt (or (:app-restart-attempted-at session) 0)
+            app-started-at (:app-started-at session)
+            can-attempt? (>= (- now last-attempt) app-restart-min-interval-ms)]
+        (cond
+          ready? session
+          (and can-attempt? (not window?))
+          (let [next-session (assoc session
+                                    :app-started-at now
+                                    :app-restart-attempted-at now
+                                    :updated-at now)]
+            (try
+              (start-app-window! session)
+              (store/upsert-session! store next-session)
+              next-session
+              (catch Exception _
+                session)))
+          (and can-attempt? window? (nil? app-started-at))
+          (let [next-session (assoc session
+                                    :app-started-at now
+                                    :app-restart-attempted-at now
+                                    :updated-at now)]
+            (store/upsert-session! store next-session)
+            next-session)
+          (and can-attempt?
+               window?
+               app-started-at
+               (>= (- now app-started-at) app-start-timeout-ms))
+          (do
+            (restart-app! store session)
+            (store/get-session store (:id session)))
+          :else session))
+      session)))
+
 (defn resume-session!
   [store cfg session]
   (when (= :complete (:status session))
@@ -575,17 +621,20 @@
   (let [auto-start-app? (get session :auto-start-app? (:auto-start-app? cfg))
         auto-start-site? (get session :auto-start-site? (:auto-start-site? cfg))
         site-enabled? (and auto-start-site?
-                           (some? (get-in session [:ports :site])))]
+                           (some? (get-in session [:ports :site])))
+        started-app? (atom false)]
     (tmux/start! (:tmux session) (:repo-dir session) (:env-file session) (:codex-command cfg))
     (tmux/pipe-output! (:tmux session) (:chat-log session))
     (when auto-start-app?
-      (start-app-window! session))
+      (start-app-window! session)
+      (reset! started-app? true))
     (when site-enabled?
       (start-site-window! session))
     (let [now (now-ms)
           next-session (assoc session
                               :status :running
-                              :updated-at now)]
+                              :updated-at now
+                              :app-started-at (when @started-app? now))]
       (update-manifest! (:logs-dir session)
                         (fn [m]
                           (assoc (or m {})
@@ -601,7 +650,10 @@
   (tmux/kill-window! (:tmux session) "app")
   (start-app-window! session)
   (let [now (now-ms)
-        next-session (assoc session :updated-at now)]
+        next-session (assoc session
+                            :updated-at now
+                            :app-started-at now
+                            :app-restart-attempted-at now)]
     (update-manifest! (:logs-dir session)
                       (fn [m]
                         (assoc (or m {})

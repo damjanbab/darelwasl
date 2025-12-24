@@ -92,6 +92,12 @@
       (when (.exists file)
         (some-> (slurp file) str/trim (not-empty))))))
 
+(defn- normalize-token
+  [value]
+  (let [raw (some-> value str/trim)]
+    (when (and raw (not (str/blank? raw)) (not= "x-oauth-basic" raw))
+      raw)))
+
 (defn- normalize-storage-dir
   [env-value default]
   (let [raw (env-str env-value default)]
@@ -197,9 +203,11 @@
                                                (get-in default-config [:terminal :max-output-bytes]))}))
         (assoc :github
                (let [default-token (get-in default-config [:github :token])
-                     token-env (env-str (get env "GITHUB_TOKEN") default-token)
+                     token-env (normalize-token (get env "GITHUB_TOKEN"))
                      token-file (env-str (get env "GITHUB_TOKEN_FILE") ".secrets/github_token")
-                     token (or token-env (read-secret-file token-file) default-token)]
+                     token-file-value (normalize-token (read-secret-file token-file))
+                     terminal-token (normalize-token (get env "TERMINAL_GITHUB_TOKEN"))
+                     token (or token-env token-file-value terminal-token default-token)]
                  {:api-url (env-str (get env "GITHUB_API_URL")
                                     (get-in default-config [:github :api-url]))
                   :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")

@@ -133,10 +133,12 @@
           cursor (parse-long (or (get-in request [:query-params :cursor])
                                  (get-in request [:query-params "cursor"]))
                              0)
-          session (find-session (:terminal/store state) session-id)
+          store (:terminal/store state)
+          session (find-session store session-id)
           max-bytes (get-in state [:terminal/config :max-output-bytes] 20000)]
       (if session
-        (let [output (session/output-since session cursor max-bytes)
+        (let [session (session/ensure-app-running! store session)
+              output (session/output-since session cursor max-bytes)
               app-ready? (session/app-ready? session)
               output (assoc output :app-ready app-ready?)
               text (str/lower-case (or (:chunk output) ""))
