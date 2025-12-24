@@ -84,7 +84,11 @@
                      (catch Exception _ nil)))]
         (if (<= 200 status 299)
           {:status status :body body}
-          (error status "GitHub request failed" {:url url :status status :body body})))
+          (let [normalized-status (if (#{401 403} status) 502 status)
+                message (if (#{401 403} status)
+                          "GitHub authorization failed"
+                          "GitHub request failed")]
+            (error normalized-status message {:url url :status status :body body}))))
       (catch Exception e
         (log/warn e "GitHub request failed" {:path path})
         (error 502 "GitHub request failed")))))
