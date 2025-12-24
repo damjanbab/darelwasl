@@ -381,12 +381,6 @@ async function run() {
     await openApp("Tasks");
     await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
 
-    // Toggle theme (dark then back to light)
-    await page.getByRole("button", { name: "Dark" }).click();
-    await page.waitForSelector('[data-theme="dark"]', { timeout: 5000 });
-    await page.getByRole("button", { name: "Light" }).click();
-    await page.waitForSelector('[data-theme="default"]', { timeout: 5000 });
-
     // Reload to confirm persistence and navigation continuity
     await page.reload({ waitUntil: "networkidle" });
     await ensureLogin(page);

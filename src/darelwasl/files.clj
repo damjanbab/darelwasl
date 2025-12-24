@@ -51,6 +51,14 @@
                  (str/replace #"(^-|-$)" ""))]
     (if (str/blank? slug) "file" slug)))
 
+(defn- reference->slug
+  [reference]
+  (let [ref (some-> reference str/trim)]
+    (when-not (str/blank? ref)
+      (if (str/starts-with? ref "file:")
+        (some-> (subs ref 5) str/trim)
+        ref))))
+
 (defn- file-type
   [mime]
   (cond
@@ -223,6 +231,35 @@
                       (io/delete-file (io/file storage-path) true)
                       (catch Exception _))
                     (error 500 "Failed to store file" (.getMessage e)))))))))))
+
+(defn update-file!
+  [conn file-id {:keys [slug ref]} _actor]
+  (or (ensure-conn conn)
+      (let [{id :value id-err :error} (normalize-uuid file-id "file id")]
+        (if id-err
+          (error 400 id-err)
+          (let [db (d/db conn)
+                eid (file-eid-by-id db id)
+                file (pull-file db eid)
+                requested (or (reference->slug ref) slug)
+                {slug-val :value slug-err :error} (normalize-string requested "slug" {:required true
+                                                                                      :allow-blank? false})
+                conflict? (and slug-val
+                               (not= slug-val (:file/slug file))
+                               (slug-exists? db slug-val))]
+            (cond
+              (nil? eid) (error 404 "File not found")
+              slug-err (error 400 slug-err)
+              conflict? (error 409 "Slug already in use")
+              :else
+              (try
+                (let [tx-res (d/transact conn {:tx-data [[:db/add eid :file/slug slug-val]]})
+                      db-after (:db-after tx-res)
+                      updated (present-file (pull-file db-after eid))]
+                  {:file updated})
+                (catch Exception e
+                  (log/error e "Failed to update file")
+                  (error 500 "Failed to update file")))))))))
 
 (defn delete-file!
   [conn file-id storage-dir]

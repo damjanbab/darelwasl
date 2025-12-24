@@ -78,21 +78,6 @@
              :on-click #(rf/dispatch [:darelwasl.app/logout])}
             "Sign out"]]))]]))
 
-(defn theme-toggle []
-  (let [theme @(rf/subscribe [:darelwasl.app/theme])
-        current (:id theme)]
-    [:div.theme-toggle
-     (for [{:keys [id label icon]} state/theme-options]
-       ^{:key (name id)}
-       [:button.theme-toggle__btn {:type "button"
-                                   :class (when (= current id) "active")
-                                   :on-click #(rf/dispatch [:darelwasl.app/set-theme id])}
-        [:span.icon (case icon
-                      :sun "☀"
-                      :moon "☾"
-                      "•")]
-        [:span label]])]))
-
 (defn app-shell [content footer]
   [:div.app-shell
    [top-bar]

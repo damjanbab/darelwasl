@@ -1,11 +1,7 @@
 (ns darelwasl.state
   (:require [clojure.string :as str]))
 
-(def theme-storage-key "darelwasl/theme")
 (def nav-storage-key "darelwasl/last-app")
-(def theme-options
-  [{:id :theme/default :label "Light" :icon :sun}
-   {:id :theme/dark :label "Dark" :icon :moon}])
 
 (def default-login-state
   {:username ""
@@ -96,13 +92,24 @@
    :status :idle
    :error nil})
 
+(def default-file-form
+  {:id nil
+   :slug ""
+   :reference ""})
+
+(def default-file-detail
+  {:form default-file-form
+   :status :idle
+   :error nil})
+
 (def default-files-state
   {:items []
    :status :idle
    :error nil
    :filters default-files-filters
    :selected nil
-   :upload default-files-upload})
+   :upload default-files-upload
+   :detail default-file-detail})
 (def default-prs-state
   {:items []
    :status :idle
@@ -206,9 +213,6 @@
                       :status :idle
                       :error nil}}})
 
-(def default-theme-state
-  {:id :theme/default})
-
 (def default-nav-state
   {:menu-open? false
    :last-route :home})
@@ -309,7 +313,6 @@
 (def default-db
   {:route :login
    :session nil
-   :theme default-theme-state
    :nav default-nav-state
    :tags default-tags-state
    :home default-home-state

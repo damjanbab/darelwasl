@@ -45,6 +45,17 @@
           payload (if (:error res) {:error (:error res)} (:result res))]
       (common/handle-task-result payload))))
 
+(defn update-file-handler
+  [state]
+  (fn [request]
+    (let [file-id (common/task-id-param request)
+          body (or (:body-params request) {})
+          res (actions/execute! state {:action/id :cap/action/file-update
+                                       :actor (actions/actor-from-session (:auth/session request))
+                                       :input (assoc body :file/id file-id)})
+          payload (if (:error res) {:error (:error res)} (:result res))]
+      (common/handle-task-result payload))))
+
 (defn file-content-handler
   [state]
   (fn [request]
@@ -72,5 +83,6 @@
                   (common/require-roles #{:role/file-library :role/admin})]}
     ["" {:get (list-files-handler state)
          :post (upload-file-handler state)}]
-    [file-id-path {:delete (delete-file-handler state)}]
+    [file-id-path {:put (update-file-handler state)
+                   :delete (delete-file-handler state)}]
     [(str file-id-path "/content") {:get (file-content-handler state)}]]])
