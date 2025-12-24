@@ -13,7 +13,7 @@
     - Sequencing Constraints: Must precede schema/design tasks.
   - Composability Impact:
     - Layers affected: Docs/specs.
-    - Patterns reused/extended: Existing run protocol; design standards.
+    - Patterns reused/extended: Existing run workflow; design standards.
     - New composability rules: None yet.
   - Requirement Change & Compatibility: Defines new requirements; no runtime changes.
   - Breaking/Deprecation: None.
@@ -351,7 +351,7 @@
   - Deliverables: Updated workflows/scripts, docs.
   - Proof Plan: CI run or local `scripts/checks.sh all`; verify new targets.
   - Fixtures/Data Assumptions: Content fixtures.
-  - Protocol/System Updates: Update docs/system.md + docs/protocol.md if needed.
+  - Protocol/System Updates: Update docs/system.md + docs/faq.md if needed.
   - FAQ Updates: Add CI gotchas.
   - Tooling/Automation: Workflow updates.
   - Reporting: Proof matrix update.

@@ -288,7 +288,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; site on `SITE_HOST=0.0.0.0`, `SITE_PORT=3200` (configurable). Reserve 80/443 for a future reverse proxy/SSL front.
 - Ports/firewall: allow inbound 22 (SSH) and 3000 (app) + 3200 (site); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
 - Logging: systemd journal for both services (no separate log files initially); optional logrotate can be added later.
-- SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per protocol.
+- SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per system rules.
 - Env file template (`/etc/darelwasl/app.env`):
   - `APP_HOST=0.0.0.0`
   - `APP_PORT=3000`

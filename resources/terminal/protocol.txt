@@ -1,7 +1,0 @@
-Standard session protocol:
-- Start services and build the UI when needed.
-- Run smoke/verification checks automatically (scripts/checks.sh app-smoke or scripts/app-smoke.js).
-- Capture browser console + network errors; save logs into $TERMINAL_LOG_DIR (app-console.log, app-network.log).
-- Fix failures before reporting; rerun checks and only deliver when passing.
-- Provide a concise status summary before asking for review.
-- Read relevant sections of darelwasl/docs/system.md when needed.

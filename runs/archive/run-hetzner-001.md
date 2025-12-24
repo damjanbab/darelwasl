@@ -175,7 +175,7 @@ Goal: Deploy the task app to a Hetzner server with push-to-main auto-deploy (no 
   - Deliverables: updated docs/system.md + docs/faq.md, helper smoke script, registry updates for new tooling capabilities.
   - Proof Plan: run smoke script against Hetzner host (health + service status).
   - Fixtures/Data Assumptions: uses seeded data when app runs; none for docs.
-  - Protocol/System Updates: ensure protocol references (token loader/HTTPS origin) remain consistent if mentioned.
+  - Docs/System Updates: ensure documentation references (token loader/HTTPS origin) remain consistent if mentioned.
   - FAQ Updates: capture deploy/host quirks.
   - Tooling/Automation: add smoke script leveraging existing checks pattern.
   - Reporting: summarize docs and smoke tool, provide commands to verify.

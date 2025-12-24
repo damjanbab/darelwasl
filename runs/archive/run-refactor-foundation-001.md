@@ -202,12 +202,12 @@
 
 - Task ID: always-correct-docs-and-gating
   - Status: done (Codex, 2025-12-10 10:25 UTC)
-  - Objective: Make the “always correct” invariant explicit in `docs/system.md` and protocol (task/run schema), and encode proof expectations (tests/checks) per capability.
+  - Objective: Make the “always correct” invariant explicit in `docs/system.md` and run workflow (task/run schema), and encode proof expectations (tests/checks) per capability.
   - Scope: Update invariants + patterns sections with required proofs for changes (schema/actions/views/importer/frontend); add task/run checklist items for proofs; document mandatory scripts (`scripts/checks.sh` targets) before merge; clarify fixtures/temporary DB usage to avoid flaky checks.
   - Out of Scope: Implementing new features.
-  - Capabilities Touched: Documentation/protocol; all capabilities (policy only).
+  - Capabilities Touched: Documentation/run workflow; all capabilities (policy only).
   - Parallel Safety:
-    - Exclusive Capabilities: Docs/protocol invariants.
+    - Exclusive Capabilities: Docs/workflow invariants.
     - Shared/Read-only Capabilities: Codebase for references.
     - Sequencing Constraints: None; ideally before proof-and-smoke.
   - Composability Impact:
@@ -220,10 +220,10 @@
   - Breaking/Deprecation:
     - Breaking change? Deprecation plan/timeline/mitigations: No breaking change.
   - Dependencies: None.
-  - Deliverables: Updated `docs/system.md` and protocol/task schema with proof requirements and checklists.
+  - Deliverables: Updated `docs/system.md` and run task schema with proof requirements and checklists.
   - Proof Plan: Review updated docs; ensure registries/checks references included.
   - Fixtures/Data Assumptions: N/A.
-  - Protocol/System Updates: Yes—protocol/task schema checklist additions.
+  - Docs/System Updates: Yes—run task schema checklist additions.
   - FAQ Updates: Add proof expectations entry.
   - Tooling/Automation: None (policy/documentation only).
   - Reporting: Summary of invariant clarifications and checklist updates.
@@ -240,7 +240,7 @@
     - Sequencing Constraints: After shared UI/state tasks stabilize enough for app-smoke; before proof-and-smoke completion.
   - Composability Impact:
     - Layers affected / patterns reused/extended: Test harness; proof automation pattern.
-    - New composability rules needed: Require checks in PR gate; document required commands in run protocol.
+    - New composability rules needed: Require checks in PR gate; document required commands in run workflow.
   - Requirement Change & Compatibility:
     - Requirement change and rationale: Enforce proof execution; rationale reliability.
     - Compatibility expectation (backward/forward/none): Backward compatible; automation only.
@@ -251,7 +251,7 @@
   - Deliverables: CI workflow or script updates; documented local command; any small harness fixes to keep checks green.
   - Proof Plan: Run full `scripts/checks.sh all`; confirm CI workflow passes; document results.
   - Fixtures/Data Assumptions: Existing fixtures/importer; Playwright installed in CI.
-  - Protocol/System Updates: Update docs/run protocol with enforced checks.
+  - Docs/System Updates: Update docs/run workflow with enforced checks.
   - FAQ Updates: Add note on required checks and troubleshooting.
   - Tooling/Automation: CI workflow addition/update; optional pre-push helper.
   - Reporting: Proof matrix and CI setup summary.

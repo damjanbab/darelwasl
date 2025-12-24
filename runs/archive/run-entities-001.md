@@ -26,7 +26,7 @@ Goal: land the shared entity foundation (:entity/type + helpers), keep Task app 
   - Deliverables: Updated `docs/system.md` product sections reflecting new goals/flows
   - Proof Plan: Consistency review; no code proofs
   - Fixtures/Data Assumptions: Existing fixtures unchanged
-  - Protocol/System Updates: Update system doc narrative; no protocol change
+  - Docs/System Updates: Update system doc narrative; no workflow change
   - FAQ Updates: None
   - Tooling/Automation: None
   - Reporting: Summarize spec additions and alignment to goal
