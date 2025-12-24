@@ -294,8 +294,6 @@
    :tasks default-task-state
    :files default-files-state
    :prs default-prs-state
-   :files default-files-state
-   :prs default-prs-state
    :land default-land-state
    :betting default-betting-state
    :terminal default-terminal-state
