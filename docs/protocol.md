@@ -2,6 +2,12 @@
 
 Purpose: guide sandbox agents to deliver changes with total correctness using referenced documents (`docs/system.md`, `docs/faq.md`) as the canonical sources. Agents rely on reasoning, not automation, but must enforce a fail-closed mindset.
 
+## Terminal Sessions (Codex UI)
+- Terminal sessions do NOT follow the run-task claiming workflow in this document unless explicitly instructed.
+- For terminal sessions, use `AGENTS.md` as the operating manual.
+- Do not require a pending task to perform PR workflow verification or other terminal-only checks.
+- Do not source `scripts/load_github_token.sh` inside terminal sessions; credentials are injected via env.
+
 ## Initial Prompt (copy verbatim to sandbox agents)
 You are a sandbox agent with no prior context. Your goal is to pick ONE task from the current run, complete it with zero defects, open a PR against the run branch, and report back. Hard stop: only touch tasks whose Status is `pending`. If a task is already `in-progress`, `done`, or `blocked`, do not edit or claim it—back off immediately. Follow these steps, referencing documents by path:
 0) Before any git fetch/push, run `source scripts/load_github_token.sh` **from the repo root** to export `DARELWASL_GITHUB_TOKEN`/`GITHUB_TOKEN`. If the loader reports missing tokens, stop and set `DARELWASL_GITHUB_TOKEN` (e.g., export from your local `~/.git-credentials`), then re-run; do not proceed without a token and do not echo it. Keep the remote set to HTTPS (`git remote set-url origin https://github.com/damjanbab/darelwasl.git`). If a non-interactive push is needed, create a temporary askpass helper (`cat <<'EOF' >/tmp/git-askpass.sh\n#!/usr/bin/env bash\nif [[ \"$1\" == *Username* ]]; then echo \"x-access-token\"; else echo \"${GITHUB_TOKEN:?}\"; fi\nEOF\nchmod +x /tmp/git-askpass.sh`) and run `GIT_ASKPASS=/tmp/git-askpass.sh GIT_TERMINAL_PROMPT=0 git push origin HEAD`. Do not print or log the token and do not commit the loader script.

@@ -9,6 +9,7 @@ You are Codex running in a per-session clone of this repo. Follow this protocol.
 
 ## Standard session protocol
 - Read relevant sections of `darelwasl/docs/system.md` when needed (services, env vars, roles, deploy).
+- Do not follow `docs/protocol.md` run-task claiming rules unless explicitly asked.
 - Start services and build the UI when needed (`scripts/run-service.sh` for the app, `scripts/run-site.sh` for the public site).
 - Run smoke/verification checks automatically (`scripts/checks.sh app-smoke` or `scripts/app-smoke.js`).
 - Capture browser console + network errors; save logs into `$TERMINAL_LOG_DIR` (`app-console.log`, `app-network.log`).
