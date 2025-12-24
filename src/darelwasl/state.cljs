@@ -246,6 +246,7 @@
    :error nil
    :notice nil
    :sessions []
+   :new-session-type :feature
    :selected nil
    :output ""
    :cursor 0
@@ -254,6 +255,7 @@
    :verifying? false
    :resuming? false
    :restarting? false
+   :interrupting? false
    :polling? false
    :app-ready? false
    :list-polling? false})

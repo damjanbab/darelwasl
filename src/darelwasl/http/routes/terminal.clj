@@ -26,9 +26,14 @@
    [state]
    (fn [request]
      (let [name (or (get-in request [:body-params :name])
-                    (get-in request [:body-params "name"]))]
+                    (get-in request [:body-params "name"]))
+           session-type (or (get-in request [:body-params :type])
+                            (get-in request [:body-params "type"]))]
        (handle-terminal-result
-        (terminal/request (:config state) :post "/sessions" (when name {:name name}))))))
+        (terminal/request (:config state) :post "/sessions"
+                          (cond-> {}
+                            name (assoc :name name)
+                            session-type (assoc :type session-type)))))))
 
  (defn session-detail-handler
    [state]
@@ -92,6 +97,13 @@
       (handle-terminal-result
        (terminal/request (:config state) :post (str "/sessions/" session-id "/restart-app"))))))
 
+(defn interrupt-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])]
+      (handle-terminal-result
+       (terminal/request (:config state) :post (str "/sessions/" session-id "/interrupt"))))))
+
 (defn routes
   [state]
   [["/terminal"
@@ -106,4 +118,5 @@
     ["/sessions/:id/complete" {:post (complete-handler state)}]
     ["/sessions/:id/verify" {:post (verify-handler state)}]
     ["/sessions/:id/resume" {:post (resume-handler state)}]
-    ["/sessions/:id/restart-app" {:post (restart-app-handler state)}]]])
+    ["/sessions/:id/restart-app" {:post (restart-app-handler state)}]
+    ["/sessions/:id/interrupt" {:post (interrupt-handler state)}]]])

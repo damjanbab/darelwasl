@@ -236,7 +236,38 @@
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
 (def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
 (def ^:private input-submit-delay-ms 200)
-(def ^:private agents-resource "terminal/AGENTS.md")
+(def ^:private session-type-default :feature)
+(def ^:private session-type-aliases
+  {"feature" :feature
+   "build" :feature
+   "bugfix" :bugfix
+   "hotfix" :bugfix
+   "bugfix/hotfix" :bugfix
+   "research" :research
+   "spike" :research
+   "integrator" :integrator
+   "integration" :integrator
+   "ops" :ops
+   "admin" :ops})
+(def ^:private agents-resources
+  {:feature "terminal/AGENTS.md"
+   :bugfix "terminal/AGENTS-bugfix.md"
+   :research "terminal/AGENTS-research.md"
+   :integrator "terminal/AGENTS-integrator.md"
+   :ops "terminal/AGENTS-ops.md"})
+
+(defn- normalize-session-type
+  [value]
+  (let [text (cond
+               (keyword? value) (name value)
+               (string? value) value
+               :else nil)
+        text (some-> text str/trim str/lower-case)]
+    (get session-type-aliases text session-type-default)))
+
+(defn- agents-resource-for
+  [session-type]
+  (get agents-resources session-type (agents-resources session-type-default)))
 
 (defn- read-github-token
   []
@@ -293,14 +324,17 @@
      :mode :replace}))
 
 (defn- write-agents!
-  [repo-dir]
-  (when-let [resource (io/resource agents-resource)]
-    (spit (io/file repo-dir "AGENTS.md") (slurp resource))
-    (let [exclude-file (io/file repo-dir ".git" "info" "exclude")]
-      (when (.exists exclude-file)
-        (let [current (slurp exclude-file)]
-          (when-not (str/includes? current "AGENTS.md")
-            (spit exclude-file (str current "\nAGENTS.md\n"))))))))
+  [repo-dir session-type]
+  (let [resource-path (agents-resource-for session-type)
+        resource (or (io/resource resource-path)
+                     (io/resource (agents-resource-for session-type-default)))]
+    (when resource
+      (spit (io/file repo-dir "AGENTS.md") (slurp resource))
+      (let [exclude-file (io/file repo-dir ".git" "info" "exclude")]
+        (when (.exists exclude-file)
+          (let [current (slurp exclude-file)]
+            (when-not (str/includes? current "AGENTS.md")
+              (spit exclude-file (str current "\nAGENTS.md\n")))))))))
 
 (defn- start-app-window!
   [session]
@@ -352,8 +386,9 @@
                (log/info "Deleted orphaned session dir" {:id id}))))))))
 
  (defn create-session!
-   [store cfg {:keys [name]}]
+   [store cfg {:keys [name type]}]
    (let [id (str (UUID/randomUUID))
+         session-type (normalize-session-type type)
          session-name (or (some-> name str/trim not-empty)
                           (str "session-" (subs id 0 8)))
          env (System/getenv)
@@ -401,13 +436,14 @@
      (.mkdirs logs-dir)
      (write-manifest! logs-dir {:id id
                                 :name session-name
+                                :type session-type
                                 :created-at now
                                 :ports ports})
      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
      (run! ["git" "config" "user.name" git-name] {:dir repo-dir})
      (run! ["git" "config" "user.email" git-email] {:dir repo-dir})
-     (write-agents! repo-dir)
+     (write-agents! repo-dir session-type)
      (when github-token
        (write-askpass! askpass-file github-token))
      (let [base-env {"APP_HOST" "0.0.0.0"
@@ -453,6 +489,7 @@
                             :env-file (.getPath env-file)}))
      (let [session {:id id
                     :name session-name
+                    :type session-type
                     :status :running
                     :created-at now
                     :updated-at now
@@ -466,7 +503,8 @@
                     :tmux tmux-session
                     :branch branch
                     :auto-start-app? auto-start-app?
-                    :auto-start-site? auto-start-site?}]
+                    :auto-start-site? auto-start-site?
+                    :auto-continue-enabled? true}]
        (store/upsert-session! store session))))
 
  (defn present-session
@@ -555,6 +593,21 @@
                       (fn [m]
                         (assoc (or m {})
                                :app-restarted-at now)))
+    (store/upsert-session! store next-session)))
+
+(defn interrupt-session!
+  [store session]
+  (when-not (tmux/running? (:tmux session))
+    (throw (ex-info "Session not running" {:id (:id session)})))
+  (tmux/send-keys! (:tmux session) ["C-c"])
+  (let [now (now-ms)
+        next-session (assoc session
+                            :updated-at now
+                            :auto-continue-enabled? false)]
+    (update-manifest! (:logs-dir session)
+                      (fn [m]
+                        (assoc (or m {})
+                               :interrupted-at now)))
     (store/upsert-session! store next-session)))
 
 (declare complete-session!)

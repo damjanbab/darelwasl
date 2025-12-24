@@ -13,10 +13,26 @@
      :complete "Complete"
      "Idle"))
 
+(def ^:private session-type-options
+  [{:id :feature :label "Feature Build"}
+   {:id :bugfix :label "Bugfix/Hotfix"}
+   {:id :research :label "Research/Spike"}
+   {:id :integrator :label "Integrator"}
+   {:id :ops :label "Ops/Admin"}])
+
+(def ^:private session-type-labels
+  (into {} (map (juxt :id :label) session-type-options)))
+
+(defn- session-type-label
+  [session]
+  (get session-type-labels (:type session)))
+
 (defn- session-row
    [session selected?]
    (let [ports (:ports session)
+         type-label (session-type-label session)
          meta (str (status-label session)
+                   (when type-label (str " · " type-label))
                    (when-let [app (:app ports)] (str " · app:" app)))]
      [ui/list-row {:title (:name session)
                    :meta meta
@@ -44,13 +60,18 @@
 
 (defn- terminal-list
   []
-  (let [{:keys [sessions status error notice]} @(rf/subscribe [:darelwasl.app/terminal])]
+  (let [{:keys [sessions status error notice new-session-type]} @(rf/subscribe [:darelwasl.app/terminal])]
      [:div.panel.terminal-list-panel
       [:div.section-header
        [:div
         [:h2 "Terminal sessions"]
         [:div.meta "Parallel Codex sessions with isolated repos and data."]]
        [:div.section-actions
+        [ui/select-field {:value (name (or new-session-type :feature))
+                          :on-change #(rf/dispatch [:darelwasl.app/terminal-update-session-type (.. % -target -value)])}
+         (for [{:keys [id label]} session-type-options]
+           ^{:key (name id)}
+           [:option {:value (name id)} label])]
         [ui/button {:variant :secondary
                     :on-click #(rf/dispatch [:darelwasl.app/fetch-terminal-sessions])}
          "Refresh"]
@@ -107,7 +128,7 @@
 
 (defn- terminal-chat
   []
-  (let [{:keys [selected output input error sending? verifying? resuming? restarting? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
+  (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting? app-ready?]} @(rf/subscribe [:darelwasl.app/terminal])]
     (if-not selected
       [:div.panel.terminal-empty
        [:div.state.empty
@@ -124,7 +145,10 @@
                         "#")
              site-link (if site-port
                          (str protocol "//" host ":" site-port "/")
-                         "#")]
+                         "#")
+             type-label (session-type-label selected)
+             meta (str (status-label selected)
+                       (when type-label (str " · " type-label)))]
           [:div.terminal-chat
           [:div.terminal-chat__header
            [:button.terminal-back
@@ -134,7 +158,7 @@
             "←"]
            [:div
             [:div.terminal-title (:name selected)]
-            [:div.terminal-meta (status-label selected)]]
+            [:div.terminal-meta meta]]
            [:div.terminal-actions
             [:a.terminal-action-link.button.secondary
              {:href app-link
@@ -160,6 +184,10 @@
                           :disabled restarting?
                           :on-click #(rf/dispatch [:darelwasl.app/terminal-restart-app])}
                (if restarting? "Restarting..." "Restart app")])
+            [ui/button {:variant :danger
+                        :disabled interrupting?
+                        :on-click #(rf/dispatch [:darelwasl.app/terminal-interrupt-session])}
+             (if interrupting? "Stopping..." "Stop")]
             [ui/button {:variant :secondary
                         :disabled verifying?
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}

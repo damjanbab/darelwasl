@@ -55,11 +55,14 @@
   [state]
   (fn [request]
     (let [name (or (get-in request [:body-params :name])
-                   (get-in request [:body-params "name"]))]
+                   (get-in request [:body-params "name"]))
+          session-type (or (get-in request [:body-params :type])
+                           (get-in request [:body-params "type"]))]
       (try
         (let [session (session/create-session! (:terminal/store state)
                                                (:terminal/config state)
-                                               {:name name})]
+                                               {:name name
+                                                :type session-type})]
           (ok {:session (session/present-session session)}))
         (catch Exception e
           (log/warn e "Failed to create terminal session")
@@ -137,11 +140,14 @@
               app-ready? (session/app-ready? session)
               output (assoc output :app-ready app-ready?)
               text (str/lower-case (or (:chunk output) ""))
+              auto-continue-enabled? (get session :auto-continue-enabled? true)
               auto-approval? (get session :auto-approval? false)
               auto-continue? (get session :auto-continue? false)
-              needs-approval? (and (not auto-approval?)
+              needs-approval? (and auto-continue-enabled?
+                                   (not auto-approval?)
                                    (str/includes? text "allow codex to work in this folder"))
-              needs-continue? (and (not auto-continue?)
+              needs-continue? (and auto-continue-enabled?
+                                   (not auto-continue?)
                                    (str/includes? text "press enter to continue"))]
           (when needs-approval?
             (session/send-keys! session ["1" "Enter"]))
@@ -220,6 +226,23 @@
                               (assoc :data (ex-data e))))))
         (error-response 404 "Session not found")))))
 
+(defn interrupt-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (try
+          (let [next-session (session/interrupt-session! (:terminal/store state) session)]
+            (ok {:session (session/present-session next-session)}))
+          (catch Exception e
+            (log/warn e "Failed to interrupt session" {:id session-id})
+            (error-response 500 "Failed to interrupt session"
+                            (cond-> {:message (.getMessage e)}
+                              (instance? clojure.lang.ExceptionInfo e)
+                              (assoc :data (ex-data e))))))
+        (error-response 404 "Session not found")))))
+
 (defn routes
   [state]
   [["/health" {:get (health-handler state)}]
@@ -241,7 +264,9 @@
    ["/sessions/:id/resume"
     {:post (resume-handler state)}]
    ["/sessions/:id/restart-app"
-    {:post (restart-app-handler state)}]])
+    {:post (restart-app-handler state)}]
+   ["/sessions/:id/interrupt"
+    {:post (interrupt-handler state)}]])
 
 (defn app
   [state]

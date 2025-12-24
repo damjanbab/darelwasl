@@ -1942,14 +1942,21 @@
 (rf/reg-event-fx
  ::terminal-create-session
  (fn [{:keys [db]} _]
-   {:db (-> db
-            (assoc-in [:terminal :status] :loading)
-            (assoc-in [:terminal :error] nil))
-    ::fx/http {:url "/api/terminal/sessions"
-               :method "POST"
-               :body {}
-               :on-success [::terminal-session-created]
-               :on-error [::terminal-sessions-failure]}}))
+   (let [session-type (get-in db [:terminal :new-session-type] :feature)]
+     {:db (-> db
+              (assoc-in [:terminal :status] :loading)
+              (assoc-in [:terminal :error] nil))
+      ::fx/http {:url "/api/terminal/sessions"
+                 :method "POST"
+                 :body {:type (name session-type)}
+                 :on-success [::terminal-session-created]
+                 :on-error [::terminal-sessions-failure]}})))
+
+(rf/reg-event-db
+ ::terminal-update-session-type
+ (fn [db [_ value]]
+   (let [kw (-> value str keyword)]
+     (assoc-in db [:terminal :new-session-type] kw))))
 
 (rf/reg-event-fx
  ::terminal-session-created
@@ -1963,6 +1970,7 @@
               (assoc-in [:terminal :app-ready?] false)
               (assoc-in [:terminal :resuming?] false)
               (assoc-in [:terminal :restarting?] false)
+              (assoc-in [:terminal :interrupting?] false)
               (assoc-in [:terminal :status] :ready)
               (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
@@ -1979,6 +1987,7 @@
             (assoc-in [:terminal :app-ready?] false)
             (assoc-in [:terminal :resuming?] false)
             (assoc-in [:terminal :restarting?] false)
+            (assoc-in [:terminal :interrupting?] false)
             (assoc-in [:terminal :error] nil)
             (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
@@ -2016,6 +2025,7 @@
        (assoc-in [:terminal :app-ready?] false)
        (assoc-in [:terminal :resuming?] false)
        (assoc-in [:terminal :restarting?] false)
+       (assoc-in [:terminal :interrupting?] false)
        (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
@@ -2264,6 +2274,39 @@
    (-> db
        (assoc-in [:terminal :restarting?] false)
        (assoc-in [:terminal :error] (or (:error body) "Unable to restart app.")))))
+
+(rf/reg-event-fx
+ ::terminal-interrupt-session
+ (fn [{:keys [db]} _]
+   (let [session-id (get-in db [:terminal :selected :id])]
+     (if session-id
+       {:db (-> db
+                (assoc-in [:terminal :interrupting?] true)
+                (assoc-in [:terminal :error] nil))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/interrupt")
+                   :method "POST"
+                   :body {}
+                   :on-success [::terminal-interrupt-success]
+                   :on-error [::terminal-interrupt-failure]}}
+       {:db db}))))
+
+(rf/reg-event-fx
+ ::terminal-interrupt-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [session (:session payload)]
+     {:db (-> db
+              (assoc-in [:terminal :selected] session)
+              (assoc-in [:terminal :interrupting?] false)
+              (assoc-in [:terminal :notice] "Interrupted. Auto-continue paused.")
+              (assoc-in [:terminal :error] nil))
+      :dispatch [::fetch-terminal-sessions]})))
+
+(rf/reg-event-db
+ ::terminal-interrupt-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :interrupting?] false)
+       (assoc-in [:terminal :error] (or (:error body) "Unable to interrupt session.")))))
 
 (rf/reg-event-db
  ::land-update-filter
