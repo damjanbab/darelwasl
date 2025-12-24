@@ -41,6 +41,13 @@
               :auto-start-site? false
               :poll-ms 1000
               :max-output-bytes 20000}
+   :github {:api-url "https://api.github.com"
+            :timeout-ms 3000
+            :repo-owner nil
+            :repo-name nil
+            :token nil
+            :prs-per-page 20
+            :commits-per-pr 10}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -176,10 +183,25 @@
                                             (get-in default-config [:terminal :auto-start-app?]))
                  :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
                                              (get-in default-config [:terminal :auto-start-site?]))
-                 :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
+                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
                                       (get-in default-config [:terminal :poll-ms]))
-                 :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
+                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
                                                (get-in default-config [:terminal :max-output-bytes]))}))
+        (assoc :github
+               {:api-url (env-str (get env "GITHUB_API_URL")
+                                  (get-in default-config [:github :api-url]))
+                :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")
+                                       (get-in default-config [:github :timeout-ms]))
+                :repo-owner (env-str (get env "GITHUB_REPO_OWNER")
+                                     (get-in default-config [:github :repo-owner]))
+                :repo-name (env-str (get env "GITHUB_REPO_NAME")
+                                    (get-in default-config [:github :repo-name]))
+                :token (env-str (get env "GITHUB_TOKEN")
+                                (get-in default-config [:github :token]))
+                :prs-per-page (parse-int (get env "GITHUB_PRS_PER_PAGE")
+                                         (get-in default-config [:github :prs-per-page]))
+                :commits-per-pr (parse-int (get env "GITHUB_COMMITS_PER_PR")
+                                           (get-in default-config [:github :commits-per-pr]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))

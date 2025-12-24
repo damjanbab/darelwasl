@@ -5,6 +5,7 @@
             [darelwasl.automations :as automations]
             [darelwasl.betting :as betting]
             [darelwasl.events :as events]
+            [darelwasl.github :as github]
             [darelwasl.tasks :as tasks]))
 
 (defn actor-from-session
@@ -132,6 +133,11 @@
                          {:bet-id (or (:bet-id body) (:betting.bet/id body))
                           :status (or (:status body) (:betting.bet/status body))})))
 
+(defn- github-pulls
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (github/list-pulls (:config state) body)))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -145,7 +151,8 @@
    :cap/action/betting-odds betting-odds
    :cap/action/betting-bet-log betting-bet-log
    :cap/action/betting-close betting-close
-   :cap/action/betting-settle betting-settle})
+   :cap/action/betting-settle betting-settle
+   :cap/action/github-pulls github-pulls})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:

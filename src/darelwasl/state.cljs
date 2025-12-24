@@ -84,6 +84,13 @@
    :status :idle
    :error nil})
 
+(def default-prs-state
+  {:items []
+   :status :idle
+   :error nil
+   :selected nil
+   :filters {:state "open"}})
+
 (def default-content-list-state
   {:items []
    :status :idle
@@ -269,6 +276,7 @@
    :home default-home-state
    :login default-login-state
    :tasks default-task-state
+   :prs default-prs-state
    :land default-land-state
    :betting default-betting-state
    :terminal default-terminal-state
@@ -287,6 +295,9 @@
            {:id :terminal
             :label "Terminal"
             :desc "Codex sessions"}
+           {:id :prs
+            :label "PRs"
+            :desc "Repo overview"}
            {:id :control-panel
             :label "Control panel"
             :desc "Website content"}]
@@ -327,6 +338,17 @@
                    set)]
     (contains? roles :role/codex-terminal)))
 
+(defn prs-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)]
+    (contains? roles :role/admin)))
+
 (defn app-options
   "Return available app options filtered by session roles/flags."
   [session]
@@ -335,6 +357,8 @@
     (remove #(= (:id %) :betting))
     (not (terminal-enabled? session))
     (remove #(= (:id %) :terminal))
+    (not (prs-enabled? session))
+    (remove #(= (:id %) :prs))
     (not (control-enabled? session))
     (remove #(= (:id %) :control-panel))))
 

@@ -4,6 +4,7 @@
             [darelwasl.features.home :as home]
             [darelwasl.features.land :as land]
             [darelwasl.features.login :as login]
+            [darelwasl.features.prs :as prs-ui]
             [darelwasl.features.control-panel :as control-panel]
             [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.tasks :as tasks-ui]
@@ -29,6 +30,7 @@
 (def default-task-form state/default-task-form)
 (def default-task-detail state/default-task-detail)
 (def default-task-state state/default-task-state)
+(def default-prs-state state/default-prs-state)
 (def default-home-state state/default-home-state)
 (def default-tags-state state/default-tags-state)
 (def default-theme-state state/default-theme-state)
@@ -122,6 +124,13 @@
   [s]
   (let [trimmed (str/trim (or s ""))]
     (when-not (str/blank? trimmed) trimmed)))
+
+(defn- build-prs-query
+  [{:keys [state]}]
+  (when-let [s (present-str state)]
+    (let [sp (js/URLSearchParams.)]
+      (.append sp "state" s)
+      (.toString sp))))
 
 (defn- parse-long-safe
   [v]
@@ -326,6 +335,10 @@
         (update :fact/adapter kw)
         (update :task/provenance kw-provenance))))
 
+(defn- normalize-pr
+  [pr]
+  (update pr :pr/state kw))
+
 (defn- task->form
   [task]
   (merge default-task-form
@@ -440,6 +453,7 @@
          dispatches (cond-> []
                        (= safe-route :home) (conj [::fetch-home])
                        (= safe-route :tasks) (conj [::fetch-tasks])
+                       (= safe-route :prs) (conj [::fetch-prs])
                        (= safe-route :land) (conj [::fetch-land])
                        (= safe-route :betting) (conj [::fetch-betting-events])
                        (= safe-route :terminal) (conj [::fetch-terminal-sessions])
@@ -511,6 +525,7 @@
                  (assoc :route preferred-route)
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
+                 (assoc :prs default-prs-state)
                  (assoc :betting default-betting-state)
                  (assoc :control default-control-state)
                  (assoc :terminal default-terminal-state)
@@ -521,6 +536,7 @@
     (let [dispatches (cond-> [[::fetch-tags]
                               [::fetch-home]
                               [::fetch-tasks]]
+                       (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
                        (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
       {:db db'
@@ -567,6 +583,7 @@
                    :route :login
                    :nav default-nav-state
             :tasks default-task-state
+           :prs default-prs-state
             :betting default-betting-state
             :control default-control-state
                    :tags default-tags-state
@@ -693,6 +710,52 @@
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
+
+;; PR overview
+(rf/reg-event-fx
+ ::fetch-prs
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:prs :filters])]
+     {:db (state/mark-loading db [:prs])
+      ::fx/http {:url (str "/api/github/pulls"
+                           (when-let [qs (build-prs-query filters)] (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-prs-success]
+                 :on-error [::fetch-prs-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-prs-success
+ (fn [db [_ payload]]
+   (let [prs (mapv normalize-pr (:pulls payload))
+         selected (let [current (get-in db [:prs :selected])]
+                    (when (some #(= (:pr/number %) current) prs)
+                      current))]
+     (-> db
+         (assoc-in [:prs :items] prs)
+         (assoc-in [:prs :selected] (or selected (:pr/number (first prs))))
+         (assoc-in [:prs :status] (if (seq prs) :ready :empty))
+         (assoc-in [:prs :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-prs-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load pull requests.")]
+     (-> (state/mark-error db [:prs] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::select-pr
+ (fn [db [_ pr-number]]
+   (assoc-in db [:prs :selected] pr-number)))
+
+(rf/reg-event-db
+ ::set-pr-state
+ (fn [db [_ value]]
+   (assoc-in db [:prs :filters :state] value)))
 
 ;; Control panel content
 (rf/reg-event-fx
@@ -2813,6 +2876,7 @@
 (rf/reg-sub ::session (fn [db _] (:session db)))
 (rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
+(rf/reg-sub ::prs (fn [db _] (:prs db)))
 (rf/reg-sub ::tags (fn [db _] (:tags db)))
 (rf/reg-sub ::control (fn [db _] (:control db)))
 (rf/reg-sub ::theme (fn [db _] (:theme db)))
@@ -2827,6 +2891,12 @@
    (let [selected (get-in db [:tasks :selected])
          items (get-in db [:tasks :items])]
      (some #(when (= (:task/id %) selected) %) items))))
+(rf/reg-sub
+ ::selected-pr
+ (fn [db _]
+   (let [selected (get-in db [:prs :selected])
+         items (get-in db [:prs :items])]
+     (some #(when (= (:pr/number %) selected) %) items))))
 (rf/reg-sub ::task-detail (fn [db _] (get-in db [:tasks :detail])))
 
 
@@ -2842,6 +2912,7 @@
          :betting [betting-ui/betting-shell]
          :terminal [terminal-ui/terminal-shell]
          :control-panel [control-panel/control-panel-shell]
+         :prs [prs-ui/prs-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])
          [tasks-ui/task-shell])
        [login/login-page])
