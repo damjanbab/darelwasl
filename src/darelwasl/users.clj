@@ -193,7 +193,7 @@
                                     adds (mapv (fn [role]
                                                  [:db/add [:user/id uid] :user/roles role])
                                                (or roles #{}))]
-                                (concat updates retracts adds)))]
+                                (into (vec updates) (concat retracts adds))))]
                 (if (empty? updates)
                   (error 400 "No updates provided")
                   (try
