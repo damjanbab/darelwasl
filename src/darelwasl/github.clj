@@ -1,6 +1,7 @@
 ;; GitHub API client helpers for PR overview.
 (ns darelwasl.github
   (:require [clj-http.client :as http]
+            [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]))
@@ -69,14 +70,18 @@
                   (and token (not (str/blank? token)))
                   (assoc "Authorization" (str "token " token)))]
     (try
-      (let [resp (http/get url {:as :json
+      (let [resp (http/get url {:as :text
                                 :throw-exceptions false
                                 :socket-timeout (or timeout-ms default-timeout-ms)
                                 :conn-timeout (or timeout-ms default-timeout-ms)
                                 :headers headers
                                 :query-params query})
             status (:status resp)
-            body (:body resp)]
+            raw (:body resp)
+            body (when (and raw (not (str/blank? raw)))
+                   (try
+                     (json/read-str raw :key-fn keyword)
+                     (catch Exception _ nil)))]
         (if (<= 200 status 299)
           {:status status :body body}
           (error status "GitHub request failed" {:url url :status status :body body})))
