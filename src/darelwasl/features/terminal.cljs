@@ -163,10 +163,7 @@
             [ui/button {:variant :secondary
                         :disabled verifying?
                         :on-click #(rf/dispatch [:darelwasl.app/terminal-verify-session])}
-             (if verifying? "Creating PR..." "Verify & create PR")]
-            [ui/button {:variant :danger
-                        :on-click #(rf/dispatch [:darelwasl.app/terminal-complete-session])}
-             "Complete"]]]
+             (if verifying? "Creating PR..." "Verify & create PR")]]]
           [:div.terminal-link-row
            [:span.meta "App:"]
            (cond

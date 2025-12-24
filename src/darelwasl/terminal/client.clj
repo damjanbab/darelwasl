@@ -24,14 +24,16 @@
 (defn request
   [cfg method path & [body]]
   (let [base-url (get-in cfg [:terminal :base-url])
-        url (str base-url path)]
+        url (str base-url path)
+        admin-token (get-in cfg [:terminal :admin-token])]
     (try
       (let [resp (http/request {:method method
                                 :url url
                                 :throw-exceptions false
                                 :socket-timeout default-timeout-ms
                                 :conn-timeout default-timeout-ms
-                                :headers {"Accept" "application/json"}
+                                :headers (cond-> {"Accept" "application/json"}
+                                           admin-token (assoc "X-Terminal-Admin-Token" admin-token))
                                 :content-type :json
                                 :as :byte-array
                                 :body (when body (json/write-str body))})

@@ -32,6 +32,13 @@
   (when session-id
     (store/get-session store session-id)))
 
+(defn- admin-authorized?
+  [state request]
+  (let [token (get-in state [:terminal/config :admin-token])
+        provided (get-in request [:headers "x-terminal-admin-token"])]
+    (and (not (str/blank? (str token)))
+         (= token provided))))
+
 (defn health-handler
   [_state]
   (fn [_request]
@@ -154,9 +161,11 @@
     (let [session-id (get-in request [:path-params :id])
           session (find-session (:terminal/store state) session-id)]
       (if session
-        (do
-          (session/complete-session! (:terminal/store state) session)
-          (ok {:status "ok"}))
+        (if (admin-authorized? state request)
+          (do
+            (session/complete-session! (:terminal/store state) session)
+            (ok {:status "ok"}))
+          (error-response 403 "Admin token required"))
         (error-response 404 "Session not found")))))
 
 (defn verify-handler

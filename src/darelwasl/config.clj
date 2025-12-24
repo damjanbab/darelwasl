@@ -28,6 +28,7 @@
    :terminal {:host "127.0.0.1"
               :port 4010
               :base-url "http://127.0.0.1:4010"
+              :admin-token nil
               :data-dir "data/terminal"
               :work-dir "data/terminal/sessions"
               :logs-dir "data/terminal/logs"
@@ -152,9 +153,10 @@
                      base-url (env-str (get env "TERMINAL_API_URL")
                                        (str "http://" host ":" port))]
                  {:host host
-                  :port port
-                  :base-url base-url
-                  :data-dir (env-str (get env "TERMINAL_DATA_DIR")
+                 :port port
+                 :base-url base-url
+                 :admin-token (env-str (get env "TERMINAL_ADMIN_TOKEN") nil)
+                 :data-dir (env-str (get env "TERMINAL_DATA_DIR")
                                      (get-in default-config [:terminal :data-dir]))
                   :work-dir (env-str (get env "TERMINAL_WORK_DIR")
                                      (get-in default-config [:terminal :work-dir]))

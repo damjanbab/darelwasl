@@ -580,7 +580,6 @@
                             (assoc (or m {})
                                    :verified-at (now-ms)
                                    :pr-url pr-url)))
-        (complete-session! store session)
         {:status "ok"
          :pr-url pr-url}))))
 

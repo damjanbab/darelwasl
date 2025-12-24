@@ -134,12 +134,14 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Separate daemon (not tied to the main app). Sessions survive app restarts and UI closes.
 - Access gated by role `:role/codex-terminal` (only Damjan for now).
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
-- Sessions are finite: on complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
+- Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
+- On complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
   - Logs/worklogs: `TERMINAL_LOG_DIR` (default `data/terminal/logs`) retained forever
 - Terminal config envs:
   - `TERMINAL_API_URL` (optional override of base url)
+  - `TERMINAL_ADMIN_TOKEN` (required to complete sessions)
   - `TERMINAL_DATA_DIR`
   - `TERMINAL_WORK_DIR`
   - `TERMINAL_LOG_DIR`

@@ -22,7 +22,8 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - `AGENTS.md` is injected into the session and ignored by git; do not add it to commits.
 
 ## Cleanup policy
-- Once the PR exists on remote, the session can be completed (repo + datomic + chat transcript deleted; logs remain).
+- Never close or delete the session; only the operator can do that.
+- After the PR exists on remote, report the PR URL and stop.
 - Never push to main or change remotes unless explicitly asked.
 - Do not undo unrelated local changes.
 
