@@ -82,8 +82,8 @@
               :timeout_ms 3000
               :endpoints ["/repos/{owner}/{repo}/pulls"
                           "/repos/{owner}/{repo}/pulls/{number}/commits"]}
-  :auth {:strategy :env-vars
-         :vars ["GITHUB_TOKEN" "GITHUB_REPO_OWNER" "GITHUB_REPO_NAME"]}
+ :auth {:strategy :env-vars
+         :vars ["GITHUB_TOKEN" "GITHUB_TOKEN_FILE" "GITHUB_REPO_OWNER" "GITHUB_REPO_NAME"]}
   :failure-modes ["Missing repo config" "Rate limits" "Invalid token" "Network timeouts/5xx"]
   :compatibility {:backward true
                   :forward true
