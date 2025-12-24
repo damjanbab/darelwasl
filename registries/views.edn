@@ -8,6 +8,25 @@
   :ux {:states [:loading :ready :error]
        :performance {:budget_ms 200}
        :state-model :finite}
+ :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]}}
+
+ {:id :cap/view/user-management
+  :title "User Management"
+  :version "v1"
+  :purpose "Admin-only user creation, role management, and deletion."
+  :data {:source :cap/schema/user
+         :pull [:user/id :user/username :user/name :user/roles]}
+  :actions [:cap/action/user-list
+            :cap/action/user-create
+            :cap/action/user-update
+            :cap/action/user-delete]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 250}
+       :state-model :finite
+       :layout {:desktop "list + detail" :mobile "stacked"}}
   :compatibility {:backward true
                   :forward true
                   :flags []}

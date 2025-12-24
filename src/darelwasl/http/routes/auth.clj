@@ -7,17 +7,20 @@
   [state]
   (fn [request]
     (let [user-index (:auth/user-index state)
+          conn (get-in state [:db :conn])
           body (or (:body-params request) {})
           username (or (:user/username body)
                        (get body "user/username"))
           password (or (:user/password body)
                        (get body "user/password"))]
       (cond
-        (or (nil? user-index) (empty? user-index))
+        (and (or (nil? user-index) (empty? user-index)) (nil? conn))
         (common/error-response 500 "Auth not configured")
 
         :else
-        (let [{:keys [user error message]} (auth/authenticate user-index username password)]
+        (let [{:keys [user error message]} (if conn
+                                             (auth/authenticate-conn conn username password)
+                                             (auth/authenticate user-index username password))]
           (cond
             error (if (= error :invalid-input)
                     (common/error-response 400 message)

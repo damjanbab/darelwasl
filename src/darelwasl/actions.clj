@@ -7,7 +7,8 @@
             [darelwasl.events :as events]
             [darelwasl.files :as files]
             [darelwasl.github :as github]
-            [darelwasl.tasks :as tasks]))
+            [darelwasl.tasks :as tasks]
+            [darelwasl.users :as users]))
 
 (defn actor-from-session
   "Normalize an HTTP session map into an actor map."
@@ -153,6 +154,26 @@
     (files/delete-file! (conn state)
                         (:file/id body)
                         storage-dir)))
+
+(defn- user-list
+  [state _]
+  (users/list-users (conn state)))
+
+(defn- user-create
+  [state {:keys [input actor]}]
+  (users/create-user! (conn state) (or input {}) actor))
+
+(defn- user-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        user-id (:user/id body)]
+    (users/update-user! (conn state) user-id (dissoc body :user/id) actor)))
+
+(defn- user-delete
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        user-id (:user/id body)]
+    (users/delete-user! (conn state) user-id actor)))
 (defn- github-pulls
   [state {:keys [input]}]
   (let [body (or input {})]
@@ -174,7 +195,11 @@
    :cap/action/betting-settle betting-settle
    :cap/action/file-upload file-upload
    :cap/action/file-delete file-delete
-   :cap/action/github-pulls github-pulls})
+   :cap/action/github-pulls github-pulls
+   :cap/action/user-list user-list
+   :cap/action/user-create user-create
+   :cap/action/user-update user-update
+   :cap/action/user-delete user-delete})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:

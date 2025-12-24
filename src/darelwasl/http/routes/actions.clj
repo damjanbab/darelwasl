@@ -4,7 +4,8 @@
 
 (def ^:private created-actions
   #{:cap/action/task-create
-    :cap/action/tag-create})
+    :cap/action/tag-create
+    :cap/action/user-create})
 
 (defn- handle-action-result
   [action-result]

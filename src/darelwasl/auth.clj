@@ -1,7 +1,9 @@
 (ns darelwasl.auth
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [datomic.client.api :as d]
+            [darelwasl.users :as users])
   (:import (java.io PushbackReader)))
 
 (def default-users-fixture "fixtures/users.edn")
@@ -51,10 +53,8 @@
   [user]
   (select-keys user [:user/id :user/username :user/name :user/roles]))
 
-(defn authenticate
-  "Validate username/password against a prepared user index. Returns
-  {:user ...} on success or {:error reason :message msg} on failure."
-  [user-index username password]
+(defn- authenticate-user
+  [user username password]
   (cond
     (or (nil? username) (str/blank? (str username)))
     {:error :invalid-input
@@ -65,10 +65,26 @@
      :message "Password is required"}
 
     :else
-    (if-let [user (get user-index username)]
+    (if user
       (if (= password (:user/password user))
         {:user (sanitize-user user)}
         {:error :invalid-credentials
          :message "Invalid username or password"})
       {:error :invalid-credentials
        :message "Invalid username or password"})))
+
+(defn authenticate
+  "Validate username/password against a prepared user index. Returns
+  {:user ...} on success or {:error reason :message msg} on failure."
+  [user-index username password]
+  (authenticate-user (get user-index username) username password))
+
+(defn authenticate-conn
+  "Validate username/password against the Datomic user records."
+  [conn username password]
+  (if-not conn
+    {:error :auth-unavailable
+     :message "Auth not configured"}
+    (let [db (d/db conn)
+          user (users/user-by-username db username)]
+      (authenticate-user user username password))))

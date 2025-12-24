@@ -12,6 +12,7 @@
             [darelwasl.http.routes.tasks :as task-routes]
             [darelwasl.http.routes.terminal :as terminal-routes]
             [darelwasl.http.routes.telegram :as telegram-routes]
+            [darelwasl.http.routes.users :as users-routes]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
             [reitit.ring.middleware.exception :as exception]
@@ -49,6 +50,7 @@
          (registries-routes/routes state)
          (terminal-routes/routes state)
          (telegram-routes/routes state)
+         (users-routes/routes state)
          (land-routes/routes state))))
 
 (defn app
