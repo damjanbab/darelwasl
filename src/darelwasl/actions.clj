@@ -8,7 +8,8 @@
             [darelwasl.files :as files]
             [darelwasl.github :as github]
             [darelwasl.tasks :as tasks]
-            [darelwasl.users :as users]))
+            [darelwasl.users :as users]
+            [darelwasl.validation :as v]))
 
 (defn actor-from-session
   "Normalize an HTTP session map into an actor map."
@@ -158,11 +159,13 @@
 (defn- file-update
   [state {:keys [input actor]}]
   (let [body (or input {})
-        file-id (:file/id body)]
+        file-id (:file/id body)
+        slug (v/param-value body :file/slug)
+        ref (v/param-value body :file/ref)]
     (files/update-file! (conn state)
                         file-id
-                        {:slug (:file/slug body)
-                         :ref (:file/ref body)}
+                        {:slug slug
+                         :ref ref}
                         actor)))
 
 (defn- user-list
