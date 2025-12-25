@@ -287,6 +287,10 @@
    :resuming? false
    :restarting? false
    :interrupting? false
+   :auto-run-commands? true
+   :pending-commands []
+   :command-ids #{}
+   :command-status {}
    :polling? false
    :app-ready? false
    :list-polling? false})

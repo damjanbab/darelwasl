@@ -38,6 +38,7 @@
 
 (def ^:private pull-pattern
   [:task/id
+   :entity/ref
    :entity/type
    :task/title
    :task/description
@@ -69,14 +70,16 @@
   (Date/from (Instant/now)))
 
 (defn- pending-note-tx
-  [task-id reason actor]
-  (let [author-id (:user/id actor)]
-    (cond-> {:note/id (UUID/randomUUID)
-             :entity/type :entity.type/note
-             :note/body reason
-             :note/type :note.type/pending-reason
-             :note/subject [:task/id task-id]
-             :note/created-at (now-inst)}
+  [db task-id reason actor]
+  (let [author-id (:user/id actor)
+        base {:note/id (UUID/randomUUID)
+              :entity/type :entity.type/note
+              :note/body reason
+              :note/type :note.type/pending-reason
+              :note/subject [:task/id task-id]
+              :note/created-at (now-inst)}
+        base (entity/with-ref db base)]
+    (cond-> base
       author-id (assoc :note/author [:user/id author-id]))))
 
 (defn- normalize-instant
@@ -153,15 +156,14 @@
              db user-id)
         ffirst)))
 
+(defn- resolve-task-id
+  [db task-id]
+  (entity/resolve-id db :task/id task-id "task id"))
+
 (defn- task-eid
   [db task-id]
   (when task-id
-    (let [tid (cond
-                (uuid? task-id) task-id
-                (string? task-id) (try
-                                    (UUID/fromString (str/trim task-id))
-                                    (catch Exception _ nil))
-                :else nil)]
+    (let [{tid :value} (resolve-task-id db task-id)]
       (when tid
         (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]]
                      db tid))))))
@@ -448,6 +450,24 @@
                           :page (inc (quot bounded-offset limit))
                           :returned (count paged)}})))))
 
+(defn fetch-task
+  "Fetch a single task by UUID or :entity/ref."
+  [conn task-id]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            {tid :value id-err :error} (resolve-task-id db task-id)]
+        (cond
+          id-err (error 400 id-err)
+          (nil? tid) (error 400 "Task id is required")
+          :else
+          (let [eid (ffirst (d/q '[:find ?e
+                                   :in $ ?id
+                                   :where [?e :task/id ?id]]
+                                 db tid))]
+            (if-not eid
+              (error 404 "Task not found")
+              {:task (present-task (pull-task db eid))}))))))
+
 (defn- validate-assignee!
   [db assignee-id]
   (cond
@@ -508,6 +528,7 @@
                       :task/assignee [:user/id (:user/id assignee)]
                       :task/archived? (boolean archived?)
                       :task/extended? (boolean extended?)}
+                base (entity/with-ref db base)
                 data (cond-> base
                        due-date (assoc :task/due-date due-date)
                        (and pending? pending-reason) (assoc :task/pending-reason pending-reason)
@@ -526,7 +547,7 @@
 
 (defn- validate-update
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {title :value title-err :error} (normalize-string-field (param-value body :task/title) "Title" {:required false
                                                                                                          :allow-blank? false})
         {desc :value desc-err :error} (normalize-string-field (param-value body :task/description) "Description" {:required false
@@ -557,7 +578,7 @@
 
 (defn- validate-simple-status
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
         pending? (= status :pending)
         pending-raw (or (param-value body :pending-reason)
@@ -580,7 +601,7 @@
 
 (defn- validate-assignee-update
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")]
     (cond
       id-err (error 400 id-err)
@@ -596,7 +617,7 @@
 
 (defn- validate-due-date-update
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")]
     (cond
       id-err (error 400 id-err)
@@ -610,7 +631,7 @@
 
 (defn- validate-tags-update
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil nil})]
     (cond
       id-err (error 400 id-err)
@@ -625,7 +646,7 @@
 
 (defn- validate-archive-update
   [db task-id body]
-  (let [{task-id :value id-err :error} (normalize-uuid task-id "task id")
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {archived? :value archived-err :error} (normalize-boolean (param-value body :task/archived?) "archived" {:default nil})]
     (cond
       id-err (error 400 id-err)
@@ -663,7 +684,7 @@
                                        (assoc :task/pending-reason pending-reason))
                     note-tx (when (and (= :pending (:task/status data))
                                        (not (str/blank? pending-reason)))
-                              (pending-note-tx (:task/id data) pending-reason actor))
+                              (pending-note-tx db (:task/id data) pending-reason actor))
                     tx-data (cond-> [(prov/enrich-tx data-with-reason tx-prov)]
                               note-tx (conj (prov/enrich-tx note-tx tx-prov)))
                     tx-result (attempt-transact conn tx-data "create task")]
@@ -732,7 +753,7 @@
                 tx-prov (prov/provenance actor)
                 note-tx (when (and (= :pending (:task/status updates))
                                    (not (str/blank? pending-reason)))
-                          (pending-note-tx task-id pending-reason actor))
+                          (pending-note-tx db task-id pending-reason actor))
                 retract-pending (when (and (not= (:task/status updates) :pending)
                                            (some? (:task/pending-reason current)))
                                   [:db/retract [:task/id task-id] :task/pending-reason (:task/pending-reason current)])
@@ -865,7 +886,7 @@
   [conn task-id actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            {parsed-id :value id-err :error} (normalize-uuid task-id "task id")]
+            {parsed-id :value id-err :error} (resolve-task-id db task-id)]
         (cond
           id-err (error 400 id-err)
           :else
@@ -911,9 +932,10 @@
           (existing-tag-by-name db value) (error 409 "Tag name already exists")
           :else
           (let [tag-id (UUID/randomUUID)
-                tx [{:tag/id tag-id
-                     :entity/type :entity.type/tag
-                     :tag/name value}]
+                base {:tag/id tag-id
+                      :entity/type :entity.type/tag
+                      :tag/name value}
+                tx [(entity/with-ref db base)]
                 tx-result (attempt-transact conn tx "create tag")]
             (if-let [tx-error (:error tx-result)]
               {:error tx-error}

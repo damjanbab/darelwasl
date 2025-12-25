@@ -1,7 +1,11 @@
 (ns darelwasl.http.routes.terminal
    (:require [clojure.string :as str]
+             [darelwasl.actions :as actions]
              [darelwasl.http.common :as common]
-             [darelwasl.terminal.client :as terminal]))
+             [darelwasl.terminal.client :as terminal]
+             [darelwasl.terminal.commands :as commands]))
+
+(def ^:private create-session-timeout-ms 300000)
 
  (defn- qparam
    [query key]
@@ -34,11 +38,12 @@
                         (get-in request [:body-params :dev-bot])
                         (get-in request [:body-params "dev-bot"]))]
        (handle-terminal-result
-        (terminal/request (:config state) :post "/sessions"
-                          (cond-> {}
-                            name (assoc :name name)
-                            session-type (assoc :type session-type)
-                            (some? dev-bot?) (assoc :dev-bot? dev-bot?)))))))
+        (terminal/request-with-timeout (:config state) :post "/sessions"
+                                        (cond-> {}
+                                          name (assoc :name name)
+                                          session-type (assoc :type session-type)
+                                          (some? dev-bot?) (assoc :dev-bot? dev-bot?))
+                                        create-session-timeout-ms)))))
 
  (defn session-detail-handler
    [state]
@@ -109,6 +114,43 @@
       (handle-terminal-result
        (terminal/request (:config state) :post (str "/sessions/" session-id "/interrupt"))))))
 
+(defn command-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          raw-body (or (:body-params request) {})
+          command (or (:command raw-body) (get raw-body "command") raw-body)
+          command-id (or (:id command) (get command "id") (:command/id command))
+          command-type (or (:type command) (get command "type") (:command/type command))
+          input (or (:input command) (get command "input") (:command/input command) {})
+          actor (actions/actor-from-session (:auth/session request))]
+      (cond
+        (str/blank? (str command-id)) (common/error-response 400 "Command id is required")
+        (str/blank? (str command-type)) (common/error-response 400 "Command type is required")
+        :else
+        (let [claim (terminal/request (:config state) :post
+                                      (str "/sessions/" session-id "/commands/claim")
+                                      {:id command-id})]
+          (cond
+            (:error claim)
+            (common/error-response (or (:status claim) 502)
+                                   (or (:error claim) "Unable to claim command"))
+
+            (= "duplicate" (get-in claim [:body :status]))
+            {:status 200 :body {:status "duplicate"}}
+
+            :else
+            (let [command (assoc command :type command-type :input input)
+                  result (commands/execute-command! state session-id command actor)
+                  message (commands/command->message command result)]
+              (terminal/request (:config state) :post
+                                (str "/sessions/" session-id "/input")
+                                {:text message})
+              {:status 200
+               :body {:status "ok"
+                     :result (or (:result result) (:message result))
+                     :error (:error result)}})))))))
+
 (defn routes
   [state]
   [["/terminal"
@@ -124,4 +166,5 @@
     ["/sessions/:id/verify" {:post (verify-handler state)}]
     ["/sessions/:id/resume" {:post (resume-handler state)}]
     ["/sessions/:id/restart-app" {:post (restart-app-handler state)}]
-    ["/sessions/:id/interrupt" {:post (interrupt-handler state)}]]])
+    ["/sessions/:id/interrupt" {:post (interrupt-handler state)}]
+    ["/sessions/:id/commands" {:post (command-handler state)}]]])

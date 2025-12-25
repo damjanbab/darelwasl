@@ -583,7 +583,8 @@
                     :auto-start-site? auto-start-site?
                     :telegram/dev-bot? dev-bot?
                     :app-started-at (when auto-start-app? now)
-                    :auto-continue-enabled? true}]
+                    :auto-continue-enabled? true
+                    :command-ids #{}}]
        (store/upsert-session! store session))))
 
  (defn present-session
@@ -625,6 +626,24 @@
   [session]
   (when-let [port (get-in session [:ports :app])]
     (port-open? "127.0.0.1" port 200)))
+
+(defn claim-command!
+  [store session command-id]
+  (let [command-id (some-> command-id str/trim)
+        seen (set (or (:command-ids session) #{}))]
+    (cond
+      (str/blank? command-id)
+      {:status :error :message "Missing command id"}
+
+      (contains? seen command-id)
+      {:status :duplicate}
+
+      :else
+      (let [next-session (assoc session
+                                :command-ids (conj seen command-id)
+                                :updated-at (now-ms))]
+        (store/upsert-session! store next-session)
+        {:status :claimed}))))
 
 (declare restart-app!)
 

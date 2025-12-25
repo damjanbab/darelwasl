@@ -308,7 +308,8 @@
                              :entity/type :entity.type/content-tag
                              :content.tag/name name
                              :content.tag/slug slug'}
-                      description (assoc :content.tag/description description))]
+                      description (assoc :content.tag/description description))
+                tag (entity/with-ref db tag)]
             {:tag tag}))))))
 
 (defn- validate-tag-update
@@ -470,16 +471,18 @@
       path-conflict (error 409 "Path already exists")
       block-error (error 400 block-error)
       :else
-      {:page (cond-> {:content.page/id (UUID/randomUUID)
-                      :entity/type :entity.type/content-page
-                      :content.page/title title
-                      :content.page/path path
-                      :content.page/visible? visible?}
-               (some? summary) (assoc :content.page/summary summary)
-               (some? nav-order) (assoc :content.page/navigation-order nav-order)
-               (seq tag-refs) (assoc :content.page/tag tag-refs)
-               (seq block-refs) (assoc :content.page/blocks block-refs))
-       :block-ids block-ids})))
+      (let [page (cond-> {:content.page/id (UUID/randomUUID)
+                          :entity/type :entity.type/content-page
+                          :content.page/title title
+                          :content.page/path path
+                          :content.page/visible? visible?}
+                   (some? summary) (assoc :content.page/summary summary)
+                   (some? nav-order) (assoc :content.page/navigation-order nav-order)
+                   (seq tag-refs) (assoc :content.page/tag tag-refs)
+                   (seq block-refs) (assoc :content.page/blocks block-refs))
+            page (entity/with-ref db page)]
+        {:page page
+         :block-ids block-ids}))))
 
 (defn- validate-page-update
   [db page-id body]
@@ -658,18 +661,20 @@
                         (d/q '[:find ?e :in $ ?slug :where [?e :content.block/slug ?slug]] db slug'))]
         (if (seq conflict?)
           (error 409 "Slug already exists")
-          {:block (cond-> {:content.block/id (or id (UUID/randomUUID))
-                           :entity/type :entity.type/content-block
-                           :content.block/type type
-                           :content.block/slug slug'
-                           :content.block/order (or order 0)
-                           :content.block/visible? visible?}
-                    page-id (assoc :content.block/page [:content.page/id page-id])
-                    title (assoc :content.block/title title)
-                    (some? body) (assoc :content.block/body body)
-                    (some? media-ref) (assoc :content.block/media-ref media-ref)
-                    (seq tag-refs) (assoc :content.block/tag tag-refs))
-           :page-id page-id}))))) 
+          (let [block (cond-> {:content.block/id (or id (UUID/randomUUID))
+                               :entity/type :entity.type/content-block
+                               :content.block/type type
+                               :content.block/slug slug'
+                               :content.block/order (or order 0)
+                               :content.block/visible? visible?}
+                        page-id (assoc :content.block/page [:content.page/id page-id])
+                        title (assoc :content.block/title title)
+                        (some? body) (assoc :content.block/body body)
+                        (some? media-ref) (assoc :content.block/media-ref media-ref)
+                        (seq tag-refs) (assoc :content.block/tag tag-refs))
+                block (entity/with-ref db block)]
+            {:block block
+             :page-id page-id})))))) 
 
 (defn- validate-block-update
   [db block-id body]
@@ -837,21 +842,23 @@
         {order :value order-err :error} (normalize-long (param-value body :license/order) "order")
         {visible :value visible-err :error} (normalize-boolean (param-value body :license/visible?) "visible" {:default true})]
     (or id-err slug-err label-err type-err processing-err ownership-err renewal-err pricing-err activities-err who-err who-act-err docs-err order-err visible-err
-        {:tx {:license/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/license
-              :license/slug slug
-              :license/label label
-              :license/type type-kw
-              :license/processing-time processing
-              :license/ownership ownership
-              :license/renewal-cost renewal
-              :license/pricing-lines pricing
-              :license/activities activities
-              :license/who who
-              :license/who-activities who-act
-              :license/document-checklist docs
-              :license/order order
-              :license/visible? (if (nil? visible) true visible)}})))
+        (let [tx {:license/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/license
+                  :license/slug slug
+                  :license/label label
+                  :license/type type-kw
+                  :license/processing-time processing
+                  :license/ownership ownership
+                  :license/renewal-cost renewal
+                  :license/pricing-lines pricing
+                  :license/activities activities
+                  :license/who who
+                  :license/who-activities who-act
+                  :license/document-checklist docs
+                  :license/order order
+                  :license/visible? (if (nil? visible) true visible)}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-license!
   [conn body actor]
@@ -896,13 +903,15 @@
         {gen :value gen-err :error} (normalize-string (param-value body :comparison.row/general) "general value" {:required false :allow-blank? true})
         {gcc :value gcc-err :error} (normalize-string (param-value body :comparison.row/gcc) "gcc value" {:required false :allow-blank? true})]
     (or id-err crit-err order-err ent-err gen-err gcc-err
-        {:tx {:comparison.row/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/comparison-row
-              :comparison.row/criterion criterion
-              :comparison.row/order order
-              :comparison.row/entrepreneur ent
-              :comparison.row/general gen
-              :comparison.row/gcc gcc}})))
+        (let [tx {:comparison.row/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/comparison-row
+                  :comparison.row/criterion criterion
+                  :comparison.row/order order
+                  :comparison.row/entrepreneur ent
+                  :comparison.row/general gen
+                  :comparison.row/gcc gcc}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-comparison-row!
   [conn body actor]
@@ -1016,11 +1025,13 @@
         {order :value order-err :error} (normalize-long (param-value body :activation.step/order) "order")
         {phase :value phase-err :error} (normalize-uuid (param-value body :activation.step/phase) "phase id")]
     (or id-err title-err order-err phase-err
-        {:tx (cond-> {:activation.step/id (or id (UUID/randomUUID))
-                      :entity/type :entity.type/activation-step
-                      :activation.step/title title
-                      :activation.step/order order}
-               phase (assoc :activation.step/phase [:journey.phase/id phase]))})))
+        (let [tx (cond-> {:activation.step/id (or id (UUID/randomUUID))
+                          :entity/type :entity.type/activation-step
+                          :activation.step/title title
+                          :activation.step/order order}
+                   phase (assoc :activation.step/phase [:journey.phase/id phase]))
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-activation-step!
   [conn body actor]
@@ -1079,13 +1090,15 @@
         {order :value order-err :error} (normalize-long (param-value body :persona/order) "order")
         {visible :value visible-err :error} (normalize-boolean (param-value body :persona/visible?) "visible" {:default true})]
     (or id-err title-err detail-err type-err order-err visible-err
-        {:tx {:persona/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/persona
-              :persona/title title
-              :persona/detail detail
-              :persona/type type-kw
-              :persona/order order
-              :persona/visible? (if (nil? visible) true visible)}})))
+        (let [tx {:persona/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/persona
+                  :persona/title title
+                  :persona/detail detail
+                  :persona/type type-kw
+                  :persona/order order
+                  :persona/visible? (if (nil? visible) true visible)}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-persona!
   [conn body actor]
@@ -1140,11 +1153,13 @@
         {text :value text-err :error} (normalize-string (param-value body :support.entry/text) "text" {:required true})
         {order :value order-err :error} (normalize-long (param-value body :support.entry/order) "order")]
     (or id-err role-err text-err order-err
-        {:tx {:support.entry/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/support-entry
-              :support.entry/role (or role :support/we)
-              :support.entry/text text
-              :support.entry/order order}})))
+        (let [tx {:support.entry/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/support-entry
+                  :support.entry/role (or role :support/we)
+                  :support.entry/text text
+                  :support.entry/order order}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-support-entry!
   [conn body actor]
@@ -1181,7 +1196,7 @@
                       {:support.entry/id sid})))))))
 
 (defn- validate-contact
-  [body]
+  [db body]
   (let [{id :value id-err :error} (normalize-uuid (param-value body :contact/id) "contact id")
         {email :value email-err :error} (normalize-string (param-value body :contact/email) "email" {:required true})
         {phone :value phone-err :error} (normalize-string (param-value body :contact/phone) "phone" {:required true})
@@ -1190,19 +1205,21 @@
         {secondary-label :value secondary-label-err :error} (normalize-string (param-value body :contact/secondary-cta-label) "secondary CTA label" {:required false})
         {secondary-url :value secondary-url-err :error} (normalize-string (param-value body :contact/secondary-cta-url) "secondary CTA url" {:required false})]
     (or id-err email-err phone-err primary-label-err primary-url-err secondary-label-err secondary-url-err
-        {:tx {:contact/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/contact
-              :contact/email email
-              :contact/phone phone
-              :contact/primary-cta-label primary-label
-              :contact/primary-cta-url primary-url
-              :contact/secondary-cta-label secondary-label
-              :contact/secondary-cta-url secondary-url}})))
+        (let [tx {:contact/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/contact
+                  :contact/email email
+                  :contact/phone phone
+                  :contact/primary-cta-label primary-label
+                  :contact/primary-cta-url primary-url
+                  :contact/secondary-cta-label secondary-label
+                  :contact/secondary-cta-url secondary-url}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-contact!
   [conn body actor]
   (or (ensure-conn conn)
-      (let [{:keys [tx error]} (validate-contact body)]
+      (let [{:keys [tx error]} (validate-contact (d/db conn) body)]
         (if error
           (error 400 error)
           (let [tx-prov (prov/provenance actor)
@@ -1216,7 +1233,7 @@
                 {:contact tx})))))))
 
 (defn- validate-business
-  [body]
+  [db body]
   (let [{id :value id-err :error} (normalize-uuid (param-value body :business/id) "business id")
         {name :value name-err :error} (normalize-string (param-value body :business/name) "name" {:required true})
         {tagline :value tagline-err :error} (normalize-string (param-value body :business/tagline) "tagline" {:required false})
@@ -1233,25 +1250,27 @@
     (or id-err name-err tagline-err summary-err mission-err vision-err nav-label-err headline-err strapline-err contact-err visible-err
         (:error hero-stats-res)
         (:error hero-flows-res)
-        {:tx (cond-> {:business/id (or id (UUID/randomUUID))
-                      :entity/type :entity.type/business
-                      :business/name name
-                      :business/tagline tagline
-                      :business/summary summary
-                      :business/mission mission
-                      :business/vision vision
-                      :business/nav-label nav-label
-                      :business/hero-headline headline
-                      :business/hero-strapline strapline
-                      :business/visible? (if (nil? visible) true visible)}
-               contact-ref (assoc :business/contact [:contact/id contact-ref])
-               (seq (:value hero-stats-res)) (assoc :business/hero-stats (:value hero-stats-res))
-               (seq (:value hero-flows-res)) (assoc :business/hero-flows (:value hero-flows-res)))})))
+        (let [tx (cond-> {:business/id (or id (UUID/randomUUID))
+                          :entity/type :entity.type/business
+                          :business/name name
+                          :business/tagline tagline
+                          :business/summary summary
+                          :business/mission mission
+                          :business/vision vision
+                          :business/nav-label nav-label
+                          :business/hero-headline headline
+                          :business/hero-strapline strapline
+                          :business/visible? (if (nil? visible) true visible)}
+                   contact-ref (assoc :business/contact [:contact/id contact-ref])
+                   (seq (:value hero-stats-res)) (assoc :business/hero-stats (:value hero-stats-res))
+                   (seq (:value hero-flows-res)) (assoc :business/hero-flows (:value hero-flows-res)))
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-business!
   [conn body actor]
   (or (ensure-conn conn)
-      (let [{:keys [tx error]} (validate-business body)]
+      (let [{:keys [tx error]} (validate-business (d/db conn) body)]
         (if error
           (error 400 error)
           (let [tx-prov (prov/provenance actor)
@@ -1285,12 +1304,14 @@
         {order :value order-err :error} (normalize-long (param-value body :journey.phase/order) "order")
         {bullets :value bullets-err :error} (normalize-string-list (param-value body :journey.phase/bullets) "bullets")]
     (or id-err title-err kind-err order-err bullets-err
-        {:tx {:journey.phase/id (or id (UUID/randomUUID))
-              :entity/type :entity.type/journey-phase
-              :journey.phase/title title
-              :journey.phase/kind (or kind :phase/pre-incorporation)
-              :journey.phase/order order
-              :journey.phase/bullets bullets}})))
+        (let [tx {:journey.phase/id (or id (UUID/randomUUID))
+                  :entity/type :entity.type/journey-phase
+                  :journey.phase/title title
+                  :journey.phase/kind (or kind :phase/pre-incorporation)
+                  :journey.phase/order order
+                  :journey.phase/bullets bullets}
+              tx (entity/with-ref db tx)]
+          {:tx tx}))))
 
 (defn upsert-journey-phase!
   [conn body actor]

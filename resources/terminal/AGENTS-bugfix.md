@@ -21,10 +21,29 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
   - UI: `scripts/checks.sh app-smoke` (or `node scripts/app-smoke.js`) + verify the specific UI flow
   - terminal: create a session, confirm app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
   - integrations (GitHub/Rezultati/Supersport/Telegram): perform a minimal call that validates auth + response shape
+- Mandatory proofs by change type (do not skip):
+  - terminal sessions/UI: create a session, confirm app link is live, send input, confirm output updates, execute at least one `@command` end-to-end
+  - tasks: create/update a task via UI or `task.create` and confirm it persists (reload or fetch)
+  - file library: upload/update a file and confirm it appears in the file list
+  - dev bot: start a dev-bot session and confirm the bot replies to `/start`
+  - PR/verify flow: run `scripts/terminal-verify.sh` and confirm a PR URL is returned
 - Do not claim done unless all required proofs pass; if blocked by creds or infra, report and stop.
+
+## Live command protocol (required)
+- Use commands to interact with live app data during the session (tasks/files/context/dev bot). Do not open a PR just to create tasks or update the file library.
+- Emit a single-line JSON command block exactly:
+  `@command {"id":"<uuid>","type":"task.create","input":{...}}`
+- Always include a unique `id` (UUID). Keep the JSON on one line.
+- Supported types:
+  - `task.create`, `task.update`, `task.set-status`, `task.assign`, `task.set-due`, `task.set-tags`, `task.archive`, `task.delete`
+  - `file.upload`, `file.update`, `file.delete`
+  - `context.add`, `devbot.reset`
+- `file.upload` requires `filename`, `mime`, and either `content_base64` or `path`.
+- Command results are injected back into the session output; treat them as authoritative.
 
 ## PR workflow (required)
 - Git credentials are preconfigured in the session environment; do NOT ask for a token.
+- Do not create a PR until the verification matrix (including mandatory proofs) is complete.
 - Make commits normally and run `git push -u origin <branch>`.
 - Create the PR by running `scripts/terminal-verify.sh` (uses `TERMINAL_API_URL` + `TERMINAL_SESSION_ID`).
 - `AGENTS.md` is injected into the session and ignored by git; do not add it to commits.

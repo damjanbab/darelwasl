@@ -137,6 +137,22 @@
             (log/warn e "Failed to send keys" {:id session-id})
             (error-response 500 "Failed to send keys")))))))
 
+(defn claim-command-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          command-id (or (get-in request [:body-params :id])
+                         (get-in request [:body-params "id"]))
+          session (find-session (:terminal/store state) session-id)]
+      (cond
+        (nil? session) (error-response 404 "Session not found")
+        :else
+        (let [{:keys [status message]} (session/claim-command! (:terminal/store state) session command-id)]
+          (case status
+            :claimed (ok {:status "claimed"})
+            :duplicate (ok {:status "duplicate"})
+            (error-response 400 (or message "Unable to claim command"))))))))
+
 (defn output-handler
   [state]
   (fn [request]
@@ -268,6 +284,8 @@
     {:post (send-input-handler state)}]
    ["/sessions/:id/keys"
     {:post (send-keys-handler state)}]
+   ["/sessions/:id/commands/claim"
+    {:post (claim-command-handler state)}]
    ["/sessions/:id/output"
     {:get (output-handler state)}]
    ["/sessions/:id/complete"

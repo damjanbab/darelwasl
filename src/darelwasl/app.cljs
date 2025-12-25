@@ -2450,6 +2450,38 @@
            (assoc :session nil
                   :route :login))))))
 
+(def ^:private command-re
+  #"@command\s+(\{[^\n]+})")
+
+(defn- parse-command-json
+  [text]
+  (try
+    (js->clj (.parse js/JSON text) :keywordize-keys true)
+    (catch :default _ nil)))
+
+(defn- normalize-command
+  [command]
+  (let [id (or (:id command) (:command/id command))
+        type (or (:type command) (:command/type command))
+        input (or (:input command) (:command/input command) {})]
+    (when (and id type)
+      {:id (str id)
+       :type (if (keyword? type) (name type) (str type))
+       :input input})))
+
+(defn- extract-commands
+  [output]
+  (let [matches (re-seq command-re (or output ""))]
+    (->> matches
+         (map second)
+         (keep parse-command-json)
+         (keep normalize-command)
+         (reduce (fn [acc cmd]
+                   (assoc acc (:id cmd) cmd))
+                 {})
+         vals
+         vec)))
+
 (rf/reg-event-fx
  ::fetch-terminal-sessions
  (fn [{:keys [db]} _]
@@ -2508,6 +2540,11 @@
  (fn [db [_ value]]
    (assoc-in db [:terminal :new-session-dev-bot?] (boolean value))))
 
+(rf/reg-event-db
+ ::terminal-update-auto-run
+ (fn [db [_ value]]
+   (assoc-in db [:terminal :auto-run-commands?] (boolean value))))
+
 (rf/reg-event-fx
  ::terminal-session-created
  (fn [{:keys [db]} [_ payload]]
@@ -2521,6 +2558,9 @@
               (assoc-in [:terminal :resuming?] false)
               (assoc-in [:terminal :restarting?] false)
               (assoc-in [:terminal :interrupting?] false)
+              (assoc-in [:terminal :pending-commands] [])
+              (assoc-in [:terminal :command-ids] #{})
+              (assoc-in [:terminal :command-status] {})
               (assoc-in [:terminal :status] :ready)
               (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
@@ -2538,6 +2578,9 @@
             (assoc-in [:terminal :resuming?] false)
             (assoc-in [:terminal :restarting?] false)
             (assoc-in [:terminal :interrupting?] false)
+            (assoc-in [:terminal :pending-commands] [])
+            (assoc-in [:terminal :command-ids] #{})
+            (assoc-in [:terminal :command-status] {})
             (assoc-in [:terminal :error] nil)
             (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
@@ -2576,6 +2619,9 @@
        (assoc-in [:terminal :resuming?] false)
        (assoc-in [:terminal :restarting?] false)
        (assoc-in [:terminal :interrupting?] false)
+       (assoc-in [:terminal :pending-commands] [])
+       (assoc-in [:terminal :command-ids] #{})
+       (assoc-in [:terminal :command-status] {})
        (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
@@ -2641,6 +2687,40 @@
        (assoc-in [:terminal :error] (or (:error body) "Unable to send keys.")))))
 
 (rf/reg-event-fx
+ ::terminal-exec-command
+ (fn [{:keys [db]} [_ command]]
+   (let [session-id (get-in db [:terminal :selected :id])
+         command-id (:id command)]
+     (if (and session-id command-id)
+       {:db (-> db
+                (update-in [:terminal :command-status] assoc command-id :running)
+                (update-in [:terminal :pending-commands]
+                           (fn [cmds]
+                             (vec (remove #(= (:id %) command-id) cmds)))))
+        ::fx/http {:url (str "/api/terminal/sessions/" session-id "/commands")
+                   :method "POST"
+                   :body {:command command}
+                   :on-success [::terminal-command-success command-id]
+                   :on-error [::terminal-command-failure command-id]}}
+       {:db db}))))
+
+(rf/reg-event-db
+ ::terminal-command-success
+ (fn [db [_ command-id _payload]]
+   (-> db
+       (update-in [:terminal :command-ids] conj command-id)
+       (update-in [:terminal :command-status] assoc command-id :done))))
+
+(rf/reg-event-db
+ ::terminal-command-failure
+ (fn [db [_ command-id {:keys [body]}]]
+   (let [message (or (:error body) "Command failed")]
+     (-> db
+         (update-in [:terminal :command-ids] conj command-id)
+         (update-in [:terminal :command-status] assoc command-id :error)
+         (assoc-in [:terminal :error] message)))))
+
+(rf/reg-event-fx
  ::terminal-start-poll
  (fn [{:keys [db]} _]
    (let [session-id (get-in db [:terminal :selected :id])]
@@ -2676,8 +2756,17 @@
                    true (assoc-in [:terminal :cursor] cursor)
                    true (assoc-in [:terminal :error] nil)
                    (some? app-ready?) (assoc-in [:terminal :app-ready?] (boolean app-ready?)))
+         output (get-in next-db [:terminal :output])
+         commands (extract-commands output)
+         seen-ids (into #{} (concat (get-in next-db [:terminal :command-ids])
+                                    (keys (get-in next-db [:terminal :command-status]))))
+         new-commands (vec (remove #(contains? seen-ids (:id %)) commands))
+         next-db (assoc-in next-db [:terminal :pending-commands] new-commands)
+         auto-run? (boolean (get-in next-db [:terminal :auto-run-commands?]))
          polling? (get-in next-db [:terminal :polling?])]
      (cond-> {:db next-db}
+       (and auto-run? (seq new-commands))
+       (assoc ::fx/dispatch-n (mapv (fn [cmd] [::terminal-exec-command cmd]) new-commands))
        polling? (assoc ::fx/dispatch-later {:ms 1000
                                             :dispatch [::terminal-fetch-output]})))))
 

@@ -29,6 +29,7 @@
            (log/error error (str "Schema load failed during " context))
            (assoc db-state :error error))
          (let [{bf-error :error added :added} (schema/backfill-entity-types! conn)
+               {ref-error :error ref-added :added} (schema/backfill-entity-refs! conn)
                db (d/db conn)
                seeded? (fixtures/seeded? db)
                has-users? (seq (d/q '[:find ?e :where [?e :user/id _]] db))
@@ -36,22 +37,29 @@
                has-tags? (seq (d/q '[:find ?e :where [?e :tag/id _]] db))
                prepared (cond
                           bf-error (assoc db-state :error bf-error)
+                          ref-error (assoc db-state :error ref-error)
                           seeded?
                           (do
                             (when (pos? (or added 0))
                               (log/infof "Backfilled :entity/type on %s existing entities" added))
+                            (when (pos? (or ref-added 0))
+                              (log/infof "Backfilled :entity/ref on %s existing entities" ref-added))
                             (log/info "Schema loaded; seed marker present, skipping fixture seed")
                             (assoc db-state :schema/tx-count tx-count))
                           (not auto-seed?)
                           (do
                             (when (pos? (or added 0))
                               (log/infof "Backfilled :entity/type on %s existing entities" added))
+                            (when (pos? (or ref-added 0))
+                              (log/infof "Backfilled :entity/ref on %s existing entities" ref-added))
                             (log/info "Schema loaded; fixture seeding disabled via ALLOW_FIXTURE_SEED")
                             (assoc db-state :schema/tx-count tx-count))
                           (and has-users? has-tasks? has-tags?)
                           (do
                             (when (pos? (or added 0))
                               (log/infof "Backfilled :entity/type on %s existing entities" added))
+                            (when (pos? (or ref-added 0))
+                              (log/infof "Backfilled :entity/ref on %s existing entities" ref-added))
                             (log/info "Schema loaded; skipping fixture seed (data already present)")
                             (assoc db-state :schema/tx-count tx-count))
                           :else

@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.entity :as entity]
             [darelwasl.validation :as v])
   (:import (java.io File FileInputStream)
            (java.math BigInteger)
@@ -28,6 +29,7 @@
 
 (def ^:private pull-pattern
   [:file/id
+   :entity/ref
    :entity/type
    :file/name
    :file/slug
@@ -137,6 +139,10 @@
           (recur (inc suffix))
           candidate)))))
 
+(defn- resolve-file-id
+  [db file-id]
+  (entity/resolve-id db :file/id file-id "file id"))
+
 (defn- file-eid-by-id
   [db file-id]
   (ffirst
@@ -207,16 +213,18 @@
                     checksum (sha256 tempfile)
                     created-at (now-inst)
                     created-by (some-> actor :user/id)
-                    tx-data (cond-> {:file/id file-id
-                                     :entity/type :entity.type/file
-                                     :file/name (or filename storage-name)
-                                     :file/slug final-slug
-                                     :file/type ftype
-                                     :file/mime mime
-                                     :file/size-bytes (long (or size 0))
-                                     :file/checksum checksum
-                                     :file/storage-path storage-name
-                                     :file/created-at created-at}
+                    base {:file/id file-id
+                          :entity/type :entity.type/file
+                          :file/name (or filename storage-name)
+                          :file/slug final-slug
+                          :file/type ftype
+                          :file/mime mime
+                          :file/size-bytes (long (or size 0))
+                          :file/checksum checksum
+                          :file/storage-path storage-name
+                          :file/created-at created-at}
+                    base (entity/with-ref db base)
+                    tx-data (cond-> base
                               created-by (assoc :file/created-by [:user/id created-by]))]
                 (try
                   (io/copy tempfile (io/file storage-path))
@@ -235,11 +243,11 @@
 (defn update-file!
   [conn file-id {:keys [slug ref]} _actor]
   (or (ensure-conn conn)
-      (let [{id :value id-err :error} (normalize-uuid file-id "file id")]
+      (let [db (d/db conn)
+            {id :value id-err :error} (resolve-file-id db file-id)]
         (if id-err
           (error 400 id-err)
-          (let [db (d/db conn)
-                eid (file-eid-by-id db id)
+          (let [eid (file-eid-by-id db id)
                 file (pull-file db eid)
                 requested (or (reference->slug ref) slug)
                 {slug-val :value slug-err :error} (normalize-string requested "slug" {:required false
@@ -266,11 +274,11 @@
 (defn delete-file!
   [conn file-id storage-dir]
   (or (ensure-conn conn)
-      (let [{id :value id-err :error} (normalize-uuid file-id "file id")]
+      (let [db (d/db conn)
+            {id :value id-err :error} (resolve-file-id db file-id)]
         (if id-err
           (error 400 id-err)
-          (let [db (d/db conn)
-                eid (file-eid-by-id db id)]
+          (let [eid (file-eid-by-id db id)]
             (if-not eid
               (error 404 "File not found")
               (let [{:file/keys [storage-path]} (pull-file db eid)
@@ -293,11 +301,11 @@
 (defn fetch-file
   [conn file-id]
   (or (ensure-conn conn)
-      (let [{id :value id-err :error} (normalize-uuid file-id "file id")]
+      (let [db (d/db conn)
+            {id :value id-err :error} (resolve-file-id db file-id)]
         (if id-err
           (error 400 id-err)
-          (let [db (d/db conn)
-                eid (file-eid-by-id db id)
+          (let [eid (file-eid-by-id db id)
                 file (pull-file db eid)]
             (if file
               {:file file}

@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
-            [darelwasl.db :as db])
+            [darelwasl.db :as db]
+            [darelwasl.entity :as entity])
   (:import (java.io PushbackReader)))
 
 (def default-registry-path "registries/schema.edn")
@@ -99,6 +100,32 @@
       {:status :ok :added (count tx-data)})
     (catch Exception e
       (log/error e "Failed to backfill :entity/type")
+      {:error e})))
+
+(defn backfill-entity-refs!
+  "Backfill :entity/ref for existing entities missing it. Returns {:status :ok :added n} or {:error e}."
+  [conn]
+  (try
+    (let [db (d/db conn)
+          entities (d/q '[:find ?e ?t
+                          :where [?e :entity/type ?t]
+                                 (not [?e :entity/ref _])]
+                        db)
+          existing (set (map first (d/q '[:find ?ref
+                                          :where [_ :entity/ref ?ref]]
+                                        db)))
+          [tx-data _] (reduce (fn [[tx used] [eid etype]]
+                                (let [ref (entity/unique-ref db etype used)]
+                                  [(conj tx [:db/add eid :entity/ref ref])
+                                   (conj used ref)]))
+                              [[] existing]
+                              entities)]
+      (when (seq tx-data)
+        (d/transact conn {:tx-data tx-data})
+        (log/infof "Backfilled :entity/ref on %s entities" (count tx-data)))
+      {:status :ok :added (count tx-data)})
+    (catch Exception e
+      (log/error e "Failed to backfill :entity/ref")
       {:error e})))
 
 (defn temp-db-with-schema!

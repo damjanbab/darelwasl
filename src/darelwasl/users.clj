@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.entity :as entity]
             [darelwasl.validation :as v])
   (:import (java.util UUID)))
 
@@ -23,6 +24,7 @@
 
 (def ^:private user-pull-pattern
   [:user/id
+   :entity/ref
    :entity/type
    :user/username
    :user/name
@@ -30,7 +32,7 @@
    :user/roles])
 
 (def ^:private public-keys
-  [:user/id :user/username :user/name :user/roles])
+  [:user/id :entity/ref :user/username :user/name :user/roles])
 
 (defn- sanitize-user
   [user]
@@ -133,6 +135,7 @@
                     base (cond-> base
                            (seq roles) (assoc :user/roles roles)
                            name (assoc :user/name name))
+                    base (entity/with-ref db base)
                     tx-data [base]]
                 (try
                   (d/transact conn {:tx-data tx-data})

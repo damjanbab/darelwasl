@@ -22,30 +22,39 @@
       (json/read-str text :key-fn keyword))))
 
 (defn request
-  [cfg method path & [body]]
-  (let [base-url (get-in cfg [:terminal :base-url])
-        url (str base-url path)
-        admin-token (get-in cfg [:terminal :admin-token])]
-    (try
-      (let [resp (http/request {:method method
-                                :url url
-                                :throw-exceptions false
-                                :socket-timeout default-timeout-ms
-                                :conn-timeout default-timeout-ms
-                                :headers (cond-> {"Accept" "application/json"}
-                                           admin-token (assoc "X-Terminal-Admin-Token" admin-token))
-                                :content-type :json
-                                :as :byte-array
-                                :body (when body (json/write-str body))})
-            status (:status resp)
-            parsed (parse-json (:body resp))]
-        (if (<= 200 status 299)
-          {:status :ok
-           :body parsed}
-          {:error (or (:error parsed) "Terminal service error")
-           :status status
-           :body parsed}))
-      (catch Exception e
-        (log/warn e "Terminal request failed" {:url url})
-        {:error "Terminal service unavailable"
-         :status 502}))))
+  ([cfg method path]
+   (request cfg method path nil nil))
+  ([cfg method path body]
+   (request cfg method path body nil))
+  ([cfg method path body {:keys [timeout-ms]}]
+   (let [base-url (get-in cfg [:terminal :base-url])
+         url (str base-url path)
+         admin-token (get-in cfg [:terminal :admin-token])
+         timeout-ms (or timeout-ms default-timeout-ms)]
+     (try
+       (let [resp (http/request {:method method
+                                 :url url
+                                 :throw-exceptions false
+                                 :socket-timeout timeout-ms
+                                 :conn-timeout timeout-ms
+                                 :headers (cond-> {"Accept" "application/json"}
+                                            admin-token (assoc "X-Terminal-Admin-Token" admin-token))
+                                 :content-type :json
+                                 :as :byte-array
+                                 :body (when body (json/write-str body))})
+             status (:status resp)
+             parsed (parse-json (:body resp))]
+         (if (<= 200 status 299)
+           {:status :ok
+            :body parsed}
+           {:error (or (:error parsed) "Terminal service error")
+            :status status
+            :body parsed}))
+       (catch Exception e
+         (log/warn e "Terminal request failed" {:url url})
+         {:error "Terminal service unavailable"
+          :status 502})))))
+
+(defn request-with-timeout
+  [cfg method path body timeout-ms]
+  (request cfg method path body {:timeout-ms timeout-ms}))

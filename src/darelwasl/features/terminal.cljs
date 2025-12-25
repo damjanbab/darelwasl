@@ -132,9 +132,43 @@
           (when error
             [:div.form-error error])])})))
 
+(defn- command-row
+  [{:keys [id type input]} status auto-run?]
+  [:div.terminal-command-row
+   [:div.terminal-command-meta
+    [:div.terminal-command-type (or type "command")]
+    [:div.terminal-command-id id]
+    (when (seq input)
+      [:div.terminal-command-input (pr-str input)])]
+   [:div.terminal-command-actions
+    (when-not auto-run?
+      [ui/button {:variant :secondary
+                  :disabled (= status :running)
+                  :on-click #(rf/dispatch [:darelwasl.app/terminal-exec-command {:id id :type type :input input}])}
+       (if (= status :running) "Running..." "Run")])
+    (when status
+      [:span.meta (case status
+                    :done "Done"
+                    :error "Error"
+                    :running "Running"
+                    "")])]])
+
+(defn- command-panel
+  [commands statuses auto-run?]
+  (when (seq commands)
+    [:div.terminal-command-panel
+     [:div.terminal-command-header
+      [:span "Commands"]
+      (when auto-run?
+        [:span.meta "Auto-run enabled"])]
+     (for [cmd commands]
+       ^{:key (:id cmd)}
+       [command-row cmd (get statuses (:id cmd)) auto-run?])]))
+
 (defn- terminal-chat
   []
-  (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting? app-ready?]}
+  (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting?
+                app-ready? auto-run-commands? pending-commands command-status]}
         @(rf/subscribe [:darelwasl.app/terminal])]
     (if-not selected
       [:div.panel.terminal-empty
@@ -181,6 +215,11 @@
                :target "_blank"
                :rel "noreferrer"}
               "Open site"])
+           [:label.terminal-command-toggle
+            [:input {:type "checkbox"
+                     :checked (boolean auto-run-commands?)
+                     :on-change #(rf/dispatch [:darelwasl.app/terminal-update-auto-run (.. % -target -checked)])}]
+            [:span "Auto-run commands"]]
            (when-not (:running? selected)
              [ui/button {:variant :secondary
                          :disabled resuming?
@@ -223,6 +262,7 @@
               site-link]])]
          [terminal-output {:output output
                            :error error}]
+         [command-panel pending-commands command-status auto-run-commands?]
          (when-let [actions (quick-actions output)]
            actions)
          [:div.terminal-input

@@ -6,7 +6,12 @@
   [{:ident :entity/type
     :type :db.type/keyword
     :cardinality :db.cardinality/one
-    :doc "Discriminator for entity type (e.g., :entity.type/task)"}]
+    :doc "Discriminator for entity type (e.g., :entity.type/task)"}
+   {:ident :entity/ref
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Short reference id for humans (e.g., T-7F2A1)"}]
   :enums []
   :invariants ["Every persisted entity must set :entity/type to its type ident"]
   :history {:strategy :overwrite}

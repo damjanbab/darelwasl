@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.entity :as entity]
             [darelwasl.rezultati-scraper :as rezultati]
             [darelwasl.validation :as v])
   (:import (java.time LocalDate LocalTime ZoneId ZonedDateTime)
@@ -21,7 +22,14 @@
 
 (def ^:private param-value v/param-value)
 (def ^:private normalize-string v/normalize-string)
-(def ^:private normalize-uuid v/normalize-uuid)
+
+(defn- resolve-event-id
+  [db value]
+  (entity/resolve-id db :betting.event/id value "event id"))
+
+(defn- resolve-bet-id
+  [db value]
+  (entity/resolve-id db :betting.bet/id value "bet id"))
 
 (defn- error
   [status message & [details]]
@@ -276,16 +284,17 @@
                               commence (or (parse-commence-time day-offset time) now)
                               key (or sport-key (sport-key-from-path sport-path))
                               title (or sport-title (sport-title-from-path sport-path))]
-                          {:betting.event/id event-id
-                           :entity/type :entity.type/betting-event
-                           :betting.event/external-id external-id
-                           :betting.event/sport-key key
-                           :betting.event/sport-title title
-                           :betting.event/commence-time commence
-                           :betting.event/home-team home
-                           :betting.event/away-team away
-                           :betting.event/status (or status :scheduled)
-                           :betting.event/last-updated now}))
+                          (entity/with-ref db
+                                           {:betting.event/id event-id
+                                            :entity/type :entity.type/betting-event
+                                            :betting.event/external-id external-id
+                                            :betting.event/sport-key key
+                                            :betting.event/sport-title title
+                                            :betting.event/commence-time commence
+                                            :betting.event/home-team home
+                                            :betting.event/away-team away
+                                            :betting.event/status (or status :scheduled)
+                                            :betting.event/last-updated now})))
                       matches)]
     (when (seq tx-data)
       (d/transact conn {:tx-data tx-data}))
@@ -325,32 +334,37 @@
     (if existing
       (d/pull db [:betting.bookmaker/id :betting.bookmaker/key :betting.bookmaker/title] existing)
       (let [bookmaker-id (UUID/randomUUID)
-            tx {:betting.bookmaker/id bookmaker-id
-                :entity/type :entity.type/betting-bookmaker
-                :betting.bookmaker/key key
-                :betting.bookmaker/title title}]
+            tx (entity/with-ref db
+                                {:betting.bookmaker/id bookmaker-id
+                                 :entity/type :entity.type/betting-bookmaker
+                                 :betting.bookmaker/key key
+                                 :betting.bookmaker/title title})]
         (d/transact conn {:tx-data [tx]})
         (assoc tx :betting.bookmaker/id bookmaker-id)))))
 
 (defn- build-quote-tx
-  [event-id bookmaker-id selection odds prob close? captured-at]
-  (let [quote-id (UUID/randomUUID)]
-    {:quote {:betting.quote/id quote-id
-             :entity/type :entity.type/betting-quote
-             :betting.quote/event [:betting.event/id event-id]
-             :betting.quote/bookmaker [:betting.bookmaker/id bookmaker-id]
-             :betting.quote/market-key market-1x2
-             :betting.quote/selection selection
-             :betting.quote/odds-decimal odds
-             :betting.quote/implied-prob prob
-             :betting.quote/close? close?
-             :betting.quote/captured-at captured-at}
-     :fact {:betting.fact/id (UUID/randomUUID)
-            :entity/type :entity.type/betting-fact
-            :betting.fact/type (if close? :close-capture :quote-capture)
-            :betting.fact/event [:betting.event/id event-id]
-            :betting.fact/quote [:betting.quote/id quote-id]
-            :betting.fact/created-at captured-at}}))
+  [db event-id bookmaker-id selection odds prob close? captured-at]
+  (let [quote-id (UUID/randomUUID)
+        quote (entity/with-ref db
+                               {:betting.quote/id quote-id
+                                :entity/type :entity.type/betting-quote
+                                :betting.quote/event [:betting.event/id event-id]
+                                :betting.quote/bookmaker [:betting.bookmaker/id bookmaker-id]
+                                :betting.quote/market-key market-1x2
+                                :betting.quote/selection selection
+                                :betting.quote/odds-decimal odds
+                                :betting.quote/implied-prob prob
+                                :betting.quote/close? close?
+                                :betting.quote/captured-at captured-at})
+        fact (entity/with-ref db
+                              {:betting.fact/id (UUID/randomUUID)
+                               :entity/type :entity.type/betting-fact
+                               :betting.fact/type (if close? :close-capture :quote-capture)
+                               :betting.fact/event [:betting.event/id event-id]
+                               :betting.fact/quote [:betting.quote/id quote-id]
+                               :betting.fact/created-at captured-at})]
+    {:quote quote
+     :fact fact}))
 
 (defn- quote-selections
   [{:keys [home away odds]}]
@@ -581,11 +595,11 @@
   (if-let [err (ensure-conn conn)]
     err
     (try
-      (let [{:keys [value error]} (normalize-uuid event-id "event id")]
+      (let [db (d/db conn)
+            {:keys [value error]} (resolve-event-id db event-id)]
         (if error
           (error 400 error)
-          (let [db (d/db conn)
-                event (event-by-id db value)
+          (let [event (event-by-id db value)
                 external-id (:betting.event/external-id event)
                 match-id (match-id-from-external external-id)]
             (cond
@@ -615,7 +629,7 @@
                                              (keep (fn [{:keys [selection odds prob]}]
                                                      (when (and selection (number? odds) (pos? odds)
                                                                 (number? prob) (pos? prob))
-                                                       (build-quote-tx value
+                                                       (build-quote-tx db value
                                                                        (:betting.bookmaker/id bookmaker)
                                                                        selection
                                                                        odds
@@ -647,11 +661,11 @@
   (if-let [err (ensure-conn conn)]
     err
     (try
-      (let [{:keys [value error]} (normalize-uuid event-id "event id")]
+      (let [db (d/db conn)
+            {:keys [value error]} (resolve-event-id db event-id)]
         (if error
           (error 400 error)
-          (let [db (d/db conn)
-                event (event-by-id db value)
+          (let [event (event-by-id db value)
                 external-id (:betting.event/external-id event)
                 match-id (match-id-from-external external-id)]
             (cond
@@ -681,7 +695,7 @@
                                              (keep (fn [{:keys [selection odds prob]}]
                                                      (when (and selection (number? odds) (pos? odds)
                                                                 (number? prob) (pos? prob))
-                                                       (build-quote-tx value
+                                                       (build-quote-tx db value
                                                                        (:betting.bookmaker/id bookmaker)
                                                                        selection
                                                                        odds
@@ -713,7 +727,8 @@
   [conn cfg {:keys [event-id market-key selection odds bookmaker-key]}]
   (if-let [err (ensure-conn conn)]
     err
-    (let [{event-id* :value event-err :error} (normalize-uuid event-id "event id")
+    (let [db (d/db conn)
+          {event-id* :value event-err :error} (resolve-event-id db event-id)
           {selection* :value sel-err :error} (normalize-string selection "selection" {:required true})
           {odds* :value odds-err :error} (parse-optional-positive odds "odds")]
       (cond
@@ -721,8 +736,7 @@
         sel-err (error 400 sel-err)
         odds-err (error 400 odds-err)
         :else
-        (let [db (d/db conn)
-              event (event-by-id db event-id*)
+        (let [event (event-by-id db event-id*)
               now (now-inst)
               market (or market-key market-1x2)]
           (if-not event
@@ -745,24 +759,26 @@
                   bookmaker (when exec-key
                               (ensure-bookmaker! conn exec-key exec-key))
                   bet-id (UUID/randomUUID)
-                  tx (cond-> {:betting.bet/id bet-id
-                              :entity/type :entity.type/betting-bet
-                              :betting.bet/event [:betting.event/id event-id*]
-                              :betting.bet/market-key market
-                              :betting.bet/selection selection*
-                              :betting.bet/implied-prob entry-prob
-                              :betting.bet/placed-at now
-                              :betting.bet/status :pending}
-                       (and execution (number? execution) (pos? execution))
-                       (assoc :betting.bet/odds-decimal execution)
-                       bookmaker
-                       (assoc :betting.bet/bookmaker [:betting.bookmaker/id (:betting.bookmaker/id bookmaker)]))
-                  fact {:betting.fact/id (UUID/randomUUID)
-                        :entity/type :entity.type/betting-fact
-                        :betting.fact/type :bet-log
-                        :betting.fact/event [:betting.event/id event-id*]
-                        :betting.fact/bet [:betting.bet/id bet-id]
-                        :betting.fact/created-at now}]
+                  base (cond-> {:betting.bet/id bet-id
+                                :entity/type :entity.type/betting-bet
+                                :betting.bet/event [:betting.event/id event-id*]
+                                :betting.bet/market-key market
+                                :betting.bet/selection selection*
+                                :betting.bet/implied-prob entry-prob
+                                :betting.bet/placed-at now
+                                :betting.bet/status :pending}
+                         (and execution (number? execution) (pos? execution))
+                         (assoc :betting.bet/odds-decimal execution)
+                         bookmaker
+                         (assoc :betting.bet/bookmaker [:betting.bookmaker/id (:betting.bookmaker/id bookmaker)]))
+                  tx (entity/with-ref db base)
+                  fact (entity/with-ref db
+                                        {:betting.fact/id (UUID/randomUUID)
+                                         :entity/type :entity.type/betting-fact
+                                         :betting.fact/type :bet-log
+                                         :betting.fact/event [:betting.event/id event-id*]
+                                         :betting.fact/bet [:betting.bet/id bet-id]
+                                         :betting.fact/created-at now})]
               (cond
                 (nil? slot) (error 400 "Selection not recognized for this match")
                 (nil? entry-prob) (error 409 "Reference odds unavailable; refresh odds first")
@@ -794,8 +810,8 @@
   [conn cfg {:keys [event-id]}]
   (if-let [err (ensure-conn conn)]
     err
-    (let [{event-id* :value event-err :error} (normalize-uuid event-id "event id")
-          db (d/db conn)]
+    (let [db (d/db conn)
+          {event-id* :value event-err :error} (resolve-event-id db event-id)]
       (if event-err
         (error 400 event-err)
         (let [bet-eids (if event-id*
@@ -862,7 +878,8 @@
   [conn cfg {:keys [bet-id status]}]
   (if-let [err (ensure-conn conn)]
     err
-    (let [{bet-id* :value bet-err :error} (normalize-uuid bet-id "bet id")
+    (let [db (d/db conn)
+          {bet-id* :value bet-err :error} (resolve-bet-id db bet-id)
           status-kw (cond
                       (keyword? status) status
                       (string? status) (keyword (str/replace status #"^:" ""))
@@ -871,8 +888,7 @@
         bet-err (error 400 bet-err)
         (nil? status-kw) (error 400 "Invalid status")
         :else
-        (let [db (d/db conn)
-              eid (ffirst (d/q '[:find ?b
+        (let [eid (ffirst (d/q '[:find ?b
                                  :in $ ?id
                                  :where [?b :betting.bet/id ?id]]
                                db bet-id*))
@@ -880,14 +896,16 @@
           (if-not eid
             (error 404 "Bet not found")
             (do
-              (d/transact conn {:tx-data [{:db/id eid
-                                           :betting.bet/status status-kw
-                                           :betting.bet/settled-at now}
-                                          {:betting.fact/id (UUID/randomUUID)
-                                           :entity/type :entity.type/betting-fact
-                                           :betting.fact/type :settle
-                                           :betting.fact/bet [:betting.bet/id bet-id*]
-                                           :betting.fact/created-at now}]})
+              (let [fact (entity/with-ref db
+                                           {:betting.fact/id (UUID/randomUUID)
+                                            :entity/type :entity.type/betting-fact
+                                            :betting.fact/type :settle
+                                            :betting.fact/bet [:betting.bet/id bet-id*]
+                                            :betting.fact/created-at now})]
+                (d/transact conn {:tx-data [{:db/id eid
+                                             :betting.bet/status status-kw
+                                             :betting.bet/settled-at now}
+                                            fact]}))
               (let [bet (d/pull (d/db conn)
                                 [:betting.bet/id
                                  {:betting.bet/event [:betting.event/id
