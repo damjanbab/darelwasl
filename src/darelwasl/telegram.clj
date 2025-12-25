@@ -726,11 +726,14 @@
 
 (defn- find-user-task
   [conn user-id task-id]
-  (let [res (list-user-tasks conn user-id 100)]
+  (let [res (tasks/fetch-task conn task-id)]
     (when-not (:error res)
-      (->> (:tasks res)
-           (filter #(= (:task/id %) task-id))
-           first))))
+      (let [task (:task res)
+            assignee-id (get-in task [:task/assignee :user/id])
+            creator-id (some-> (:fact/source-id task) str)]
+        (when (or (= assignee-id user-id)
+                  (= creator-id (str user-id)))
+          task)))))
 
 (defn- handle-freeform-message
   [state chat-user chat-id text]
@@ -1015,7 +1018,9 @@
                   (nil? task-id) {:text "Invalid task id. Use /task <uuid>."}
                   :else
                   (let [task (find-user-task conn (:user/id chat-user) task-id)]
-                    {:task task}))))
+                    (if task
+                      {:task task}
+                      {:text "Task not found or not assigned to you."})))))
       :new (if-not chat-user
              {:text "Chat not linked. Use /start <token> from the app to link."}
              (let [raw (str/trim (or rest ""))

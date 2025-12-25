@@ -448,6 +448,17 @@
                           :page (inc (quot bounded-offset limit))
                           :returned (count paged)}})))))
 
+(defn fetch-task
+  "Fetch a single task by id."
+  [conn task-id]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)]
+        (if-let [eid (task-eid db task-id)]
+          (if-let [task (some-> (pull-task db eid) present-task)]
+            {:task task}
+            (error 500 "Task not available"))
+          (error 404 "Task not found")))))
+
 (defn- validate-assignee!
   [db assignee-id]
   (cond
