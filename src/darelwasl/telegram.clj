@@ -30,6 +30,9 @@
 (defonce pending-reasons
   (atom {}))
 
+(def ^:private max-capture-preview 10)
+(def ^:private max-capture-cards 5)
+
 (declare ensure-conn)
 (declare bind-chat-for-user!)
 
@@ -58,6 +61,62 @@
 (defn- capture-key
   [chat-id message-id]
   (str chat-id ":" message-id))
+
+(defn- normalize-task-item
+  [item]
+  (let [trimmed (-> item str str/trim)
+        cleaned (str/replace trimmed #"^(?:[-*•])\s+" "")]
+    (when-not (str/blank? cleaned)
+      cleaned)))
+
+(defn- parse-task-entry
+  [item]
+  (let [[title desc] (if (str/includes? item "|")
+                       (map str/trim (str/split item #"\|" 2))
+                       [item nil])
+        title (when-not (str/blank? title) title)
+        desc (when-not (str/blank? desc) desc)]
+    (when title
+      {:title title
+       :desc desc})))
+
+(defn- parse-task-entries
+  [text]
+  (let [raw (str/trim (or text ""))
+        items (->> (str/split raw #"\r?\n")
+                   (map normalize-task-item)
+                   (remove nil?)
+                   vec)
+        items (if (> (count items) 1)
+                items
+                (let [semi (->> (str/split raw #"\s*;\s*")
+                                (map normalize-task-item)
+                                (remove nil?)
+                                vec)]
+                  (if (> (count semi) 1) semi items)))]
+    (->> items
+         (map parse-task-entry)
+         (remove nil?)
+         vec)))
+
+(defn- capture-summary
+  [entries]
+  (let [titles (map :title entries)
+        preview (take max-capture-preview titles)
+        remainder (- (count titles) (count preview))]
+    (str "Capture multiple tasks:\n"
+         (str/join "\n" (map #(str "- " %) preview))
+         (when (pos? remainder)
+           (str "\n- ...and " remainder " more"))
+         "\n\nSave these tasks?")))
+
+(defn- task-body
+  [chat-user {:keys [title desc]}]
+  {:task/title title
+   :task/description (or desc (str "Captured via chat: " title))
+   :task/status :todo
+   :task/priority :medium
+   :task/assignee (:user/id chat-user)})
 
 (defn- save-capture!
   [chat-id message-id payload]
@@ -734,29 +793,46 @@
 
 (defn- handle-freeform-message
   [state chat-user chat-id text]
-  (let [body {:task/title text
-              :task/description (str "Captured via chat: " text)
-              :task/status :todo
-              :task/priority :medium
-              :task/assignee (:user/id chat-user)}
-        cfg (get-in state [:config :telegram])
-        prompt (str "Capture:\n" text "\n\nSave as a task?")
-        send-res (send-message! cfg {:chat-id chat-id
-                                     :text prompt
-                                     :message-key (str "capture-" (System/currentTimeMillis))
-                                     :reply-markup (capture-inline-keyboard "pending")})]
-    (if-let [err (:error send-res)]
-      (send-message! cfg {:chat-id chat-id
-                          :text (str "Unable to capture: " err)
-                          :message-key (str "capture-error-" (System/currentTimeMillis))})
-      (let [message-id (:telegram/message-id send-res)]
-        (save-capture! chat-id message-id {:body body
-                                           :user chat-user
-                                           :text text})
-        (edit-message! cfg {:chat-id chat-id
-                            :message-id message-id
-                            :text prompt
-                                           :reply-markup (capture-inline-keyboard message-id)})))))
+  (let [entries (parse-task-entries text)
+        cfg (get-in state [:config :telegram])]
+    (if (> (count entries) 1)
+      (let [bodies (mapv #(task-body chat-user %) entries)
+            prompt (capture-summary entries)
+            send-res (send-message! cfg {:chat-id chat-id
+                                         :text prompt
+                                         :message-key (str "capture-" (System/currentTimeMillis))
+                                         :reply-markup (capture-inline-keyboard "pending")})]
+        (if-let [err (:error send-res)]
+          (send-message! cfg {:chat-id chat-id
+                              :text (str "Unable to capture: " err)
+                              :message-key (str "capture-error-" (System/currentTimeMillis))})
+          (let [message-id (:telegram/message-id send-res)]
+            (save-capture! chat-id message-id {:bodies bodies
+                                               :titles (mapv :title entries)
+                                               :user chat-user})
+            (edit-message! cfg {:chat-id chat-id
+                                :message-id message-id
+                                :text prompt
+                                :reply-markup (capture-inline-keyboard message-id)}))))
+      (let [entry (first entries)
+            body (task-body chat-user (or entry {:title text :desc nil}))
+            prompt (str "Capture:\n" (:task/title body) "\n\nSave as a task?")
+            send-res (send-message! cfg {:chat-id chat-id
+                                         :text prompt
+                                         :message-key (str "capture-" (System/currentTimeMillis))
+                                         :reply-markup (capture-inline-keyboard "pending")})]
+        (if-let [err (:error send-res)]
+          (send-message! cfg {:chat-id chat-id
+                              :text (str "Unable to capture: " err)
+                              :message-key (str "capture-error-" (System/currentTimeMillis))})
+          (let [message-id (:telegram/message-id send-res)]
+            (save-capture! chat-id message-id {:body body
+                                               :user chat-user
+                                               :text text})
+            (edit-message! cfg {:chat-id chat-id
+                                :message-id message-id
+                                :text prompt
+                                :reply-markup (capture-inline-keyboard message-id)})))))))
 
 (defn- handle-pending-reason-message
   [state chat-user chat-id text]
@@ -794,17 +870,53 @@
       (answer-callback! cfg {:callback-id callback-id}))
     (case (:type parsed)
       :capture/create (let [capture (take-capture! chat-id message-id)
-                            body (:body capture)
                             actor (actions/actor-from-telegram (:user capture))]
                         (if (and capture actor)
-                          (let [res (actions/execute! state {:action/id :cap/action/task-create
-                                                             :actor actor
-                                                             :input body})]
-                            (if-let [err (:error res)]
-                              (send-message! cfg {:chat-id chat-id
-                                                  :text (str "Unable to create task: " (:message err))
-                                                  :message-key (str "capture-create-error-" message-id)})
-                              (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id})))
+                          (let [bodies (or (:bodies capture)
+                                           (when-let [body (:body capture)] [body]))
+                                results (mapv (fn [body]
+                                                (let [res (actions/execute! state {:action/id :cap/action/task-create
+                                                                                   :actor actor
+                                                                                   :input body})]
+                                                  (if-let [err (:error res)]
+                                                    {:status :error
+                                                     :title (:task/title body)
+                                                     :error (:message err)}
+                                                    {:status :ok
+                                                     :task (get-in res [:result :task])
+                                                     :title (:task/title body)})))
+                                              bodies)
+                                successes (->> results (filter #(= :ok (:status %))) vec)
+                                failures (->> results (filter #(= :error (:status %))) vec)]
+                            (if (> (count bodies) 1)
+                              (do
+                                (edit-message! cfg {:chat-id chat-id
+                                                    :message-id message-id
+                                                    :text (str "Created "
+                                                               (count successes)
+                                                               " task"
+                                                               (when (not= 1 (count successes)) "s")
+                                                               "."
+                                                               (when (seq failures)
+                                                                 (str "\nFailed:\n"
+                                                                      (str/join "\n"
+                                                                                (map (fn [{:keys [title error]}]
+                                                                                       (str "- " title ": " error))
+                                                                                     failures)))))
+                                                    :reply-markup {:inline_keyboard []}})
+                                (doseq [task (map :task (take max-capture-cards successes))]
+                                  (send-task-card! state chat-id task {}))
+                                (when (> (count successes) max-capture-cards)
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text (str "Showing " max-capture-cards " of "
+                                                                 (count successes) " created tasks.")
+                                                      :message-key (str "capture-summary-" (System/currentTimeMillis))})))
+                              (let [res (first results)]
+                                (if (= :error (:status res))
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text (str "Unable to create task: " (:error res))
+                                                      :message-key (str "capture-create-error-" message-id)})
+                                  (send-task-card! state chat-id (:task res) {:reply-to-message-id message-id})))))
                           (edit-message! cfg {:chat-id chat-id
                                               :message-id message-id
                                               :text "Capture expired."
@@ -1018,26 +1130,48 @@
                     {:task task}))))
       :new (if-not chat-user
              {:text "Chat not linked. Use /start <token> from the app to link."}
-             (let [raw (str/trim (or rest ""))
-                   [title desc] (if (str/includes? raw "|")
-                                  (map str/trim (str/split raw #"\|" 2))
-                                  [(str/trim raw) nil])
-                   title (when-not (str/blank? title) title)
-                   desc (when-not (str/blank? desc) desc)]
+             (let [entries (parse-task-entries rest)]
                (cond
-                 (nil? title) {:text "Usage: /new <title> [| description]"}
-                 :else
-                 (let [body {:task/title title
-                             :task/description (or desc (str "Created via Telegram: " title))
-                             :task/status :todo
-                             :task/priority :medium
-                             :task/assignee (:user/id chat-user)}
+                 (empty? entries) {:text "Usage: /new <title> [| description]"}
+                 (= 1 (count entries))
+                 (let [entry (first entries)
+                       body (assoc (task-body chat-user entry)
+                                   :task/description (or (:desc entry)
+                                                         (str "Created via Telegram: " (:title entry))))
                        action-res (actions/execute! state {:action/id :cap/action/task-create
                                                           :actor (actions/actor-from-telegram chat-user)
                                                           :input body})]
                    (if-let [err (:error action-res)]
                      {:text (str "Unable to create task: " (:message err))}
-                     {:task (get-in action-res [:result :task])})))))
+                     {:task (get-in action-res [:result :task])}))
+                 :else
+                 (let [actor (actions/actor-from-telegram chat-user)
+                       results (mapv (fn [entry]
+                                       (let [body (assoc (task-body chat-user entry)
+                                                         :task/description (or (:desc entry)
+                                                                               (str "Created via Telegram: " (:title entry))))
+                                             res (actions/execute! state {:action/id :cap/action/task-create
+                                                                          :actor actor
+                                                                          :input body})]
+                                         (if-let [err (:error res)]
+                                           {:status :error
+                                            :title (:title entry)
+                                            :error (:message err)}
+                                           {:status :ok
+                                            :task (get-in res [:result :task])
+                                            :title (:title entry)})))
+                                     entries)
+                       successes (count (filter #(= :ok (:status %)) results))
+                       failures (->> results (filter #(= :error (:status %))) vec)]
+                   {:text (str "Created " successes " task"
+                               (when (not= 1 successes) "s")
+                               "."
+                               (when (seq failures)
+                                 (str "\nFailed:\n"
+                                      (str/join "\n"
+                                                (map (fn [{:keys [title error]}]
+                                                       (str "- " title ": " error))
+                                                     failures)))))}))))
       {:text "Unknown command. Send /help for available commands."})))
 
 (defn notify-task-event!
