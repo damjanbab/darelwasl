@@ -12,6 +12,8 @@
               :notifications-enabled? false
               :http-timeout-ms 3000
               :link-token-ttl-ms 900000
+              :polling-enabled? false
+              :polling-interval-ms 2000
               :auto-set-webhook? true}
    :rezultati {:base-url "https://m.rezultati.com"
                :http-timeout-ms 3000
@@ -138,6 +140,10 @@
                                             (get-in default-config [:telegram :http-timeout-ms]))
                 :link-token-ttl-ms (parse-int (get env "TELEGRAM_LINK_TOKEN_TTL_MS")
                                               (get-in default-config [:telegram :link-token-ttl-ms]))
+                :polling-enabled? (env-bool (get env "TELEGRAM_POLLING_ENABLED")
+                                            (get-in default-config [:telegram :polling-enabled?]))
+                :polling-interval-ms (parse-int (get env "TELEGRAM_POLLING_INTERVAL_MS")
+                                                (get-in default-config [:telegram :polling-interval-ms]))
                 :auto-set-webhook? (env-bool (get env "TELEGRAM_AUTO_SET_WEBHOOK")
                                              (get-in default-config [:telegram :auto-set-webhook?]))})
         (assoc :rezultati

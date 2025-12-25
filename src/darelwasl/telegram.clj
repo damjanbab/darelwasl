@@ -213,6 +213,10 @@
   [cfg]
   (true? (:webhook-enabled? cfg)))
 
+(defn polling-enabled?
+  [cfg]
+  (true? (:polling-enabled? cfg)))
+
 (defn commands-enabled?
   [cfg]
   (true? (:commands-enabled? cfg)))
@@ -296,6 +300,25 @@
                         (log/warn e "Telegram API request failed" {:path path})
                         {:error "Telegram API request failed"})))))]
         (attempt! 1)))))
+
+(defn get-updates!
+  "Fetch Telegram updates. Returns {:updates [...], :next-offset n} or {:error ...}."
+  [cfg {:keys [offset limit timeout-ms]}]
+  (let [timeout-secs (when (number? timeout-ms)
+                       (max 0 (long (Math/ceil (/ timeout-ms 1000.0)))))
+        payload (cond-> {}
+                  (some? offset) (assoc :offset (long offset))
+                  (some? limit) (assoc :limit (long limit))
+                  (some? timeout-secs) (assoc :timeout timeout-secs))
+        resp (request-json cfg "getUpdates" payload)]
+    (if-let [err (:error resp)]
+      resp
+      (let [updates (vec (or (:result resp) []))
+            last-id (when (seq updates)
+                      (apply max (map :update_id updates)))
+            next-offset (when last-id (inc (long last-id)))]
+        {:updates updates
+         :next-offset next-offset}))))
 
 (defn send-message!
   "Send a Telegram message to chat-id. Returns {:telegram/message-id ...} or {:error ...}."
@@ -1046,7 +1069,8 @@
   [state update]
   (let [cfg (get-in state [:config :telegram])]
     (cond
-      (not (webhook-enabled? cfg)) {:status :ignored :reason :webhook-disabled}
+      (and (not (webhook-enabled? cfg))
+           (not (polling-enabled? cfg))) {:status :ignored :reason :webhook-disabled}
       (not (commands-enabled? cfg)) {:status :ignored :reason :commands-disabled}
       :else
       (let [{:keys [update-id chat-id command callback text] :as parsed} (extract-update update)]

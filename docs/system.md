@@ -136,6 +136,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
+- Dev bot defaults to polling when the public base URL is not HTTPS; webhook is only enabled for HTTPS base URLs.
 - On complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
@@ -158,6 +159,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TELEGRAM_DEV_BOT_TOKEN` (use dev bot for terminal sessions)
   - `TELEGRAM_DEV_WEBHOOK_SECRET`, `TELEGRAM_DEV_WEBHOOK_BASE_URL` (optional dev webhook config)
   - `TELEGRAM_DEV_WEBHOOK_ENABLED`, `TELEGRAM_DEV_COMMANDS_ENABLED`, `TELEGRAM_DEV_NOTIFICATIONS_ENABLED` (optional dev flags)
+  - `TELEGRAM_DEV_POLLING_ENABLED`, `TELEGRAM_DEV_POLLING_INTERVAL_MS` (optional dev polling flags)
   - `TELEGRAM_DEV_HTTP_TIMEOUT_MS`, `TELEGRAM_DEV_LINK_TOKEN_TTL_MS` (optional dev overrides)
 
 ## Auth Sessions

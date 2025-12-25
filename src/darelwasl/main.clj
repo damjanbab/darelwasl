@@ -8,7 +8,8 @@
             [darelwasl.site.server :as site-server]
             [darelwasl.telegram :as telegram]
             [darelwasl.workers.betting-scheduler :as betting-scheduler]
-            [darelwasl.workers.outbox :as outbox-worker]))
+            [darelwasl.workers.outbox :as outbox-worker]
+            [darelwasl.workers.telegram-poller :as telegram-poller]))
 
 (defonce system-state (atom nil))
 
@@ -55,9 +56,14 @@
          betting-future (when (and betting-enabled? (not (:error db-state)))
                           (betting-scheduler/start! {:config cfg
                                                      :db db-state}))
+         telegram-polling? (get-in cfg [:telegram :polling-enabled?])
+         telegram-future (when (and telegram-polling? (not (:error db-state)))
+                           (telegram-poller/start! {:config cfg
+                                                    :db db-state}))
          started (cond-> started
                    worker-future (assoc :outbox/worker worker-future)
-                   betting-future (assoc :betting/scheduler betting-future))]
+                   betting-future (assoc :betting/scheduler betting-future)
+                   telegram-future (assoc :telegram/poller telegram-future))]
      (telegram/auto-set-webhook! (:telegram cfg))
      (reset! system-state started)
      started)))
@@ -69,6 +75,8 @@
     (when-let [worker (:outbox/worker state)]
       (future-cancel worker))
     (when-let [worker (:betting/scheduler state)]
+      (future-cancel worker))
+    (when-let [worker (:telegram/poller state)]
       (future-cancel worker))
     (-> state
         (site-server/stop)

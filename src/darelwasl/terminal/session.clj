@@ -31,6 +31,15 @@
   (when (and (string? value) (not (str/blank? value)))
     value))
 
+(defn- truthy?
+  [value]
+  (contains? #{"1" "true" "yes" "y" "on"} (str/lower-case (str value))))
+
+(defn- https-url?
+  [value]
+  (when value
+    (str/starts-with? (str/lower-case value) "https://")))
+
 (defn- ensure-port
   [base-url port]
   (let [trimmed (-> base-url str/trim (str/replace #"/+$" ""))]
@@ -447,6 +456,8 @@
         telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
         telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
+        telegram-dev-polling-enabled (present-env (get env "TELEGRAM_DEV_POLLING_ENABLED"))
+        telegram-dev-polling-interval (present-env (get env "TELEGRAM_DEV_POLLING_INTERVAL_MS"))
         telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
         telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
         telegram-dev-timeout (present-env (get env "TELEGRAM_DEV_HTTP_TIMEOUT_MS"))
@@ -468,6 +479,19 @@
         ports (cond-> ports
                 (not site-enabled?) (assoc :site nil))
         telegram-dev-base-url (dev-webhook-base-url cfg env (:app ports))
+        webhook-explicit? (when telegram-dev-webhook-enabled
+                            (truthy? telegram-dev-webhook-enabled))
+        polling-explicit? (when telegram-dev-polling-enabled
+                            (truthy? telegram-dev-polling-enabled))
+        webhook-enabled? (cond
+                           (and (true? webhook-explicit?)
+                                (https-url? telegram-dev-base-url)) true
+                           (true? webhook-explicit?) false
+                           (false? webhook-explicit?) false
+                           :else (https-url? telegram-dev-base-url))
+        polling-enabled? (if (some? polling-explicit?)
+                           polling-explicit?
+                           (not webhook-enabled?))
         tmux-session (tmux/session-name (:tmux-prefix cfg) id)
         branch (str "terminal/" (subs id 0 8))
         now (now-ms)]
@@ -516,9 +540,12 @@
                                           "GIT_TERMINAL_PROMPT" "0"))
            telegram-env (cond-> {}
                           dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
-                                          "TELEGRAM_WEBHOOK_ENABLED" (or telegram-dev-webhook-enabled "false")
+                                          "TELEGRAM_WEBHOOK_ENABLED" (if webhook-enabled? "true" "false")
+                                          "TELEGRAM_POLLING_ENABLED" (if polling-enabled? "true" "false")
                                           "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
                                           "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
+                          (and dev-bot? telegram-dev-polling-interval)
+                          (assoc "TELEGRAM_POLLING_INTERVAL_MS" telegram-dev-polling-interval)
                           (and dev-bot? telegram-dev-secret) (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
                           (and dev-bot? telegram-dev-base-url) (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
                           (and dev-bot? telegram-dev-timeout) (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
