@@ -84,6 +84,14 @@
         task-id (:task/id body)]
     (tasks/archive-task! (conn state) task-id (dissoc body :task/id) actor)))
 
+(defn- task-add-note
+  [state {:keys [input actor]}]
+  (tasks/add-note! (conn state) (or input {}) actor))
+
+(defn- task-edit-note
+  [state {:keys [input actor]}]
+  (tasks/edit-note! (conn state) (or input {}) actor))
+
 (defn- task-delete
   [state {:keys [input actor]}]
   (let [body (or input {})
@@ -200,6 +208,8 @@
    :cap/action/task-set-due task-set-due
    :cap/action/task-set-tags task-set-tags
    :cap/action/task-archive task-archive
+   :cap/action/task-add-note task-add-note
+   :cap/action/task-edit-note task-edit-note
    :cap/action/task-delete task-delete
    :cap/action/betting-events betting-events
    :cap/action/betting-odds betting-odds

@@ -254,7 +254,50 @@
  :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/task]
+ :related {:schema [:cap/schema/task]
+           :views [:cap/view/tasks]}
+ :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-add-note
+  :title "Add Task Note"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :note/body :string
+           :note/type :keyword?}
+  :outputs {:task/id :uuid
+            :note/id :uuid}
+  :side-effects ["Persist note for task"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :note/body]}
+  :contracts {:fixtures [:fixtures/tasks :fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/note]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-edit-note
+  :title "Edit Task Note"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :note/body :string}
+  :outputs {:task/id :uuid
+            :note/id :uuid}
+  :side-effects ["Update latest comment note for task"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :note/body]}
+  :contracts {:fixtures [:fixtures/tasks :fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/note]
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 

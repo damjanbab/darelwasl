@@ -24,6 +24,9 @@
   (delay (or (some-> @task-schema-entry (get-in [:enums :task/priority]) set)
              #{:low :medium :high})))
 
+(def ^:private allowed-note-types
+  #{:note.type/comment :note.type/pending-reason :note.type/system})
+
 (def ^:private priority-rank
   {:high 3 :medium 2 :low 1})
 
@@ -78,6 +81,35 @@
              :note/subject [:task/id task-id]
              :note/created-at (now-inst)}
       author-id (assoc :note/author [:user/id author-id]))))
+
+(defn- comment-note-tx
+  [task-id body note-type actor]
+  (let [author-id (:user/id actor)]
+    (cond-> {:note/id (UUID/randomUUID)
+             :entity/type :entity.type/note
+             :note/body body
+             :note/type note-type
+             :note/subject [:task/id task-id]
+             :note/created-at (now-inst)}
+      author-id (assoc :note/author [:user/id author-id]))))
+
+(defn- latest-comment-note
+  [db task-id author-id]
+  (let [notes (d/q '[:find ?id ?created
+                     :in $ ?task-id ?author-id
+                     :where [?t :task/id ?task-id]
+                            [?author :user/id ?author-id]
+                            [?n :note/subject ?t]
+                            [?n :note/type :note.type/comment]
+                            [?n :note/author ?author]
+                            [?n :note/id ?id]
+                            [?n :note/created-at ?created]]
+                   db task-id author-id)]
+    (when (seq notes)
+      (->> notes
+           (sort-by second)
+           last
+           first))))
 
 (defn- normalize-instant
   [value label]
@@ -638,6 +670,41 @@
                    :task/archived? archived?}}
         (error 404 "Task not found")))))
 
+(defn- validate-add-note
+  [db body]
+  (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
+        {note-body :value body-err :error} (normalize-string-field (param-value body :note/body)
+                                                                   "Note"
+                                                                   {:required true
+                                                                    :allow-blank? false})
+        {note-type :value type-err :error} (normalize-enum (param-value body :note/type) allowed-note-types "note type")
+        note-type (or note-type :note.type/comment)]
+    (cond
+      id-err (error 400 id-err)
+      body-err (error 400 body-err)
+      type-err (error 400 type-err)
+      (not (task-eid db task-id)) (error 404 "Task not found")
+      :else {:task-id task-id
+             :note-body note-body
+             :note-type note-type})))
+
+(defn- validate-edit-note
+  [db body actor]
+  (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
+        {note-body :value body-err :error} (normalize-string-field (param-value body :note/body)
+                                                                   "Note"
+                                                                   {:required true
+                                                                    :allow-blank? false})
+        author-id (:user/id actor)]
+    (cond
+      id-err (error 400 id-err)
+      body-err (error 400 body-err)
+      (nil? author-id) (error 400 "Note edits require an authenticated user")
+      (not (task-eid db task-id)) (error 404 "Task not found")
+      :else {:task-id task-id
+             :note-body note-body
+             :author-id author-id})))
+
 (defn create-task!
   [conn body actor]
   (or (ensure-conn conn)
@@ -860,6 +927,65 @@
                            (:task/archived? updates))
                 {:task updated})
               :else (error 500 "Task not available after archive update")))))))
+
+(defn add-note!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            result (validate-add-note db body)]
+        (if-let [err (:error result)]
+          {:error err}
+          (let [{:keys [task-id note-body note-type]} result
+                tx-prov (prov/provenance actor)
+                note-tx (comment-note-tx task-id note-body note-type actor)
+                tx-result (attempt-transact conn [(prov/enrich-tx note-tx tx-prov)] "add note")
+                updated (when-let [db-after (:db-after tx-result)]
+                          (when-let [eid (task-eid db-after task-id)]
+                            (some-> (pull-task db-after eid)
+                                    present-task)))]
+            (cond
+              (:error tx-result) {:error (:error tx-result)}
+              updated (do
+                        (log/infof "AUDIT task-add-note user=%s task=%s type=%s"
+                                   (or (:user/username actor) (:user/id actor))
+                                   task-id
+                                   note-type)
+                        {:task updated
+                         :note {:note/id (:note/id note-tx)
+                                :note/type note-type
+                                :note/body note-body}})
+              :else (error 500 "Task not available after note add")))))))
+
+(defn edit-note!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            result (validate-edit-note db body actor)]
+        (if-let [err (:error result)]
+          {:error err}
+          (let [{:keys [task-id note-body author-id]} result
+                note-id (latest-comment-note db task-id author-id)]
+            (if-not note-id
+              (error 404 "No editable comment note found for this task")
+              (let [tx-prov (prov/provenance actor)
+                    tx-result (attempt-transact conn [(prov/enrich-tx {:note/id note-id
+                                                                      :note/body note-body}
+                                                                     tx-prov)]
+                                                "edit note")
+                    updated (when-let [db-after (:db-after tx-result)]
+                              (when-let [eid (task-eid db-after task-id)]
+                                (some-> (pull-task db-after eid)
+                                        present-task)))]
+                (cond
+                  (:error tx-result) {:error (:error tx-result)}
+                  updated (do
+                            (log/infof "AUDIT task-edit-note user=%s task=%s"
+                                       (or (:user/username actor) (:user/id actor))
+                                       task-id)
+                            {:task updated
+                             :note {:note/id note-id
+                                    :note/body note-body}})
+                  :else (error 500 "Task not available after note edit")))))))))
 
 (defn delete-task!
   [conn task-id actor]
