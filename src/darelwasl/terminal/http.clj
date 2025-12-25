@@ -80,7 +80,7 @@
             (log/warn e "Failed to create terminal session")
             (error-response status message
                             (cond-> {:message (.getMessage e)}
-                              data (assoc :data data))))))))))
+                              data (assoc :data data)))))))))
 
 (defn session-detail-handler
   [state]
