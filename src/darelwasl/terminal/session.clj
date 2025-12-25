@@ -268,6 +268,15 @@
         text (some-> text str/trim str/lower-case)]
     (get session-type-aliases text session-type-default)))
 
+(defn- dev-bot-active?
+  [store exclude-id]
+  (some (fn [session]
+          (and (:telegram/dev-bot? session)
+               (not= (:id session) exclude-id)
+               (not= :complete (:status session))
+               (tmux/running? (:tmux session))))
+        (store/list-sessions store)))
+
 (defn- agents-resource-for
   [session-type]
   (get agents-resources session-type (agents-resources session-type-default)))
@@ -401,12 +410,12 @@
                (update-log-closed! logs-dir id)
                (log/info "Deleted orphaned session dir" {:id id}))))))))
 
- (defn create-session!
-   [store cfg {:keys [name type]}]
-   (let [id (str (UUID/randomUUID))
-         session-type (normalize-session-type type)
-         session-name (or (some-> name str/trim not-empty)
-                          (str "session-" (subs id 0 8)))
+(defn create-session!
+  [store cfg {:keys [name type dev-bot?]}]
+  (let [id (str (UUID/randomUUID))
+        session-type (normalize-session-type type)
+        session-name (or (some-> name str/trim not-empty)
+                         (str "session-" (subs id 0 8)))
          env (System/getenv)
          git-name (or (present-env (get env "TERMINAL_GIT_NAME"))
                       (present-env (get env "GIT_AUTHOR_NAME"))
@@ -421,17 +430,18 @@
                           (present-env (get env "GH_TOKEN"))
                           (present-env (get env "DARELWASL_GITHUB_TOKEN"))
                           (read-github-token))
-         telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
-         telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
-         telegram-dev-base-url (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL"))
-         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
-         telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
-         telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
-         telegram-dev-timeout (present-env (get env "TELEGRAM_DEV_HTTP_TIMEOUT_MS"))
-         telegram-dev-ttl (present-env (get env "TELEGRAM_DEV_LINK_TOKEN_TTL_MS"))
-         work-root (ensure-dir! (:work-dir cfg))
-         logs-root (ensure-dir! (:logs-dir cfg))
-         session-root (io/file work-root id)
+        telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
+        telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
+        telegram-dev-base-url (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL"))
+        telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
+        telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
+        telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
+        telegram-dev-timeout (present-env (get env "TELEGRAM_DEV_HTTP_TIMEOUT_MS"))
+        telegram-dev-ttl (present-env (get env "TELEGRAM_DEV_LINK_TOKEN_TTL_MS"))
+        dev-bot? (true? dev-bot?)
+        work-root (ensure-dir! (:work-dir cfg))
+        logs-root (ensure-dir! (:logs-dir cfg))
+        session-root (io/file work-root id)
          repo-dir (io/file session-root "repo")
          datomic-dir (io/file session-root "datomic")
          chat-file (io/file session-root "chat.log")
@@ -445,11 +455,18 @@
          ports (cond-> ports
                  (not site-enabled?) (assoc :site nil))
          tmux-session (tmux/session-name (:tmux-prefix cfg) id)
-         branch (str "terminal/" (subs id 0 8))
-         now (now-ms)]
-     (.mkdirs session-root)
-     (.mkdirs datomic-dir)
-     (.mkdirs logs-dir)
+        branch (str "terminal/" (subs id 0 8))
+        now (now-ms)]
+    (when dev-bot?
+      (when-not telegram-dev-token
+        (throw (ex-info "Dev bot is not configured on the server"
+                        {:status 400 :message "Dev bot is not configured on the server"})))
+      (when (dev-bot-active? store nil)
+        (throw (ex-info "Dev bot already running in another session"
+                        {:status 409 :message "Dev bot already running in another session"}))))
+    (.mkdirs session-root)
+    (.mkdirs datomic-dir)
+    (.mkdirs logs-dir)
      (write-manifest! logs-dir {:id id
                                 :name session-name
                                 :type session-type
@@ -484,15 +501,15 @@
                                           "GIT_ASKPASS" (.getPath askpass-file)
                                           "GIT_TERMINAL_PROMPT" "0"))
            telegram-env (cond-> {}
-                          telegram-dev-token (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
-                                                    "TELEGRAM_WEBHOOK_ENABLED" (or telegram-dev-webhook-enabled "false")
-                                                    "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
-                                                    "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
-                          telegram-dev-secret (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
-                          telegram-dev-base-url (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
-                          telegram-dev-timeout (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
-                          telegram-dev-ttl (assoc "TELEGRAM_LINK_TOKEN_TTL_MS" telegram-dev-ttl))]
-       (write-env! env-file (merge base-env telegram-env)))
+                          dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
+                                          "TELEGRAM_WEBHOOK_ENABLED" (or telegram-dev-webhook-enabled "false")
+                                          "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
+                                          "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
+                          (and dev-bot? telegram-dev-secret) (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
+                          (and dev-bot? telegram-dev-base-url) (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
+                          (and dev-bot? telegram-dev-timeout) (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
+                          (and dev-bot? telegram-dev-ttl) (assoc "TELEGRAM_LINK_TOKEN_TTL_MS" telegram-dev-ttl))]
+      (write-env! env-file (merge base-env telegram-env)))
      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
      (tmux/pipe-output! tmux-session (.getPath chat-file))
      (when auto-start-app?
@@ -520,6 +537,7 @@
                     :branch branch
                     :auto-start-app? auto-start-app?
                     :auto-start-site? auto-start-site?
+                    :telegram/dev-bot? dev-bot?
                     :app-started-at (when auto-start-app? now)
                     :auto-continue-enabled? true}]
        (store/upsert-session! store session))))
@@ -614,6 +632,10 @@
     (throw (ex-info "Session already completed" {:id (:id session)})))
   (when (tmux/running? (:tmux session))
     (throw (ex-info "Session already running" {:id (:id session)})))
+  (when (and (:telegram/dev-bot? session)
+             (dev-bot-active? store (:id session)))
+    (throw (ex-info "Dev bot already running in another session"
+                    {:status 409 :message "Dev bot already running in another session"})))
   (doseq [[label path] [[:repo-dir (:repo-dir session)]
                         [:env-file (:env-file session)]
                         [:chat-log (:chat-log session)]]]

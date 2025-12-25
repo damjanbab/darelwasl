@@ -135,6 +135,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Access gated by role `:role/codex-terminal` (only Damjan for now).
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
+- Dev bot use is opt-in per session; only one session may run the dev bot at a time.
 - On complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)

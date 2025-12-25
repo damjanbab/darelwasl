@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [darelwasl.terminal.session :as session]
             [darelwasl.terminal.store :as store]
+            [darelwasl.validation :as v]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
             [reitit.ring.middleware.exception :as exception]
@@ -26,6 +27,11 @@
   (cond-> {:status status
            :body {:error message}}
     details (assoc-in [:body :details] details)))
+
+(defn- parse-bool
+  [value]
+  (let [{:keys [value error]} (v/normalize-boolean value "boolean" {:default false})]
+    (if error false value)))
 
 (defn- find-session
   [store session-id]
@@ -57,19 +63,24 @@
     (let [name (or (get-in request [:body-params :name])
                    (get-in request [:body-params "name"]))
           session-type (or (get-in request [:body-params :type])
-                           (get-in request [:body-params "type"]))]
+                           (get-in request [:body-params "type"]))
+          dev-bot-raw (v/param-value (:body-params request) :dev-bot?)
+          dev-bot? (parse-bool dev-bot-raw)]
       (try
         (let [session (session/create-session! (:terminal/store state)
                                                (:terminal/config state)
                                                {:name name
-                                                :type session-type})]
+                                                :type session-type
+                                                :dev-bot? dev-bot?})]
           (ok {:session (session/present-session session)}))
         (catch Exception e
-          (log/warn e "Failed to create terminal session")
-          (error-response 500 "Failed to create terminal session"
-                          (cond-> {:message (.getMessage e)}
-                            (instance? clojure.lang.ExceptionInfo e)
-                            (assoc :data (ex-data e)))))))))
+          (let [data (when (instance? clojure.lang.ExceptionInfo e) (ex-data e))
+                status (or (:status data) 500)
+                message (or (:message data) "Failed to create terminal session")]
+            (log/warn e "Failed to create terminal session")
+            (error-response status message
+                            (cond-> {:message (.getMessage e)}
+                              data (assoc :data data))))))))))
 
 (defn session-detail-handler
   [state]

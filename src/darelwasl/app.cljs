@@ -2485,13 +2485,15 @@
 (rf/reg-event-fx
  ::terminal-create-session
  (fn [{:keys [db]} _]
-   (let [session-type (get-in db [:terminal :new-session-type] :feature)]
+   (let [session-type (get-in db [:terminal :new-session-type] :feature)
+         dev-bot? (boolean (get-in db [:terminal :new-session-dev-bot?]))]
      {:db (-> db
               (assoc-in [:terminal :status] :loading)
               (assoc-in [:terminal :error] nil))
       ::fx/http {:url "/api/terminal/sessions"
                  :method "POST"
-                 :body {:type (name session-type)}
+                 :body {:type (name session-type)
+                        :dev-bot? dev-bot?}
                  :on-success [::terminal-session-created]
                  :on-error [::terminal-sessions-failure]}})))
 
@@ -2500,6 +2502,11 @@
  (fn [db [_ value]]
    (let [kw (-> value str keyword)]
      (assoc-in db [:terminal :new-session-type] kw))))
+
+(rf/reg-event-db
+ ::terminal-update-dev-bot
+ (fn [db [_ value]]
+   (assoc-in db [:terminal :new-session-dev-bot?] (boolean value))))
 
 (rf/reg-event-fx
  ::terminal-session-created

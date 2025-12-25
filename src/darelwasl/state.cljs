@@ -277,6 +277,7 @@
    :notice nil
    :sessions []
    :new-session-type :feature
+   :new-session-dev-bot? false
    :selected nil
    :output ""
    :cursor 0

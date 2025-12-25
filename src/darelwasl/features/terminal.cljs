@@ -33,6 +33,7 @@
          type-label (session-type-label session)
          meta (str (status-label session)
                    (when type-label (str " · " type-label))
+                   (when (:telegram/dev-bot? session) " · Dev bot")
                    (when-let [app (:app ports)] (str " · app:" app)))]
      [ui/list-row {:title (:name session)
                    :meta meta
@@ -60,7 +61,7 @@
 
 (defn- terminal-list
   []
-  (let [{:keys [sessions status error notice new-session-type]} @(rf/subscribe [:darelwasl.app/terminal])]
+  (let [{:keys [sessions status error notice new-session-type new-session-dev-bot?]} @(rf/subscribe [:darelwasl.app/terminal])]
      [:div.panel.terminal-list-panel
       [:div.section-header
        [:div
@@ -72,6 +73,11 @@
          (for [{:keys [id label]} session-type-options]
            ^{:key (name id)}
            [:option {:value (name id)} label])]
+        [:label {:class "terminal-dev-bot-toggle"}
+         [:input {:type "checkbox"
+                  :checked (boolean new-session-dev-bot?)
+                  :on-change #(rf/dispatch [:darelwasl.app/terminal-update-dev-bot (.. % -target -checked)])}]
+         [:span "Dev bot"]]
         [ui/button {:variant :secondary
                     :on-click #(rf/dispatch [:darelwasl.app/fetch-terminal-sessions])}
          "Refresh"]
