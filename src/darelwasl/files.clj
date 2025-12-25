@@ -242,14 +242,16 @@
                 eid (file-eid-by-id db id)
                 file (pull-file db eid)
                 requested (or (reference->slug ref) slug)
-                {slug-val :value slug-err :error} (normalize-string requested "slug" {:required true
+                {slug-val :value slug-err :error} (normalize-string requested "slug" {:required false
                                                                                       :allow-blank? false})
+                missing? (nil? slug-val)
                 conflict? (and slug-val
                                (not= slug-val (:file/slug file))
                                (slug-exists? db slug-val))]
             (cond
               (nil? eid) (error 404 "File not found")
               slug-err (error 400 slug-err)
+              missing? (error 400 "Slug or reference is required")
               conflict? (error 409 "Slug already in use")
               :else
               (try

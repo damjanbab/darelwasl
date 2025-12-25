@@ -1143,13 +1143,14 @@
    (let [{:keys [form]} (get-in db [:files :detail])
          {:keys [id slug reference]} form
          slug-val (present-str slug)
-         ref-val (present-str reference)]
+         ref-val (present-str reference)
+         effective-slug (or (file-slug-from-reference ref-val) slug-val)]
      (cond
        (nil? id)
        {:db (assoc-in db [:files :detail :error] "Select a file to update")}
 
-       (nil? slug-val)
-       {:db (assoc-in db [:files :detail :error] "Slug is required")}
+       (nil? effective-slug)
+       {:db (assoc-in db [:files :detail :error] "Slug or reference is required")}
 
        :else
        {:db (-> db
@@ -1157,7 +1158,7 @@
                 (assoc-in [:files :detail :error] nil))
         ::fx/http {:url (str "/api/files/" id)
                    :method "PUT"
-                   :body (cond-> {:file/slug slug-val}
+                   :body (cond-> {:file/slug effective-slug}
                            ref-val (assoc :file/ref ref-val))
                    :on-success [::update-file-success]
                    :on-error [::update-file-failure]}}))))
