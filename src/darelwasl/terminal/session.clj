@@ -31,6 +31,20 @@
   (when (and (string? value) (not (str/blank? value)))
     value))
 
+(defn- ensure-port
+  [base-url port]
+  (let [trimmed (-> base-url str/trim (str/replace #"/+$" ""))]
+    (if (re-find #":\\d+$" trimmed)
+      trimmed
+      (str trimmed ":" port))))
+
+(defn- dev-webhook-base-url
+  [cfg env app-port]
+  (let [raw (or (present-env (:public-base-url cfg))
+                (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL")))]
+    (when raw
+      (ensure-port raw app-port))))
+
  (defn- update-manifest!
    [dir f]
    (let [file (io/file dir "manifest.edn")
@@ -432,7 +446,6 @@
                           (read-github-token))
         telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
         telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
-        telegram-dev-base-url (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL"))
         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
         telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
         telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
@@ -452,9 +465,10 @@
          auto-start-app? (true? (:auto-start-app? cfg))
          auto-start-site? (true? (:auto-start-site? cfg))
          site-enabled? auto-start-site?
-         ports (cond-> ports
-                 (not site-enabled?) (assoc :site nil))
-         tmux-session (tmux/session-name (:tmux-prefix cfg) id)
+        ports (cond-> ports
+                (not site-enabled?) (assoc :site nil))
+        telegram-dev-base-url (dev-webhook-base-url cfg env (:app ports))
+        tmux-session (tmux/session-name (:tmux-prefix cfg) id)
         branch (str "terminal/" (subs id 0 8))
         now (now-ms)]
     (when dev-bot?

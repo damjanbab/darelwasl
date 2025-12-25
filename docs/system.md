@@ -151,6 +151,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_TMUX_BIN` (optional full path to tmux binary)
   - `TERMINAL_GIT_NAME`, `TERMINAL_GIT_EMAIL` (git identity for session commits)
   - `TERMINAL_GITHUB_TOKEN` (token used for git push + PR creation inside sessions)
+  - `TERMINAL_PUBLIC_BASE_URL` (public base URL for per-session app links; used to compute Telegram dev webhook with the session port)
   - `TERMINAL_PORT_RANGE_START`, `TERMINAL_PORT_RANGE_END` (per-session app/site ports)
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
