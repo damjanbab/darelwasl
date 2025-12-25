@@ -15,7 +15,7 @@
 (def ^:private default-timeout-ms 3000)
 
 (def ^:private allowed-commands
-  #{:start :help :tasks :task :stop :new})
+  #{:start :help :tasks :task :stop :new :edit :note :note-edit})
 
 (defn- present-string?
   [v]
@@ -29,7 +29,13 @@
 
 (defonce pending-reasons
   (atom {}))
-
+(def ^:private max-capture-preview 10)
+(def ^:private max-capture-cards 5)
+(def ^:private status-emoji
+  {:todo "🔵"
+   :in-progress "🟡"
+   :pending "🔴"
+   :done "🟢"})
 (declare ensure-conn)
 (declare bind-chat-for-user!)
 
@@ -58,7 +64,73 @@
 (defn- capture-key
   [chat-id message-id]
   (str chat-id ":" message-id))
+(defn- normalize-task-item
+  [item]
+  (let [trimmed (-> item str str/trim)
+        cleaned (str/replace trimmed #"^(?:[-*•])\s+" "")]
+    (when-not (str/blank? cleaned)
+      cleaned)))
 
+(defn- parse-task-entry
+  [item]
+  (let [[title desc] (if (str/includes? item "|")
+                       (map str/trim (str/split item #"\|" 2))
+                       [item nil])
+        title (when-not (str/blank? title) title)
+        desc (when-not (str/blank? desc) desc)]
+    (when title
+      {:title title
+       :desc desc})))
+
+(defn- parse-task-entries
+  [text]
+  (let [raw (str/trim (or text ""))
+        items (->> (str/split raw #"\r?\n")
+                   (map normalize-task-item)
+                   (remove nil?)
+                   vec)
+        items (if (> (count items) 1)
+                items
+                (let [semi (->> (str/split raw #"\s*;\s*")
+                                (map normalize-task-item)
+                                (remove nil?)
+                                vec)]
+                  (if (> (count semi) 1) semi items)))]
+    (->> items
+         (map parse-task-entry)
+         (remove nil?)
+         vec)))
+
+(defn- capture-summary
+  [entries]
+  (let [titles (map :title entries)
+        preview (take max-capture-preview titles)
+        remainder (- (count titles) (count preview))]
+    (str "Capture multiple tasks:\n"
+         (str/join "\n" (map #(str "- " %) preview))
+         (when (pos? remainder)
+           (str "\n- ...and " remainder " more"))
+         "\n\nSave these tasks?")))
+
+(defn- task-body
+  [chat-user {:keys [title desc]}]
+  {:task/title title
+   :task/description (or desc (str "Captured via chat: " title))
+   :task/status :todo
+   :task/priority :medium
+   :task/assignee (:user/id chat-user)})
+
+(defn- parse-task-command
+  [rest]
+  (let [raw (str/trim (or rest ""))
+        [id-str body] (str/split raw #"\s+" 2)
+        task-id (when (and id-str (not (str/blank? id-str)))
+                  (try
+                    (UUID/fromString id-str)
+                    (catch Exception _ nil)))
+        body (some-> body str/trim)]
+    {:task-id task-id
+     :body body}))
 (defn- save-capture!
   [chat-id message-id payload]
   (prune-captures!)
@@ -625,12 +697,18 @@
                                   (get-in callback ["message" "message_id"]))
                   :chat-id chat-id})}))
 
+(defn- status-label
+  [status]
+  (let [label (or (some-> status name) "unknown")
+        icon (get status-emoji status "⚪️")]
+    (str icon " " label)))
+
 (defn- format-task-line
   [task pending-reason]
-  (let [id-frag (some-> (:task/id task) str (subs 0 8))
-        status (name (:task/status task))
-        due (or (:task/due-date task) "none")]
-    (str "- [" status "] " (:task/title task) " (id " id-frag ", due " due ")"
+  (let [status (status-label (:task/status task))
+        due (or (:task/due-date task) "none")
+        title (or (:task/title task) "Untitled task")]
+    (str "- " status " " title " (due " due ")"
          (when pending-reason
            (str " · Reason: " (truncate-text pending-reason 80))))))
 
@@ -664,8 +742,9 @@
   [task]
   (let [id (str (:task/id task))
         title (or (:task/title task) "Task")
-        label (if (> (count title) 22) (str (subs title 0 19) "…") title)]
-    (inline-button (str "Open: " label) (str "task:view:" id))))
+        label (if (> (count title) 22) (str (subs title 0 19) "…") title)
+        status (get status-emoji (:task/status task))]
+    (inline-button (str (when status (str status " ")) label) (str "task:view:" id))))
 
 (defn- tasks-list-keyboard
   [tasks filters]
@@ -678,16 +757,23 @@
   [task pending-reason]
   (if-not task
     "Task not found or not assigned to you."
-    (let [id-str (str (:task/id task))
-          status (name (:task/status task))
+    (let [status (status-label (:task/status task))
           due (or (:task/due-date task) "none")
           assignee (get-in task [:task/assignee :user/username] "n/a")]
-      (str "Task " id-str "\n"
-           (:task/title task) "\n"
+      (str (or (:task/title task) "Untitled task") "\n"
            "Status: " status "\n"
            (when pending-reason (str "Pending reason: " (truncate-text pending-reason 120) "\n"))
            "Due: " due "\n"
            "Assignee: " assignee))))
+
+(defn- task-notification-text
+  [event title status due actor-name]
+  (case event
+    :task/created (str "New task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due)
+    :task/assigned (str "Task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due)
+    :task/status-changed (str "Task status updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due)
+    :task/due-changed (str "Task due date updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due)
+    (str "Task update:\n" title "\nStatus: " status "\nDue: " due)))
 
 (defn- send-task-card!
   [state chat-id task {:keys [reply-to-message-id] :as opts}]
@@ -967,7 +1053,10 @@
                             (:user res))))
                       (auto-bind-user state db chat-id))]
     (case command
-      :help {:text "Commands: /start <link-token>, /help, /tasks, /task <uuid>, /new <title> [| description], /stop.\nLink chat with /start using a token from the app. Notifications require flags on."}
+      :help {:text (str "Commands: /start <link-token>, /help, /tasks, /task <uuid>, "
+                        "/new <title> [| description], /edit <task-id> <title> [| description], "
+                        "/note <task-id> <comment>, /note-edit <task-id> <comment>, /stop.\n"
+                        "Link chat with /start using a token from the app. Notifications require flags on.")}
       :start (let [token (or (some-> rest (str/split #"\s+" 2) first)
                              (some->> text
                                       (re-matches #"^/start(?:@[A-Za-z0-9_]+)?\s+(.*)$")
@@ -1016,6 +1105,57 @@
                   :else
                   (let [task (find-user-task conn (:user/id chat-user) task-id)]
                     {:task task}))))
+      :edit (if-not chat-user
+              {:text "Chat not linked. Use /start <token> from the app to link."}
+              (let [{:keys [task-id body]} (parse-task-command rest)]
+                (cond
+                  (nil? task-id) {:text "Usage: /edit <task-id> <title> [| description]"}
+                  (str/blank? body) {:text "Usage: /edit <task-id> <title> [| description]"}
+                  :else
+                  (let [[title desc] (if (str/includes? body "|")
+                                       (map str/trim (str/split body #"\|" 2))
+                                       [body nil])
+                        title (when-not (str/blank? title) title)
+                        desc (when-not (str/blank? desc) desc)
+                        input (cond-> {:task/id task-id}
+                                title (assoc :task/title title)
+                                desc (assoc :task/description desc))]
+                    (if (and (nil? title) (nil? desc))
+                      {:text "Provide a new title and/or description to edit the task."}
+                      (let [action-res (actions/execute! state {:action/id :cap/action/task-update
+                                                                :actor (actions/actor-from-telegram chat-user)
+                                                                :input input})]
+                        (if-let [err (:error action-res)]
+                          {:text (str "Unable to edit task: " (:message err))}
+                          {:task (get-in action-res [:result :task])})))))))
+      :note (if-not chat-user
+              {:text "Chat not linked. Use /start <token> from the app to link."}
+              (let [{:keys [task-id body]} (parse-task-command rest)]
+                (cond
+                  (nil? task-id) {:text "Usage: /note <task-id> <comment>"}
+                  (str/blank? body) {:text "Usage: /note <task-id> <comment>"}
+                  :else
+                  (let [action-res (actions/execute! state {:action/id :cap/action/task-add-note
+                                                            :actor (actions/actor-from-telegram chat-user)
+                                                            :input {:task/id task-id
+                                                                    :note/body body}})]
+                    (if-let [err (:error action-res)]
+                      {:text (str "Unable to add note: " (:message err))}
+                      {:text "Note added to task."})))))
+      :note-edit (if-not chat-user
+                   {:text "Chat not linked. Use /start <token> from the app to link."}
+                   (let [{:keys [task-id body]} (parse-task-command rest)]
+                     (cond
+                       (nil? task-id) {:text "Usage: /note-edit <task-id> <comment>"}
+                       (str/blank? body) {:text "Usage: /note-edit <task-id> <comment>"}
+                       :else
+                       (let [action-res (actions/execute! state {:action/id :cap/action/task-edit-note
+                                                                 :actor (actions/actor-from-telegram chat-user)
+                                                                 :input {:task/id task-id
+                                                                         :note/body body}})]
+                         (if-let [err (:error action-res)]
+                           {:text (str "Unable to edit note: " (:message err))}
+                           {:text "Latest note updated."})))))
       :new (if-not chat-user
              {:text "Chat not linked. Use /start <token> from the app to link."}
              (let [raw (str/trim (or rest ""))
@@ -1054,22 +1194,18 @@
                        (not (str/blank? (:bot-token cfg))))
               (let [task-id (str (:task/id task))
                     title (:task/title task)
-                    status (some-> (:task/status task) name)
+                    status-key (or (some-> (:task/status task) name) "unknown")
+                    status (status-label (:task/status task))
                     due (or (:task/due-date task) "none")
                     actor-name (or (:user/username actor)
                                    (:user/name actor)
                                    (some-> (:user/id actor) str)
                                    "system")
-                    text (case event
-                           :task/created (str "New task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
-                           :task/assigned (str "Task assigned by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
-                           :task/status-changed (str "Task status updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
-                           :task/due-changed (str "Task due date updated by " actor-name ":\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id)
-                           (str "Task update:\n" title "\nStatus: " status "\nDue: " due "\nID: " task-id))
+                    text (task-notification-text event title status due actor-name)
                     message-key (case event
                                   :task/created (str "task-created:" task-id)
                                   :task/assigned (str "task-assigned:" task-id ":" (or (some-> assignee-id str) "none"))
-                                  :task/status-changed (str "task-status:" task-id ":" status)
+                                  :task/status-changed (str "task-status:" task-id ":" status-key)
                                   :task/due-changed (str "task-due:" task-id ":" due)
                                   (str "task-update:" task-id))]
                 (when-let [err (:error (outbox/enqueue! conn {:integration :integration/telegram
