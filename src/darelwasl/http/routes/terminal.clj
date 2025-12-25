@@ -28,12 +28,17 @@
      (let [name (or (get-in request [:body-params :name])
                     (get-in request [:body-params "name"]))
            session-type (or (get-in request [:body-params :type])
-                            (get-in request [:body-params "type"]))]
+                            (get-in request [:body-params "type"]))
+           dev-bot? (or (get-in request [:body-params :dev-bot?])
+                        (get-in request [:body-params "dev-bot?"])
+                        (get-in request [:body-params :dev-bot])
+                        (get-in request [:body-params "dev-bot"]))]
        (handle-terminal-result
         (terminal/request (:config state) :post "/sessions"
                           (cond-> {}
                             name (assoc :name name)
-                            session-type (assoc :type session-type)))))))
+                            session-type (assoc :type session-type)
+                            (some? dev-bot?) (assoc :dev-bot? dev-bot?)))))))
 
  (defn session-detail-handler
    [state]
