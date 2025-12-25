@@ -7,6 +7,7 @@
             [darelwasl.actions :as actions]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
+            [darelwasl.users :as users]
             [darelwasl.tasks :as tasks]
             [darelwasl.provenance :as prov])
   (:import (java.util UUID Date)))
@@ -30,6 +31,7 @@
   (atom {}))
 
 (declare ensure-conn)
+(declare bind-chat-for-user!)
 
 (defn- prune-captures!
   []
@@ -96,16 +98,17 @@
                       (if (> (count s) 2000)
                         (subs s 0 2000)
                         s)))
-          tx (prov/enrich-tx {:telegram.message/id (UUID/randomUUID)
-                              :entity/type :entity.type/telegram-message
-                              :telegram.message/chat-id (str chat-id)
-                              :telegram.message/from-id (when from-id (long from-id))
-                              :telegram.message/text trimmed
-                              :telegram.message/update-id update-id
-                              :telegram.message/message-id message-id
-                              :telegram.message/direction direction
-                              :telegram.message/created-at (Date.)}
-                             prov)]
+          base {:telegram.message/id (UUID/randomUUID)
+                :entity/type :entity.type/telegram-message
+                :telegram.message/chat-id (str chat-id)
+                :telegram.message/update-id update-id
+                :telegram.message/direction direction
+                :telegram.message/created-at (Date.)}
+          tx (cond-> base
+               (some? from-id) (assoc :telegram.message/from-id (long from-id))
+               (some? trimmed) (assoc :telegram.message/text trimmed)
+               (some? message-id) (assoc :telegram.message/message-id (long message-id)))
+          tx (prov/enrich-tx tx prov)]
       (try
         (d/transact conn {:tx-data [tx]})
         (catch Exception e
@@ -216,6 +219,14 @@
 (defn polling-enabled?
   [cfg]
   (true? (:polling-enabled? cfg)))
+
+(defn- auto-bind-user
+  [state db chat-id]
+  (let [username (get-in state [:config :telegram :auto-bind-username])]
+    (when (and (present-string? username) db)
+      (when-let [user (users/user-by-username db username)]
+        (when-let [res (bind-chat-for-user! state {:user user :chat-id chat-id})]
+          (:user res))))))
 
 (defn commands-enabled?
   [cfg]
@@ -585,6 +596,10 @@
                     (get-in message ["chat" "id"])
                     (get-in callback [:message :chat :id])
                     (get-in callback ["message" "chat" "id"]))
+        message-id (or (get-in message [:message_id])
+                       (get-in message ["message_id"])
+                       (get-in callback [:message :message_id])
+                       (get-in callback ["message" "message_id"]))
         from-id (or (get-in message [:from :id])
                     (get-in message ["from" "id"])
                     (get-in callback [:from :id])
@@ -597,6 +612,7 @@
         {:keys [command rest]} (parse-command text)]
     {:update-id update-id
      :chat-id (some-> chat-id str)
+     :message-id message-id
      :from-id from-id
      :from-username from-username
      :text text
@@ -948,7 +964,8 @@
                       (when (and db from-id)
                         (when-let [auto-user (user-by-telegram-user-id db (long from-id))]
                           (when-let [res (bind-chat-for-user! state {:user auto-user :chat-id chat-id})]
-                            (:user res)))))]
+                            (:user res))))
+                      (auto-bind-user state db chat-id))]
     (case command
       :help {:text "Commands: /start <link-token>, /help, /tasks, /task <uuid>, /new <title> [| description], /stop.\nLink chat with /start using a token from the app. Notifications require flags on."}
       :start (let [token (or (some-> rest (str/split #"\s+" 2) first)
@@ -1084,6 +1101,7 @@
                                           :from-id (:from-id parsed)
                                           :text (or text (some-> command name))
                                           :update-id update-id
+                                          :message-id (:message-id parsed)
                                           :direction :inbound})
             (let [response (cond
                            callback (handle-callback state chat-id callback)
@@ -1095,7 +1113,8 @@
                                                      (when (and db (:from-id parsed))
                                                        (when-let [auto-user (user-by-telegram-user-id db (long (:from-id parsed)))]
                                                          (when-let [res (bind-chat-for-user! state {:user auto-user :chat-id chat-id})]
-                                                           (:user res)))))]
+                                                           (:user res))))
+                                                     (auto-bind-user state db chat-id))]
                                    (if chat-user
                                      (if (get-pending-reason! chat-id)
                                        (handle-pending-reason-message state chat-user chat-id text)

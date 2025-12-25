@@ -458,6 +458,7 @@
         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
         telegram-dev-polling-enabled (present-env (get env "TELEGRAM_DEV_POLLING_ENABLED"))
         telegram-dev-polling-interval (present-env (get env "TELEGRAM_DEV_POLLING_INTERVAL_MS"))
+        telegram-dev-auto-bind-username (present-env (get env "TELEGRAM_DEV_AUTO_BIND_USERNAME"))
         telegram-dev-commands-enabled (present-env (get env "TELEGRAM_DEV_COMMANDS_ENABLED"))
         telegram-dev-notifications-enabled (present-env (get env "TELEGRAM_DEV_NOTIFICATIONS_ENABLED"))
         telegram-dev-timeout (present-env (get env "TELEGRAM_DEV_HTTP_TIMEOUT_MS"))
@@ -492,6 +493,7 @@
         polling-enabled? (if (some? polling-explicit?)
                            polling-explicit?
                            (not webhook-enabled?))
+        auto-bind-username (or telegram-dev-auto-bind-username "damjan")
         tmux-session (tmux/session-name (:tmux-prefix cfg) id)
         branch (str "terminal/" (subs id 0 8))
         now (now-ms)]
@@ -542,6 +544,7 @@
                           dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
                                           "TELEGRAM_WEBHOOK_ENABLED" (if webhook-enabled? "true" "false")
                                           "TELEGRAM_POLLING_ENABLED" (if polling-enabled? "true" "false")
+                                          "TELEGRAM_AUTO_BIND_USERNAME" auto-bind-username
                                           "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
                                           "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
                           (and dev-bot? telegram-dev-polling-interval)
