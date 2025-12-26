@@ -111,6 +111,8 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Auto webhook (prod-friendly): when `TELEGRAM_WEBHOOK_ENABLED=true` and `TELEGRAM_WEBHOOK_BASE_URL`/`TELEGRAM_WEBHOOK_SECRET`/`TELEGRAM_BOT_TOKEN` are set, the app calls setWebhook on startup (set `TELEGRAM_AUTO_SET_WEBHOOK=false` to disable).
 - Webhook: POST `/api/telegram/webhook` must include `X-Telegram-Bot-Api-Secret-Token`; reject missing/mismatched secret. Allowed updates include `message` and `callback_query`.
 - Commands: `/start <link-token>` binds chat to user via one-time token; `/help` lists commands; `/tasks` returns a task list message with filter buttons + per-task “Open” buttons; `/task <uuid>` returns a task card; `/new <title> [| description]` creates a task assigned to the mapped user; `/stop` clears chat mapping. All except `/help` require a chat→user mapping.
+- Task edits/notes: `/edit <task-id> <title> [| description]` updates task title/description; `/note <task-id> <comment>` adds a comment note; `/note-edit <task-id> <comment>` updates the latest comment note by the same author. Notes are stored as `:entity.type/note` with `:note/type` enum (`:note.type/comment`, `:note.type/pending-reason`, `:note.type/system`).
+- Inline edit actions: task cards include buttons to edit title/description and add/edit/delete the latest comment note; flows prompt for input and allow cancel, tracking one pending edit per chat until completion.
 - Freeform capture: non-command text shows a capture prompt with inline buttons (“Create task”, “Dismiss”) and only creates on confirmation.
 - Inline UX: task cards include inline buttons for status, archive/unarchive, and refresh; list message filters by status/archived and updates in-place.
 - Data/mapping: store optional `:user/telegram-chat-id` (unique), `:user/telegram-user-id` (unique for auto-recognition), `:user/telegram-link-token` (single-use, unique), and `:user/telegram-link-token-created-at`. `/start` writes mapping and clears the token fields; `/stop` clears mapping. Link tokens are generated via `POST /api/telegram/link-token` (self-service; admin can generate for others). Recognized users can be registered via `POST /api/telegram/recognize`.
@@ -134,10 +136,13 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Separate daemon (not tied to the main app). Sessions survive app restarts and UI closes.
 - Access gated by role `:role/codex-terminal` (only Damjan for now).
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
+- Terminal backend switching: `/api/terminal/backend` (admin-only) reports `{active stable-url canary-url}` and accepts `{active|backend}` to switch between `:stable` (`TERMINAL_API_URL`) and `:canary` (`TERMINAL_CANARY_API_URL`); active backend persists in `TERMINAL_BACKEND_FILE` (default `data/terminal/backend.edn`).
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
+- Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`), plus `context.add` and `devbot.reset`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
 - Dev bot defaults to polling when the public base URL is not HTTPS or uses a non-Telegram webhook port; webhook is only enabled for HTTPS URLs on ports 80/88/443/8443.
 - Dev bot auto-binds the first chat to `damjan` unless overridden by `TELEGRAM_DEV_AUTO_BIND_USERNAME`.
+- Dev bot tokens resolve from `TELEGRAM_DEV_BOT_TOKEN`, `TELEGRAM_DEV_BOT_TOKEN_FILE`, or `.secrets/telegram_bot_token_dev` (first present).
 - On complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
@@ -160,6 +165,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
   - `TELEGRAM_DEV_BOT_TOKEN` (use dev bot for terminal sessions)
+  - `TELEGRAM_DEV_BOT_TOKEN_FILE` (optional file path for dev bot token)
   - `TELEGRAM_DEV_WEBHOOK_SECRET`, `TELEGRAM_DEV_WEBHOOK_BASE_URL` (optional dev webhook config)
   - `TELEGRAM_DEV_WEBHOOK_ENABLED`, `TELEGRAM_DEV_COMMANDS_ENABLED`, `TELEGRAM_DEV_NOTIFICATIONS_ENABLED` (optional dev flags)
   - `TELEGRAM_DEV_POLLING_ENABLED`, `TELEGRAM_DEV_POLLING_INTERVAL_MS` (optional dev polling flags)
@@ -219,6 +225,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Tooling: prefer deterministic, reproducible scripts; pin dependencies; record invocation and scope in the registry.
 - Testing: use fixture-driven tests; spin a temp Datomic for schema/action checks; run headless app boot smoke; avoid flaky external calls.
 - Entity view primitives: define list/detail render configs per `:entity/type` in `src/darelwasl/ui/entity.cljs` (title/meta/key + render-row + detail shells). Home/Tasks/Land must consume these instead of ad-hoc list/detail code; add new entity configs rather than hard-coding UI per feature. Stable keys come from the config `:key`; row renderers must be pure and state-free.
+- Entity refs: every entity may have a short `:entity/ref` (unique, human-friendly like `T-7F2A1`) in addition to UUIDs; schema enforces uniqueness and bootstrap backfills missing refs. Use refs for UI display and API lookups (tasks/files accept UUID or `:entity/ref`), and generate via `entity/with-ref` for new entities.
 - Entity list UI: shared `entity-list` supports optional chip bars for quick filters; chips are passed from the view (label/active/on-click). Keep list/detail loading/empty/error handling explicit.
 - Pagination/perf guardrails: list endpoints (tasks; land people/parcels) default to `limit=25`, `offset=0`, with a max limit of 200 and server-side bounding. Clients must send limit/offset (or page/page-size in filters) and render pagination controls (shared `pagination-controls` UI). Responses return `:pagination {:total :limit :offset :page :returned}`; update UI state from these fields.
 - Importer idempotency: land importer uses deterministic IDs for person/parcel/ownership rows; re-running the same CSV against the same DB must not change counts or create duplicates. Proof is enforced via `scripts/checks.sh import` (runs importer twice in a temp DB and compares counts).
