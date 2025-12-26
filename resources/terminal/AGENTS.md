@@ -58,6 +58,5 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Do not undo unrelated local changes.
 
 ## Consolidation sessions (integrator role)
-- Create a fresh `integration/<date>` branch.
-- Pull in existing PR branches; resolve conflicts; run full checks.
-- Open a single integration PR; never merge to main directly.
+- Pull in the operator-provided list of PR branches; resolve conflicts; run full checks.
+- Merge the consolidated result directly into `main` and push to `main` (no integration PR).
