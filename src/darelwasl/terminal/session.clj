@@ -128,6 +128,18 @@
                          :message (or (:error body) "Snapshot request failed")
                          :body body}))))))
 
+(defn- latest-tx-inst
+  [db]
+  (reduce (fn [acc [inst]]
+            (if (or (nil? acc)
+                    (pos? (.compareTo ^java.util.Date inst acc)))
+              inst
+              acc))
+          nil
+          (d/q '[:find ?inst
+                 :where [_ :db/txInstant ?inst]]
+               db)))
+
 (defn- load-main-db-local
   [cfg]
   (let [storage-dir (:main-datomic-dir cfg)
@@ -144,9 +156,7 @@
       (let [conn (d/connect client {:db-name db-name})
             db (d/db conn)
             basis (:basisT db)
-            tx-inst (d/q '[:find (max ?inst) .
-                           :where [?tx :db/txInstant ?inst]]
-                         db)]
+            tx-inst (latest-tx-inst db)]
         {:client client
          :conn conn
          :db db
