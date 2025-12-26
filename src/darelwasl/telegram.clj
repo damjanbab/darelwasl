@@ -29,6 +29,9 @@
 
 (defonce pending-reasons
   (atom {}))
+
+(defonce pending-edits
+  (atom {}))
 (def ^:private max-capture-preview 10)
 (def ^:private max-capture-cards 5)
 (def ^:private status-emoji
@@ -54,6 +57,17 @@
   []
   (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
     (swap! pending-reasons
+           (fn [entries]
+             (into {}
+                   (filter (fn [[_ v]]
+                             (let [ts (:created-at v 0)]
+                               (>= ts cutoff))))
+                   entries)))))
+
+(defn- prune-pending-edits!
+  []
+  (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
+    (swap! pending-edits
            (fn [entries]
              (into {}
                    (filter (fn [[_ v]]
@@ -158,6 +172,20 @@
   (prune-pending-reasons!)
   (get @pending-reasons (pending-reason-key chat-id)))
 
+(defn- pending-edit-key
+  [chat-id]
+  (str chat-id))
+
+(defn- save-pending-edit!
+  [chat-id payload]
+  (prune-pending-edits!)
+  (swap! pending-edits assoc (pending-edit-key chat-id) (assoc payload :created-at (System/currentTimeMillis))))
+
+(defn- get-pending-edit!
+  [chat-id]
+  (prune-pending-edits!)
+  (get @pending-edits (pending-edit-key chat-id)))
+
 (defn- log-telegram-message!
   "Persist a minimal telegram message fact with provenance. Direction is :inbound or :outbound."
   [state {:keys [chat-id from-id text update-id message-id direction]}]
@@ -193,6 +221,14 @@
   (let [k (pending-reason-key chat-id)
         value (get @pending-reasons k)]
     (swap! pending-reasons dissoc k)
+    value))
+
+(defn- take-pending-edit!
+  [chat-id]
+  (prune-pending-edits!)
+  (let [k (pending-edit-key chat-id)
+        value (get @pending-edits k)]
+    (swap! pending-edits dissoc k)
     value))
 
 (defn- truncate-text
@@ -267,6 +303,11 @@
   {:inline_keyboard
    [[(inline-button "Cancel" (str "pending:cancel:" task-id))]]})
 
+(defn- pending-edit-inline-keyboard
+  [task-id]
+  {:inline_keyboard
+   [[(inline-button "Cancel" (str "task:edit:cancel:" task-id))]]})
+
 (defn- inline-button [text data]
   {:text text
    :callback_data data})
@@ -280,7 +321,12 @@
        (inline-button "🟡 In progress" (str "task:status:" id ":in-progress"))]
       [(inline-button "🔴 Pending" (str "task:status:" id ":pending"))
        (inline-button "🟢 Done" (str "task:status:" id ":done"))]
-      [(inline-button (if archived? "Unarchive" "Archive")
+      [(inline-button "Edit title" (str "task:edit:title:" id))
+       (inline-button "Edit desc" (str "task:edit:desc:" id))]
+      [(inline-button "Add note" (str "task:note:add:" id))
+       (inline-button "Edit note" (str "task:note:edit:" id))]
+      [(inline-button "Delete note" (str "task:note:delete:" id))
+       (inline-button (if archived? "Unarchive" "Archive")
                       (str "task:archive:" id ":" (if archived? "false" "true")))]
       [(inline-button "Refresh" (str "task:view:" id))]]}))
 
@@ -867,6 +913,97 @@
               (take-pending-reason! chat-id)
               (send-task-card! state chat-id (get-in res [:result :task]) {}))))))))
 
+(defn- edit-prompt-text
+  [edit-type title]
+  (case edit-type
+    :edit-title (str "Send the new title for:\n" title)
+    :edit-desc (str "Send the new description for:\n" title)
+    :note-add (str "Send a new note for:\n" title)
+    :note-edit (str "Send the updated note for your latest comment on:\n" title)
+    (str "Send the update for:\n" title)))
+
+(defn- handle-pending-edit-message
+  [state chat-user chat-id text]
+  (let [cfg (get-in state [:config :telegram])
+        pending (get-pending-edit! chat-id)]
+    (when pending
+      (if (str/blank? text)
+        (send-message! cfg {:chat-id chat-id
+                            :text "Reply with a value or tap Cancel."
+                            :message-key (str "edit-empty-" (System/currentTimeMillis))})
+        (let [{:keys [task-id type]} pending
+              action (case type
+                       :edit-title {:action/id :cap/action/task-update
+                                    :input {:task/id task-id
+                                            :task/title text}}
+                       :edit-desc {:action/id :cap/action/task-update
+                                   :input {:task/id task-id
+                                           :task/description text}}
+                       :note-add {:action/id :cap/action/task-add-note
+                                  :input {:task/id task-id
+                                          :note/body text}}
+                       :note-edit {:action/id :cap/action/task-edit-note
+                                   :input {:task/id task-id
+                                           :note/body text}}
+                       nil)]
+          (if-not action
+            (do
+              (take-pending-edit! chat-id)
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Unknown edit action."
+                                  :message-key (str "edit-unknown-" (System/currentTimeMillis))}))
+            (let [res (actions/execute! state (assoc action :actor (actions/actor-from-telegram chat-user)))]
+              (if-let [err (:error res)]
+                (do
+                  (take-pending-edit! chat-id)
+                  (send-message! cfg {:chat-id chat-id
+                                      :text (str "Unable to update: " (:message err))
+                                      :message-key (str "edit-error-" (System/currentTimeMillis))}))
+                (do
+                  (take-pending-edit! chat-id)
+                  (cond
+                    (#{:edit-title :edit-desc} type)
+                    (send-task-card! state chat-id (get-in res [:result :task]) {})
+
+                    (= :note-add type)
+                    (send-message! cfg {:chat-id chat-id
+                                        :text "Note added to task."
+                                        :message-key (str "note-add-" (System/currentTimeMillis))})
+
+                    (= :note-edit type)
+                    (send-message! cfg {:chat-id chat-id
+                                        :text "Latest note updated."
+                                        :message-key (str "note-edit-" (System/currentTimeMillis))})
+
+                    :else
+                    (send-message! cfg {:chat-id chat-id
+                                        :text "Update saved."
+                                        :message-key (str "edit-ok-" (System/currentTimeMillis))}))))))))))))
+
+(defn- start-pending-edit!
+  [state chat-id chat-user task-id edit-type message-id]
+  (let [cfg (get-in state [:config :telegram])
+        conn (ensure-conn state)
+        task (find-user-task conn (:user/id chat-user) task-id)]
+    (if-not task
+      (send-message! cfg {:chat-id chat-id
+                          :text "Task not found."
+                          :message-key (str "edit-task-missing-" (or message-id (System/currentTimeMillis)))})
+      (let [title (or (:task/title task) "Task")
+            prompt (edit-prompt-text edit-type title)
+            send-res (send-message! cfg {:chat-id chat-id
+                                         :text prompt
+                                         :message-key (str "edit-prompt-" (name edit-type) "-" task-id "-" (System/currentTimeMillis))
+                                         :reply-markup (pending-edit-inline-keyboard task-id)})]
+        (if-let [err (:error send-res)]
+          send-res
+          (do
+            (take-pending-reason! chat-id)
+            (save-pending-edit! chat-id {:task-id task-id
+                                         :type edit-type
+                                         :user chat-user})
+            send-res))))))
+
 (declare parse-callback)
 
 (defn- handle-callback
@@ -907,6 +1044,56 @@
                                              :message-id message-id
                                              :text "Pending reason cancelled."
                                              :reply-markup {:inline_keyboard []}}))
+      :task/edit-cancel (do
+                          (take-pending-edit! chat-id)
+                          (edit-message! cfg {:chat-id chat-id
+                                              :message-id message-id
+                                              :text "Edit cancelled."
+                                              :reply-markup {:inline_keyboard []}}))
+      :task/edit-title (let [tid (:task-id parsed)
+                             task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                         (if (and chat-user task-id)
+                           (start-pending-edit! state chat-id chat-user task-id :edit-title message-id)
+                           (send-message! cfg {:chat-id chat-id
+                                               :text "Cannot edit task."
+                                               :message-key (str "task-edit-title-error-" (System/currentTimeMillis))})))
+      :task/edit-desc (let [tid (:task-id parsed)
+                            task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                        (if (and chat-user task-id)
+                          (start-pending-edit! state chat-id chat-user task-id :edit-desc message-id)
+                          (send-message! cfg {:chat-id chat-id
+                                              :text "Cannot edit task."
+                                              :message-key (str "task-edit-desc-error-" (System/currentTimeMillis))})))
+      :task/note-add (let [tid (:task-id parsed)
+                           task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                       (if (and chat-user task-id)
+                         (start-pending-edit! state chat-id chat-user task-id :note-add message-id)
+                         (send-message! cfg {:chat-id chat-id
+                                             :text "Cannot add note."
+                                             :message-key (str "task-note-add-error-" (System/currentTimeMillis))})))
+      :task/note-edit (let [tid (:task-id parsed)
+                            task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                        (if (and chat-user task-id)
+                          (start-pending-edit! state chat-id chat-user task-id :note-edit message-id)
+                          (send-message! cfg {:chat-id chat-id
+                                              :text "Cannot edit note."
+                                              :message-key (str "task-note-edit-error-" (System/currentTimeMillis))})))
+      :task/note-delete (let [tid (:task-id parsed)
+                              task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                          (if (and chat-user task-id)
+                            (let [res (actions/execute! state {:action/id :cap/action/task-delete-note
+                                                               :actor (actions/actor-from-telegram chat-user)
+                                                               :input {:task/id task-id}})]
+                              (if-let [err (:error res)]
+                                (send-message! cfg {:chat-id chat-id
+                                                    :text (str "Unable to delete note: " (:message err))
+                                                    :message-key (str "task-note-delete-error-" (System/currentTimeMillis))})
+                                (send-message! cfg {:chat-id chat-id
+                                                    :text "Latest note deleted."
+                                                    :message-key (str "task-note-delete-" (System/currentTimeMillis))})))
+                            (send-message! cfg {:chat-id chat-id
+                                                :text "Cannot delete note."
+                                                :message-key (str "task-note-delete-invalid-" (System/currentTimeMillis))})))
       :tasks/filter (let [filters (or (get-task-list! chat-id message-id)
                                       {:status nil :archived :active})
                           new-filters (case (:filter parsed)
@@ -964,6 +1151,7 @@
                                                               :message-key (str "pending-reason-" tid)
                                                               :reply-markup (pending-reason-inline-keyboard tid)})]
                              (when-not (:error send-res)
+                               (take-pending-edit! chat-id)
                                (save-pending-reason! chat-id {:task-id task-id
                                                               :user chat-user}))
                              send-res)
@@ -1037,6 +1225,22 @@
                      :value (nth parts 3 nil)}
           "view" {:type :task/view
                   :task-id (nth parts 2 nil)}
+          "edit" (case (nth parts 2 nil)
+                   "title" {:type :task/edit-title
+                            :task-id (nth parts 3 nil)}
+                   "desc" {:type :task/edit-desc
+                           :task-id (nth parts 3 nil)}
+                   "cancel" {:type :task/edit-cancel
+                             :task-id (nth parts 3 nil)}
+                   nil)
+          "note" (case (nth parts 2 nil)
+                   "add" {:type :task/note-add
+                          :task-id (nth parts 3 nil)}
+                   "edit" {:type :task/note-edit
+                           :task-id (nth parts 3 nil)}
+                   "delete" {:type :task/note-delete
+                             :task-id (nth parts 3 nil)}
+                   nil)
           nil)
         nil))))
 
@@ -1252,9 +1456,11 @@
                                                            (:user res))))
                                                      (auto-bind-user state db chat-id))]
                                    (if chat-user
-                                     (if (get-pending-reason! chat-id)
-                                       (handle-pending-reason-message state chat-user chat-id text)
-                                       (handle-freeform-message state chat-user chat-id text))
+                                     (if (get-pending-edit! chat-id)
+                                       (handle-pending-edit-message state chat-user chat-id text)
+                                       (if (get-pending-reason! chat-id)
+                                         (handle-pending-reason-message state chat-user chat-id text)
+                                         (handle-freeform-message state chat-user chat-id text)))
                                      {:text "Chat not linked. Use /start <token> to link."})))
                 {:keys [text tasks task task-list]} response]
             (cond

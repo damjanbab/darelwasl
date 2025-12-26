@@ -92,6 +92,10 @@
   [state {:keys [input actor]}]
   (tasks/edit-note! (conn state) (or input {}) actor))
 
+(defn- task-delete-note
+  [state {:keys [input actor]}]
+  (tasks/delete-note! (conn state) (or input {}) actor))
+
 (defn- task-delete
   [state {:keys [input actor]}]
   (let [body (or input {})
@@ -210,6 +214,7 @@
    :cap/action/task-archive task-archive
    :cap/action/task-add-note task-add-note
    :cap/action/task-edit-note task-edit-note
+   :cap/action/task-delete-note task-delete-note
    :cap/action/task-delete task-delete
    :cap/action/betting-events betting-events
    :cap/action/betting-odds betting-odds

@@ -726,6 +726,17 @@
              :note-body note-body
              :author-id author-id})))
 
+(defn- validate-delete-note
+  [db body actor]
+  (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
+        author-id (:user/id actor)]
+    (cond
+      id-err (error 400 id-err)
+      (nil? author-id) (error 400 "Note deletions require an authenticated user")
+      (not (task-eid db task-id)) (error 404 "Task not found")
+      :else {:task-id task-id
+             :author-id author-id})))
+
 (defn create-task!
   [conn body actor]
   (or (ensure-conn conn)
@@ -1007,6 +1018,33 @@
                              :note {:note/id note-id
                                     :note/body note-body}})
                   :else (error 500 "Task not available after note edit")))))))))
+
+(defn delete-note!
+  [conn body actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            result (validate-delete-note db body actor)]
+        (if-let [err (:error result)]
+          {:error err}
+          (let [{:keys [task-id author-id]} result
+                note-id (latest-comment-note db task-id author-id)]
+            (if-not note-id
+              (error 404 "No deletable comment note found for this task")
+              (let [tx-result (attempt-transact conn [[:db/retractEntity [:note/id note-id]]] "delete note")
+                    updated (when-let [db-after (:db-after tx-result)]
+                              (when-let [eid (task-eid db-after task-id)]
+                                (some-> (pull-task db-after eid)
+                                        present-task)))]
+                (cond
+                  (:error tx-result) {:error (:error tx-result)}
+                  updated (do
+                            (log/infof "AUDIT task-delete-note user=%s task=%s"
+                                       (or (:user/username actor) (:user/id actor))
+                                       task-id)
+                            {:task updated
+                             :note {:note/id note-id
+                                    :note/deleted true}})
+                  :else (error 500 "Task not available after note delete")))))))))
 
 (defn delete-task!
   [conn task-id actor]

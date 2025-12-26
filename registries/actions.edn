@@ -301,6 +301,26 @@
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 
+ {:id :cap/action/task-delete-note
+  :title "Delete Task Note"
+  :version "v1"
+  :inputs {:task/id :uuid}
+  :outputs {:task/id :uuid
+            :note/id :uuid}
+  :side-effects ["Delete latest comment note for task"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id]}
+  :contracts {:fixtures [:fixtures/tasks :fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/note]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
  {:id :cap/action/tag-create
   :title "Create Tag"
   :version "v1"
