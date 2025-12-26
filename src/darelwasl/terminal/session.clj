@@ -294,13 +294,18 @@
    "integrator" :integrator
    "integration" :integrator
    "ops" :ops
-   "admin" :ops})
+   "admin" :ops
+   "main-ops" :main-ops
+   "mainops" :main-ops
+   "main" :main-ops
+   "data" :main-ops})
 (def ^:private agents-resources
   {:feature "terminal/AGENTS.md"
    :bugfix "terminal/AGENTS-bugfix.md"
    :research "terminal/AGENTS-research.md"
    :integrator "terminal/AGENTS-integrator.md"
-   :ops "terminal/AGENTS-ops.md"})
+   :ops "terminal/AGENTS-ops.md"
+   :main-ops "terminal/AGENTS-main-ops.md"})
 
 (def ^:private app-start-timeout-ms (* 5 60 1000))
 (def ^:private app-restart-min-interval-ms 15000)

@@ -138,6 +138,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
 - Terminal backend switching: `/api/terminal/backend` (admin-only) reports `{active stable-url canary-url}` and accepts `{active|backend}` to switch between `:stable` (`TERMINAL_API_URL`) and `:canary` (`TERMINAL_CANARY_API_URL`); active backend persists in `TERMINAL_BACKEND_FILE` (default `data/terminal/backend.edn`).
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
+- Session types: `feature`, `bugfix`, `research`, `integrator`, `ops`, `main-ops` (main-ops is data/library only via command protocol; no code edits or PRs).
 - Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`), plus `context.add` and `devbot.reset`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
 - Dev bot defaults to polling when the public base URL is not HTTPS or uses a non-Telegram webhook port; webhook is only enabled for HTTPS URLs on ports 80/88/443/8443.

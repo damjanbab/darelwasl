@@ -18,7 +18,8 @@
    {:id :bugfix :label "Bugfix/Hotfix"}
    {:id :research :label "Research/Spike"}
    {:id :integrator :label "Integrator"}
-   {:id :ops :label "Ops/Admin"}])
+   {:id :ops :label "Ops/Admin"}
+   {:id :main-ops :label "Main Ops (Data)"}])
 
 (def ^:private session-type-labels
   (into {} (map (juxt :id :label) session-type-options)))
