@@ -63,8 +63,10 @@
   (let [muuntaja-instance (m/create m/default-options)]
     (ring/ring-handler
      (ring/router
-      [(health-route state)
-       (api-routes state)]
+      (concat
+       [(health-route state)]
+       (terminal-routes/public-routes state)
+       [(api-routes state)])
       {:conflicts nil
        :data {:muuntaja muuntaja-instance
               :middleware default-middleware}})

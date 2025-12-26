@@ -1,7 +1,9 @@
 (ns darelwasl.terminal.main
   (:gen-class)
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [darelwasl.config :as config]
+            [darelwasl.db :as db]
             [darelwasl.terminal.http :as http]
             [darelwasl.terminal.session :as session]
             [darelwasl.terminal.store :as store]
@@ -9,13 +11,33 @@
 
 (defonce system-state (atom nil))
 
+(defn- nested-terminal?
+  []
+  (let [session-id (System/getenv "TERMINAL_SESSION_ID")
+        allow (System/getenv "TERMINAL_ALLOW_NESTED")]
+    (and (not (str/blank? (str session-id)))
+         (not= "1" (str allow)))))
+
+(defn- ensure-not-nested!
+  []
+  (when (nested-terminal?)
+    (throw (ex-info "Nested terminal service is not allowed"
+                    {:status 400
+                     :message "Nested terminal service is not allowed"}))))
+
 (defn start!
   ([] (start! (config/load-config)))
   ([cfg]
+   (ensure-not-nested!)
    (let [terminal-cfg (:terminal cfg)
+         db-state (db/connect! (:datomic cfg))
          terminal-store (store/load-store (:data-dir terminal-cfg))]
+     (when (:error db-state)
+       (log/warn (:error db-state) "Main DB not ready; terminal commands will fail until it recovers"))
      (session/reconcile-orphaned-sessions! terminal-store terminal-cfg)
+     (session/rebuild-port-reservations! terminal-store terminal-cfg)
      (let [state {:config cfg
+                  :db db-state
                   :terminal/config terminal-cfg
                   :terminal/store terminal-store}
            handler (http/app state)

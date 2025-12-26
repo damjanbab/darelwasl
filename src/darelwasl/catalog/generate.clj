@@ -23,7 +23,7 @@
    {:id :main-ops :label "Main Ops (Data)"}])
 
 (def ^:private command-prefixes
-  ["task." "file." "context." "devbot." "session."])
+  ["task." "file." "context." "devbot." "session." "library."])
 
 (def ^:private route-root-paths
   ["src/darelwasl/http/routes"
@@ -207,4 +207,3 @@
   (let [catalog (build-catalog)]
     (spit path (pr-str catalog))
     catalog))
-

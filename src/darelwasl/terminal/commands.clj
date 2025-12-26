@@ -38,6 +38,9 @@
    "file.update" :cap/action/file-update
    "file.delete" :cap/action/file-delete})
 
+(def ^:private library-command-types
+  ["library.add"])
+
 (defn- run-action
   [state action-id actor input]
   (let [res (actions/execute! state {:action/id action-id

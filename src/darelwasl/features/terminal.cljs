@@ -313,7 +313,7 @@
             app-port (get-in selected [:ports :app])
             site-port (get-in selected [:ports :site])
             app-link (if app-port
-                       (str protocol "//" host ":" app-port "/")
+                       (str "/terminal/sessions/" (:id selected) "/app")
                        "#")
             site-link (if site-port
                         (str protocol "//" host ":" site-port "/")

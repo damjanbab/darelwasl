@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$ROOT"
+if [ -n "${TERMINAL_SESSION_ID:-}" ] && [ "${TERMINAL_ALLOW_NESTED:-}" != "1" ]; then
+  echo "Refusing to start terminal service inside a session. Set TERMINAL_ALLOW_NESTED=1 to override." >&2
+  exit 1
+fi
 TMUX_LOCAL="$HOME/.local/tmux/usr/bin"
 if [ -x "$TMUX_LOCAL/tmux" ]; then
   export PATH="$TMUX_LOCAL:$PATH"

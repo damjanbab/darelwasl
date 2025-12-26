@@ -17,6 +17,28 @@
     (catch Exception _
       default)))
 
+(defn- parse-uuid
+  [value]
+  (try
+    (when value
+      (java.util.UUID/fromString (str value)))
+    (catch Exception _
+      nil)))
+
+(defn- normalize-actor
+  [actor]
+  (if (map? actor)
+    (let [raw-id (or (:user/id actor) (get actor "user/id"))
+          user-id (cond
+                    (instance? java.util.UUID raw-id) raw-id
+                    (string? raw-id) (parse-uuid raw-id)
+                    :else nil)]
+      (cond
+        (some? user-id) (assoc actor :user/id user-id)
+        raw-id (dissoc actor :user/id)
+        :else actor))
+    actor))
+
 (defn- ok
   [body]
   {:status 200
@@ -153,6 +175,53 @@
             :duplicate (ok {:status "duplicate"})
             (error-response 400 (or message "Unable to claim command"))))))))
 
+(defn run-command-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          raw-body (or (:body-params request) {})
+          command (or (:command raw-body) (get raw-body "command") raw-body)
+          command-id (or (:id command) (get command "id") (:command/id command))
+          command-type (or (:type command) (get command "type") (:command/type command))
+          input (or (:input command) (get command "input") (:command/input command) {})
+          actor (normalize-actor (or (:actor raw-body) (get raw-body "actor")))
+          session (find-session (:terminal/store state) session-id)]
+      (cond
+        (nil? session) (error-response 404 "Session not found")
+        (str/blank? (str command-id)) (error-response 400 "Command id is required")
+        (str/blank? (str command-type)) (error-response 400 "Command type is required")
+        :else
+        (let [command {:id (str command-id)
+                       :type command-type
+                       :input input}
+              result (session/run-command! state (:terminal/store state) session command actor)
+              payload (:result result)]
+          (case (:status result)
+            :duplicate (ok {:status "duplicate"})
+            :error (error-response 400 (or (:message result) "Unable to run command"))
+            (ok {:status "ok"
+                 :result (or (:result payload) (:message payload))
+                 :error (:error payload)})))))))
+
+(defn reallocate-ports-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (try
+          (let [next-session (session/reallocate-ports! (:terminal/store state)
+                                                       (:terminal/config state)
+                                                       session)]
+            (ok {:session (session/present-session next-session)}))
+          (catch Exception e
+            (log/warn e "Failed to reallocate ports" {:id session-id})
+            (error-response 500 "Failed to reallocate ports"
+                            (cond-> {:message (.getMessage e)}
+                              (instance? clojure.lang.ExceptionInfo e)
+                              (assoc :data (ex-data e))))))
+        (error-response 404 "Session not found")))))
+
 (defn output-handler
   [state]
   (fn [request]
@@ -164,7 +233,7 @@
           session (find-session store session-id)
           max-bytes (get-in state [:terminal/config :max-output-bytes] 20000)]
       (if session
-        (let [session (session/ensure-app-running! store session)
+        (let [session (session/ensure-app-running! store (:terminal/config state) session)
               output (session/output-since session cursor max-bytes)
               app-ready? (session/app-ready? session)
               output (assoc output :app-ready app-ready?)
@@ -182,6 +251,7 @@
             (session/send-keys! session ["1" "Enter"]))
           (when needs-continue?
             (session/send-keys! session ["Enter"]))
+          (session/auto-run-commands! state store session (:chunk output))
           (let [next-session (cond-> session
                                needs-approval? (assoc :auto-approval? true)
                                needs-continue? (assoc :auto-continue? true))]
@@ -191,6 +261,19 @@
         (error-response 404 "Session not found")))))
 
 (defn complete-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session (find-session (:terminal/store state) session-id)]
+      (if session
+        (if (admin-authorized? state request)
+          (do
+            (session/complete-session! (:terminal/store state) session)
+            (ok {:status "ok"}))
+            (error-response 403 "Admin token required"))
+        (error-response 404 "Session not found")))))
+
+(defn cleanup-handler
   [state]
   (fn [request]
     (let [session-id (get-in request [:path-params :id])
@@ -286,16 +369,22 @@
     {:post (send-keys-handler state)}]
    ["/sessions/:id/commands/claim"
     {:post (claim-command-handler state)}]
+   ["/sessions/:id/commands/run"
+    {:post (run-command-handler state)}]
    ["/sessions/:id/output"
     {:get (output-handler state)}]
    ["/sessions/:id/complete"
     {:post (complete-handler state)}]
+   ["/sessions/:id/cleanup"
+    {:post (cleanup-handler state)}]
    ["/sessions/:id/verify"
     {:post (verify-handler state)}]
    ["/sessions/:id/resume"
     {:post (resume-handler state)}]
    ["/sessions/:id/restart-app"
     {:post (restart-app-handler state)}]
+   ["/sessions/:id/ports/reallocate"
+    {:post (reallocate-ports-handler state)}]
    ["/sessions/:id/interrupt"
     {:post (interrupt-handler state)}]])
 

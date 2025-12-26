@@ -7,6 +7,10 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
+            [darelwasl.files :as files]
+            [darelwasl.terminal.commands :as commands]
+            [darelwasl.terminal.promote :as promote]
             [darelwasl.terminal.store :as store]
             [darelwasl.terminal.tmux :as tmux])
   (:import (java.io RandomAccessFile)
@@ -24,9 +28,17 @@
       (.mkdirs abs))
     abs))
 
- (defn- write-manifest!
-   [dir data]
-   (spit (io/file dir "manifest.edn") (pr-str data)))
+(defn- write-manifest!
+  [dir data]
+  (spit (io/file dir "manifest.edn") (pr-str data)))
+
+(defn- read-manifest
+  [dir]
+  (let [file (io/file dir "manifest.edn")]
+    (when (.exists file)
+      (try
+        (read-string (slurp file))
+        (catch Exception _ nil)))))
 
 (defn- present-env
   [value]
@@ -166,15 +178,12 @@
         raw
         (ensure-port raw app-port)))))
 
- (defn- update-manifest!
-   [dir f]
-   (let [file (io/file dir "manifest.edn")
-         current (when (.exists file)
-                   (try
-                     (read-string (slurp file))
-                     (catch Exception _ nil)))
-         next (f (or current {}))]
-     (write-manifest! dir next)))
+(defn- update-manifest!
+  [dir f]
+  (let [file (io/file dir "manifest.edn")
+        current (read-manifest dir)
+        next (f (or current {}))]
+    (write-manifest! dir next)))
 
 (defn- port-free?
   [port]
@@ -191,28 +200,51 @@
       true)
     (catch Exception _ false)))
 
- (defn- used-ports
-   [sessions]
-   (->> sessions
-        (mapcat (fn [session]
-                  (vals (:ports session))))
-        (filter number?)
-        set))
+(defn- used-ports
+  [sessions & [exclude-id]]
+  (->> sessions
+       (remove (fn [session]
+                 (= (:id session) exclude-id)))
+       (mapcat (fn [session]
+                 (vals (:ports session))))
+       (filter number?)
+       set))
 
- (defn- allocate-ports
-   [cfg sessions]
-   (let [start (:port-range-start cfg)
-         end (:port-range-end cfg)
-         used (used-ports sessions)]
-     (loop [port start]
-       (when (> (+ port 1) end)
-         (throw (ex-info "No available port block" {:start start :end end})))
-       (let [block [port (inc port)]]
-         (if (and (every? port-free? block)
-                  (empty? (set/intersection used (set block))))
-           {:app port
-            :site (inc port)}
-           (recur (+ port 2)))))))
+(defn- reserved-ports
+  [store & [exclude-id]]
+  (->> (store/port-reservations store)
+       (remove (fn [[session-id _ports]]
+                 (= (str session-id) (str exclude-id))))
+       (mapcat (fn [[_ ports]]
+                 (vals ports)))
+       (filter number?)
+       set))
+
+(defn- allocate-ports
+  [cfg store & [opts]]
+  (let [{:keys [exclude-id avoid-ports]} (if (map? opts) opts {:exclude-id opts})
+        avoid-set (cond
+                    (map? avoid-ports) (->> (vals avoid-ports)
+                                            (filter number?)
+                                            set)
+                    (sequential? avoid-ports) (->> avoid-ports
+                                                   (filter number?)
+                                                   set)
+                    :else #{})
+        start (:port-range-start cfg)
+        end (:port-range-end cfg)
+        used (used-ports (store/list-sessions store) exclude-id)
+        reserved (reserved-ports store exclude-id)
+        blocked (set/union used reserved avoid-set)]
+    (loop [port start]
+      (when (> (+ port 1) end)
+        (throw (ex-info "No available port block" {:start start :end end})))
+      (let [block [port (inc port)]]
+        (if (and (every? port-free? block)
+                 (empty? (set/intersection blocked (set block))))
+          {:app port
+           :site (inc port)}
+          (recur (+ port 2)))))))
 
  (defn- run!
    [args & [{:keys [dir]}]]
@@ -346,11 +378,29 @@
       :else (throw (ex-info "Failed to create pull request"
                             {:status status :body (:body resp)})))))
 
- (defn- write-env!
-   [file env-map]
-   (let [lines (for [[k v] env-map]
-                 (str k "=" v))]
-     (spit file (str/join "\n" lines))))
+(defn- write-env!
+  [file env-map]
+  (let [lines (for [[k v] env-map]
+                (str k "=" v))]
+    (spit file (str/join "\n" lines))))
+
+(defn- read-env
+  [file]
+  (when (.exists (io/file file))
+    (->> (str/split-lines (slurp file))
+         (remove str/blank?)
+         (map #(str/split % #"=" 2))
+         (reduce (fn [acc [k v]]
+                   (if (and k v)
+                     (assoc acc k v)
+                     acc))
+                 {}))))
+
+(defn- update-env!
+  [file f]
+  (let [current (or (read-env file) {})
+        next (f current)]
+    (write-env! file next)))
 
 (defn- write-askpass!
   [file token]
@@ -370,6 +420,7 @@
 (def ^:private ansi-csi-re #"\u001B\[[0-?]*[ -/]*[@-~]")
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
 (def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
+(def ^:private command-re #"@command\s+(\{[^\n]+\})")
 (def ^:private input-submit-delay-ms 200)
 (def ^:private session-type-default :feature)
 (def ^:private session-type-aliases
@@ -448,6 +499,35 @@
         (str/replace "\u001B(B" "")
         (str/trimr))))
 
+(defn- parse-command-json
+  [text]
+  (try
+    (json/read-str text :key-fn keyword)
+    (catch Exception _ nil)))
+
+(defn- normalize-command
+  [command]
+  (let [id (or (:id command) (:command/id command))
+        type (or (:type command) (:command/type command))
+        input (or (:input command) (:command/input command) {})]
+    (when (and id type)
+      {:id (str id)
+       :type (if (keyword? type) (name type) (str type))
+       :input input})))
+
+(defn- extract-commands
+  [output]
+  (let [matches (re-seq command-re (or output ""))]
+    (->> matches
+         (map second)
+         (keep parse-command-json)
+         (keep normalize-command)
+         (reduce (fn [acc cmd]
+                   (assoc acc (:id cmd) cmd))
+                 {})
+         vals
+         vec)))
+
 (defn- codex-idle?
   [session]
   (let [raw (tmux/capture-pane (:tmux session))
@@ -517,38 +597,128 @@
                     (:env-file session)
                     "scripts/run-site.sh"))
 
- (defn- list-session-dirs
-   [work-dir]
-   (let [root (ensure-dir! work-dir)
-         entries (or (.listFiles root) [])]
-     (->> entries
+(defn- list-session-dirs
+  [work-dir]
+  (let [root (ensure-dir! work-dir)
+        entries (or (.listFiles root) [])]
+    (->> entries
           (filter #(.isDirectory ^java.io.File %))
           (map (fn [dir]
                  {:id (.getName ^java.io.File dir)
                   :dir dir}))
           (sort-by :id))))
 
- (defn- update-log-closed!
-   [logs-dir session-id]
-   (let [dir (io/file logs-dir session-id)]
-     (when (.exists dir)
-       (update-manifest! dir (fn [m] (assoc (or m {}) :closed-at (now-ms)))))))
+(defn- list-log-dirs
+  [logs-dir]
+  (let [root (ensure-dir! logs-dir)
+        entries (or (.listFiles root) [])]
+    (->> entries
+         (filter #(.isDirectory ^java.io.File %))
+         (map (fn [dir]
+                {:id (.getName ^java.io.File dir)
+                 :dir dir}))
+         (sort-by :id))))
 
- (defn reconcile-orphaned-sessions!
-   [store cfg]
-   (let [work-dir (:work-dir cfg)
-         logs-dir (:logs-dir cfg)
-         tmux-prefix (:tmux-prefix cfg)
-         stored-ids (set (keys @(:sessions store)))]
-     (doseq [{:keys [id dir]} (list-session-dirs work-dir)]
-       (when-not (contains? stored-ids id)
-         (let [tmux-session (tmux/session-name tmux-prefix id)]
-           (if (tmux/running? tmux-session)
-             (log/warn "Skipping orphaned session with active tmux" {:id id :tmux tmux-session})
-             (do
-               (run! ["rm" "-rf" (.getPath ^java.io.File dir)])
-               (update-log-closed! logs-dir id)
-               (log/info "Deleted orphaned session dir" {:id id}))))))))
+(def ^:private stale-idle-ms (* 15 60 1000))
+
+(defn- chat-idle?
+  [chat-file]
+  (let [file (io/file chat-file)]
+    (if (.exists file)
+      (>= (- (now-ms) (.lastModified file)) stale-idle-ms)
+      true)))
+
+(defn- cleanup-eligible?
+  [session]
+  (let [tmux-running? (tmux/running? (:tmux session))
+        app-port (get-in session [:ports :app])
+        app-listening? (when app-port (port-open? "127.0.0.1" app-port 200))
+        idle? (chat-idle? (:chat-log session))]
+    (and (not tmux-running?)
+         (not app-listening?)
+         idle?)))
+
+(defn- mark-session-stale!
+  [logs-dir session-id cleanup?]
+  (let [dir (io/file logs-dir session-id)
+        now (now-ms)]
+    (when (.exists dir)
+      (update-manifest! dir (fn [m]
+                              (assoc (or m {})
+                                     :stale? true
+                                     :stale-at now
+                                     :cleanup-eligible? cleanup?))))))
+
+(defn reconcile-orphaned-sessions!
+  [store cfg]
+  (let [work-dir (:work-dir cfg)
+        logs-root (:logs-dir cfg)
+        tmux-prefix (:tmux-prefix cfg)
+        stored-ids (set (keys @(:sessions store)))]
+    (doseq [{:keys [id dir]} (list-session-dirs work-dir)]
+      (when-not (contains? stored-ids id)
+        (let [tmux-session (tmux/session-name tmux-prefix id)
+              repo-dir (io/file dir "repo")
+              datomic-dir (io/file dir "datomic")
+              files-dir (io/file dir "files")
+              chat-file (io/file dir "chat.log")
+              env-file (io/file dir "session.env")
+              logs-dir (io/file logs-root id)
+              manifest (read-manifest logs-dir)
+              ports (or (:ports manifest) {})
+              now (now-ms)
+              session-name (or (:name manifest)
+                               (str "session-" (subs id 0 8)))
+              session-type (normalize-session-type (:type manifest))
+              session {:id id
+                       :name session-name
+                       :type session-type
+                       :status :stale
+                       :created-at (or (:created-at manifest) now)
+                       :updated-at now
+                       :ports ports
+                       :repo-dir (.getPath repo-dir)
+                       :datomic-dir (.getPath datomic-dir)
+                       :files-dir (.getPath files-dir)
+                       :work-dir (.getPath dir)
+                       :logs-dir (.getPath logs-dir)
+                       :chat-log (.getPath chat-file)
+                       :env-file (.getPath env-file)
+                       :tmux tmux-session
+                       :auto-start-app? (true? (:auto-start-app? cfg))
+                       :auto-start-site? (true? (:auto-start-site? cfg))
+                       :auto-run-commands? true
+                       :command-ids #{}
+                       :stale? true}
+              cleanup? (cleanup-eligible? session)
+              next-session (assoc session :cleanup-eligible? cleanup?)]
+          (when (tmux/running? tmux-session)
+            (log/warn "Orphaned session still has active tmux" {:id id :tmux tmux-session}))
+          (store/upsert-session! store next-session)
+          (mark-session-stale! logs-root id cleanup?)
+          (log/info "Marked orphaned session as stale" {:id id :cleanup-eligible cleanup?}))))))
+
+(defn rebuild-port-reservations!
+  [store cfg]
+  (let [from-store (->> (store/list-sessions store)
+                        (keep (fn [session]
+                                (when (seq (:ports session))
+                                  [(:id session) (:ports session)])))
+                        (into {}))
+        from-manifests (->> (list-log-dirs (:logs-dir cfg))
+                            (keep (fn [{:keys [id dir]}]
+                                    (when-let [manifest (read-manifest dir)]
+                                      (when (and (nil? (:closed-at manifest))
+                                                 (seq (:ports manifest)))
+                                        [id (:ports manifest)]))))
+                            (into {}))
+        combined (reduce (fn [acc [id ports]]
+                           (if (contains? acc id)
+                             acc
+                             (assoc acc id ports)))
+                         from-store
+                         from-manifests)]
+    (store/set-port-reservations! store combined)))
 
 (defn create-session!
   [store cfg {:keys [name type dev-bot?]}]
@@ -593,7 +763,7 @@
          env-file (io/file session-root "session.env")
          askpass-file (io/file session-root "git-askpass.sh")
          logs-dir (io/file logs-root id)
-         ports (allocate-ports cfg (store/list-sessions store))
+         ports (allocate-ports cfg store)
          auto-start-app? (true? (:auto-start-app? cfg))
          auto-start-site? (true? (:auto-start-site? cfg))
          site-enabled? auto-start-site?
@@ -619,6 +789,8 @@
                            polling-explicit?
                            (not webhook-enabled?))
         auto-bind-username (or telegram-dev-auto-bind-username "damjan")
+        datomic-system "darelwasl"
+        datomic-db "darelwasl"
         tmux-session (tmux/session-name (:tmux-prefix cfg) id)
         branch (str "terminal/" (subs id 0 8))
         now (now-ms)]
@@ -629,111 +801,121 @@
       (when (dev-bot-active? store nil)
         (throw (ex-info "Dev bot already running in another session"
                         {:status 409 :message "Dev bot already running in another session"}))))
-    (.mkdirs session-root)
-    (.mkdirs datomic-dir)
-    (.mkdirs files-dir)
-    (.mkdirs logs-dir)
-    (snapshot-main-data! cfg id datomic-dir files-dir logs-dir)
-     (write-manifest! logs-dir {:id id
-                                :name session-name
-                                :type session-type
-                                :created-at now
-                                :ports ports
-                                :datomic-dir (.getPath datomic-dir)
-                                :files-dir (.getPath files-dir)})
-     (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
-     (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
-     (run! ["git" "config" "user.name" git-name] {:dir repo-dir})
-     (run! ["git" "config" "user.email" git-email] {:dir repo-dir})
-     (write-agents! repo-dir session-type)
-     (when github-token
-       (write-askpass! askpass-file github-token))
-     (let [tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
-           snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
-           base-env {"APP_HOST" "0.0.0.0"
-                     "APP_PORT" (:app ports)
-                     "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
-                     "DATOMIC_SYSTEM" "darelwasl"
-                     "DATOMIC_DB_NAME" "darelwasl"
-                     "FILES_STORAGE_DIR" (.getPath files-dir)
-                     "ALLOW_FIXTURE_SEED" "false"
-                     "SESSION_TX_LOG_PATH" tx-log-path
-                     "SESSION_SNAPSHOT_PATH" snapshot-path
-                     "TERMINAL_SESSION_ID" id
-                     "TERMINAL_LOG_DIR" (.getPath logs-dir)
-                     "TERMINAL_API_URL" (:base-url cfg)
-                     "GIT_AUTHOR_NAME" git-name
-                     "GIT_AUTHOR_EMAIL" git-email
-                     "GIT_COMMITTER_NAME" git-name
-                     "GIT_COMMITTER_EMAIL" git-email}
-           base-env (cond-> base-env
-                      site-enabled? (assoc "SITE_HOST" "0.0.0.0"
-                                           "SITE_PORT" (:site ports))
-                      openai-key (assoc "OPENAI_API_KEY" openai-key)
-                      github-token (assoc "GITHUB_TOKEN" github-token
-                                          "GH_TOKEN" github-token
-                                          "GIT_ASKPASS" (.getPath askpass-file)
-                                          "GIT_TERMINAL_PROMPT" "0"))
-           telegram-env (cond-> {}
-                          telegram-dev-token (assoc "TELEGRAM_DEV_BOT_TOKEN" telegram-dev-token)
-                          dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
-                                          "TELEGRAM_WEBHOOK_ENABLED" (if webhook-enabled? "true" "false")
-                                          "TELEGRAM_POLLING_ENABLED" (if polling-enabled? "true" "false")
-                                          "TELEGRAM_AUTO_BIND_USERNAME" auto-bind-username
-                                          "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
-                                          "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
-                          (and dev-bot? telegram-dev-polling-interval)
-                          (assoc "TELEGRAM_POLLING_INTERVAL_MS" telegram-dev-polling-interval)
-                          (and dev-bot? telegram-dev-secret) (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
-                          (and dev-bot? telegram-dev-base-url) (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
-                          (and dev-bot? telegram-dev-timeout) (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
-                          (and dev-bot? telegram-dev-ttl) (assoc "TELEGRAM_LINK_TOKEN_TTL_MS" telegram-dev-ttl))]
-      (write-env! env-file (merge base-env telegram-env)))
-     (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
-     (tmux/pipe-output! tmux-session (.getPath chat-file))
-     (when auto-start-app?
-       (start-app-window! {:tmux tmux-session
-                           :repo-dir (.getPath repo-dir)
-                           :env-file (.getPath env-file)}))
-     (when auto-start-site?
-       (start-site-window! {:tmux tmux-session
+    (store/reserve-ports! store id ports)
+    (try
+      (.mkdirs session-root)
+      (.mkdirs datomic-dir)
+      (.mkdirs files-dir)
+      (.mkdirs logs-dir)
+      (snapshot-main-data! cfg id datomic-dir files-dir logs-dir)
+      (write-manifest! logs-dir {:id id
+                                 :name session-name
+                                 :type session-type
+                                 :created-at now
+                                 :ports ports
+                                 :datomic-dir (.getPath datomic-dir)
+                                 :files-dir (.getPath files-dir)})
+      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
+      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
+      (run! ["git" "config" "user.name" git-name] {:dir repo-dir})
+      (run! ["git" "config" "user.email" git-email] {:dir repo-dir})
+      (write-agents! repo-dir session-type)
+      (when github-token
+        (write-askpass! askpass-file github-token))
+      (let [tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
+            snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
+            base-env {"APP_HOST" "0.0.0.0"
+                      "APP_PORT" (:app ports)
+                      "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
+                      "DATOMIC_SYSTEM" datomic-system
+                      "DATOMIC_DB_NAME" datomic-db
+                      "FILES_STORAGE_DIR" (.getPath files-dir)
+                      "ALLOW_FIXTURE_SEED" "false"
+                      "SESSION_TX_LOG_PATH" tx-log-path
+                      "SESSION_SNAPSHOT_PATH" snapshot-path
+                      "TERMINAL_SESSION_ID" id
+                      "TERMINAL_LOG_DIR" (.getPath logs-dir)
+                      "TERMINAL_API_URL" (:base-url cfg)
+                      "GIT_AUTHOR_NAME" git-name
+                      "GIT_AUTHOR_EMAIL" git-email
+                      "GIT_COMMITTER_NAME" git-name
+                      "GIT_COMMITTER_EMAIL" git-email}
+            base-env (cond-> base-env
+                       site-enabled? (assoc "SITE_HOST" "0.0.0.0"
+                                            "SITE_PORT" (:site ports))
+                       openai-key (assoc "OPENAI_API_KEY" openai-key)
+                       github-token (assoc "GITHUB_TOKEN" github-token
+                                           "GH_TOKEN" github-token
+                                           "GIT_ASKPASS" (.getPath askpass-file)
+                                           "GIT_TERMINAL_PROMPT" "0"))
+            telegram-env (cond-> {}
+                           telegram-dev-token (assoc "TELEGRAM_DEV_BOT_TOKEN" telegram-dev-token)
+                           dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
+                                           "TELEGRAM_WEBHOOK_ENABLED" (if webhook-enabled? "true" "false")
+                                           "TELEGRAM_POLLING_ENABLED" (if polling-enabled? "true" "false")
+                                           "TELEGRAM_AUTO_BIND_USERNAME" auto-bind-username
+                                           "TELEGRAM_COMMANDS_ENABLED" (or telegram-dev-commands-enabled "true")
+                                           "TELEGRAM_NOTIFICATIONS_ENABLED" (or telegram-dev-notifications-enabled "false"))
+                           (and dev-bot? telegram-dev-polling-interval)
+                           (assoc "TELEGRAM_POLLING_INTERVAL_MS" telegram-dev-polling-interval)
+                           (and dev-bot? telegram-dev-secret) (assoc "TELEGRAM_WEBHOOK_SECRET" telegram-dev-secret)
+                           (and dev-bot? telegram-dev-base-url) (assoc "TELEGRAM_WEBHOOK_BASE_URL" telegram-dev-base-url)
+                           (and dev-bot? telegram-dev-timeout) (assoc "TELEGRAM_HTTP_TIMEOUT_MS" telegram-dev-timeout)
+                           (and dev-bot? telegram-dev-ttl) (assoc "TELEGRAM_LINK_TOKEN_TTL_MS" telegram-dev-ttl))]
+        (write-env! env-file (merge base-env telegram-env)))
+      (tmux/start! tmux-session (.getPath repo-dir) (.getPath env-file) (:codex-command cfg))
+      (tmux/pipe-output! tmux-session (.getPath chat-file))
+      (when auto-start-app?
+        (start-app-window! {:tmux tmux-session
                             :repo-dir (.getPath repo-dir)
                             :env-file (.getPath env-file)}))
-     (let [session {:id id
-                    :name session-name
-                    :type session-type
-                    :status :running
-                    :created-at now
-                    :updated-at now
-                    :ports ports
-                    :repo-dir (.getPath repo-dir)
-                    :datomic-dir (.getPath datomic-dir)
-                    :work-dir (.getPath session-root)
-                    :logs-dir (.getPath logs-dir)
-                    :files-dir (.getPath files-dir)
-                    :chat-log (.getPath chat-file)
-                    :env-file (.getPath env-file)
-                    :tmux tmux-session
-                    :branch branch
-                    :auto-start-app? auto-start-app?
-                    :auto-start-site? auto-start-site?
-                    :telegram/dev-bot? dev-bot?
-                    :app-started-at (when auto-start-app? now)
-                    :auto-continue-enabled? true
-                    :command-ids #{}}]
-       (store/upsert-session! store session))))
+      (when auto-start-site?
+        (start-site-window! {:tmux tmux-session
+                             :repo-dir (.getPath repo-dir)
+                             :env-file (.getPath env-file)}))
+      (let [session {:id id
+                     :name session-name
+                     :type session-type
+                     :status :running
+                     :created-at now
+                     :updated-at now
+                     :ports ports
+                     :repo-dir (.getPath repo-dir)
+                     :datomic-dir (.getPath datomic-dir)
+                     :datomic-system datomic-system
+                     :datomic-db datomic-db
+                     :work-dir (.getPath session-root)
+                     :logs-dir (.getPath logs-dir)
+                     :files-dir (.getPath files-dir)
+                     :chat-log (.getPath chat-file)
+                     :env-file (.getPath env-file)
+                     :tmux tmux-session
+                     :branch branch
+                     :auto-start-app? auto-start-app?
+                     :auto-start-site? auto-start-site?
+                     :auto-run-commands? true
+                     :telegram/dev-bot? dev-bot?
+                     :app-started-at (when auto-start-app? now)
+                     :auto-continue-enabled? true
+                     :command-ids #{}}]
+        (store/upsert-session! store session))
+      (catch Exception e
+        (store/release-ports! store id)
+        (throw e)))))
 
- (defn present-session
-   [session]
-   (let [running (tmux/running? (:tmux session))
-         status (cond
-                  (= :complete (:status session)) :complete
-                  running :running
-                  :else :idle)]
-     (-> session
-         (assoc :running? running
-                :status status)
-         (dissoc :repo-dir :datomic-dir :work-dir :env-file :chat-log))))
+(defn present-session
+  [session]
+  (let [running (tmux/running? (:tmux session))
+        stale? (true? (:stale? session))
+        status (cond
+                 (= :complete (:status session)) :complete
+                 stale? :stale
+                 running :running
+                 :else :idle)]
+    (-> session
+        (assoc :running? running
+               :status status)
+         (dissoc :repo-dir :datomic-dir :datomic-system :datomic-db :work-dir :env-file :chat-log))))
 
 (defn send-input!
   [session text]
@@ -758,10 +940,27 @@
     (capture-output session max-bytes)
     (read-output (:chat-log session) cursor max-bytes)))
 
+(defn- app-health?
+  [port]
+  (try
+    (let [resp (http/request {:method :get
+                              :url (str "http://127.0.0.1:" port "/health")
+                              :throw-exceptions false
+                              :as :text
+                              :socket-timeout 500
+                              :conn-timeout 500})
+          status (:status resp)
+          body (:body resp)
+          parsed (when (and body (not (str/blank? body)))
+                   (json/read-str body :key-fn keyword))]
+      (and (= 200 status)
+           (= "darelwasl" (:service parsed))))
+    (catch Exception _ false)))
+
 (defn app-ready?
   [session]
   (when-let [port (get-in session [:ports :app])]
-    (port-open? "127.0.0.1" port 200)))
+    (app-health? port)))
 
 (defn claim-command!
   [store session command-id]
@@ -781,22 +980,220 @@
         (store/upsert-session! store next-session)
         {:status :claimed}))))
 
+(defn- command-error
+  [status message & [details]]
+  {:error {:status status
+           :message message
+           :details details}})
+
+(defn- session-db-state
+  [session]
+  (let [storage-dir (:datomic-dir session)
+        system (or (:datomic-system session) "darelwasl")
+        db-name (or (:datomic-db session) "darelwasl")]
+    (when (str/blank? (str storage-dir))
+      (throw (ex-info "Session Datomic storage missing" {:status 400 :message "Session Datomic storage missing"})))
+    (db/connect! {:storage-dir storage-dir
+                  :system system
+                  :db-name db-name})))
+
+(defn- storage-filename
+  [file-id filename]
+  (let [ext (when (and (string? filename) (str/includes? filename "."))
+              (some-> filename
+                      (str/split #"\.")
+                      last
+                      str/trim))]
+    (if (and ext (not (str/blank? ext)))
+      (str file-id "." ext)
+      (str file-id))))
+
+(defn- append-session-tx!
+  [logs-dir session-id tx-data]
+  (let [file (io/file logs-dir "data-tx-log.edn")
+        entry {:session/id session-id
+               :tx/inst (java.util.Date.)
+               :tx-data [tx-data]}]
+    (.mkdirs (.getParentFile file))
+    (spit file (str (pr-str entry) "\n") :append true)))
+
+(defn- file-meta
+  [conn file-id]
+  (let [db (d/db conn)
+        eid (ffirst (d/q '[:find ?e :in $ ?id :where [?e :file/id ?id]] db file-id))]
+    (when eid
+      (d/pull db [:entity/ref :file/storage-path] eid))))
+
+(defn- library-add!
+  [state session command actor]
+  (let [input (:input command)
+        raw-path (or (:path input) (get input "path"))
+        path (when raw-path (str raw-path))
+        slug (:slug input)
+        repo-dir (:repo-dir session)
+        logs-dir (:logs-dir session)
+        files-dir (:files-dir session)]
+    (cond
+      (str/blank? path) (command-error 400 "library.add requires path")
+      (nil? repo-dir) (command-error 500 "Session repo directory missing")
+      (nil? logs-dir) (command-error 500 "Session logs directory missing")
+      (nil? files-dir) (command-error 500 "Session files directory missing")
+      :else
+      (let [file (io/file path)
+            file (if (.isAbsolute file) file (io/file repo-dir path))]
+        (cond
+          (not (.exists file)) (command-error 400 "library.add path not found")
+          (not (.isFile file)) (command-error 400 "library.add path must be a file")
+          :else
+          (let [{:keys [conn error]} (session-db-state session)]
+            (if error
+              (command-error 500 "Session database unavailable")
+              (let [mime (try
+                           (Files/probeContentType (.toPath file))
+                           (catch Exception _ nil))
+                    upload {:filename (.getName file)
+                            :content-type mime
+                            :tempfile file
+                            :size (.length file)}
+                    res (files/create-file! conn {:file upload
+                                                  :slug slug} actor files-dir)]
+                (if-let [err (:error res)]
+                  {:error err}
+                  (let [file-data (:file res)
+                        file-id (:file/id file-data)
+                        meta (file-meta conn file-id)
+                        storage-path (or (:file/storage-path meta)
+                                         (storage-filename file-id (:file/name file-data)))
+                        entity-ref (:entity/ref meta)
+                        created-by (some-> actor :user/id)
+                        tx-data (cond-> {:file/id file-id
+                                         :entity/type :entity.type/file
+                                         :file/name (:file/name file-data)
+                                         :file/slug (:file/slug file-data)
+                                         :file/type (:file/type file-data)
+                                         :file/mime (:file/mime file-data)
+                                         :file/size-bytes (:file/size-bytes file-data)
+                                         :file/checksum (:file/checksum file-data)
+                                         :file/storage-path storage-path
+                                         :file/created-at (:file/created-at file-data)}
+                                  entity-ref (assoc :entity/ref entity-ref)
+                                  created-by (assoc :file/created-by [:user/id created-by]))
+                        _ (append-session-tx! logs-dir (:id session) tx-data)
+                        promote-res (promote/promote-session-data! state (:id session) logs-dir)
+                        promote-msg (or (:message promote-res) "Session data promoted")
+                        message (str "Library add: " (:file/name file-data) ". " promote-msg)]
+                    {:message message
+                     :result {:file file-data
+                              :promotion promote-res}}))))))))))
+
+(defn- normalize-command-type
+  [value]
+  (let [raw (cond
+              (keyword? value) (name value)
+              (string? value) value
+              :else nil)]
+    (some-> raw str/trim str/lower-case)))
+
+(defn run-command!
+  [state store session command actor]
+  (let [command-id (:id command)
+        claim (claim-command! store session command-id)]
+    (case (:status claim)
+      :claimed
+      (let [command-type (normalize-command-type (:type command))
+            result (try
+                     (if (= command-type "library.add")
+                       (library-add! state session command actor)
+                       (commands/execute-command! state (:id session) command actor))
+                     (catch Exception e
+                       (log/warn e "Failed to execute terminal command" {:id command-id})
+                       (command-error 500 "Command execution failed" (.getMessage e))))
+            message (commands/command->message command result)]
+        (try
+          (if (tmux/running? (:tmux session))
+            (send-input! session message)
+            (append-chat! (:chat-log session) message))
+          (catch Exception e
+            (log/warn e "Failed to deliver command result" {:id command-id})))
+        {:status :ok
+         :result result})
+      :duplicate {:status :duplicate}
+      {:status :error
+       :message (:message claim)})))
+
+(defn auto-run-commands!
+  [state store session output]
+  (let [auto-run? (get session :auto-run-commands? true)
+        commands (extract-commands output)]
+    (when (and auto-run?
+               (tmux/running? (:tmux session))
+               (seq commands))
+      (doseq [command commands]
+        (run-command! state store session command nil)))))
+
 (declare restart-app!)
 
+(defn- apply-ports-to-env!
+  [session ports]
+  (let [site-port (:site ports)]
+    (update-env! (:env-file session)
+                 (fn [env]
+                   (cond-> (assoc env "APP_PORT" (:app ports))
+                     site-port (assoc "SITE_PORT" site-port)
+                     (nil? site-port) (dissoc "SITE_PORT"))))))
+
+(defn reallocate-ports!
+  [store cfg session]
+  (when-not (tmux/running? (:tmux session))
+    (throw (ex-info "Session not running" {:id (:id session)})))
+  (when-not (and (:env-file session) (.exists (io/file (:env-file session))))
+    (throw (ex-info "Session env file missing" {:id (:id session)})))
+  (let [session-id (:id session)
+        auto-start-site? (get session :auto-start-site? (:auto-start-site? cfg))
+        site-enabled? (and auto-start-site? (some? (get-in session [:ports :site])))
+        next-ports (allocate-ports cfg store {:exclude-id session-id
+                                              :avoid-ports (:ports session)})
+        next-ports (cond-> next-ports
+                     (not site-enabled?) (assoc :site nil))
+        now (now-ms)]
+    (store/reserve-ports! store session-id next-ports)
+    (apply-ports-to-env! session next-ports)
+    (tmux/kill-window! (:tmux session) "app")
+    (start-app-window! session)
+    (tmux/kill-window! (:tmux session) "site")
+    (when site-enabled?
+      (start-site-window! session))
+    (let [next-session (assoc session
+                              :ports next-ports
+                              :updated-at now
+                              :app-started-at now
+                              :app-restart-attempted-at now)]
+      (update-manifest! (:logs-dir session)
+                        (fn [m]
+                          (assoc (or m {})
+                                 :ports next-ports
+                                 :ports-reallocated-at now)))
+      (store/upsert-session! store next-session))))
+
 (defn ensure-app-running!
-  [store session]
+  [store cfg session]
   (let [tmux-session (:tmux session)
         app-port (get-in session [:ports :app])
         auto-start? (get session :auto-start-app? true)]
     (if (and auto-start? app-port (tmux/running? tmux-session))
       (let [now (now-ms)
             ready? (app-ready? session)
+            listening? (when app-port (port-open? "127.0.0.1" app-port 200))
             window? (contains? (tmux/window-names tmux-session) "app")
             last-attempt (or (:app-restart-attempted-at session) 0)
             app-started-at (:app-started-at session)
             can-attempt? (>= (- now last-attempt) app-restart-min-interval-ms)]
         (cond
           ready? session
+          (and can-attempt? listening? (not ready?))
+          (do
+            (reallocate-ports! store cfg session)
+            (store/get-session store (:id session)))
           (and can-attempt? (not window?))
           (let [next-session (assoc session
                                     :app-started-at now
@@ -820,7 +1217,7 @@
                app-started-at
                (>= (- now app-started-at) app-start-timeout-ms))
           (do
-            (restart-app! store session)
+            (reallocate-ports! store cfg session)
             (store/get-session store (:id session)))
           :else session))
       session)))
@@ -925,12 +1322,12 @@
         {:status "ok"
          :pr-url pr-url}))))
 
- (defn complete-session!
-   [store session]
-   (tmux/kill! (:tmux session))
-   (update-manifest! (:logs-dir session)
-                     (fn [m]
-                       (assoc m :closed-at (now-ms))))
+(defn complete-session!
+  [store session]
+  (tmux/kill! (:tmux session))
+  (update-manifest! (:logs-dir session)
+                    (fn [m]
+                      (assoc m :closed-at (now-ms))))
    (doseq [path [(:repo-dir session)
                  (:datomic-dir session)
                  (:chat-log session)
@@ -941,5 +1338,6 @@
            (if (.isDirectory f)
              (run! ["rm" "-rf" (.getPath f)])
              (.delete f))))))
-   (store/delete-session! store (:id session))
-   true)
+  (store/release-ports! store (:id session))
+  (store/delete-session! store (:id session))
+  true)

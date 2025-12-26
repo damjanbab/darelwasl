@@ -3,14 +3,49 @@
              [darelwasl.actions :as actions]
              [darelwasl.http.common :as common]
              [darelwasl.terminal.backend :as backend]
-             [darelwasl.terminal.client :as terminal]
-             [darelwasl.terminal.commands :as commands]))
+             [darelwasl.terminal.client :as terminal]))
 
 (def ^:private create-session-timeout-ms 300000)
 
 (defn- terminal-config
   [state]
   (backend/config-with-active (:config state)))
+
+(defn- public-base-info
+  [cfg]
+  (when-let [raw (get-in cfg [:terminal :public-base-url])]
+    (try
+      (let [uri (java.net.URI. raw)]
+        {:host (.getHost uri)
+         :scheme (or (.getScheme uri) "http")})
+      (catch Exception _ nil))))
+
+(defn- request-host
+  [request cfg]
+  (let [header (or (get-in request [:headers "x-forwarded-host"])
+                   (get-in request [:headers "host"]))
+        host (some-> header
+                     (str/split #",")
+                     first
+                     str/trim
+                     (str/replace #":\\d+$" ""))
+        public-host (:host (public-base-info cfg))]
+    (cond
+      (and host (not= host "0.0.0.0")) host
+      (and public-host (not= public-host "0.0.0.0")) public-host
+      :else "localhost")))
+
+(defn- request-scheme
+  [request cfg]
+  (let [header (or (get-in request [:headers "x-forwarded-proto"])
+                   (get-in request [:headers "x-forwarded-protocol"]))
+        scheme (some-> header
+                       (str/split #",")
+                       first
+                       str/trim)
+        public-scheme (:scheme (public-base-info cfg))]
+    (let [raw (or scheme public-scheme (name (:scheme request)) "http")]
+      (if (= "https" raw) "http" raw))))
 
  (defn- qparam
    [query key]
@@ -48,6 +83,27 @@
           _ (backend/set-active-backend! (:config state) active)]
       {:status 200
        :body (backend/backend-info (:config state))})))
+
+(defn app-link-handler
+  [state]
+  (fn [request]
+    (let [session-id (get-in request [:path-params :id])
+          session-res (terminal/request (terminal-config state) :get (str "/sessions/" session-id))
+          app-port (get-in session-res [:body :session :ports :app])]
+      (cond
+        (:error session-res)
+        (common/error-response (or (:status session-res) 502)
+                               (or (:error session-res) "Terminal service unavailable"))
+
+        (nil? app-port)
+        (common/error-response 404 "Session app port unavailable")
+
+        :else
+        (let [host (request-host request (:config state))
+              scheme (request-scheme request (:config state))
+              url (str scheme "://" host ":" app-port "/")]
+          {:status 302
+           :headers {"Location" url}})))))
 
  (defn create-session-handler
    [state]
@@ -151,28 +207,25 @@
         (str/blank? (str command-id)) (common/error-response 400 "Command id is required")
         (str/blank? (str command-type)) (common/error-response 400 "Command type is required")
         :else
-        (let [claim (terminal/request (terminal-config state) :post
-                                      (str "/sessions/" session-id "/commands/claim")
-                                      {:id command-id})]
-          (cond
-            (:error claim)
-            (common/error-response (or (:status claim) 502)
-                                   (or (:error claim) "Unable to claim command"))
+        (let [command {:id (str command-id)
+                       :type command-type
+                       :input input}
+              res (terminal/request (terminal-config state) :post
+                                    (str "/sessions/" session-id "/commands/run")
+                                    {:command command
+                                     :actor actor})]
+          (if (:error res)
+            (common/error-response (or (:status res) 502)
+                                   (or (:error res) "Unable to run command"))
+            {:status 200
+             :body (:body res)}))))))
 
-            (= "duplicate" (get-in claim [:body :status]))
-            {:status 200 :body {:status "duplicate"}}
-
-            :else
-            (let [command (assoc command :type command-type :input input)
-                  result (commands/execute-command! state session-id command actor)
-                  message (commands/command->message command result)]
-              (terminal/request (terminal-config state) :post
-                                (str "/sessions/" session-id "/input")
-                                {:text message})
-              {:status 200
-               :body {:status "ok"
-                     :result (or (:result result) (:message result))
-                     :error (:error result)}})))))))
+(defn public-routes
+  [state]
+  [["/terminal/sessions/:id/app"
+    {:middleware [common/require-session
+                  (common/require-roles #{:role/codex-terminal})]
+     :get (app-link-handler state)}]])
 
 (defn routes
   [state]

@@ -86,10 +86,12 @@
 
 (defn- unique-identity-attrs
   [db]
-  (set (d/q '[:find [?ident ...]
+  (->> (d/q '[:find ?ident
               :where [?e :db/unique :db.unique/identity]
                      [?e :db/ident ?ident]]
-            db)))
+            db)
+       (map first)
+       set))
 
 (defn- tx-entity-refs
   [identity-attrs tx]
@@ -119,10 +121,10 @@
     (number? ref) (if (d/pull db [:db/id] ref)
                     {:status :ok :eid ref}
                     {:status :missing})
-    (lookup-ref? ref) (if-let [eid (d/q '[:find ?e .
-                                         :in $ ?a ?v
-                                         :where [?e ?a ?v]]
-                                       db (first ref) (second ref))]
+    (lookup-ref? ref) (if-let [eid (ffirst (d/q '[:find ?e
+                                                  :in $ ?a ?v
+                                                  :where [?e ?a ?v]]
+                                                db (first ref) (second ref)))]
                         {:status :ok :eid eid}
                         {:status :missing})
     :else {:status :skip}))
@@ -211,11 +213,12 @@
 
 (defn- file-storage-path
   [db file-id]
-  (d/q '[:find ?path .
-         :in $ ?id
-         :where [?e :file/id ?id]
-                [?e :file/storage-path ?path]]
-       db file-id))
+  (ffirst
+   (d/q '[:find ?path
+          :in $ ?id
+          :where [?e :file/id ?id]
+                 [?e :file/storage-path ?path]]
+        db file-id)))
 
 (defn promote-session-data!
   [state session-id logs-dir]
