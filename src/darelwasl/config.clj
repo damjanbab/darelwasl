@@ -33,6 +33,7 @@
               :base-url "http://127.0.0.1:4010"
               :canary-base-url "http://127.0.0.1:4011"
               :public-base-url nil
+              :main-app-url "http://127.0.0.1:3000"
               :admin-token nil
               :data-dir "data/terminal"
               :work-dir "data/terminal/sessions"
@@ -193,6 +194,8 @@
                                               (get-in default-config [:terminal :canary-base-url]))
                      public-base-url (env-str (get env "TERMINAL_PUBLIC_BASE_URL")
                                               (get-in default-config [:terminal :public-base-url]))
+                     main-app-url (env-str (get env "TERMINAL_MAIN_APP_URL")
+                                           (get-in default-config [:terminal :main-app-url]))
                      main-datomic-dir (normalize-storage-dir (or (get env "TERMINAL_MAIN_DATOMIC_DIR")
                                                                  (get env "DATOMIC_STORAGE_DIR"))
                                                              (get-in default-config [:terminal :main-datomic-dir]))
@@ -210,6 +213,7 @@
                   :base-url base-url
                   :canary-base-url canary-base-url
                   :public-base-url public-base-url
+                  :main-app-url main-app-url
                   :admin-token (env-str (get env "TERMINAL_ADMIN_TOKEN") nil)
                   :data-dir (env-str (get env "TERMINAL_DATA_DIR")
                                      (get-in default-config [:terminal :data-dir]))

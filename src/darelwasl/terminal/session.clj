@@ -16,7 +16,7 @@
   (:import (java.io RandomAccessFile)
            (java.net InetSocketAddress ServerSocket Socket)
            (java.nio.file Files Path StandardCopyOption)
-           (java.util UUID)))
+           (java.util Date UUID)))
 
  (defn- now-ms [] (System/currentTimeMillis))
 
@@ -74,7 +74,61 @@
                                       [StandardCopyOption/REPLACE_EXISTING
                                        StandardCopyOption/COPY_ATTRIBUTES])))))))))
 
-(defn- load-main-db
+(defn- parse-long-safe
+  [value]
+  (try
+    (when (some? value)
+      (Long/parseLong (str value)))
+    (catch Exception _
+      nil)))
+
+(defn- exception-chain
+  [^Throwable err]
+  (take-while some? (iterate #(.getCause ^Throwable %) err)))
+
+(defn- lock-error?
+  [^Throwable err]
+  (boolean
+   (some (fn [^Throwable e]
+           (when-let [msg (.getMessage e)]
+             (or (str/includes? msg ".lock is in use")
+                 (str/includes? msg "dev-local directory")
+                 (str/includes? (str/lower-case msg) "dev-local"))))
+         (exception-chain err))))
+
+(defn- fetch-main-db-snapshot
+  [cfg]
+  (let [base-url (some-> (:main-app-url cfg) str/trim (str/replace #"/+$" ""))
+        token (:admin-token cfg)]
+    (when (str/blank? base-url)
+      (throw (ex-info "Main app URL missing for snapshot" {:status 500 :message "Main app URL missing"})))
+    (when (str/blank? (str token))
+      (throw (ex-info "Admin token missing for snapshot" {:status 500 :message "Admin token missing"})))
+    (let [resp (http/request {:method :get
+                              :url (str base-url "/api/system/datastore/snapshot")
+                              :throw-exceptions false
+                              :socket-timeout 2000
+                              :conn-timeout 2000
+                              :headers {"Accept" "application/json"
+                                        "X-Terminal-Admin-Token" token}
+                              :as :text})
+          status (:status resp)
+          body (some-> (:body resp)
+                       (not-empty)
+                       (json/read-str :key-fn keyword))
+          datomic (:datomic body)
+          basis-t (parse-long-safe (:basis-t datomic))
+          tx-inst-ms (parse-long-safe (:tx-inst-ms datomic))
+          tx-inst (when tx-inst-ms (Date. tx-inst-ms))]
+      (if (and (= 200 status) basis-t tx-inst)
+        {:basis-t basis-t
+         :tx-inst tx-inst}
+        (throw (ex-info "Failed to fetch main datastore snapshot"
+                        {:status (or status 500)
+                         :message (or (:error body) "Snapshot request failed")
+                         :body body}))))))
+
+(defn- load-main-db-local
   [cfg]
   (let [storage-dir (:main-datomic-dir cfg)
         system (:main-datomic-system cfg)
@@ -96,6 +150,17 @@
          :db db
          :basis-t basis
          :tx-inst tx-inst}))))
+
+(defn- load-main-db
+  [cfg]
+  (try
+    (load-main-db-local cfg)
+    (catch Exception e
+      (if (lock-error? e)
+        (do
+          (log/warn e "Main Datomic locked; using app snapshot endpoint")
+          (fetch-main-db-snapshot cfg))
+        (throw e)))))
 
 (defn- write-data-snapshot!
   [logs-dir snapshot]

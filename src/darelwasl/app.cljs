@@ -7,6 +7,7 @@
             [darelwasl.features.login :as login]
             [darelwasl.features.prs :as prs-ui]
             [darelwasl.features.control-panel :as control-panel]
+            [darelwasl.features.services :as services-ui]
             [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.users :as users-ui]
             [darelwasl.features.tasks :as tasks-ui]
@@ -44,6 +45,7 @@
 (def default-betting-odds state/default-betting-odds)
 (def default-betting-bets state/default-betting-bets)
 (def default-terminal-state state/default-terminal-state)
+(def default-services-state state/default-services-state)
 (def default-user-form state/default-user-form)
 (def default-user-detail state/default-user-detail)
 (def default-users-state state/default-users-state)
@@ -519,7 +521,8 @@
                       (= safe-route :land) (conj [::fetch-land])
                       (= safe-route :betting) (conj [::fetch-betting-events])
                       (= safe-route :terminal) (conj [::fetch-terminal-sessions])
-                       (= safe-route :control-panel) (conj [::fetch-content]))]
+                      (= safe-route :services) (conj [::fetch-services])
+                      (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
               (assoc-in [:nav :menu-open?] false)
@@ -586,6 +589,7 @@
                  (assoc :control default-control-state)
                  (assoc :users default-users-state)
                  (assoc :terminal default-terminal-state)
+                 (assoc :services default-services-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
@@ -597,7 +601,8 @@
                        (= preferred-route :users) (conj [::fetch-users])
                        (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
-                       (= preferred-route :terminal) (conj [::fetch-terminal-sessions]))]
+                       (= preferred-route :terminal) (conj [::fetch-terminal-sessions])
+                       (= preferred-route :services) (conj [::fetch-services]))]
       {:db db'
        ::persist-last-route preferred-route
        :dispatch-n dispatches}))))
@@ -639,16 +644,17 @@
  (fn [{:keys [db]} _]
    {:db (-> db
             (assoc :session nil
-                   :route :login
-                   :nav default-nav-state
-                   :tasks default-task-state
-                   :files default-files-state
-                   :prs default-prs-state
-                   :betting default-betting-state
-                   :users default-users-state
-                   :control default-control-state
-                   :tags default-tags-state
-                   :home default-home-state)
+                  :route :login
+                  :nav default-nav-state
+                  :tasks default-task-state
+                  :files default-files-state
+                  :prs default-prs-state
+                  :betting default-betting-state
+                  :users default-users-state
+                  :services default-services-state
+                  :control default-control-state
+                  :tags default-tags-state
+                  :home default-home-state)
             (assoc :login (assoc default-login-state :username (or (get-in db [:session :user :username])
                                                                    (get-in db [:login :username])
                                                                    ""))))}))
@@ -800,6 +806,69 @@
        (assoc-in [:home :restarting?] false)
        (assoc-in [:home :restart-error] (or (:error body) "Unable to restart server."))
        (assoc-in [:home :restart-notice] nil))))
+
+(rf/reg-event-fx
+ ::fetch-services
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:services :status] :loading)
+            (assoc-in [:services :error] nil))
+    ::fx/http {:url "/api/system/services"
+               :method "GET"
+               :on-success [::fetch-services-success]
+               :on-error [::fetch-services-failure]}}))
+
+(rf/reg-event-db
+ ::fetch-services-success
+ (fn [db [_ payload]]
+   (let [services (vec (:services payload))]
+     (-> db
+         (assoc-in [:services :items] services)
+         (assoc-in [:services :status] (if (seq services) :ready :empty))
+         (assoc-in [:services :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-services-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load services.")]
+     (-> (state/mark-error db [:services] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::restart-service
+ (fn [{:keys [db]} [_ service-id]]
+   (let [service-id (some-> service-id str str/trim)]
+     (if (str/blank? (str service-id))
+       {:db db}
+       {:db (-> db
+                (update-in [:services :restarting] (fnil conj #{}) service-id)
+                (assoc-in [:services :notice] nil))
+        ::fx/http {:url (str "/api/system/services/" service-id "/restart")
+                   :method "POST"
+                   :body {}
+                   :on-success [::restart-service-success service-id]
+                   :on-error [::restart-service-failure service-id]}}))))
+
+(rf/reg-event-fx
+ ::restart-service-success
+ (fn [{:keys [db]} [_ service-id]]
+   {:db (-> db
+            (update-in [:services :restarting] disj (str service-id))
+            (assoc-in [:services :notice] "Restart requested. Refreshing status...")
+            (assoc-in [:services :error] nil))
+    :dispatch [::fetch-services]}))
+
+(rf/reg-event-db
+ ::restart-service-failure
+ (fn [db [_ service-id {:keys [body]}]]
+   (-> db
+       (update-in [:services :restarting] disj (str service-id))
+       (assoc-in [:services :error] (or (:error body) "Unable to restart service."))
+       (assoc-in [:services :notice] nil))))
 
 ;; File library
 (rf/reg-event-fx
@@ -3651,6 +3720,7 @@
 (rf/reg-sub ::land (fn [db _] (:land db)))
 (rf/reg-sub ::betting (fn [db _] (:betting db)))
 (rf/reg-sub ::terminal (fn [db _] (:terminal db)))
+(rf/reg-sub ::services (fn [db _] (:services db)))
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
@@ -3690,6 +3760,7 @@
          :home [home/home-shell]
          :betting [betting-ui/betting-shell]
          :terminal [terminal-ui/terminal-shell]
+         :services [services-ui/services-shell]
          :control-panel [control-panel/control-panel-shell]
          :files [files-ui/file-library-shell]
          :users [users-ui/users-shell]

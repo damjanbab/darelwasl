@@ -2400,6 +2400,105 @@ button.list-row .meta {
   gap: var(--spacing-scale-1);
 }
 
+.services-layout {
+  padding: var(--spacing-scale-5);
+}
+
+.services-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--spacing-scale-3);
+}
+
+.service-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-2);
+  padding: var(--spacing-scale-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--colors-border);
+  background: var(--colors-surface);
+  box-shadow: var(--shadows-card);
+}
+
+.service-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-scale-2);
+}
+
+.service-label {
+  font-weight: 700;
+}
+
+.service-url {
+  word-break: break-all;
+}
+
+.service-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--typography-font-sizes-meta);
+  color: var(--colors-text-secondary);
+}
+
+.service-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--colors-text-secondary);
+}
+
+.service-status.ok {
+  color: var(--colors-success);
+}
+
+.service-status.ok .service-status-dot {
+  background: var(--colors-success);
+}
+
+.service-status.degraded {
+  color: var(--colors-warning);
+}
+
+.service-status.degraded .service-status-dot {
+  background: var(--colors-warning);
+}
+
+.service-status.error {
+  color: var(--colors-danger);
+}
+
+.service-status.error .service-status-dot {
+  background: var(--colors-danger);
+}
+
+.service-message {
+  color: var(--colors-text-secondary);
+  font-size: var(--typography-font-sizes-meta);
+}
+
+.service-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-scale-2);
+}
+
+.service-actions {
+  display: flex;
+  gap: var(--spacing-scale-2);
+  align-items: center;
+  margin-top: auto;
+}
+
 @media (max-width: 768px) {
   .terminal-layout {
     padding: var(--spacing-scale-4);
@@ -2411,6 +2510,10 @@ button.list-row .meta {
 
   .terminal-context-controls {
     grid-template-columns: 1fr;
+  }
+
+  .services-layout {
+    padding: var(--spacing-scale-4);
   }
 }
 

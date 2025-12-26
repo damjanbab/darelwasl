@@ -345,4 +345,22 @@
                      :cap/schema/value
                      :cap/schema/team-member
                      :cap/schema/business]
-            :actions [:cap/action/content-v2]}}]
+            :actions [:cap/action/content-v2]}}
+
+ {:id :cap/view/system-services
+  :title "System Services"
+  :version "v1"
+  :purpose "Health checks + restart controls for core services."
+  :data {:sources [{:id :system/services
+                    :source :cap/action/system-services
+                    :pull []}]}
+  :actions [:cap/action/system-services
+            :cap/action/system-service-restart]
+  :ux {:states [:loading :ready :error]
+       :performance {:budget_ms 200}
+       :state-model :finite
+       :layout {:desktop "grid cards" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []}}]

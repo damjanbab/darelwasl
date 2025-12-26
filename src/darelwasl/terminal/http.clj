@@ -355,9 +355,25 @@
                               (assoc :data (ex-data e))))))
         (error-response 404 "Session not found")))))
 
+(defn restart-service-handler
+  [state]
+  (fn [request]
+    (if (admin-authorized? state request)
+      (if-let [restart! (:terminal/restart! state)]
+        (try
+          (restart!)
+          {:status 202
+           :body {:status "restarting"}}
+          (catch Exception e
+            (log/warn e "Failed to restart terminal service")
+            (error-response 500 "Unable to restart terminal service")))
+        (error-response 500 "Restart unavailable"))
+      (error-response 403 "Admin token required"))))
+
 (defn routes
   [state]
   [["/health" {:get (health-handler state)}]
+   ["/system/restart" {:post (restart-service-handler state)}]
    ["/sessions"
     {:get (list-sessions-handler state)
      :post (create-session-handler state)}]

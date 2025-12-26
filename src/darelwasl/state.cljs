@@ -311,6 +311,13 @@
    :backend-updating? false
    :list-polling? false})
 
+(def default-services-state
+  {:status :idle
+   :error nil
+   :items []
+   :notice nil
+   :restarting #{}})
+
 (def default-user-form
   {:id nil
    :username ""
@@ -344,6 +351,7 @@
    :land default-land-state
    :betting default-betting-state
    :terminal default-terminal-state
+   :services default-services-state
    :users default-users-state
    :control default-control-state})
 
@@ -371,7 +379,10 @@
             :desc "Accounts + roles"}
            {:id :control-panel
             :label "Control panel"
-            :desc "Website content"}]
+            :desc "Website content"}
+           {:id :services
+            :label "Services"
+            :desc "Health + controls"}]
     land-enabled? (conj {:id :land
                          :label "Land"
                          :desc "People ↔ parcels"})))
@@ -438,6 +449,17 @@
                           (cond
                             (keyword? r) r
                             (string? r) (-> r (str/replace #"^:" "") keyword)
+                    :else r)))
+                   set)]
+    (contains? roles :role/admin)))
+
+(defn services-enabled?
+  [session]
+  (let [roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
                             :else r)))
                    set)]
     (contains? roles :role/admin)))
@@ -456,6 +478,8 @@
     (remove #(= (:id %) :prs))
     (not (users-enabled? session))
     (remove #(= (:id %) :users))
+    (not (services-enabled? session))
+    (remove #(= (:id %) :services))
     (not (control-enabled? session))
     (remove #(= (:id %) :control-panel))))
 

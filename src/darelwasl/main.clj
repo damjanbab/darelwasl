@@ -25,6 +25,7 @@
          user-index (auth/user-index-by-username users)
          _ (when (:error db-state)
              (log/warn (:error db-state) "Datomic dev-local not ready; health endpoint will report error"))
+         terminal-session? (some? (System/getenv "TERMINAL_SESSION_ID"))
          restart-fn (fn []
                       (future
                         (log/info "Restart requested; stopping service")
@@ -32,13 +33,21 @@
                         (stop!)
                         (log/info "Restarting service")
                         (start! cfg)))
+         site-restart-fn (when-not terminal-session?
+                           (fn []
+                             (future
+                               (log/info "Restart requested; restarting site server")
+                               (swap! system-state (fn [state]
+                                                     (-> state
+                                                         (site-server/stop)
+                                                         (site-server/start)))))))
          base {:config cfg
                :db db-state
                :auth/users users
                :auth/user-index user-index
-               :app/restart! restart-fn}
-        terminal-session? (some? (System/getenv "TERMINAL_SESSION_ID"))
-        started (cond-> (server/start-http base)
+               :app/restart! restart-fn
+               :site/restart! site-restart-fn}
+         started (cond-> (server/start-http base)
                    (not terminal-session?) (site-server/start))
          outbox-enabled? (get-in cfg [:outbox :worker-enabled?])
          worker-future (when (and outbox-enabled? (not (:error db-state)))

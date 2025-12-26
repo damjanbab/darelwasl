@@ -31,7 +31,14 @@
    (ensure-not-nested!)
    (let [terminal-cfg (:terminal cfg)
          db-state (db/connect! (:datomic cfg))
-         terminal-store (store/load-store (:data-dir terminal-cfg))]
+         terminal-store (store/load-store (:data-dir terminal-cfg))
+         restart-fn (fn []
+                      (future
+                        (log/info "Restart requested; stopping terminal service")
+                        (Thread/sleep 200)
+                        (stop!)
+                        (log/info "Restarting terminal service")
+                        (start! cfg)))]
      (when (:error db-state)
        (log/warn (:error db-state) "Main DB not ready; terminal commands will fail until it recovers"))
      (session/reconcile-orphaned-sessions! terminal-store terminal-cfg)
@@ -39,7 +46,8 @@
      (let [state {:config cfg
                   :db db-state
                   :terminal/config terminal-cfg
-                  :terminal/store terminal-store}
+                  :terminal/store terminal-store
+                  :terminal/restart! restart-fn}
            handler (http/app state)
            server (jetty/run-jetty handler {:port (:port terminal-cfg)
                                             :host (:host terminal-cfg)

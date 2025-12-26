@@ -1154,10 +1154,47 @@
           :fields [:terminal.session/id]}
   :idempotency {:strategy :none}
   :contracts {:fixtures []}
-  :compatibility {:backward true
+ :compatibility {:backward true
                   :forward true
                   :flags []}
   :related {:schema []
             :views [:cap/view/terminal]}
+  :tooling []}
+
+ {:id :cap/action/system-services
+  :title "List System Services"
+  :version "v1"
+  :inputs {}
+  :outputs {:services :vector}
+  :side-effects []
+  :adapter {:integration :local/system}
+  :audit {:records [:system/read]
+          :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/system-services]}
+  :tooling []}
+
+ {:id :cap/action/system-service-restart
+  :title "Restart System Service"
+  :version "v1"
+  :inputs {:service/id :string}
+  :outputs {:status :string}
+  :side-effects ["Restart service"]
+  :adapter {:integration :local/system}
+  :audit {:records [:system/restart]
+          :fields [:service/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:service/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/system-services]}
   :tooling []}
 ]
