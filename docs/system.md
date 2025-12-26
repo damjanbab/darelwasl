@@ -136,7 +136,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
-- Dev bot defaults to polling when the public base URL is not HTTPS; webhook is only enabled for HTTPS base URLs.
+- Dev bot defaults to polling when the public base URL is not HTTPS or uses a non-Telegram webhook port; webhook is only enabled for HTTPS URLs on ports 80/88/443/8443.
 - Dev bot auto-binds the first chat to `damjan` unless overridden by `TELEGRAM_DEV_AUTO_BIND_USERNAME`.
 - On complete/delete, repo + datomic + chat transcript are deleted; logs/worklogs are retained.
 - Session storage:

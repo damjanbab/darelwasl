@@ -47,6 +47,20 @@
   (when value
     (str/starts-with? (str/lower-case value) "https://")))
 
+(def ^:private allowed-webhook-ports
+  #{80 88 443 8443})
+
+(defn- webhook-port-allowed?
+  [raw-url]
+  (try
+    (let [uri (java.net.URI. (str raw-url))
+          scheme (some-> (.getScheme uri) str/lower-case)
+          port (.getPort uri)]
+      (and (= "https" scheme)
+           (or (= -1 port)
+               (contains? allowed-webhook-ports port))))
+    (catch Exception _ false)))
+
 (defn- ensure-port
   [base-url port]
   (let [trimmed (-> base-url str/trim (str/replace #"/+$" ""))]
@@ -56,10 +70,12 @@
 
 (defn- dev-webhook-base-url
   [cfg env app-port]
-  (let [raw (or (present-env (:public-base-url cfg))
-                (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL")))]
+  (let [explicit (present-env (get env "TELEGRAM_DEV_WEBHOOK_BASE_URL"))
+        raw (or explicit (present-env (:public-base-url cfg)))]
     (when raw
-      (ensure-port raw app-port))))
+      (if explicit
+        raw
+        (ensure-port raw app-port)))))
 
  (defn- update-manifest!
    [dir f]
@@ -494,11 +510,16 @@
         polling-explicit? (when telegram-dev-polling-enabled
                             (truthy? telegram-dev-polling-enabled))
         webhook-enabled? (cond
-                           (and (true? webhook-explicit?)
-                                (https-url? telegram-dev-base-url)) true
-                           (true? webhook-explicit?) false
+                           (true? webhook-explicit?)
+                           (do
+                             (when (and telegram-dev-base-url
+                                        (not (webhook-port-allowed? telegram-dev-base-url)))
+                               (log/warn "Dev bot webhook disabled: invalid port"
+                                         {:url telegram-dev-base-url
+                                          :allowed allowed-webhook-ports}))
+                             (webhook-port-allowed? telegram-dev-base-url))
                            (false? webhook-explicit?) false
-                           :else (https-url? telegram-dev-base-url))
+                           :else (webhook-port-allowed? telegram-dev-base-url))
         polling-enabled? (if (some? polling-explicit?)
                            polling-explicit?
                            (not webhook-enabled?))
