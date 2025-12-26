@@ -11,6 +11,8 @@
 
 (defonce system-state (atom nil))
 
+(declare start! stop!)
+
 (defn- nested-terminal?
   []
   (let [session-id (System/getenv "TERMINAL_SESSION_ID")
