@@ -144,10 +144,12 @@ Maintain stable IDs; reference them in tasks/PRs.
   - Logs/worklogs: `TERMINAL_LOG_DIR` (default `data/terminal/logs`) retained forever
 - Terminal config envs:
   - `TERMINAL_API_URL` (optional override of base url)
+  - `TERMINAL_CANARY_API_URL` (optional canary base url for backend switching)
   - `TERMINAL_ADMIN_TOKEN` (required to complete sessions)
   - `TERMINAL_DATA_DIR`
   - `TERMINAL_WORK_DIR`
   - `TERMINAL_LOG_DIR`
+  - `TERMINAL_BACKEND_FILE` (optional override for backend switch state)
   - `TERMINAL_REPO_URL` (repo clone for sessions)
   - `TERMINAL_CODEX_CMD` (default `codex`)
   - `TERMINAL_TMUX_BIN` (optional full path to tmux binary)

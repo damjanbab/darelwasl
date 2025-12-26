@@ -2493,6 +2493,71 @@
                :on-success [::terminal-sessions-success]
                :on-error [::terminal-sessions-failure]}}))
 
+(rf/reg-event-fx
+ ::terminal-fetch-backend
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:terminal :backend-status] :loading)
+            (assoc-in [:terminal :backend-error] nil))
+    ::fx/http {:url "/api/terminal/backend"
+               :method "GET"
+               :on-success [::terminal-backend-success]
+               :on-error [::terminal-backend-failure]}}))
+
+(rf/reg-event-db
+ ::terminal-backend-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:terminal :backend-status] :ready)
+       (assoc-in [:terminal :backend-active] (:active payload))
+       (assoc-in [:terminal :backend-stable-url] (:stable-url payload))
+       (assoc-in [:terminal :backend-canary-url] (:canary-url payload))
+       (assoc-in [:terminal :backend-error] nil))))
+
+(rf/reg-event-db
+ ::terminal-backend-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load terminal backend.")]
+     (-> db
+         (assoc-in [:terminal :backend-status] :error)
+         (assoc-in [:terminal :backend-error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::terminal-set-backend
+ (fn [{:keys [db]} [_ backend]]
+   {:db (-> db
+            (assoc-in [:terminal :backend-updating?] true)
+            (assoc-in [:terminal :backend-error] nil))
+    ::fx/http {:url "/api/terminal/backend"
+               :method "POST"
+               :body {:active backend}
+               :on-success [::terminal-set-backend-success]
+               :on-error [::terminal-set-backend-failure]}}))
+
+(rf/reg-event-db
+ ::terminal-set-backend-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:terminal :backend-updating?] false)
+       (assoc-in [:terminal :backend-status] :ready)
+       (assoc-in [:terminal :backend-active] (:active payload))
+       (assoc-in [:terminal :backend-stable-url] (:stable-url payload))
+       (assoc-in [:terminal :backend-canary-url] (:canary-url payload))
+       (assoc-in [:terminal :backend-error] nil))))
+
+(rf/reg-event-db
+ ::terminal-set-backend-failure
+ (fn [db [_ {:keys [body]}]]
+   (let [message (or (:error body) "Unable to update terminal backend.")]
+     (-> db
+         (assoc-in [:terminal :backend-updating?] false)
+         (assoc-in [:terminal :backend-error] message)))))
+
 (rf/reg-event-db
  ::terminal-sessions-success
  (fn [db [_ payload]]

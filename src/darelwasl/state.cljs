@@ -293,6 +293,12 @@
    :command-status {}
    :polling? false
    :app-ready? false
+   :backend-status :idle
+   :backend-active nil
+   :backend-stable-url nil
+   :backend-canary-url nil
+   :backend-error nil
+   :backend-updating? false
    :list-polling? false})
 
 (def default-user-form

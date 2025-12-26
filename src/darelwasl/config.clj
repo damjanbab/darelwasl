@@ -31,11 +31,13 @@
    :terminal {:host "127.0.0.1"
               :port 4010
               :base-url "http://127.0.0.1:4010"
+              :canary-base-url "http://127.0.0.1:4011"
               :public-base-url nil
               :admin-token nil
               :data-dir "data/terminal"
               :work-dir "data/terminal/sessions"
               :logs-dir "data/terminal/logs"
+              :backend-file "data/terminal/backend.edn"
               :repo-url "https://github.com/damjanbab/darelwasl.git"
               :tmux-prefix "codex"
               :codex-command "codex"
@@ -183,19 +185,24 @@
                                      (get-in default-config [:terminal :port]))
                      base-url (env-str (get env "TERMINAL_API_URL")
                                        (str "http://" host ":" port))
+                     canary-base-url (env-str (get env "TERMINAL_CANARY_API_URL")
+                                              (get-in default-config [:terminal :canary-base-url]))
                      public-base-url (env-str (get env "TERMINAL_PUBLIC_BASE_URL")
                                               (get-in default-config [:terminal :public-base-url]))]
                  {:host host
                   :port port
                   :base-url base-url
+                  :canary-base-url canary-base-url
                   :public-base-url public-base-url
                   :admin-token (env-str (get env "TERMINAL_ADMIN_TOKEN") nil)
-                 :data-dir (env-str (get env "TERMINAL_DATA_DIR")
+                  :data-dir (env-str (get env "TERMINAL_DATA_DIR")
                                      (get-in default-config [:terminal :data-dir]))
                   :work-dir (env-str (get env "TERMINAL_WORK_DIR")
                                      (get-in default-config [:terminal :work-dir]))
                   :logs-dir (env-str (get env "TERMINAL_LOG_DIR")
                                      (get-in default-config [:terminal :logs-dir]))
+                  :backend-file (env-str (get env "TERMINAL_BACKEND_FILE")
+                                         (get-in default-config [:terminal :backend-file]))
                   :repo-url (env-str (get env "TERMINAL_REPO_URL")
                                      (get-in default-config [:terminal :repo-url]))
                   :tmux-prefix (env-str (get env "TERMINAL_TMUX_PREFIX")

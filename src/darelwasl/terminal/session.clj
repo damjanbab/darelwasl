@@ -31,6 +31,13 @@
   (when (and (string? value) (not (str/blank? value)))
     value))
 
+(defn- read-secret-file
+  [path]
+  (when (and path (not (str/blank? path)))
+    (let [file (io/file path)]
+      (when (.exists file)
+        (some-> (slurp file) str/trim (not-empty))))))
+
 (defn- truthy?
   [value]
   (contains? #{"1" "true" "yes" "y" "on"} (str/lower-case (str value))))
@@ -453,7 +460,9 @@
                           (present-env (get env "GH_TOKEN"))
                           (present-env (get env "DARELWASL_GITHUB_TOKEN"))
                           (read-github-token))
-        telegram-dev-token (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
+        telegram-dev-token (or (present-env (get env "TELEGRAM_DEV_BOT_TOKEN"))
+                               (read-secret-file (present-env (get env "TELEGRAM_DEV_BOT_TOKEN_FILE")))
+                               (read-secret-file ".secrets/telegram_bot_token_dev"))
         telegram-dev-secret (present-env (get env "TELEGRAM_DEV_WEBHOOK_SECRET"))
         telegram-dev-webhook-enabled (present-env (get env "TELEGRAM_DEV_WEBHOOK_ENABLED"))
         telegram-dev-polling-enabled (present-env (get env "TELEGRAM_DEV_POLLING_ENABLED"))
@@ -541,6 +550,7 @@
                                           "GIT_ASKPASS" (.getPath askpass-file)
                                           "GIT_TERMINAL_PROMPT" "0"))
            telegram-env (cond-> {}
+                          telegram-dev-token (assoc "TELEGRAM_DEV_BOT_TOKEN" telegram-dev-token)
                           dev-bot? (assoc "TELEGRAM_BOT_TOKEN" telegram-dev-token
                                           "TELEGRAM_WEBHOOK_ENABLED" (if webhook-enabled? "true" "false")
                                           "TELEGRAM_POLLING_ENABLED" (if polling-enabled? "true" "false")

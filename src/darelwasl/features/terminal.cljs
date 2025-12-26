@@ -61,8 +61,12 @@
 
 (defn- terminal-list
   []
-  (let [{:keys [sessions status error notice new-session-type new-session-dev-bot?]} @(rf/subscribe [:darelwasl.app/terminal])]
-     [:div.panel.terminal-list-panel
+  (r/with-let [_ (rf/dispatch [:darelwasl.app/terminal-fetch-backend])]
+    (let [{:keys [sessions status error notice new-session-type new-session-dev-bot?
+                  backend-status backend-active backend-stable-url backend-canary-url
+                  backend-error backend-updating?]} @(rf/subscribe [:darelwasl.app/terminal])
+          active-key (some-> backend-active keyword)]
+      [:div.panel.terminal-list-panel
       [:div.section-header
        [:div
         [:h2 "Terminal sessions"]
@@ -83,6 +87,29 @@
          "Refresh"]
         [ui/button {:on-click #(rf/dispatch [:darelwasl.app/terminal-create-session])}
          "New session"]]]
+      [:div.terminal-backend-panel
+       [:div.terminal-backend-header
+        [:div
+         [:div.meta "Terminal backend"]
+         [:div.terminal-backend-active (or backend-active "unknown")]]
+        [:div.terminal-backend-actions
+         [ui/button {:variant :secondary
+                     :disabled (or backend-updating? (= active-key :stable))
+                     :on-click #(rf/dispatch [:darelwasl.app/terminal-set-backend "stable"])}
+          (if (= active-key :stable) "Stable active" "Use stable")]
+         [ui/button {:variant :secondary
+                     :disabled (or backend-updating? (= active-key :canary))
+                     :on-click #(rf/dispatch [:darelwasl.app/terminal-set-backend "canary"])}
+          (if (= active-key :canary) "Canary active" "Promote canary")]]]
+       [:div.terminal-backend-urls
+        [:div.meta (str "Stable: " (or backend-stable-url "—"))]
+        [:div.meta (str "Canary: " (or backend-canary-url "—"))]]
+       (case backend-status
+         :loading [:div.meta "Loading backend status..."]
+         :error [:div.form-error (or backend-error "Unable to load backend status.")]
+         nil)
+       (when backend-error
+         [:div.form-error backend-error])]
       (when notice
         [:div.form-success notice])
       (case status
@@ -93,7 +120,7 @@
         [:div.terminal-session-list
          (for [session sessions]
            ^{:key (:id session)}
-           [session-row session false])])]))
+           [session-row session false])])])))
 
 (defn- scroll-to-bottom!
   [node]
