@@ -978,7 +978,7 @@
                     :else
                     (send-message! cfg {:chat-id chat-id
                                         :text "Update saved."
-                                        :message-key (str "edit-ok-" (System/currentTimeMillis))}))))))))))))
+                                        :message-key (str "edit-ok-" (System/currentTimeMillis))})))))))))))
 
 (defn- start-pending-edit!
   [state chat-id chat-user task-id edit-type message-id]
