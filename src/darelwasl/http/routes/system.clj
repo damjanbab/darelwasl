@@ -44,7 +44,9 @@
       (try
         (let [db (d/db conn)
               basis (:basisT db)
-              tx-inst (:db/txInstant (d/pull db [:db/txInstant] basis))]
+              tx-inst (d/q '[:find (max ?inst) .
+                             :where [?tx :db/txInstant ?inst]]
+                           db)]
           {:basis-t basis
            :tx-inst-ms (when tx-inst (.getTime ^java.util.Date tx-inst))})
         (catch Exception e

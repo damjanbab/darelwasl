@@ -144,7 +144,9 @@
       (let [conn (d/connect client {:db-name db-name})
             db (d/db conn)
             basis (:basisT db)
-            tx-inst (:db/txInstant (d/pull db [:db/txInstant] basis))]
+            tx-inst (d/q '[:find (max ?inst) .
+                           :where [?tx :db/txInstant ?inst]]
+                         db)]
         {:client client
          :conn conn
          :db db
