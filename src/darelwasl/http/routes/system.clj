@@ -122,15 +122,8 @@
      :datastore db-status}))
 
 (defn- site-health
-  [state]
-  (if-let [_ (:site/server state)]
-    (let [db-status (db/status (:db state))]
-      (cond
-        (= :ok (:status db-status)) {:status "ok"}
-        :else {:status "degraded"
-               :message (:message db-status)}))
-    {:status "error"
-     :message "Site not running"}))
+  [site-url]
+  (http-health site-url "/"))
 
 (defn- terminal-restart
   [cfg base-url]
@@ -180,7 +173,7 @@
                      :label "Public site"
                      :url site-url
                      :restartable? (boolean (:site/restart! state))
-                     :health (assoc (site-health state) :checked-at checked-at)}
+                     :health (assoc (site-health site-url) :checked-at checked-at)}
                     {:id "terminal-stable"
                      :label "Terminal (stable)"
                      :url terminal-url
