@@ -293,6 +293,16 @@
    :command-status {}
    :polling? false
    :app-ready? false
+   :context-panel? false
+   :context-tab :catalog
+   :context-query ""
+   :context-kind ""
+   :catalog-status :idle
+   :catalog-items []
+   :catalog-error nil
+   :data-status :idle
+   :data-items []
+   :data-error nil
    :backend-status :idle
    :backend-active nil
    :backend-stable-url nil

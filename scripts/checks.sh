@@ -7,7 +7,7 @@ DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts|import]
+Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts|import|docs]
 
 Commands:
   registries       Registry presence + field checks + EDN/fixture parse
@@ -15,6 +15,7 @@ Commands:
   actions          Registries + schema + action contract harness
   app-smoke|views  Full stack smoke: registries + schema + actions + headless UI flow
   import           Run land-registry importer against the provided CSV in a temp DB
+  docs             Regenerate system/catalog docs and fail on drift
   all              Runs registries, schema, actions, and app smoke
 EOF
 }
@@ -92,6 +93,18 @@ check_registry_fields() {
   require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius" ":shadows" ":motion" ":compatibility"
   require_keys "$ROOT/registries/automations.edn" ":id" ":version" ":enabled" ":triggers" ":handler"
   echo "Registry field checks passed."
+}
+
+check_docs() {
+  check_clojure_available
+  echo "Generating docs/catalog..."
+  (cd "$ROOT" && scripts/generate-docs.sh)
+  if ! git diff --quiet -- docs/system.generated.md docs/catalog.edn; then
+    echo "Generated docs are out of date. Run scripts/generate-docs.sh and commit the results."
+    git diff -- docs/system.generated.md docs/catalog.edn
+    exit 1
+  fi
+  echo "Docs/catalog up to date."
 }
 
 check_edn_parse() {
@@ -613,13 +626,15 @@ case "$target" in
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
-  app-smoke|views) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions; check_app_smoke ;;
+  app-smoke|views) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_docs; check_actions; check_app_smoke ;;
+  docs) check_registries; check_registry_fields; check_edn_parse; check_docs ;;
   import) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_import ;;
   all)
     check_registries
     check_registry_fields
     check_edn_parse
     check_schema_load
+    check_docs
     check_import
     check_actions
     check_app_smoke

@@ -2623,11 +2623,21 @@
               (assoc-in [:terminal :resuming?] false)
               (assoc-in [:terminal :restarting?] false)
               (assoc-in [:terminal :interrupting?] false)
-              (assoc-in [:terminal :pending-commands] [])
-              (assoc-in [:terminal :command-ids] #{})
-              (assoc-in [:terminal :command-status] {})
-              (assoc-in [:terminal :status] :ready)
-              (assoc-in [:terminal :notice] nil))
+             (assoc-in [:terminal :pending-commands] [])
+             (assoc-in [:terminal :command-ids] #{})
+             (assoc-in [:terminal :command-status] {})
+             (assoc-in [:terminal :context-panel?] false)
+             (assoc-in [:terminal :context-tab] :catalog)
+             (assoc-in [:terminal :context-query] "")
+             (assoc-in [:terminal :context-kind] "")
+             (assoc-in [:terminal :catalog-status] :idle)
+             (assoc-in [:terminal :catalog-items] [])
+             (assoc-in [:terminal :catalog-error] nil)
+             (assoc-in [:terminal :data-status] :idle)
+             (assoc-in [:terminal :data-items] [])
+             (assoc-in [:terminal :data-error] nil)
+             (assoc-in [:terminal :status] :ready)
+             (assoc-in [:terminal :notice] nil))
       :dispatch-n [[::fetch-terminal-sessions]
                    [::terminal-start-poll]]})))
 
@@ -2643,11 +2653,21 @@
             (assoc-in [:terminal :resuming?] false)
             (assoc-in [:terminal :restarting?] false)
             (assoc-in [:terminal :interrupting?] false)
-            (assoc-in [:terminal :pending-commands] [])
-            (assoc-in [:terminal :command-ids] #{})
-            (assoc-in [:terminal :command-status] {})
-            (assoc-in [:terminal :error] nil)
-            (assoc-in [:terminal :notice] nil))
+           (assoc-in [:terminal :pending-commands] [])
+           (assoc-in [:terminal :command-ids] #{})
+           (assoc-in [:terminal :command-status] {})
+           (assoc-in [:terminal :context-panel?] false)
+           (assoc-in [:terminal :context-tab] :catalog)
+           (assoc-in [:terminal :context-query] "")
+           (assoc-in [:terminal :context-kind] "")
+           (assoc-in [:terminal :catalog-status] :idle)
+           (assoc-in [:terminal :catalog-items] [])
+           (assoc-in [:terminal :catalog-error] nil)
+           (assoc-in [:terminal :data-status] :idle)
+           (assoc-in [:terminal :data-items] [])
+           (assoc-in [:terminal :data-error] nil)
+           (assoc-in [:terminal :error] nil)
+           (assoc-in [:terminal :notice] nil))
     :dispatch-n [[::terminal-start-poll]
                  [::terminal-fetch-session (:id session)]]}))
 
@@ -2684,15 +2704,118 @@
        (assoc-in [:terminal :resuming?] false)
        (assoc-in [:terminal :restarting?] false)
        (assoc-in [:terminal :interrupting?] false)
-       (assoc-in [:terminal :pending-commands] [])
-       (assoc-in [:terminal :command-ids] #{})
-       (assoc-in [:terminal :command-status] {})
-       (assoc-in [:terminal :notice] nil))))
+      (assoc-in [:terminal :pending-commands] [])
+      (assoc-in [:terminal :command-ids] #{})
+      (assoc-in [:terminal :command-status] {})
+      (assoc-in [:terminal :context-panel?] false)
+      (assoc-in [:terminal :context-tab] :catalog)
+      (assoc-in [:terminal :context-query] "")
+      (assoc-in [:terminal :context-kind] "")
+      (assoc-in [:terminal :catalog-status] :idle)
+      (assoc-in [:terminal :catalog-items] [])
+      (assoc-in [:terminal :catalog-error] nil)
+      (assoc-in [:terminal :data-status] :idle)
+      (assoc-in [:terminal :data-items] [])
+      (assoc-in [:terminal :data-error] nil)
+      (assoc-in [:terminal :notice] nil))))
 
 (rf/reg-event-db
  ::terminal-update-input
  (fn [db [_ value]]
    (assoc-in db [:terminal :input] value)))
+
+(rf/reg-event-db
+ ::terminal-toggle-context-panel
+ (fn [db _]
+   (update-in db [:terminal :context-panel?] not)))
+
+(rf/reg-event-db
+ ::terminal-set-context-tab
+ (fn [db [_ tab]]
+   (assoc-in db [:terminal :context-tab] (keyword tab))))
+
+(rf/reg-event-db
+ ::terminal-update-context-query
+ (fn [db [_ value]]
+   (assoc-in db [:terminal :context-query] value)))
+
+(rf/reg-event-db
+ ::terminal-update-context-kind
+ (fn [db [_ value]]
+   (assoc-in db [:terminal :context-kind] value)))
+
+(defn- terminal-context-query
+  [db]
+  (let [raw (get-in db [:terminal :context-query])]
+    (when (and raw (not (str/blank? (str raw))))
+      (js/encodeURIComponent (str raw)))))
+
+(rf/reg-event-fx
+ ::terminal-fetch-catalog
+ (fn [{:keys [db]} _]
+   (let [q (terminal-context-query db)
+         kind (some-> (get-in db [:terminal :context-kind]) str/trim)
+         limit "60"
+         params (cond-> []
+                  q (conj (str "q=" q))
+                  (and kind (not (str/blank? kind))) (conj (str "kind=" (js/encodeURIComponent kind)))
+                  :always (conj (str "limit=" limit)))
+         qs (str/join "&" params)
+         url (str "/api/catalog" (when (seq qs) (str "?" qs)))]
+     {:db (-> db
+              (assoc-in [:terminal :catalog-status] :loading)
+              (assoc-in [:terminal :catalog-error] nil))
+      ::fx/http {:url url
+                 :method :get
+                 :on-success [::terminal-catalog-success]
+                 :on-error [::terminal-catalog-failure]}})))
+
+(rf/reg-event-db
+ ::terminal-catalog-success
+ (fn [db [_ {:keys [entries]}]]
+   (-> db
+       (assoc-in [:terminal :catalog-status] :ready)
+       (assoc-in [:terminal :catalog-items] (vec entries))
+       (assoc-in [:terminal :catalog-error] nil))))
+
+(rf/reg-event-db
+ ::terminal-catalog-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :catalog-status] :error)
+       (assoc-in [:terminal :catalog-error] (or (:error body) "Unable to load catalog")))))
+
+(rf/reg-event-fx
+ ::terminal-fetch-data
+ (fn [{:keys [db]} _]
+   (let [q (terminal-context-query db)
+         params (cond-> []
+                  q (conj (str "q=" q))
+                  :always (conj "limit=50"))
+         qs (str/join "&" params)
+         url (str "/api/catalog/data" (when (seq qs) (str "?" qs)))]
+     {:db (-> db
+              (assoc-in [:terminal :data-status] :loading)
+              (assoc-in [:terminal :data-error] nil))
+      ::fx/http {:url url
+                 :method :get
+                 :on-success [::terminal-data-success]
+                 :on-error [::terminal-data-failure]}})))
+
+(rf/reg-event-db
+ ::terminal-data-success
+ (fn [db [_ {:keys [entries]}]]
+   (-> db
+       (assoc-in [:terminal :data-status] :ready)
+       (assoc-in [:terminal :data-items] (vec entries))
+       (assoc-in [:terminal :data-error] nil))))
+
+(rf/reg-event-db
+ ::terminal-data-failure
+ (fn [db [_ {:keys [body]}]]
+   (-> db
+       (assoc-in [:terminal :data-status] :error)
+       (assoc-in [:terminal :data-error] (or (:error body) "Unable to load data")))))
 
 (rf/reg-event-fx
  ::terminal-send-input

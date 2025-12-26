@@ -3,6 +3,7 @@
             [darelwasl.http.routes.actions :as actions-routes]
             [darelwasl.http.routes.auth :as auth-routes]
             [darelwasl.http.routes.betting :as betting-routes]
+            [darelwasl.http.routes.catalog :as catalog-routes]
             [darelwasl.http.routes.content :as content-routes]
             [darelwasl.http.routes.events :as events-routes]
             [darelwasl.http.routes.files :as files-routes]
@@ -43,6 +44,7 @@
          (auth-routes/routes state)
          (actions-routes/routes state)
          (betting-routes/routes state)
+         (catalog-routes/routes state)
          (events-routes/routes state)
          (files-routes/routes state)
          (github-routes/routes state)

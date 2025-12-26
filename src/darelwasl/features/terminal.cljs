@@ -24,6 +24,22 @@
   (merge (into {} (map (juxt :id :label) session-type-options))
          {:main-ops "Main Ops (Data)"}))
 
+(def ^:private context-kind-options
+  [{:id "" :label "All"}
+   {:id "schema" :label "Schema"}
+   {:id "action" :label "Actions"}
+   {:id "view" :label "Views"}
+   {:id "integration" :label "Integrations"}
+   {:id "tooling" :label "Tooling"}
+   {:id "theme" :label "Theme"}
+   {:id "automation" :label "Automations"}
+   {:id "namespace" :label "Namespaces"}
+   {:id "route" :label "Routes"}
+   {:id "terminal-command" :label "Terminal commands"}
+   {:id "terminal-session-type" :label "Session types"}
+   {:id "script" :label "Scripts"}
+   {:id "config-env" :label "Config envs"}])
+
 (defn- session-type-label
   [session]
   (get session-type-labels (:type session)))
@@ -193,10 +209,97 @@
        ^{:key (:id cmd)}
        [command-row cmd (get statuses (:id cmd)) auto-run?])]))
 
+(defn- context-entry-row
+  [{:keys [id name title kind source path context]}]
+  (let [label (or title name path id)
+        kind-label (when kind (name kind))
+        meta (str/join " · " (remove str/blank? [(or kind-label "")
+                                                 (or source "")]))
+        input (or context
+                  {:text (str "Catalog entry: " id
+                              (when kind-label (str "\nkind: " kind-label))
+                              (when source (str "\nsource: " source))
+                              (when path (str "\npath: " path)))})
+        cmd {:id (str (random-uuid))
+             :type "context.add"
+             :input input}]
+    [:div.terminal-context-row
+     [:div.terminal-context-meta
+      [:div.terminal-context-title label]
+      (when (seq meta)
+        [:div.terminal-context-sub meta])]
+     [ui/button {:variant :secondary
+                 :on-click #(rf/dispatch [:darelwasl.app/terminal-exec-command cmd])}
+      "Attach"]]))
+
+(defn- context-panel
+  []
+  (let [{:keys [context-panel? context-tab context-query context-kind
+                catalog-status catalog-items catalog-error
+                data-status data-items data-error]} @(rf/subscribe [:darelwasl.app/terminal])
+        tab (or context-tab :catalog)
+        search! (fn []
+                  (if (= tab :data)
+                    (rf/dispatch [:darelwasl.app/terminal-fetch-data])
+                    (rf/dispatch [:darelwasl.app/terminal-fetch-catalog])))]
+    (when context-panel?
+      [:div.terminal-context-panel
+       [:div.terminal-context-header
+        [:div
+         [:div.terminal-context-title "Attach context"]
+         [:div.terminal-context-sub "Search the catalog or live data, then attach to the session."]]
+        [ui/button {:variant :secondary
+                    :on-click #(rf/dispatch [:darelwasl.app/terminal-toggle-context-panel])}
+         "Close"]]
+       [:div.terminal-context-tabs
+        [ui/button {:variant (if (= tab :catalog) :primary :secondary)
+                    :on-click #(rf/dispatch [:darelwasl.app/terminal-set-context-tab :catalog])}
+         "Catalog"]
+        [ui/button {:variant (if (= tab :data) :primary :secondary)
+                    :on-click #(rf/dispatch [:darelwasl.app/terminal-set-context-tab :data])}
+         "Data"]]
+       [:div.terminal-context-controls
+        [ui/form-input {:value context-query
+                        :placeholder "Search..."
+                        :on-change #(rf/dispatch [:darelwasl.app/terminal-update-context-query (.. % -target -value)])
+                        :on-key-down #(when (= "Enter" (.-key %))
+                                        (.preventDefault %)
+                                        (search!))}]
+        (when (= tab :catalog)
+          [ui/select-field {:value (or context-kind "")
+                            :on-change #(rf/dispatch [:darelwasl.app/terminal-update-context-kind (.. % -target -value)])}
+           (for [{:keys [id label]} context-kind-options]
+             ^{:key (str "kind-" id)}
+             [:option {:value id} label])])
+        [ui/button {:variant :secondary
+                    :on-click search!}
+         "Search"]]
+       [:div.terminal-context-results
+        (cond
+          (= tab :catalog)
+          (case catalog-status
+            :loading [ui/loading-state "Searching catalog..."]
+            :error [ui/error-state (or catalog-error "Unable to load catalog.") search!]
+            (if (seq catalog-items)
+              (for [entry catalog-items]
+                ^{:key (:id entry)}
+                [context-entry-row entry])
+              [:div.meta "No catalog results."]))
+
+          :else
+          (case data-status
+            :loading [ui/loading-state "Searching data..."]
+            :error [ui/error-state (or data-error "Unable to load data.") search!]
+            (if (seq data-items)
+              (for [entry data-items]
+                ^{:key (:id entry)}
+                [context-entry-row entry])
+              [:div.meta "No data results."])))]])))
+
 (defn- terminal-chat
   []
   (let [{:keys [selected output input error sending? verifying? resuming? restarting? interrupting?
-                app-ready? auto-run-commands? pending-commands command-status]}
+                app-ready? auto-run-commands? pending-commands command-status context-panel?]}
         @(rf/subscribe [:darelwasl.app/terminal])]
     (if-not selected
       [:div.panel.terminal-empty
@@ -248,6 +351,9 @@
                      :checked (boolean auto-run-commands?)
                      :on-change #(rf/dispatch [:darelwasl.app/terminal-update-auto-run (.. % -target -checked)])}]
             [:span "Auto-run commands"]]
+           [ui/button {:variant (if context-panel? :primary :secondary)
+                       :on-click #(rf/dispatch [:darelwasl.app/terminal-toggle-context-panel])}
+            (if context-panel? "Context open" "Attach context")]
            (when-not (:running? selected)
              [ui/button {:variant :secondary
                          :disabled resuming?
@@ -271,7 +377,7 @@
                                     (rf/dispatch [:darelwasl.app/terminal-complete-session]))}
             "Complete"]]]
          [:div.terminal-link-row
-          [:span.meta "App:"]
+         [:span.meta "App:"]
           (cond
             (not app-port) [:span.meta "Unavailable"]
             (not app-ready?) [:span.meta "Starting..."]
@@ -288,6 +394,7 @@
                :target "_blank"
                :rel "noreferrer"}
               site-link]])]
+         [context-panel]
          [terminal-output {:output output
                            :error error}]
          [command-panel pending-commands command-status auto-run-commands?]
