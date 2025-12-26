@@ -92,7 +92,7 @@
 (defn bind-chat-id!
   [username chat-id]
   (let [conn (conn!)]
-    (d/transact conn {:tx-data [[:db/add [:user/username username] :user/telegram-chat-id (str chat-id)]]})
+    (db/transact! conn {:tx-data [[:db/add [:user/username username] :user/telegram-chat-id (str chat-id)]]})
     (println "bound chat id" chat-id "to user" username)))
 
 (defn link-token!

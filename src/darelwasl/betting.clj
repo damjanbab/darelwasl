@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.rezultati-scraper :as rezultati]
             [darelwasl.validation :as v])
@@ -297,7 +298,7 @@
                                             :betting.event/last-updated now})))
                       matches)]
     (when (seq tx-data)
-      (d/transact conn {:tx-data tx-data}))
+      (db/transact! conn {:tx-data tx-data}))
     (let [updated (existing-event-ids (d/db conn) external-ids)]
       (mapv (fn [match]
               (let [external-id (match-external-id (:match-id match))]
@@ -339,7 +340,7 @@
                                  :entity/type :entity.type/betting-bookmaker
                                  :betting.bookmaker/key key
                                  :betting.bookmaker/title title})]
-        (d/transact conn {:tx-data [tx]})
+        (db/transact! conn {:tx-data [tx]})
         (assoc tx :betting.bookmaker/id bookmaker-id)))))
 
 (defn- build-quote-tx
@@ -640,9 +641,9 @@
                                        bookmakers)
                         quote-txs (mapv :quote quotes)
                         fact-txs (mapv :fact quotes)]
-                    (d/transact conn {:tx-data (into [event-update] quote-txs)})
+                    (db/transact! conn {:tx-data (into [event-update] quote-txs)})
                     (when (seq fact-txs)
-                      (d/transact conn {:tx-data fact-txs}))
+                      (db/transact! conn {:tx-data fact-txs}))
                     (let [db' (d/db conn)
                           event' (event-by-id db' value)
                           summary (odds-summary db' cfg event' market-1x2 false)]
@@ -706,9 +707,9 @@
                                        bookmakers)
                         quote-txs (mapv :quote quotes)
                         fact-txs (mapv :fact quotes)]
-                    (d/transact conn {:tx-data (into [event-update] quote-txs)})
+                    (db/transact! conn {:tx-data (into [event-update] quote-txs)})
                     (when (seq fact-txs)
-                      (d/transact conn {:tx-data fact-txs}))
+                      (db/transact! conn {:tx-data fact-txs}))
                     (let [db' (d/db conn)
                           event' (event-by-id db' value)
                           summary (odds-summary db' cfg event' market-1x2 true)]
@@ -784,8 +785,8 @@
                 (nil? entry-prob) (error 409 "Reference odds unavailable; refresh odds first")
                 :else
                 (do
-                  (d/transact conn {:tx-data [tx]})
-                  (d/transact conn {:tx-data [fact]})
+                  (db/transact! conn {:tx-data [tx]})
+                  (db/transact! conn {:tx-data [fact]})
                   (let [bet (d/pull (d/db conn)
                                     [:betting.bet/id
                                      {:betting.bet/event [:betting.event/id
@@ -902,7 +903,7 @@
                                             :betting.fact/type :settle
                                             :betting.fact/bet [:betting.bet/id bet-id*]
                                             :betting.fact/created-at now})]
-                (d/transact conn {:tx-data [{:db/id eid
+                (db/transact! conn {:tx-data [{:db/id eid
                                              :betting.bet/status status-kw
                                              :betting.bet/settled-at now}
                                             fact]}))

@@ -6,10 +6,12 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [datomic.client.api :as d]
             [darelwasl.terminal.store :as store]
             [darelwasl.terminal.tmux :as tmux])
   (:import (java.io RandomAccessFile)
            (java.net InetSocketAddress ServerSocket Socket)
+           (java.nio.file Files Path StandardCopyOption)
            (java.util UUID)))
 
  (defn- now-ms [] (System/currentTimeMillis))
@@ -37,6 +39,93 @@
     (let [file (io/file path)]
       (when (.exists file)
         (some-> (slurp file) str/trim (not-empty))))))
+
+(defn- copy-dir!
+  [from to]
+  (let [src (io/file from)
+        dest (io/file to)]
+    (when-not (.exists src)
+      (throw (ex-info "Snapshot source directory missing" {:path (.getPath src)})))
+    (.mkdirs dest)
+    (let [src-path (.toPath src)]
+      (doseq [file (file-seq src)]
+        (let [path (.toPath file)
+              rel (.relativize src-path path)
+              target (.resolve (.toPath dest) rel)]
+          (if (.isDirectory file)
+            (Files/createDirectories target (make-array java.nio.file.attribute.FileAttribute 0))
+            (do
+              (Files/createDirectories (.getParent target) (make-array java.nio.file.attribute.FileAttribute 0))
+              (Files/copy path
+                          target
+                          (into-array StandardCopyOption
+                                      [StandardCopyOption/REPLACE_EXISTING
+                                       StandardCopyOption/COPY_ATTRIBUTES])))))))))
+
+(defn- load-main-db
+  [cfg]
+  (let [storage-dir (:main-datomic-dir cfg)
+        system (:main-datomic-system cfg)
+        db-name (:main-datomic-db cfg)]
+    (when (or (nil? storage-dir) (nil? system) (nil? db-name))
+      (throw (ex-info "Main Datomic config missing"
+                      {:status 500
+                       :message "Main Datomic config missing"})))
+    (let [client (d/client {:server-type :dev-local
+                            :storage-dir storage-dir
+                            :system system})]
+      (d/create-database client {:db-name db-name})
+      (let [conn (d/connect client {:db-name db-name})
+            db (d/db conn)
+            basis (:basisT db)
+            tx-inst (:db/txInstant (d/pull db [:db/txInstant] basis))]
+        {:client client
+         :conn conn
+         :db db
+         :basis-t basis
+         :tx-inst tx-inst}))))
+
+(defn- write-data-snapshot!
+  [logs-dir snapshot]
+  (spit (io/file logs-dir "data-snapshot.edn") (pr-str snapshot)))
+
+(defn- write-data-promote-state!
+  [logs-dir state]
+  (spit (io/file logs-dir "data-promote.edn") (pr-str state)))
+
+(defn- snapshot-main-data!
+  [cfg session-id datomic-dir files-dir logs-dir]
+  (let [main-datomic-root (:main-datomic-dir cfg)
+        main-files-root (:main-files-dir cfg)]
+    (when (or (nil? main-datomic-root) (nil? main-files-root))
+      (throw (ex-info "Main Datomic/files config missing"
+                      {:status 500
+                       :message "Main Datomic/files config missing"})))
+    (let [main-datomic-dir (ensure-dir! main-datomic-root)
+          main-files-dir (ensure-dir! main-files-root)
+          now (now-ms)
+          {:keys [basis-t tx-inst]} (load-main-db cfg)
+          tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
+          snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
+          snapshot {:version 1
+                    :session/id session-id
+                    :created-at now
+                    :datomic {:storage-dir (.getPath main-datomic-dir)
+                              :system (:main-datomic-system cfg)
+                              :db-name (:main-datomic-db cfg)
+                              :basis-t basis-t
+                              :tx-inst tx-inst}
+                    :files {:storage-dir (.getPath main-files-dir)}
+                    :session {:datomic-dir (.getPath datomic-dir)
+                              :files-dir (.getPath files-dir)
+                              :tx-log tx-log-path
+                              :snapshot snapshot-path}}]
+      (copy-dir! (.getPath main-datomic-dir) (.getPath datomic-dir))
+      (copy-dir! (.getPath main-files-dir) (.getPath files-dir))
+      (write-data-snapshot! logs-dir snapshot)
+      (write-data-promote-state! logs-dir {:applied-lines 0
+                                           :last-promoted-at nil})
+      snapshot)))
 
 (defn- truthy?
   [value]
@@ -499,6 +588,7 @@
         session-root (io/file work-root id)
          repo-dir (io/file session-root "repo")
          datomic-dir (io/file session-root "datomic")
+         files-dir (io/file session-root "files")
          chat-file (io/file session-root "chat.log")
          env-file (io/file session-root "session.env")
          askpass-file (io/file session-root "git-askpass.sh")
@@ -541,12 +631,16 @@
                         {:status 409 :message "Dev bot already running in another session"}))))
     (.mkdirs session-root)
     (.mkdirs datomic-dir)
+    (.mkdirs files-dir)
     (.mkdirs logs-dir)
+    (snapshot-main-data! cfg id datomic-dir files-dir logs-dir)
      (write-manifest! logs-dir {:id id
                                 :name session-name
                                 :type session-type
                                 :created-at now
-                                :ports ports})
+                                :ports ports
+                                :datomic-dir (.getPath datomic-dir)
+                                :files-dir (.getPath files-dir)})
      (run! ["git" "clone" (:repo-url cfg) (.getPath repo-dir)])
      (run! ["git" "checkout" "-b" branch] {:dir repo-dir})
      (run! ["git" "config" "user.name" git-name] {:dir repo-dir})
@@ -554,12 +648,17 @@
      (write-agents! repo-dir session-type)
      (when github-token
        (write-askpass! askpass-file github-token))
-     (let [base-env {"APP_HOST" "0.0.0.0"
+     (let [tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
+           snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
+           base-env {"APP_HOST" "0.0.0.0"
                      "APP_PORT" (:app ports)
                      "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
                      "DATOMIC_SYSTEM" "darelwasl"
                      "DATOMIC_DB_NAME" "darelwasl"
-                     "ALLOW_FIXTURE_SEED" "true"
+                     "FILES_STORAGE_DIR" (.getPath files-dir)
+                     "ALLOW_FIXTURE_SEED" "false"
+                     "SESSION_TX_LOG_PATH" tx-log-path
+                     "SESSION_SNAPSHOT_PATH" snapshot-path
                      "TERMINAL_SESSION_ID" id
                      "TERMINAL_LOG_DIR" (.getPath logs-dir)
                      "TERMINAL_API_URL" (:base-url cfg)
@@ -611,6 +710,7 @@
                     :datomic-dir (.getPath datomic-dir)
                     :work-dir (.getPath session-root)
                     :logs-dir (.getPath logs-dir)
+                    :files-dir (.getPath files-dir)
                     :chat-log (.getPath chat-file)
                     :env-file (.getPath env-file)
                     :tmux tmux-session

@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.validation :as v])
   (:import (java.io File FileInputStream)
@@ -228,7 +229,7 @@
                               created-by (assoc :file/created-by [:user/id created-by]))]
                 (try
                   (io/copy tempfile (io/file storage-path))
-                  (let [tx-res (d/transact conn {:tx-data [tx-data]})
+                  (let [tx-res (db/transact! conn {:tx-data [tx-data]})
                         db-after (:db-after tx-res)
                         eid (file-eid-by-id db-after file-id)
                         file (present-file (pull-file db-after eid))]
@@ -263,7 +264,7 @@
               conflict? (error 409 "Slug already in use")
               :else
               (try
-                (let [tx-res (d/transact conn {:tx-data [[:db/add eid :file/slug slug-val]]})
+                (let [tx-res (db/transact! conn {:tx-data [[:db/add eid :file/slug slug-val]]})
                       db-after (:db-after tx-res)
                       updated (present-file (pull-file db-after eid))]
                   {:file updated})
@@ -292,7 +293,7 @@
                         (catch Exception e
                           (log/warn e "Failed to delete file from storage"))))
                     (try
-                      (d/transact conn {:tx-data [[:db/retractEntity eid]]})
+                      (db/transact! conn {:tx-data [[:db/retractEntity [:file/id id]]]})
                       {:file/id id}
                       (catch Exception e
                         (log/error e "Failed to delete file metadata")

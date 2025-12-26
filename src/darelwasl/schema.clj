@@ -44,7 +44,7 @@
   ([conn registry]
    (let [tx-data (registry->tx-data registry)]
      (try
-       (d/transact conn {:tx-data tx-data})
+       (db/transact! conn {:tx-data tx-data})
        {:status :ok
         :tx-count (count tx-data)}
          (catch Exception e
@@ -95,7 +95,7 @@
                                    (map (fn [e] [:db/add e :entity/type type-kw]) eids))))
                        vec)]
       (when (seq tx-data)
-        (d/transact conn {:tx-data tx-data})
+        (db/transact! conn {:tx-data tx-data})
         (log/infof "Backfilled :entity/type on %s entities" (count tx-data)))
       {:status :ok :added (count tx-data)})
     (catch Exception e
@@ -121,7 +121,7 @@
                               [[] existing]
                               entities)]
       (when (seq tx-data)
-        (d/transact conn {:tx-data tx-data})
+        (db/transact! conn {:tx-data tx-data})
         (log/infof "Backfilled :entity/ref on %s entities" (count tx-data)))
       {:status :ok :added (count tx-data)})
     (catch Exception e

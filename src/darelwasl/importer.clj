@@ -136,9 +136,9 @@
                (:persons stats) (:parcels stats) (:ownerships stats) file)
     (when-not dry-run?
       (log/info "Transacting persons/parcels...")
-      (d/transact conn {:tx-data tx-persons-parcels})
+      (db/transact! conn {:tx-data tx-persons-parcels})
       (log/info "Transacting ownerships...")
-      (d/transact conn {:tx-data ownerships})
+      (db/transact! conn {:tx-data ownerships})
       (let [dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
         (log/infof "Import transaction complete dur=%.1fms" dur-ms)))
     (merge stats {:status :ok

@@ -6,6 +6,7 @@
             [darelwasl.files :as files]
             [darelwasl.tasks :as tasks]
             [darelwasl.terminal.client :as terminal]
+            [darelwasl.terminal.promote :as promote]
             [darelwasl.validation :as v])
   (:import (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
@@ -235,6 +236,33 @@
           {:message (str "Dev bot reset in session " (:name target))
            :result {:session (:id target)}})))))
 
+(defn- session-data-promote
+  [state session-id input]
+  (let [target (or (v/param-value input :session/id)
+                   (v/param-value input :session-id)
+                   (v/param-value input :session_id)
+                   (v/param-value input :id)
+                   session-id)]
+    (if (str/blank? (str target))
+      {:error (error 400 "Session id is required")}
+      (let [session-res (terminal/request (:config state) :get (str "/sessions/" target))
+            logs-dir (get-in session-res [:body :session :logs-dir])]
+        (cond
+          (:error session-res)
+          (let [status (or (:status session-res) 502)
+                message (if (= status 404) "Session not found" "Terminal service unavailable")]
+            {:error (error status message)})
+          (str/blank? (str logs-dir)) {:error (error 404 "Session logs directory not found")}
+          :else
+          (try
+            (promote/promote-session-data! state target logs-dir)
+            (catch Exception e
+              (let [data (ex-data e)
+                    status (or (:status data) 500)
+                    message (or (:message data) (.getMessage e))
+                    details (:details data)]
+                {:error (error status message details)}))))))))
+
 (defn execute-command!
   [state session-id command actor]
   (let [command-type (normalize-type (:type command))
@@ -251,6 +279,9 @@
 
       (= command-type "devbot.reset")
       (devbot-reset state session-id input)
+
+      (= command-type "session.data-promote")
+      (session-data-promote state session-id input)
 
       :else
       (if-let [action-id (get action-types command-type)]

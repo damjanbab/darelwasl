@@ -139,7 +139,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Terminal backend switching: `/api/terminal/backend` (admin-only) reports `{active stable-url canary-url}` and accepts `{active|backend}` to switch between `:stable` (`TERMINAL_API_URL`) and `:canary` (`TERMINAL_CANARY_API_URL`); active backend persists in `TERMINAL_BACKEND_FILE` (default `data/terminal/backend.edn`).
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
 - Session types: `feature`, `bugfix`, `research`, `integrator`, `ops`, `main-ops` (main-ops is data/library only via command protocol; no code edits or PRs; kept as internal/fallback and not exposed in the UI).
-- Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`), plus `context.add` and `devbot.reset`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
+- Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`), plus `context.add`, `devbot.reset`, and `session.data-promote`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
 - Dev bot defaults to polling when the public base URL is not HTTPS or uses a non-Telegram webhook port; webhook is only enabled for HTTPS URLs on ports 80/88/443/8443.
 - Dev bot auto-binds the first chat to `damjan` unless overridden by `TELEGRAM_DEV_AUTO_BIND_USERNAME`.
@@ -148,6 +148,11 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
   - Logs/worklogs: `TERMINAL_LOG_DIR` (default `data/terminal/logs`) retained forever
+- Session data snapshot & promotion:
+  - On create, sessions snapshot main Datomic + file storage into the session (`data-snapshot.edn` in the logs dir).
+  - All Datomic writes in a session are logged to `data-tx-log.edn` via `SESSION_TX_LOG_PATH`.
+  - Promotion state is tracked in `data-promote.edn` (`applied-lines`, `last-promoted-at`).
+  - Use `session.data-promote` to apply the logged tx-data + file copies back to main (integrator only).
 - Terminal config envs:
   - `TERMINAL_API_URL` (optional override of base url)
   - `TERMINAL_CANARY_API_URL` (optional canary base url for backend switching)
@@ -165,6 +170,8 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_PORT_RANGE_START`, `TERMINAL_PORT_RANGE_END` (per-session app/site ports)
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
+  - `TERMINAL_MAIN_DATOMIC_DIR`, `TERMINAL_MAIN_DATOMIC_SYSTEM`, `TERMINAL_MAIN_DATOMIC_DB` (source of truth for session snapshots/promotion)
+  - `TERMINAL_MAIN_FILES_DIR` (source file storage dir for session snapshots/promotion)
   - `TELEGRAM_DEV_BOT_TOKEN` (use dev bot for terminal sessions)
   - `TELEGRAM_DEV_BOT_TOKEN_FILE` (optional file path for dev bot token)
   - `TELEGRAM_DEV_WEBHOOK_SECRET`, `TELEGRAM_DEV_WEBHOOK_BASE_URL` (optional dev webhook config)

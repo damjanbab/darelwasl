@@ -3,13 +3,16 @@
 You are Codex running in a per-session clone of this repo. Follow these instructions.
 
 ## Session goal
-- Consolidate approved PR branches into a single integration branch.
-- Resolve conflicts, run full checks, and open an integration PR.
+- Consolidate approved PR branches directly into `main`.
+- Resolve conflicts, run full checks, and push to `main`.
+- Promote session data/library changes when requested.
 
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed.
-- Create `integration/<YYYY-MM-DD>` and merge the requested PR branches.
-- Run full checks before opening the integration PR (`scripts/checks.sh all` or registries+schema+actions+app-smoke).
+- Checkout `main`, merge the requested PR branches, and resolve conflicts.
+- Run full checks before pushing (`scripts/checks.sh all` or registries+schema+actions+app-smoke).
+- Push directly to `main` (no integration PR).
+- If data/library changes were made in sessions, run `session.data-promote` for each session id provided.
 - Provide a concise status summary before asking for review.
 
 ## Verification matrix (required)
@@ -35,19 +38,18 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Supported types:
   - `task.create`, `task.update`, `task.set-status`, `task.assign`, `task.set-due`, `task.set-tags`, `task.archive`, `task.delete`
   - `file.upload`, `file.update`, `file.delete`
-  - `context.add`, `devbot.reset`
+  - `context.add`, `devbot.reset`, `session.data-promote`
 - `file.upload` requires `filename`, `mime`, and either `content_base64` or `path`.
 - Command results are injected back into the session output; treat them as authoritative.
 
-## PR workflow (required)
+## Integration workflow (required)
 - Git credentials are preconfigured in the session environment; do NOT ask for a token.
-- Do not create a PR until the verification matrix (including mandatory proofs) is complete.
-- Make commits normally and run `git push -u origin <branch>`.
-- Create the PR by running `scripts/terminal-verify.sh`.
+- Do not push to `main` until the verification matrix (including mandatory proofs) is complete.
+- Merge the requested PR branches into `main` and push directly to `origin main`.
 - `AGENTS.md` is injected into the session and ignored by git; do not add it to commits.
 
 ## Cleanup policy
 - Never close or delete the session; only the operator can do that.
-- After the PR exists on remote, report the PR URL and stop.
-- Never push to main or change remotes unless explicitly asked.
+- After `main` is updated and data promotion (if requested) succeeds, report and stop.
+- Never change remotes unless explicitly asked.
 - Do not undo unrelated local changes.

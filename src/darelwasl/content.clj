@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.provenance :as prov]
             [darelwasl.shared.block-types :as block-types]
@@ -45,7 +46,7 @@
                      (map #(prov/enrich-tx % tx-prov) tx-data)
                      tx-data)]
       (if (seq tx-data')
-        (d/transact conn {:tx-data tx-data'})
+        (db/transact! conn {:tx-data tx-data'})
         {:db-after (d/db conn)}))
     (catch Exception e
       (log/error e (str "Failed to " context))

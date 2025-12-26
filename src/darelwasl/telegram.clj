@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.actions :as actions]
+            [darelwasl.db :as db]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
             [darelwasl.users :as users]
@@ -210,7 +211,7 @@
                (some? message-id) (assoc :telegram.message/message-id (long message-id)))
           tx (prov/enrich-tx tx prov)]
       (try
-        (d/transact conn {:tx-data [tx]})
+        (db/transact! conn {:tx-data [tx]})
         (catch Exception e
           (log/warn e "Failed to log Telegram message" {:chat-id chat-id :direction direction})))
       nil)))
@@ -520,7 +521,7 @@
   (if-let [conn (ensure-conn state)]
     (try
       (let [token (str (UUID/randomUUID))]
-        (d/transact conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-link-token token]
+        (db/transact! conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-link-token token]
                                     [:db/add [:user/id user-id] :user/telegram-link-token-created-at (java.util.Date.)]]})
         {:token token})
       (catch Exception e
@@ -616,7 +617,7 @@
                                  [[:db/add [:user/id (:user/id user)] :user/telegram-chat-id chat-id]])]
                   (doseq [tx [retract-existing retract-user-chat retract-token add-chat]]
                     (when (seq tx)
-                      (d/transact conn {:tx-data tx})))
+                      (db/transact! conn {:tx-data tx})))
                   {:user (assoc user :user/telegram-chat-id chat-id)})))))
         (catch Exception e
           (log/warn e "Failed to bind Telegram chat" {:chat-id chat-id})
@@ -649,7 +650,7 @@
                          [[:db/add [:user/id (:user/id user)] :user/telegram-chat-id chat-id]])]
           (doseq [tx [retract-existing retract-user-chat add-chat]]
             (when (seq tx)
-              (d/transact conn {:tx-data tx})))
+              (db/transact! conn {:tx-data tx})))
           {:user (assoc user :user/telegram-chat-id chat-id)})
         (catch Exception e
           (log/warn e "Failed to bind Telegram chat (auto)" {:chat-id chat-id})
@@ -661,7 +662,7 @@
   [state user-id telegram-user-id]
   (if-let [conn (ensure-conn state)]
     (try
-      (d/transact conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-user-id telegram-user-id]]})
+      (db/transact! conn {:tx-data [[:db/add [:user/id user-id] :user/telegram-user-id telegram-user-id]]})
       {:status :ok
        :user/id user-id
        :telegram/user-id telegram-user-id}
@@ -680,7 +681,7 @@
         (if-not user
           {:error "No chat binding found"}
           (do
-            (d/transact conn {:tx-data [[:db/retract [:user/id (:user/id user)] :user/telegram-chat-id chat-id]]})
+            (db/transact! conn {:tx-data [[:db/retract [:user/id (:user/id user)] :user/telegram-chat-id chat-id]]})
             {:status :ok
              :user user})))
       (catch Exception e

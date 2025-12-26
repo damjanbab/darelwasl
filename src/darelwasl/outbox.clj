@@ -2,7 +2,8 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [datomic.client.api :as d])
+            [datomic.client.api :as d]
+            [darelwasl.db :as db])
   (:import (java.util Date UUID)))
 
 (def ^:private default-max-attempts 5)
@@ -51,7 +52,7 @@
                   :outbox/updated-at now}
               tx (cond-> tx dedupe (assoc :outbox/dedupe-key dedupe))]
           (try
-            (d/transact conn {:tx-data [tx]})
+            (db/transact! conn {:tx-data [tx]})
             {:outbox/id id}
             (catch Exception e
               (let [data (ex-data e)
@@ -84,7 +85,7 @@
   (or (ensure-conn conn)
       (try
         (let [now (now)]
-          (d/transact conn {:tx-data [[:db/add [:outbox/id outbox-id] :outbox/status :succeeded]
+          (db/transact! conn {:tx-data [[:db/add [:outbox/id outbox-id] :outbox/status :succeeded]
                                       [:db/add [:outbox/id outbox-id] :outbox/updated-at now]]})
           {:status :ok})
         (catch Exception e
@@ -101,7 +102,7 @@
             retry? (< next-attempt max-attempts)
             next-available (Date. (+ (.getTime now) (backoff-ms attempts)))]
         (try
-          (d/transact conn {:tx-data (cond-> [[:db/add [:outbox/id outbox-id] :outbox/attempts next-attempt]
+          (db/transact! conn {:tx-data (cond-> [[:db/add [:outbox/id outbox-id] :outbox/attempts next-attempt]
                                               [:db/add [:outbox/id outbox-id] :outbox/last-error (or message "unknown error")]
                                               [:db/add [:outbox/id outbox-id] :outbox/updated-at now]
                                               [:db/add [:outbox/id outbox-id] :outbox/status (if retry? :pending :failed)]]
@@ -133,7 +134,7 @@
                                                [:db/add eid :outbox/locked-at now]
                                                [:db/add eid :outbox/worker worker-id]
                                                [:db/add eid :outbox/updated-at now]]}
-                                 tx-res (d/transact conn tx)
+                                 tx-res (db/transact! conn tx)
                                  db-after (:db-after tx-res)]
                              (d/pull db-after [:outbox/id :outbox/integration :outbox/payload
                                                :outbox/status :outbox/attempts :outbox/dedupe-key

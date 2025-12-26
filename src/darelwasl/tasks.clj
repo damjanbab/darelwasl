@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.provenance :as prov]
             [darelwasl.schema :as schema]
@@ -287,7 +288,7 @@
   [conn tx-data context]
   (try
     (if (seq tx-data)
-      (d/transact conn {:tx-data tx-data})
+      (db/transact! conn {:tx-data tx-data})
       {:db-after (d/db conn)})
     (catch Exception e
       (log/error e (str "Failed to " context))
@@ -1056,7 +1057,7 @@
           :else
           (if-let [eid (task-eid db parsed-id)]
             (let [task (some-> (pull-task db eid) present-task)
-                  tx-result (attempt-transact conn [[:db/retractEntity eid]] "delete task")]
+                  tx-result (attempt-transact conn [[:db/retractEntity [:task/id parsed-id]]] "delete task")]
               (if-let [tx-error (:error tx-result)]
                 {:error tx-error}
                 (do

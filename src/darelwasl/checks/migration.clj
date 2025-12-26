@@ -25,7 +25,7 @@
             expected (count pairs)
             result (try
                      (when (seq tx-data)
-                       (d/transact conn {:tx-data tx-data}))
+                       (db/transact! conn {:tx-data tx-data}))
                      (schema/backfill-entity-types! conn)
                      (catch Exception e
                        {:error e}))]

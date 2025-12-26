@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.validation :as v])
   (:import (java.util UUID)))
@@ -138,7 +139,7 @@
                     base (entity/with-ref db base)
                     tx-data [base]]
                 (try
-                  (d/transact conn {:tx-data tx-data})
+                  (db/transact! conn {:tx-data tx-data})
                   (when actor
                     (log/infof "AUDIT user-create user=%s target=%s"
                                (or (:user/username actor) (:user/id actor))
@@ -202,7 +203,7 @@
                 (if (empty? updates)
                   (error 400 "No updates provided")
                   (try
-                    (d/transact conn {:tx-data updates})
+                    (db/transact! conn {:tx-data updates})
                     (when actor
                       (log/infof "AUDIT user-update user=%s target=%s"
                                  (or (:user/username actor) (:user/id actor))
@@ -234,7 +235,7 @@
               (pos? (or assigned 0)) (error 409 "User is assigned to tasks; reassign tasks before deleting")
               :else
               (try
-                (d/transact conn {:tx-data [[:db/retractEntity eid]]})
+                (db/transact! conn {:tx-data [[:db/retractEntity [:user/id uid]]]})
                 (when actor
                   (log/infof "AUDIT user-delete user=%s target=%s"
                              (or (:user/username actor) (:user/id actor))
