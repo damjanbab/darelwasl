@@ -1,7 +1,8 @@
 (ns darelwasl.http.routes.catalog
   (:require [clojure.string :as str]
             [darelwasl.catalog :as catalog]
-            [darelwasl.http.common :as common]))
+            [darelwasl.http.common :as common]
+            [datomic.client.api :as d]))
 
 (defn- parse-int
   [value default]
@@ -58,7 +59,8 @@
       (cond
         (str/blank? (str q)) (common/error-response 400 "Query is required for data search")
         :else
-        (let [res (catalog/search-data (get-in state [:db :conn]) {:q q :limit limit})]
+        (let [db (d/db (get-in state [:db :conn]))
+              res (catalog/search-data db {:q q :limit limit})]
           {:status 200
            :body {:entries (:entries res)}})))))
 

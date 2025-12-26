@@ -107,10 +107,11 @@
 
 (defn- search-tasks
   [db q]
-  (let [eids (d/q '[:find [?e ...]
+  (let [eids (d/q '[:find ?e
                    :where [?e :entity/type :entity.type/task]]
                  db)]
     (->> eids
+         (map first)
          (map #(d/pull db [:task/id :task/title :task/description :entity/ref] %))
          (filter (fn [task]
                    (if-not q
@@ -122,10 +123,11 @@
 
 (defn- search-files
   [db q]
-  (let [eids (d/q '[:find [?e ...]
+  (let [eids (d/q '[:find ?e
                    :where [?e :entity/type :entity.type/file]]
                  db)]
     (->> eids
+         (map first)
          (map #(d/pull db [:file/id :file/name :file/slug :entity/ref] %))
          (filter (fn [file]
                    (if-not q
@@ -142,8 +144,8 @@
                          :in $ ?q
                          :where [?e :entity/ref ?ref]
                                 [?e :entity/type ?type]
-                               [(clojure.string/includes?
-                                 (clojure.string/lower-case ?ref) ?q)]]
+                                [(clojure.string/lower-case ?ref) ?ref-lower]
+                                [(clojure.string/includes? ?ref-lower ?q)]]
                        db q)]
       (->> results
            (map first)
