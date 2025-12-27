@@ -15,6 +15,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Fail closed on test errors and report exact failures only after fixing them.
 - Provide a concise status summary before asking for review.
 - When a feature has a UI surface, verify it using the same payload shape the UI sends (unnamespaced JSON keys, same endpoints).
+- All workspace staging and library changes must flow through the action gateway; promote session data with `workspace.promote` when ready.
 
 ## Verification matrix (required)
 - Identify touched areas and run the corresponding proofs:
@@ -40,7 +41,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Supported types:
   - `task.create`, `task.update`, `task.set-status`, `task.assign`, `task.set-due`, `task.set-tags`, `task.archive`, `task.delete`
   - `file.upload`, `file.update`, `file.delete`
-  - `context.add`, `devbot.reset`
+  - `context.add`, `devbot.reset`, `workspace.promote`
 - `file.upload` requires `filename`, `mime`, and either `content_base64` or `path`.
 - Command results are injected back into the session output; treat them as authoritative.
 
