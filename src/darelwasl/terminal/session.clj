@@ -742,6 +742,7 @@
               env-file (io/file dir "session.env")
               logs-dir (io/file logs-root id)
               manifest (read-manifest logs-dir)
+              closed-at (:closed-at manifest)
               ports (or (:ports manifest) {})
               now (now-ms)
               session-name (or (:name manifest)
@@ -769,11 +770,14 @@
                        :stale? true}
               cleanup? (cleanup-eligible? session)
               next-session (assoc session :cleanup-eligible? cleanup?)]
-          (when (tmux/running? tmux-session)
-            (log/warn "Orphaned session still has active tmux" {:id id :tmux tmux-session}))
-          (store/upsert-session! store next-session)
-          (mark-session-stale! logs-root id cleanup?)
-          (log/info "Marked orphaned session as stale" {:id id :cleanup-eligible cleanup?}))))))
+          (if closed-at
+            (log/info "Skipping closed session on disk" {:id id :closed-at closed-at})
+            (do
+              (when (tmux/running? tmux-session)
+                (log/warn "Orphaned session still has active tmux" {:id id :tmux tmux-session}))
+              (store/upsert-session! store next-session)
+              (mark-session-stale! logs-root id cleanup?)
+              (log/info "Marked orphaned session as stale" {:id id :cleanup-eligible cleanup?}))))))))
 
 (defn rebuild-port-reservations!
   [store cfg]
