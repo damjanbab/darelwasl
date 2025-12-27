@@ -893,6 +893,8 @@
            :message message
            :details details}})
 
+(declare normalize-command-type)
+
 (defn- resolve-upload-path
   [session command]
   (let [input (:input command)

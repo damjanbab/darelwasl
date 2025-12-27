@@ -161,6 +161,15 @@
                  [?e :file/workspace ?workspace]]
         db file-id workspace)))
 
+(defn- file-eid-by-slug
+  [db slug workspace]
+  (ffirst
+   (d/q '[:find ?e
+          :in $ ?slug ?workspace
+          :where [?e :file/slug ?slug]
+                 [?e :file/workspace ?workspace]]
+        db slug workspace)))
+
 (defn list-files
   ([conn params] (list-files conn params nil))
   ([conn params workspace]
@@ -324,11 +333,16 @@
    (or (ensure-conn conn)
        (let [db (d/db conn)
              workspace (workspace-id workspace)
-             {id :value id-err :error} (resolve-file-id db file-id)]
-         (if id-err
-           (error 400 id-err)
-           (let [eid (file-eid-by-id db id workspace)
-                 file (pull-file db eid)]
-             (if file
-               {:file file}
-               (error 404 "File not found"))))))))
+             {id :value id-err :error} (resolve-file-id db file-id)
+             slug (when (and id-err (string? file-id))
+                    (reference->slug file-id))
+             eid (cond
+                   id (file-eid-by-id db id workspace)
+                   (seq slug) (file-eid-by-slug db slug workspace)
+                   :else nil)
+             file (when eid (pull-file db eid))]
+         (cond
+           (nil? file-id) (error 400 "File id is required")
+           (and id-err (not (seq slug))) (error 400 id-err)
+           file {:file file}
+           :else (error 404 "File not found"))))))
