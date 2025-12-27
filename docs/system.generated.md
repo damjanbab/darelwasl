@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `9cf7895acdf76407f29f26bef1322d27c2d3a11b1be0cb95c69d4ed9e6861596`
+- Catalog version: `1a62e197145d4788319b4cfb2c04f301ef05e261d32b416188ce581f0df1fdaa`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -44,7 +44,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (57)
+### Actions (59)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -74,6 +74,8 @@ This file is auto-generated. Do not edit by hand.
 - action/parcel-stats
 - action/person-detail
 - action/person-list
+- action/system-service-restart
+- action/system-services
 - action/tag-create
 - action/tag-delete
 - action/tag-update
@@ -103,7 +105,7 @@ This file is auto-generated. Do not edit by hand.
 - action/user-list
 - action/user-update
 
-### Views (17)
+### Views (18)
 - view/betting
 - view/control-panel
 - view/file-library
@@ -118,6 +120,7 @@ This file is auto-generated. Do not edit by hand.
 - view/site-process
 - view/site-service-leaf
 - view/site-services
+- view/system-services
 - view/tasks
 - view/terminal
 - view/user-management
@@ -169,6 +172,7 @@ This file is auto-generated. Do not edit by hand.
 - file.delete
 - file.update
 - file.upload
+- library.add
 - session.data-promote
 - task.archive
 - task.assign
@@ -181,6 +185,7 @@ This file is auto-generated. Do not edit by hand.
 
 ## Routes
 
+- /+$
 - /:id
 - /:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}
 - /actions
@@ -195,7 +200,7 @@ This file is auto-generated. Do not edit by hand.
 - /blocks
 - /businesses
 - /catalog
-- /commands/claim
+- /commands/run
 - /comparison-rows
 - /complete
 - /contacts
@@ -233,28 +238,37 @@ This file is auto-generated. Do not edit by hand.
 - /resume
 - /rezultati/daily
 - /rezultati/match/:id
+- /services
+- /services/:id/restart
 - /session
 - /sessions
 - /sessions/
 - /sessions/:id
+- /sessions/:id/cleanup
 - /sessions/:id/commands
 - /sessions/:id/commands/claim
+- /sessions/:id/commands/run
 - /sessions/:id/complete
 - /sessions/:id/input
 - /sessions/:id/interrupt
 - /sessions/:id/keys
 - /sessions/:id/output
+- /sessions/:id/ports/reallocate
 - /sessions/:id/restart-app
 - /sessions/:id/resume
 - /sessions/:id/verify
+- /site/restart
 - /stats
 - /status
 - /support-entries
 - /system
+- /system/datastore/snapshot
+- /system/restart
 - /tags
 - /tasks
 - /telegram
 - /terminal
+- /terminal/sessions/:id/app
 - /users
 - /v2
 - /verify
@@ -316,6 +330,7 @@ This file is auto-generated. Do not edit by hand.
 - TERMINAL_GITHUB_TOKEN
 - TERMINAL_HOST
 - TERMINAL_LOG_DIR
+- TERMINAL_MAIN_APP_URL
 - TERMINAL_MAIN_DATOMIC_DB
 - TERMINAL_MAIN_DATOMIC_DIR
 - TERMINAL_MAIN_DATOMIC_SYSTEM
@@ -372,6 +387,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.features.land
 - darelwasl.features.login
 - darelwasl.features.prs
+- darelwasl.features.services
 - darelwasl.features.tasks
 - darelwasl.features.terminal
 - darelwasl.features.users
