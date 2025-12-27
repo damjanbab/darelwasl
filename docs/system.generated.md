@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `3146e37028c614fa3eb64523987f845a9a867d9cf6503b96acc178d34804116e`
+- Catalog version: `88e16de331e4164ae4c6976ebc3e3cebabb0bedc79d4f88285becf2e6fc7b53d`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary

@@ -10,6 +10,7 @@
   (case t
     :file.type/image "Image"
     :file.type/pdf "PDF"
+    :file.type/markdown "Markdown"
     "File"))
 
 (defn- file-row
@@ -38,7 +39,7 @@
      [:div.section-header
       [:div
        [:h2 "Upload"]
-       [:span.meta "Images + PDFs only"]]
+       [:span.meta "Images, PDFs, and Markdown"]]
       [:div.controls
        [ui/button {:variant :secondary
                    :disabled uploading?
@@ -49,7 +50,7 @@
        [:label {:for "file-input"} "File"]
        [:input.form-input {:id "file-input"
                            :type "file"
-                           :accept "image/*,application/pdf"
+                           :accept "image/*,application/pdf,text/markdown,text/x-markdown,.md,.markdown"
                            :disabled uploading?
                            :on-change #(let [f (aget (.. % -target -files) 0)]
                                          (rf/dispatch [:darelwasl.app/set-upload-file f]))}]
@@ -116,7 +117,7 @@
           (for [file items]
             ^{:key (str (:file/id file))}
             [file-row file (= (:file/id file) selected)])]
-         [ui/empty-state "No files yet" "Upload an image or PDF to get started."]))]))
+         [ui/empty-state "No files yet" "Upload an image, PDF, or Markdown file to get started."]))]))
 
 (defn- preview-panel
   []
@@ -141,6 +142,8 @@
                                    :alt (or (:file/name file) "Uploaded image")}]
            :file.type/pdf [:iframe {:src (:file/url file)
                                     :title (or (:file/name file) "PDF preview")}]
+           :file.type/markdown [:iframe {:src (:file/url file)
+                                         :title (or (:file/name file) "Markdown preview")}]
            [:div.meta "No preview available."])]
         [:div.files-meta
          [:div.meta-row
