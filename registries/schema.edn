@@ -1534,7 +1534,7 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Workspace/tenant for scoping"}]
-  :enums {:file/type [:file.type/image :file.type/pdf]}
+  :enums {:file/type [:file.type/image :file.type/pdf :file.type/markdown]}
   :invariants ["File id and slug must be unique"
                "Files scoped by workspace"
                "File entities set :entity/type to :entity.type/file"

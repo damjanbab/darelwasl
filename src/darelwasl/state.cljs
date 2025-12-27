@@ -364,7 +364,7 @@
             :desc "Workboard"}
            {:id :files
             :label "Library"
-            :desc "Images + PDFs"}
+            :desc "Images, PDFs, Markdown"}
            {:id :betting
             :label "Betting CLV"
             :desc "Browse odds and log bets"}
