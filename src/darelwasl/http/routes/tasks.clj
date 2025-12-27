@@ -150,7 +150,7 @@
   (fn [request]
     (common/handle-task-result
      (tasks/list-tags (get-in state [:db :conn])
-                      (common/workspace-id request))))))
+                      (common/workspace-id request)))))
 
 (defn create-tag-handler
   [state]
