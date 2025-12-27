@@ -6,7 +6,8 @@
             [datomic.client.api :as d]
             [darelwasl.db :as db]
             [darelwasl.entity :as entity]
-            [darelwasl.validation :as v])
+            [darelwasl.validation :as v]
+            [darelwasl.workspace :as workspace])
   (:import (java.io File FileInputStream)
            (java.math BigInteger)
            (java.security MessageDigest)
@@ -25,7 +26,6 @@
     (error 500 "Database not ready")))
 
 (def ^:private param-value v/param-value)
-(def ^:private normalize-uuid v/normalize-uuid)
 (def ^:private normalize-string v/normalize-string)
 
 (def ^:private pull-pattern
@@ -41,6 +41,10 @@
    :file/storage-path
    :file/created-at
    {:file/created-by [:user/id :user/username :user/name]}])
+
+(defn- workspace-id
+  [value]
+  (workspace/resolve-id value))
 
 (defn- now-inst
   []
@@ -96,8 +100,12 @@
       root)))
 
 (defn- file-eids
-  [db]
-  (map first (d/q '[:find ?e :where [?e :file/id _]] db)))
+  [db workspace]
+  (map first (d/q '[:find ?e
+                    :in $ ?workspace
+                    :where [?e :file/id _]
+                           [?e :file/workspace ?workspace]]
+                  db workspace)))
 
 (defn- pull-file
   [db eid]
@@ -145,33 +153,39 @@
   (entity/resolve-id db :file/id file-id "file id"))
 
 (defn- file-eid-by-id
-  [db file-id]
+  [db file-id workspace]
   (ffirst
-   (d/q '[:find ?e :in $ ?id :where [?e :file/id ?id]] db file-id)))
+   (d/q '[:find ?e
+          :in $ ?id ?workspace
+          :where [?e :file/id ?id]
+                 [?e :file/workspace ?workspace]]
+        db file-id workspace)))
 
 (defn list-files
-  [conn params]
-  (or (ensure-conn conn)
-      (let [{q :value q-err :error} (normalize-string (param-value params :q) "query" {:required false
+  ([conn params] (list-files conn params nil))
+  ([conn params workspace]
+   (or (ensure-conn conn)
+       (let [{q :value q-err :error} (normalize-string (param-value params :q) "query" {:required false
                                                                                         :allow-blank? true})]
-        (if q-err
-          (error 400 q-err)
-          (let [db (d/db conn)
-                items (->> (file-eids db)
-                           (map #(pull-file db %))
-                           (remove nil?)
-                           (map present-file))
-                needle (some-> q str/lower-case str/trim)
-                filtered (if (seq needle)
-                           (filter (fn [f]
-                                     (let [name (some-> (:file/name f) str/lower-case)
-                                           slug (some-> (:file/slug f) str/lower-case)]
-                                       (or (and name (str/includes? name needle))
-                                           (and slug (str/includes? slug needle)))))
-                                   items)
-                           items)
-                sorted (sort-by :file/created-at #(compare %2 %1) filtered)]
-            {:files (vec sorted)})))))
+         (if q-err
+           (error 400 q-err)
+           (let [db (d/db conn)
+                 workspace (workspace-id workspace)
+                 items (->> (file-eids db workspace)
+                            (map #(pull-file db %))
+                            (remove nil?)
+                            (map present-file))
+                 needle (some-> q str/lower-case str/trim)
+                 filtered (if (seq needle)
+                            (filter (fn [f]
+                                      (let [name (some-> (:file/name f) str/lower-case)
+                                            slug (some-> (:file/slug f) str/lower-case)]
+                                        (or (and name (str/includes? name needle))
+                                            (and slug (str/includes? slug needle)))))
+                                    items)
+                            items)
+                 sorted (sort-by :file/created-at #(compare %2 %1) filtered)]
+             {:files (vec sorted)}))))))
 
 (defn- storage-filename
   [file-id filename]
@@ -192,7 +206,8 @@
             mime (:content-type upload)
             tempfile (:tempfile upload)
             size (or (:size upload) (when tempfile (.length ^File tempfile)))
-            ftype (file-type mime)]
+            ftype (file-type mime)
+            workspace (workspace/actor-workspace actor)]
         (cond
           (nil? upload) (error 400 "File is required")
           (nil? tempfile) (error 400 "Upload missing file data")
@@ -224,6 +239,8 @@
                           :file/checksum checksum
                           :file/storage-path storage-name
                           :file/created-at created-at}
+                    base (cond-> base
+                           workspace (assoc :file/workspace workspace))
                     base (entity/with-ref db base)
                     tx-data (cond-> base
                               created-by (assoc :file/created-by [:user/id created-by]))]
@@ -231,7 +248,7 @@
                   (io/copy tempfile (io/file storage-path))
                   (let [tx-res (db/transact! conn {:tx-data [tx-data]})
                         db-after (:db-after tx-res)
-                        eid (file-eid-by-id db-after file-id)
+                        eid (file-eid-by-id db-after file-id workspace)
                         file (present-file (pull-file db-after eid))]
                     {:file file})
                   (catch Exception e
@@ -242,13 +259,14 @@
                     (error 500 "Failed to store file" (.getMessage e)))))))))))
 
 (defn update-file!
-  [conn file-id {:keys [slug ref]} _actor]
+  [conn file-id {:keys [slug ref]} actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
             {id :value id-err :error} (resolve-file-id db file-id)]
         (if id-err
           (error 400 id-err)
-          (let [eid (file-eid-by-id db id)
+          (let [eid (file-eid-by-id db id workspace)
                 file (pull-file db eid)
                 requested (or (reference->slug ref) slug)
                 {slug-val :value slug-err :error} (normalize-string requested "slug" {:required false
@@ -273,13 +291,14 @@
                   (error 500 "Failed to update file")))))))))
 
 (defn delete-file!
-  [conn file-id storage-dir]
+  [conn file-id storage-dir actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
             {id :value id-err :error} (resolve-file-id db file-id)]
         (if id-err
           (error 400 id-err)
-          (let [eid (file-eid-by-id db id)]
+          (let [eid (file-eid-by-id db id workspace)]
             (if-not eid
               (error 404 "File not found")
               (let [{:file/keys [storage-path]} (pull-file db eid)
@@ -300,14 +319,16 @@
                         (error 500 "Failed to delete file"))))))))))))
 
 (defn fetch-file
-  [conn file-id]
-  (or (ensure-conn conn)
-      (let [db (d/db conn)
-            {id :value id-err :error} (resolve-file-id db file-id)]
-        (if id-err
-          (error 400 id-err)
-          (let [eid (file-eid-by-id db id)
-                file (pull-file db eid)]
-            (if file
-              {:file file}
-              (error 404 "File not found")))))))
+  ([conn file-id] (fetch-file conn file-id nil))
+  ([conn file-id workspace]
+   (or (ensure-conn conn)
+       (let [db (d/db conn)
+             workspace (workspace-id workspace)
+             {id :value id-err :error} (resolve-file-id db file-id)]
+         (if id-err
+           (error 400 id-err)
+           (let [eid (file-eid-by-id db id workspace)
+                 file (pull-file db eid)]
+             (if file
+               {:file file}
+               (error 404 "File not found"))))))))

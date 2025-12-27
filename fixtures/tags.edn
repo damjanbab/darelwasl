@@ -1,14 +1,18 @@
 [
  {:tag/id #uuid "30000000-0000-0000-0000-000000000001"
   :entity/type :entity.type/tag
-  :tag/name "Ops"}
+  :tag/name "Ops"
+  :tag/workspace "main"}
  {:tag/id #uuid "30000000-0000-0000-0000-000000000002"
   :entity/type :entity.type/tag
-  :tag/name "Home"}
+  :tag/name "Home"
+  :tag/workspace "main"}
  {:tag/id #uuid "30000000-0000-0000-0000-000000000003"
   :entity/type :entity.type/tag
-  :tag/name "Finance"}
+  :tag/name "Finance"
+  :tag/workspace "main"}
  {:tag/id #uuid "30000000-0000-0000-0000-000000000004"
   :entity/type :entity.type/tag
-  :tag/name "Urgent"}
+  :tag/name "Urgent"
+  :tag/workspace "main"}
 ]

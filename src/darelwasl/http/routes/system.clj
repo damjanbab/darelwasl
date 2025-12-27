@@ -2,7 +2,7 @@
   (:require [clj-http.client :as http]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [datomic.client.api :as d]
+            [darelwasl.actions :as actions]
             [darelwasl.db :as db]
             [darelwasl.http.common :as common]))
 
@@ -31,44 +31,54 @@
     (and (not (str/blank? (str token)))
          (= token provided))))
 
-(defn- datastore-snapshot
-  [state]
-  (let [{:keys [conn error]} (:db state)]
-    (cond
-      error {:error {:status 503
-                     :message "Main datastore unavailable"
-                     :details (.getMessage ^Exception error)}}
-      (nil? conn) {:error {:status 503
-                           :message "Main datastore unavailable"}}
-      :else
-      (try
-        (let [db (d/db conn)
-              basis (:basisT db)
-              tx-inst (reduce (fn [acc [inst]]
-                                (if (or (nil? acc)
-                                        (pos? (.compareTo ^java.util.Date inst acc)))
-                                  inst
-                                  acc))
-                              nil
-                              (d/q '[:find ?inst
-                                     :where [_ :db/txInstant ?inst]]
-                                   db))]
-          {:basis-t basis
-           :tx-inst-ms (when tx-inst (.getTime ^java.util.Date tx-inst))})
-        (catch Exception e
-          {:error {:status 500
-                   :message "Failed to read datastore snapshot"
-                   :details (.getMessage e)}})))))
+(defn- parse-uuid
+  [value]
+  (try
+    (when value
+      (java.util.UUID/fromString (str value)))
+    (catch Exception _
+      nil)))
 
-(defn- datastore-snapshot-handler
+(def ^:private default-admin-actor
+  {:actor/type :actor.type/system
+   :actor/surface :surface/system
+   :actor/adapter :adapter/system})
+
+(defn- normalize-actor
+  [actor]
+  (if (map? actor)
+    (let [raw-id (or (:user/id actor) (get actor "user/id"))
+          user-id (cond
+                    (instance? java.util.UUID raw-id) raw-id
+                    (string? raw-id) (parse-uuid raw-id)
+                    :else nil)]
+      (cond
+        (some? user-id) (assoc actor :user/id user-id)
+        raw-id (dissoc actor :user/id)
+        :else actor))
+    actor))
+
+(defn- system-action-handler
   [state]
   (fn [request]
     (if (terminal-admin-authorized? state request)
-      (let [snapshot (datastore-snapshot state)]
-        (if-let [err (:error snapshot)]
-          (common/error-response (:status err) (:message err) (:details err))
+      (let [raw-id (or (get-in request [:path-params :id])
+                       (get-in request [:path-params "id"]))
+            action-id (actions/parse-action-id (some-> raw-id str))
+            body (or (:body-params request) {})
+            input (or (:input body) (get body "input") body)
+            actor (normalize-actor (or (:actor body) (get body "actor")))
+            actor (if (map? actor) (merge default-admin-actor actor) default-admin-actor)
+            actor (assoc actor :actor/workspace (common/workspace-id request))
+            res (actions/execute! state {:action/id action-id
+                                         :actor actor
+                                         :input input})]
+        (if-let [err (:error res)]
+          (common/error-response (or (:status err) 500)
+                                 (:message err)
+                                 (:details err))
           {:status 200
-           :body {:datomic snapshot}}))
+           :body res}))
       (common/error-response 403 "Admin token required"))))
 
 (defn- restart-handler
@@ -219,8 +229,8 @@
 
 (defn routes
   [state]
-  [["/system/datastore/snapshot"
-    {:get (datastore-snapshot-handler state)}]
+  [["/system/actions/:id"
+    {:post (system-action-handler state)}]
    ["/system"
     {:middleware [common/require-session
                   (common/require-roles #{:role/admin})]}

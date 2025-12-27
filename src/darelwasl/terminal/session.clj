@@ -6,19 +6,14 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [datomic.client.api :as d]
-            [darelwasl.db :as db]
-            [darelwasl.files :as files]
             [darelwasl.terminal.commands :as commands]
-            [darelwasl.terminal.promote :as promote]
             [darelwasl.terminal.store :as store]
             [darelwasl.terminal.tmux :as tmux])
   (:import (java.io RandomAccessFile)
            (java.net InetSocketAddress ServerSocket Socket)
-           (java.nio.file Files Path StandardCopyOption)
-           (java.util Date UUID)))
+           (java.util UUID)))
 
- (defn- now-ms [] (System/currentTimeMillis))
+(defn- now-ms [] (System/currentTimeMillis))
 
 (defn- ensure-dir!
   [path]
@@ -51,170 +46,6 @@
     (let [file (io/file path)]
       (when (.exists file)
         (some-> (slurp file) str/trim (not-empty))))))
-
-(defn- copy-dir!
-  [from to]
-  (let [src (io/file from)
-        dest (io/file to)]
-    (when-not (.exists src)
-      (throw (ex-info "Snapshot source directory missing" {:path (.getPath src)})))
-    (.mkdirs dest)
-    (let [src-path (.toPath src)]
-      (doseq [file (file-seq src)]
-        (let [path (.toPath file)
-              rel (.relativize src-path path)
-              target (.resolve (.toPath dest) rel)]
-          (if (.isDirectory file)
-            (Files/createDirectories target (make-array java.nio.file.attribute.FileAttribute 0))
-            (do
-              (Files/createDirectories (.getParent target) (make-array java.nio.file.attribute.FileAttribute 0))
-              (Files/copy path
-                          target
-                          (into-array StandardCopyOption
-                                      [StandardCopyOption/REPLACE_EXISTING
-                                       StandardCopyOption/COPY_ATTRIBUTES])))))))))
-
-(defn- parse-long-safe
-  [value]
-  (try
-    (when (some? value)
-      (Long/parseLong (str value)))
-    (catch Exception _
-      nil)))
-
-(defn- exception-chain
-  [^Throwable err]
-  (take-while some? (iterate #(.getCause ^Throwable %) err)))
-
-(defn- lock-error?
-  [^Throwable err]
-  (boolean
-   (some (fn [^Throwable e]
-           (when-let [msg (.getMessage e)]
-             (or (str/includes? msg ".lock is in use")
-                 (str/includes? msg "dev-local directory")
-                 (str/includes? (str/lower-case msg) "dev-local"))))
-         (exception-chain err))))
-
-(defn- fetch-main-db-snapshot
-  [cfg]
-  (let [base-url (some-> (:main-app-url cfg) str/trim (str/replace #"/+$" ""))
-        token (:admin-token cfg)]
-    (when (str/blank? base-url)
-      (throw (ex-info "Main app URL missing for snapshot" {:status 500 :message "Main app URL missing"})))
-    (when (str/blank? (str token))
-      (throw (ex-info "Admin token missing for snapshot" {:status 500 :message "Admin token missing"})))
-    (let [resp (http/request {:method :get
-                              :url (str base-url "/api/system/datastore/snapshot")
-                              :throw-exceptions false
-                              :socket-timeout 2000
-                              :conn-timeout 2000
-                              :headers {"Accept" "application/json"
-                                        "X-Terminal-Admin-Token" token}
-                              :as :text})
-          status (:status resp)
-          body (some-> (:body resp)
-                       (not-empty)
-                       (json/read-str :key-fn keyword))
-          datomic (:datomic body)
-          basis-t (parse-long-safe (:basis-t datomic))
-          tx-inst-ms (parse-long-safe (:tx-inst-ms datomic))
-          tx-inst (when tx-inst-ms (Date. tx-inst-ms))]
-      (if (and (= 200 status) basis-t tx-inst)
-        {:basis-t basis-t
-         :tx-inst tx-inst}
-        (throw (ex-info "Failed to fetch main datastore snapshot"
-                        {:status (or status 500)
-                         :message (or (:error body) "Snapshot request failed")
-                         :body body}))))))
-
-(defn- latest-tx-inst
-  [db]
-  (reduce (fn [acc [inst]]
-            (if (or (nil? acc)
-                    (pos? (.compareTo ^java.util.Date inst acc)))
-              inst
-              acc))
-          nil
-          (d/q '[:find ?inst
-                 :where [_ :db/txInstant ?inst]]
-               db)))
-
-(defn- load-main-db-local
-  [cfg]
-  (let [storage-dir (:main-datomic-dir cfg)
-        system (:main-datomic-system cfg)
-        db-name (:main-datomic-db cfg)]
-    (when (or (nil? storage-dir) (nil? system) (nil? db-name))
-      (throw (ex-info "Main Datomic config missing"
-                      {:status 500
-                       :message "Main Datomic config missing"})))
-    (let [client (d/client {:server-type :dev-local
-                            :storage-dir storage-dir
-                            :system system})]
-      (d/create-database client {:db-name db-name})
-      (let [conn (d/connect client {:db-name db-name})
-            db (d/db conn)
-            basis (:basisT db)
-            tx-inst (latest-tx-inst db)]
-        {:client client
-         :conn conn
-         :db db
-         :basis-t basis
-         :tx-inst tx-inst}))))
-
-(defn- load-main-db
-  [cfg]
-  (try
-    (load-main-db-local cfg)
-    (catch Exception e
-      (if (lock-error? e)
-        (do
-          (log/warn e "Main Datomic locked; using app snapshot endpoint")
-          (fetch-main-db-snapshot cfg))
-        (throw e)))))
-
-(defn- write-data-snapshot!
-  [logs-dir snapshot]
-  (spit (io/file logs-dir "data-snapshot.edn") (pr-str snapshot)))
-
-(defn- write-data-promote-state!
-  [logs-dir state]
-  (spit (io/file logs-dir "data-promote.edn") (pr-str state)))
-
-(defn- snapshot-main-data!
-  [cfg session-id datomic-dir files-dir logs-dir]
-  (let [main-datomic-root (:main-datomic-dir cfg)
-        main-files-root (:main-files-dir cfg)]
-    (when (or (nil? main-datomic-root) (nil? main-files-root))
-      (throw (ex-info "Main Datomic/files config missing"
-                      {:status 500
-                       :message "Main Datomic/files config missing"})))
-    (let [main-datomic-dir (ensure-dir! main-datomic-root)
-          main-files-dir (ensure-dir! main-files-root)
-          now (now-ms)
-          {:keys [basis-t tx-inst]} (load-main-db cfg)
-          tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
-          snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
-          snapshot {:version 1
-                    :session/id session-id
-                    :created-at now
-                    :datomic {:storage-dir (.getPath main-datomic-dir)
-                              :system (:main-datomic-system cfg)
-                              :db-name (:main-datomic-db cfg)
-                              :basis-t basis-t
-                              :tx-inst tx-inst}
-                    :files {:storage-dir (.getPath main-files-dir)}
-                    :session {:datomic-dir (.getPath datomic-dir)
-                              :files-dir (.getPath files-dir)
-                              :tx-log tx-log-path
-                              :snapshot snapshot-path}}]
-      (copy-dir! (.getPath main-datomic-dir) (.getPath datomic-dir))
-      (copy-dir! (.getPath main-files-dir) (.getPath files-dir))
-      (write-data-snapshot! logs-dir snapshot)
-      (write-data-promote-state! logs-dir {:applied-lines 0
-                                           :last-promoted-at nil})
-      snapshot)))
 
 (defn- truthy?
   [value]
@@ -323,14 +154,14 @@
            :site (inc port)}
           (recur (+ port 2)))))))
 
- (defn- run!
-   [args & [{:keys [dir]}]]
-   (let [{:keys [exit out err]} (apply sh/sh (cond-> args dir (concat [:dir dir])))]
-     (when-not (zero? exit)
-       (throw (ex-info "Command failed" {:args args :exit exit :err err})))
-     (when (seq err)
-       (log/debug "Command stderr" {:args args :err err}))
-     out))
+(defn- run!
+  [args & [{:keys [dir]}]]
+  (let [{:keys [exit out err]} (apply sh/sh (cond-> args dir (concat [:dir dir])))]
+    (when-not (zero? exit)
+      (throw (ex-info "Command failed" {:args args :exit exit :err err})))
+    (when (seq err)
+      (log/debug "Command stderr" {:args args :err err}))
+    out))
 
 (def ^:private ignored-porcelain-files
   #{"AGENTS.md"})
@@ -888,7 +719,6 @@
       (.mkdirs datomic-dir)
       (.mkdirs files-dir)
       (.mkdirs logs-dir)
-      (snapshot-main-data! cfg id datomic-dir files-dir logs-dir)
       (write-manifest! logs-dir {:id id
                                  :name session-name
                                  :type session-type
@@ -903,17 +733,13 @@
       (write-agents! repo-dir session-type)
       (when github-token
         (write-askpass! askpass-file github-token))
-      (let [tx-log-path (.getPath (io/file logs-dir "data-tx-log.edn"))
-            snapshot-path (.getPath (io/file logs-dir "data-snapshot.edn"))
-            base-env {"APP_HOST" "0.0.0.0"
+      (let [base-env {"APP_HOST" "0.0.0.0"
                       "APP_PORT" (:app ports)
                       "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
                       "DATOMIC_SYSTEM" datomic-system
                       "DATOMIC_DB_NAME" datomic-db
                       "FILES_STORAGE_DIR" (.getPath files-dir)
                       "ALLOW_FIXTURE_SEED" "false"
-                      "SESSION_TX_LOG_PATH" tx-log-path
-                      "SESSION_SNAPSHOT_PATH" snapshot-path
                       "TERMINAL_SESSION_ID" id
                       "TERMINAL_LOG_DIR" (.getPath logs-dir)
                       "TERMINAL_API_URL" (:base-url cfg)
@@ -1067,105 +893,26 @@
            :message message
            :details details}})
 
-(defn- session-db-state
-  [session]
-  (let [storage-dir (:datomic-dir session)
-        system (or (:datomic-system session) "darelwasl")
-        db-name (or (:datomic-db session) "darelwasl")]
-    (when (str/blank? (str storage-dir))
-      (throw (ex-info "Session Datomic storage missing" {:status 400 :message "Session Datomic storage missing"})))
-    (db/connect! {:storage-dir storage-dir
-                  :system system
-                  :db-name db-name})))
-
-(defn- storage-filename
-  [file-id filename]
-  (let [ext (when (and (string? filename) (str/includes? filename "."))
-              (some-> filename
-                      (str/split #"\.")
-                      last
-                      str/trim))]
-    (if (and ext (not (str/blank? ext)))
-      (str file-id "." ext)
-      (str file-id))))
-
-(defn- append-session-tx!
-  [logs-dir session-id tx-data]
-  (let [file (io/file logs-dir "data-tx-log.edn")
-        entry {:session/id session-id
-               :tx/inst (java.util.Date.)
-               :tx-data [tx-data]}]
-    (.mkdirs (.getParentFile file))
-    (spit file (str (pr-str entry) "\n") :append true)))
-
-(defn- file-meta
-  [conn file-id]
-  (let [db (d/db conn)
-        eid (ffirst (d/q '[:find ?e :in $ ?id :where [?e :file/id ?id]] db file-id))]
-    (when eid
-      (d/pull db [:entity/ref :file/storage-path] eid))))
-
-(defn- library-add!
-  [state session command actor]
+(defn- resolve-upload-path
+  [session command]
   (let [input (:input command)
         raw-path (or (:path input) (get input "path"))
         path (when raw-path (str raw-path))
-        slug (:slug input)
-        repo-dir (:repo-dir session)
-        logs-dir (:logs-dir session)
-        files-dir (:files-dir session)]
-    (cond
-      (str/blank? path) (command-error 400 "library.add requires path")
-      (nil? repo-dir) (command-error 500 "Session repo directory missing")
-      (nil? logs-dir) (command-error 500 "Session logs directory missing")
-      (nil? files-dir) (command-error 500 "Session files directory missing")
-      :else
+        repo-dir (:repo-dir session)]
+    (if (and path repo-dir)
       (let [file (io/file path)
             file (if (.isAbsolute file) file (io/file repo-dir path))]
-        (cond
-          (not (.exists file)) (command-error 400 "library.add path not found")
-          (not (.isFile file)) (command-error 400 "library.add path must be a file")
-          :else
-          (let [{:keys [conn error]} (session-db-state session)]
-            (if error
-              (command-error 500 "Session database unavailable")
-              (let [mime (try
-                           (Files/probeContentType (.toPath file))
-                           (catch Exception _ nil))
-                    upload {:filename (.getName file)
-                            :content-type mime
-                            :tempfile file
-                            :size (.length file)}
-                    res (files/create-file! conn {:file upload
-                                                  :slug slug} actor files-dir)]
-                (if-let [err (:error res)]
-                  {:error err}
-                  (let [file-data (:file res)
-                        file-id (:file/id file-data)
-                        meta (file-meta conn file-id)
-                        storage-path (or (:file/storage-path meta)
-                                         (storage-filename file-id (:file/name file-data)))
-                        entity-ref (:entity/ref meta)
-                        created-by (some-> actor :user/id)
-                        tx-data (cond-> {:file/id file-id
-                                         :entity/type :entity.type/file
-                                         :file/name (:file/name file-data)
-                                         :file/slug (:file/slug file-data)
-                                         :file/type (:file/type file-data)
-                                         :file/mime (:file/mime file-data)
-                                         :file/size-bytes (:file/size-bytes file-data)
-                                         :file/checksum (:file/checksum file-data)
-                                         :file/storage-path storage-path
-                                         :file/created-at (:file/created-at file-data)}
-                                  entity-ref (assoc :entity/ref entity-ref)
-                                  created-by (assoc :file/created-by [:user/id created-by]))
-                        _ (append-session-tx! logs-dir (:id session) tx-data)
-                        promote-res (promote/promote-session-data! state (:id session) logs-dir)
-                        promote-msg (or (:message promote-res) "Session data promoted")
-                        message (str "Library add: " (:file/name file-data) ". " promote-msg)]
-                    {:message message
-                     :result {:file file-data
-                              :promotion promote-res}}))))))))))
+        (assoc-in command [:input :path] (.getPath file)))
+      command)))
+
+(defn- normalize-command
+  [command]
+  (let [command-type (normalize-command-type (:type command))]
+    (if (= command-type "library.add")
+      (-> command
+          (assoc :type "file.upload")
+          (update :input #(or % {})))
+      command)))
 
 (defn- normalize-command-type
   [value]
@@ -1181,11 +928,13 @@
         claim (claim-command! store session command-id)]
     (case (:status claim)
       :claimed
-      (let [command-type (normalize-command-type (:type command))
+      (let [command (normalize-command command)
+            command-type (normalize-command-type (:type command))
+            command (if (= command-type "file.upload")
+                      (resolve-upload-path session command)
+                      command)
             result (try
-                     (if (= command-type "library.add")
-                       (library-add! state session command actor)
-                       (commands/execute-command! state (:id session) command actor))
+                     (commands/execute-command! state (:id session) command actor)
                      (catch Exception e
                        (log/warn e "Failed to execute terminal command" {:id command-id})
                        (command-error 500 "Command execution failed" (.getMessage e))))

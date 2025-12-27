@@ -4,7 +4,8 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.db :as db]
-            [darelwasl.entity :as entity])
+            [darelwasl.entity :as entity]
+            [darelwasl.workspace :as workspace])
   (:import (java.io PushbackReader)))
 
 (def default-registry-path "registries/schema.edn")
@@ -126,6 +127,41 @@
       {:status :ok :added (count tx-data)})
     (catch Exception e
       (log/error e "Failed to backfill :entity/ref")
+      {:error e})))
+
+(defn backfill-workspaces!
+  "Backfill workspace attributes for existing entities missing them."
+  [conn]
+  (try
+    (let [db (d/db conn)
+          ws (workspace/default-id)
+          task-eids (map first (d/q '[:find ?e
+                                      :where [?e :task/id _]
+                                             (not [?e :fact/workspace _])]
+                                    db))
+          tag-eids (map first (d/q '[:find ?e
+                                     :where [?e :tag/id _]
+                                            (not [?e :tag/workspace _])]
+                                   db))
+          file-eids (map first (d/q '[:find ?e
+                                      :where [?e :file/id _]
+                                             (not [?e :file/workspace _])]
+                                    db))
+          note-eids (map first (d/q '[:find ?e
+                                      :where [?e :note/id _]
+                                             (not [?e :note/workspace _])]
+                                    db))
+          tx-data (->> (concat (map (fn [e] [:db/add e :fact/workspace ws]) task-eids)
+                               (map (fn [e] [:db/add e :tag/workspace ws]) tag-eids)
+                               (map (fn [e] [:db/add e :file/workspace ws]) file-eids)
+                               (map (fn [e] [:db/add e :note/workspace ws]) note-eids))
+                       vec)]
+      (when (seq tx-data)
+        (db/transact! conn {:tx-data tx-data})
+        (log/infof "Backfilled workspace on %s entities" (count tx-data)))
+      {:status :ok :added (count tx-data)})
+    (catch Exception e
+      (log/error e "Failed to backfill workspace attributes")
       {:error e})))
 
 (defn temp-db-with-schema!

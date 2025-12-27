@@ -18,7 +18,8 @@
   (fn [request]
     (common/handle-task-result
      (files/list-files (get-in state [:db :conn])
-                       (:query-params request)))))
+                       (:query-params request)
+                       (common/workspace-id request)))))
 
 (defn upload-file-handler
   [state]
@@ -26,8 +27,9 @@
     (let [params (merge (:params request) (:multipart-params request))
           upload (or (get params "file") (get params :file))
           slug (or (get params "slug") (get params :slug))
+          workspace (common/workspace-id request)
           res (actions/execute! state {:action/id :cap/action/file-upload
-                                       :actor (actions/actor-from-session (:auth/session request))
+                                       :actor (actions/actor-from-session (:auth/session request) workspace)
                                        :input {:file/upload upload
                                                :file/slug slug
                                                :storage-dir (storage-dir state)}})
@@ -37,9 +39,10 @@
 (defn delete-file-handler
   [state]
   (fn [request]
-    (let [file-id (common/task-id-param request)
+    (let [workspace (common/workspace-id request)
+          file-id (common/task-id-param request)
           res (actions/execute! state {:action/id :cap/action/file-delete
-                                       :actor (actions/actor-from-session (:auth/session request))
+                                       :actor (actions/actor-from-session (:auth/session request) workspace)
                                        :input {:file/id file-id
                                                :storage-dir (storage-dir state)}})
           payload (if (:error res) {:error (:error res)} (:result res))]
@@ -48,10 +51,11 @@
 (defn update-file-handler
   [state]
   (fn [request]
-    (let [file-id (common/task-id-param request)
+    (let [workspace (common/workspace-id request)
+          file-id (common/task-id-param request)
           body (or (:body-params request) {})
           res (actions/execute! state {:action/id :cap/action/file-update
-                                       :actor (actions/actor-from-session (:auth/session request))
+                                       :actor (actions/actor-from-session (:auth/session request) workspace)
                                        :input (assoc body :file/id file-id)})
           payload (if (:error res) {:error (:error res)} (:result res))]
       (common/handle-task-result payload))))
@@ -60,7 +64,9 @@
   [state]
   (fn [request]
     (let [file-id (common/task-id-param request)
-          res (files/fetch-file (get-in state [:db :conn]) file-id)]
+          res (files/fetch-file (get-in state [:db :conn])
+                                file-id
+                                (common/workspace-id request))]
       (if-let [err (:error res)]
         (common/error-response (or (:status err) 500)
                                (:message err)

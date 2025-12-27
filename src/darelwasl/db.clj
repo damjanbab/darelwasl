@@ -1,7 +1,5 @@
 (ns darelwasl.db
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [datomic.client.api :as d])
   (:import (java.util UUID)))
 
@@ -80,30 +78,7 @@
     :else {:status :error
            :message "No Datomic connection"}))
 
-(defn- session-tx-log-path
-  []
-  (let [raw (or (System/getenv "SESSION_TX_LOG_PATH")
-                (System/getenv "TERMINAL_SESSION_TX_LOG_PATH"))]
-    (when-not (str/blank? (str raw))
-      raw)))
-
-(defn- append-tx-log!
-  [path entry]
-  (when (and path entry)
-    (let [file (io/file path)
-          parent (.getParentFile file)]
-      (when parent
-        (.mkdirs parent))
-      (spit file (str (pr-str entry) "\n") :append true))))
-
 (defn transact!
-  "Wrapper around datomic transact that optionally logs tx-data for session promotion."
+  "Wrapper around datomic transact."
   [conn tx]
-  (let [tx-data (:tx-data tx)
-        log-path (session-tx-log-path)
-        session-id (System/getenv "TERMINAL_SESSION_ID")]
-    (when (and log-path (seq tx-data))
-      (append-tx-log! log-path {:session/id session-id
-                                :tx/inst (java.util.Date.)
-                                :tx-data tx-data}))
-    (d/transact conn tx)))
+  (d/transact conn tx))

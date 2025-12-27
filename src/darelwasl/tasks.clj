@@ -7,7 +7,8 @@
             [darelwasl.entity :as entity]
             [darelwasl.provenance :as prov]
             [darelwasl.schema :as schema]
-            [darelwasl.validation :as v])
+            [darelwasl.validation :as v]
+            [darelwasl.workspace :as workspace])
   (:import (java.time Instant)
            (java.time.format DateTimeFormatter)
            (java.util Date UUID)))
@@ -39,6 +40,10 @@
 
 (def ^:private default-list-limit 25)
 (def ^:private max-list-limit 200)
+
+(defn- workspace-id
+  [value]
+  (workspace/resolve-id value))
 
 (def ^:private pull-pattern
   [:task/id
@@ -74,7 +79,7 @@
   (Date/from (Instant/now)))
 
 (defn- pending-note-tx
-  [db task-id reason actor]
+  [db task-id reason actor workspace-id]
   (let [author-id (:user/id actor)
         base {:note/id (UUID/randomUUID)
               :entity/type :entity.type/note
@@ -84,10 +89,11 @@
               :note/created-at (now-inst)}
         base (entity/with-ref db base)]
     (cond-> base
+      workspace-id (assoc :note/workspace workspace-id)
       author-id (assoc :note/author [:user/id author-id]))))
 
 (defn- comment-note-tx
-  [task-id body note-type actor]
+  [task-id body note-type actor workspace-id]
   (let [author-id (:user/id actor)]
     (cond-> {:note/id (UUID/randomUUID)
              :entity/type :entity.type/note
@@ -95,6 +101,7 @@
              :note/type note-type
              :note/subject [:task/id task-id]
              :note/created-at (now-inst)}
+      workspace-id (assoc :note/workspace workspace-id)
       author-id (assoc :note/author [:user/id author-id]))))
 
 (defn- latest-comment-note
@@ -129,18 +136,19 @@
       :else {:error (str "Invalid " label)})))
 
 (defn- tag-by-id
-  [db tag-id]
+  [db tag-id workspace-id]
   (when tag-id
     (-> (d/q '[:find (pull ?t [:tag/id :tag/name])
-               :in $ ?id
-               :where [?t :tag/id ?id]]
-             db tag-id)
+               :in $ ?id ?workspace
+               :where [?t :tag/id ?id]
+                      [?t :tag/workspace ?workspace]]
+             db tag-id workspace-id)
         ffirst)))
 
 (defn- ensure-tags-exist
-  [db tag-ids]
+  [db tag-ids workspace-id]
   (let [tags (->> tag-ids
-                  (map (fn [id] [id (tag-by-id db id)]))
+                  (map (fn [id] [id (tag-by-id db id workspace-id)]))
                   (into {}))
         missing (->> tags (keep (fn [[id tag]] (when-not tag id))) seq)]
     (cond
@@ -149,8 +157,8 @@
              :tag-ids tag-ids})))
 
 (defn- normalize-tags
-  ([db value] (normalize-tags db value {:default-on-nil #{}}))
-  ([db value {:keys [default-on-nil]}]
+  ([db value workspace-id] (normalize-tags db value workspace-id {:default-on-nil #{}}))
+  ([db value workspace-id {:keys [default-on-nil]}]
    (cond
      (nil? value) {:value default-on-nil :tags []}
      :else
@@ -174,7 +182,7 @@
          (= raw ::invalid) {:error "Tags must be provided as a collection"}
          (nil? tag-ids) {:value default-on-nil :tags []}
          :else
-         (let [{:keys [error tags]} (ensure-tags-exist db tag-ids)]
+         (let [{:keys [error tags]} (ensure-tags-exist db tag-ids workspace-id)]
            (if error
              {:error error}
              {:value tag-ids
@@ -194,20 +202,24 @@
   (entity/resolve-id db :task/id task-id "task id"))
 
 (defn- task-eid
-  [db task-id]
+  [db task-id workspace-id]
   (when task-id
     (let [{tid :value} (resolve-task-id db task-id)]
       (when tid
-        (ffirst (d/q '[:find ?e :in $ ?id :where [?e :task/id ?id]]
-                     db tid))))))
+        (ffirst (d/q '[:find ?e
+                       :in $ ?id ?workspace
+                       :where [?e :task/id ?id]
+                              [?e :fact/workspace ?workspace]]
+                     db tid workspace-id))))))
 
 (defn- task-eid-by-automation-key
-  [db automation-key]
+  [db automation-key workspace-id]
   (when (and (string? automation-key) (not (str/blank? (str/trim automation-key))))
     (ffirst (d/q '[:find ?e
-                   :in $ ?k
-                   :where [?e :task/automation-key ?k]]
-                 db (str/trim automation-key)))))
+                   :in $ ?k ?workspace
+                   :where [?e :task/automation-key ?k]
+                          [?e :fact/workspace ?workspace]]
+                 db (str/trim automation-key) workspace-id))))
 
 (defn- updated-at
   [db eid]
@@ -248,14 +260,21 @@
                                       vec))))))))
 
 (defn- existing-tag-by-name
-  [db tag-name]
-  (let [lname (-> tag-name str/trim str/lower-case)]
+  [db tag-name workspace-id]
+  (let [lname (-> tag-name str/trim str/lower-case)
+        query (if workspace-id
+                '[:find (pull ?t [:tag/id :tag/name :tag/workspace])
+                  :in $ ?workspace
+                  :where [?t :tag/name _]
+                         [?t :tag/workspace ?workspace]]
+                '[:find (pull ?t [:tag/id :tag/name :tag/workspace])
+                  :where [?t :tag/name _]])
+        args (cond-> [db]
+               workspace-id (conj workspace-id))]
     (some (fn [[tag]]
             (when (= lname (-> (:tag/name tag) str/lower-case))
               tag))
-          (d/q '[:find (pull ?t [:tag/id :tag/name])
-                 :where [?t :tag/name _]]
-               db))))
+          (d/q {:query query :args args}))))
 
 (defn- tag-name-field
   [name]
@@ -378,24 +397,26 @@
     tasks))
 
 (defn- task-eids-by-filters
-  [db {:keys [status priority assignee tag archived]}]
+  [db {:keys [status priority assignee tag archived]} workspace-id]
   (let [archived-filter (case archived
                           :all :all
                           true true
                           false)
-        where (cond-> ['[?e :entity/type :entity.type/task]]
+        where (cond-> ['[?e :entity/type :entity.type/task]
+                       '[?e :fact/workspace ?workspace]]
                 status (conj ['?e :task/status '?status])
                 priority (conj ['?e :task/priority '?priority])
                 assignee (-> (conj ['?e :task/assignee '?assignee-entity])
                              (conj ['?assignee-entity :user/id '?assignee-id]))
                 tag (-> (conj ['?e :task/tags '?tag-entity])
-                        (conj ['?tag-entity :tag/id '?tag-id])))
-        in (cond-> ['$]
+                        (conj ['?tag-entity :tag/id '?tag-id])
+                        (conj ['?tag-entity :tag/workspace '?workspace])))
+        in (cond-> ['$ '?workspace]
              status (conj '?status)
              priority (conj '?priority)
              assignee (conj '?assignee-id)
              tag (conj '?tag-id))
-        args (cond-> [db]
+        args (cond-> [db workspace-id]
                status (conj status)
                priority (conj priority)
                assignee (conj assignee)
@@ -417,89 +438,100 @@
 
 (defn recent-tasks
   "Return up to `limit` recent tasks sorted by updated-at desc, optional include-archived?."
-  [conn {:keys [limit include-archived?]}]
-  (or (ensure-conn conn)
-      (try
-        (let [db (d/db conn)
-              eids (entity/eids-by-type db :entity.type/task)
-              tasks (->> eids
-                         (map #(pull-task db %))
-                         (remove nil?)
-                         (filter #(or include-archived?
-                                      (not (:task/archived? %))))
-                         (sort-tasks {:sort :updated :order :desc})
-                         (take (or limit 5))
-                         (map present-task)
-                         (remove nil?)
-                         vec)]
-          {:tasks tasks})
-        (catch Exception e
-          (log/error e "Failed to compute recent tasks")
-          {:error {:status 500
-                   :message "Unable to fetch recent tasks"}}))))
+  ([conn params] (recent-tasks conn params nil))
+  ([conn {:keys [limit include-archived?]} workspace]
+   (or (ensure-conn conn)
+       (try
+         (let [db (d/db conn)
+               workspace (workspace-id workspace)
+               eids (entity/eids-by-type db :entity.type/task)
+               tasks (->> eids
+                          (map #(pull-task db %))
+                          (remove nil?)
+                          (filter #(= workspace (:fact/workspace %)))
+                          (filter #(or include-archived?
+                                       (not (:task/archived? %))))
+                          (sort-tasks {:sort :updated :order :desc})
+                          (take (or limit 5))
+                          (map present-task)
+                          (remove nil?)
+                          vec)]
+           {:tasks tasks})
+         (catch Exception e
+           (log/error e "Failed to compute recent tasks")
+           {:error {:status 500
+                    :message "Unable to fetch recent tasks"}})))))
 
 (defn task-status-counts
   "Return counts of tasks by status (optionally excluding archived unless include-archived?)."
-  [conn {:keys [include-archived?]}]
-  (or (ensure-conn conn)
-      (let [db (d/db conn)
-            eids (entity/eids-by-type db :entity.type/task)
-            counts (->> eids
-                        (map #(pull-task db %))
-                        (remove nil?)
-                        (filter #(or include-archived?
-                                     (not (:task/archived? %))))
-                        (map :task/status)
-                        (frequencies))]
-        {:counts {:todo (get counts :todo 0)
-                  :in-progress (get counts :in-progress 0)
-                  :pending (get counts :pending 0)
-                  :done (get counts :done 0)}})))
+  ([conn params] (task-status-counts conn params nil))
+  ([conn {:keys [include-archived?]} workspace]
+   (or (ensure-conn conn)
+       (let [db (d/db conn)
+             workspace (workspace-id workspace)
+             eids (entity/eids-by-type db :entity.type/task)
+             counts (->> eids
+                         (map #(pull-task db %))
+                         (remove nil?)
+                         (filter #(= workspace (:fact/workspace %)))
+                         (filter #(or include-archived?
+                                      (not (:task/archived? %))))
+                         (map :task/status)
+                         (frequencies))]
+         {:counts {:todo (get counts :todo 0)
+                   :in-progress (get counts :in-progress 0)
+                   :pending (get counts :pending 0)
+                   :done (get counts :done 0)}}))))
 
 (defn list-tasks
   "List tasks with optional filters and sort/order parameters."
-  [conn params]
-  (or (ensure-conn conn)
-      (let [{:keys [filters error limit offset]} (normalize-list-params params)]
-        (if error
-          {:error error}
-          (let [db (d/db conn)
-                eids (task-eids-by-filters db filters)
-                tasks (->> eids
-                           (map #(pull-task db %))
-                           (remove nil?))
-                sorted (sort-tasks tasks filters)
-                total (count sorted)
-                bounded-offset (min offset (max 0 (- total limit)))
-                paged (->> sorted
-                           (drop bounded-offset)
-                           (take limit)
-                           (map present-task)
-                           vec)]
-            {:tasks paged
-             :pagination {:total total
-                          :limit limit
-                          :offset bounded-offset
-                          :page (inc (quot bounded-offset limit))
-                          :returned (count paged)}})))))
+  ([conn params] (list-tasks conn params nil))
+  ([conn params workspace]
+   (or (ensure-conn conn)
+       (let [{:keys [filters error limit offset]} (normalize-list-params params)]
+         (if error
+           {:error error}
+           (let [db (d/db conn)
+                 workspace (workspace-id workspace)
+                 eids (task-eids-by-filters db filters workspace)
+                 tasks (->> eids
+                            (map #(pull-task db %))
+                            (remove nil?))
+                 sorted (sort-tasks tasks filters)
+                 total (count sorted)
+                 bounded-offset (min offset (max 0 (- total limit)))
+                 paged (->> sorted
+                            (drop bounded-offset)
+                            (take limit)
+                            (map present-task)
+                            vec)]
+             {:tasks paged
+              :pagination {:total total
+                           :limit limit
+                           :offset bounded-offset
+                           :page (inc (quot bounded-offset limit))
+                           :returned (count paged)}}))))))
 
 (defn fetch-task
   "Fetch a single task by UUID or :entity/ref."
-  [conn task-id]
-  (or (ensure-conn conn)
-      (let [db (d/db conn)
-            {tid :value id-err :error} (resolve-task-id db task-id)]
-        (cond
-          id-err (error 400 id-err)
-          (nil? tid) (error 400 "Task id is required")
-          :else
-          (let [eid (ffirst (d/q '[:find ?e
-                                   :in $ ?id
-                                   :where [?e :task/id ?id]]
-                                 db tid))]
-            (if-not eid
-              (error 404 "Task not found")
-              {:task (present-task (pull-task db eid))}))))))
+  ([conn task-id] (fetch-task conn task-id nil))
+  ([conn task-id workspace]
+   (or (ensure-conn conn)
+       (let [db (d/db conn)
+             workspace (workspace-id workspace)
+             {tid :value id-err :error} (resolve-task-id db task-id)]
+         (cond
+           id-err (error 400 id-err)
+           (nil? tid) (error 400 "Task id is required")
+           :else
+           (let [eid (ffirst (d/q '[:find ?e
+                                    :in $ ?id ?workspace
+                                    :where [?e :task/id ?id]
+                                           [?e :fact/workspace ?workspace]]
+                                  db tid workspace))]
+             (if-not eid
+               (error 404 "Task not found")
+               {:task (present-task (pull-task db eid))})))))))
 
 (defn- validate-assignee!
   [db assignee-id]
@@ -511,7 +543,7 @@
       (error 400 "Assignee not found"))))
 
 (defn- validate-create
-  [db body]
+  [db body workspace]
   (let [{title :value title-err :error} (normalize-string-field (param-value body :task/title) "Title" {:required true
                                                                                                          :allow-blank? false})
         {desc :value desc-err :error} (normalize-string-field (param-value body :task/description) "Description" {:required true
@@ -525,7 +557,7 @@
                                                                            {:required pending?
                                                                             :allow-blank? false})
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
-        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil #{}})
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) workspace {:default-on-nil #{}})
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")
         {archived? :value archived-err :error} (normalize-boolean (param-value body :task/archived?) "archived" {:default false})
         {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default false})
@@ -579,14 +611,14 @@
             (map (fn [tag-id] [:db/retract [:task/id task-id] :task/tags [:tag/id tag-id]]) to-retract))))
 
 (defn- validate-update
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {title :value title-err :error} (normalize-string-field (param-value body :task/title) "Title" {:required false
                                                                                                          :allow-blank? false})
         {desc :value desc-err :error} (normalize-string-field (param-value body :task/description) "Description" {:required false
                                                                                                                    :allow-blank? true})
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
-        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil nil})
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) workspace {:default-on-nil nil})
         {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default nil})]
     (cond
       id-err (error 400 id-err)
@@ -598,7 +630,7 @@
       (and (nil? title) (nil? desc) (nil? priority) (nil? value) (nil? extended?))
       (error 400 "No fields provided to update")
       :else
-      (if-let [eid (task-eid db task-id)]
+      (if-let [eid (task-eid db task-id workspace)]
         {:eid eid
          :task-id task-id
          :updates (cond-> {:task/id task-id}
@@ -610,7 +642,7 @@
         (error 404 "Task not found")))))
 
 (defn- validate-simple-status
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {status :value status-err :error} (normalize-enum (param-value body :task/status) @allowed-statuses "status")
         pending? (= status :pending)
@@ -625,7 +657,7 @@
       status-err (error 400 status-err)
       pending-err (error 400 pending-err)
       :else
-      (if (task-eid db task-id)
+      (if (task-eid db task-id workspace)
         {:task-id task-id
          :updates {:task/id task-id
                    :task/status status}
@@ -633,7 +665,7 @@
         (error 404 "Task not found")))))
 
 (defn- validate-assignee-update
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")]
     (cond
@@ -643,42 +675,42 @@
       (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
         (cond
           assignee-error {:error assignee-error}
-          (not (task-eid db task-id)) (error 404 "Task not found")
+          (not (task-eid db task-id workspace)) (error 404 "Task not found")
           :else {:task-id task-id
                  :updates {:task/id task-id
                            :task/assignee [:user/id (:user/id assignee)]}})))))
 
 (defn- validate-due-date-update
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")]
     (cond
       id-err (error 400 id-err)
       due-err (error 400 due-err)
       :else
-      (if-let [eid (task-eid db task-id)]
+      (if-let [eid (task-eid db task-id workspace)]
         {:task-id task-id
          :eid eid
          :due-date due-date}
         (error 404 "Task not found")))))
 
 (defn- validate-tags-update
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
-        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) {:default-on-nil nil})]
+        {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) workspace {:default-on-nil nil})]
     (cond
       id-err (error 400 id-err)
       (:error tags-result) (error 400 (:error tags-result))
       (nil? value) (error 400 "Tags are required")
       :else
-      (if-let [eid (task-eid db task-id)]
+      (if-let [eid (task-eid db task-id workspace)]
         {:task-id task-id
          :eid eid
          :tags value}
         (error 404 "Task not found")))))
 
 (defn- validate-archive-update
-  [db task-id body]
+  [db task-id body workspace]
   (let [{task-id :value id-err :error} (resolve-task-id db task-id)
         {archived? :value archived-err :error} (normalize-boolean (param-value body :task/archived?) "archived" {:default nil})]
     (cond
@@ -686,14 +718,14 @@
       archived-err (error 400 archived-err)
       (nil? archived?) (error 400 "Archived flag is required")
       :else
-      (if (task-eid db task-id)
+      (if (task-eid db task-id workspace)
         {:task-id task-id
          :updates {:task/id task-id
                    :task/archived? archived?}}
         (error 404 "Task not found")))))
 
 (defn- validate-add-note
-  [db body]
+  [db body workspace]
   (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
         {note-body :value body-err :error} (normalize-string-field (param-value body :note/body)
                                                                    "Note"
@@ -705,13 +737,13 @@
       id-err (error 400 id-err)
       body-err (error 400 body-err)
       type-err (error 400 type-err)
-      (not (task-eid db task-id)) (error 404 "Task not found")
+      (not (task-eid db task-id workspace)) (error 404 "Task not found")
       :else {:task-id task-id
              :note-body note-body
              :note-type note-type})))
 
 (defn- validate-edit-note
-  [db body actor]
+  [db body actor workspace]
   (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
         {note-body :value body-err :error} (normalize-string-field (param-value body :note/body)
                                                                    "Note"
@@ -722,19 +754,19 @@
       id-err (error 400 id-err)
       body-err (error 400 body-err)
       (nil? author-id) (error 400 "Note edits require an authenticated user")
-      (not (task-eid db task-id)) (error 404 "Task not found")
+      (not (task-eid db task-id workspace)) (error 404 "Task not found")
       :else {:task-id task-id
              :note-body note-body
              :author-id author-id})))
 
 (defn- validate-delete-note
-  [db body actor]
+  [db body actor workspace]
   (let [{task-id :value id-err :error} (normalize-uuid (param-value body :task/id) "task id")
         author-id (:user/id actor)]
     (cond
       id-err (error 400 id-err)
       (nil? author-id) (error 400 "Note deletions require an authenticated user")
-      (not (task-eid db task-id)) (error 404 "Task not found")
+      (not (task-eid db task-id workspace)) (error 404 "Task not found")
       :else {:task-id task-id
              :author-id author-id})))
 
@@ -742,11 +774,12 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            {:keys [data pending-reason error]} (validate-create db body)]
+            workspace (workspace/actor-workspace actor)
+            {:keys [data pending-reason error]} (validate-create db body workspace)]
         (if error
           {:error error}
           (let [automation-key (:task/automation-key data)
-                existing-eid (when automation-key (task-eid-by-automation-key db automation-key))]
+                existing-eid (when automation-key (task-eid-by-automation-key db automation-key workspace))]
             (if existing-eid
               (if-let [existing (some-> (pull-task db existing-eid) present-task)]
                 (do
@@ -763,13 +796,13 @@
                                        (assoc :task/pending-reason pending-reason))
                     note-tx (when (and (= :pending (:task/status data))
                                        (not (str/blank? pending-reason)))
-                              (pending-note-tx db (:task/id data) pending-reason actor))
+                              (pending-note-tx db (:task/id data) pending-reason actor workspace))
                     tx-data (cond-> [(prov/enrich-tx data-with-reason tx-prov)]
                               note-tx (conj (prov/enrich-tx note-tx tx-prov)))
                     tx-result (attempt-transact conn tx-data "create task")]
                 (if-let [tx-error (:error tx-result)]
                   (let [db-now (d/db conn)
-                        eid (when automation-key (task-eid-by-automation-key db-now automation-key))
+                        eid (when automation-key (task-eid-by-automation-key db-now automation-key workspace))
                         task (when eid (some-> (pull-task db-now eid) present-task))]
                     (if task
                       (do
@@ -780,7 +813,7 @@
                         {:task task})
                       {:error tx-error}))
                   (let [db-after (:db-after tx-result)
-                        created-eid (task-eid db-after (:task/id data))
+                        created-eid (task-eid db-after (:task/id data) workspace)
                         task (when created-eid
                                (some-> (pull-task db-after created-eid) present-task))]
                     (if task
@@ -796,7 +829,8 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-update db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-update db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [eid task-id updates tags]} result
@@ -806,7 +840,7 @@
                 tx-prov (prov/provenance actor)
                 tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -823,16 +857,17 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-simple-status db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-simple-status db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id updates pending-reason]} result
-                current (when-let [eid (task-eid db task-id)]
+                current (when-let [eid (task-eid db task-id workspace)]
                           (pull-task db eid))
                 tx-prov (prov/provenance actor)
                 note-tx (when (and (= :pending (:task/status updates))
                                    (not (str/blank? pending-reason)))
-                          (pending-note-tx db task-id pending-reason actor))
+                          (pending-note-tx db task-id pending-reason actor workspace))
                 retract-pending (when (and (not= (:task/status updates) :pending)
                                            (some? (:task/pending-reason current)))
                                   [:db/retract [:task/id task-id] :task/pending-reason (:task/pending-reason current)])
@@ -845,7 +880,7 @@
                           retract-pending (conj retract-pending))
                 tx-result (attempt-transact conn tx-data "set task status")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -862,14 +897,15 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-assignee-update db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-assignee-update db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [updates task-id]} result
                 tx-prov (prov/provenance actor)
                 tx-result (attempt-transact conn [(prov/enrich-tx updates tx-prov)] "assign task")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -886,7 +922,8 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-due-date-update db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-due-date-update db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id due-date eid]} result
@@ -899,7 +936,7 @@
                 tx-prov (prov/provenance actor)
                 tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task due date")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -915,7 +952,8 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-tags-update db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-tags-update db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [eid task-id tags]} result
@@ -924,7 +962,7 @@
                 tx-prov (prov/provenance actor)
                 tx-result (attempt-transact conn (map #(prov/enrich-tx % tx-prov) tx-data) "update task tags")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -941,14 +979,15 @@
   [conn task-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-archive-update db task-id body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-archive-update db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [updates task-id]} result
                 tx-prov (prov/provenance actor)
                 tx-result (attempt-transact conn [(prov/enrich-tx updates tx-prov)] "archive task")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -965,15 +1004,16 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-add-note db body)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-add-note db body workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id note-body note-type]} result
                 tx-prov (prov/provenance actor)
-                note-tx (comment-note-tx task-id note-body note-type actor)
+                note-tx (comment-note-tx task-id note-body note-type actor workspace)
                 tx-result (attempt-transact conn [(prov/enrich-tx note-tx tx-prov)] "add note")
                 updated (when-let [db-after (:db-after tx-result)]
-                          (when-let [eid (task-eid db-after task-id)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
                             (some-> (pull-task db-after eid)
                                     present-task)))]
             (cond
@@ -993,7 +1033,8 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-edit-note db body actor)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-edit-note db body actor workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id note-body author-id]} result
@@ -1006,7 +1047,7 @@
                                                                      tx-prov)]
                                                 "edit note")
                     updated (when-let [db-after (:db-after tx-result)]
-                              (when-let [eid (task-eid db-after task-id)]
+                              (when-let [eid (task-eid db-after task-id workspace)]
                                 (some-> (pull-task db-after eid)
                                         present-task)))]
                 (cond
@@ -1024,7 +1065,8 @@
   [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            result (validate-delete-note db body actor)]
+            workspace (workspace/actor-workspace actor)
+            result (validate-delete-note db body actor workspace)]
         (if-let [err (:error result)]
           {:error err}
           (let [{:keys [task-id author-id]} result
@@ -1033,7 +1075,7 @@
               (error 404 "No deletable comment note found for this task")
               (let [tx-result (attempt-transact conn [[:db/retractEntity [:note/id note-id]]] "delete note")
                     updated (when-let [db-after (:db-after tx-result)]
-                              (when-let [eid (task-eid db-after task-id)]
+                              (when-let [eid (task-eid db-after task-id workspace)]
                                 (some-> (pull-task db-after eid)
                                         present-task)))]
                 (cond
@@ -1051,11 +1093,12 @@
   [conn task-id actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
             {parsed-id :value id-err :error} (resolve-task-id db task-id)]
         (cond
           id-err (error 400 id-err)
           :else
-          (if-let [eid (task-eid db parsed-id)]
+          (if-let [eid (task-eid db parsed-id workspace)]
             (let [task (some-> (pull-task db eid) present-task)
                   tx-result (attempt-transact conn [[:db/retractEntity [:task/id parsed-id]]] "delete task")]
               (if-let [tx-error (:error tx-result)]
@@ -1076,30 +1119,37 @@
               (error 404 "Task not found")))))))
 
 (defn list-tags
-  [conn]
-  (or (ensure-conn conn)
-      (let [db (d/db conn)
-            tags (->> (d/q '[:find (pull ?t [:tag/id :tag/name])
-                             :where [?t :tag/id _]]
-                           db)
-                      (map first)
-                      (sort-by (comp str/lower-case :tag/name))
-                      vec)]
-        {:tags tags})))
+  ([conn] (list-tags conn nil))
+  ([conn workspace]
+   (or (ensure-conn conn)
+       (let [db (d/db conn)
+             workspace (workspace-id workspace)
+             tags (->> (d/q '[:find (pull ?t [:tag/id :tag/name])
+                              :in $ ?workspace
+                              :where [?t :tag/id _]
+                                     [?t :tag/workspace ?workspace]]
+                            db workspace)
+                       (map first)
+                       (sort-by (comp str/lower-case :tag/name))
+                       vec)]
+         {:tags tags}))))
 
 (defn create-tag!
-  [conn body]
+  [conn body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
-            {:keys [value] :as tag-result} (tag-name-field (param-value body :tag/name))]
+            workspace (workspace/actor-workspace actor)
+            {:keys [value] :as tag-result} (tag-name-field (param-value body :tag/name))
+            existing (when value (existing-tag-by-name db value workspace))]
         (cond
           (:error tag-result) (error 400 (:error tag-result))
-          (existing-tag-by-name db value) (error 409 "Tag name already exists")
+          existing (error 409 "Tag name already exists")
           :else
           (let [tag-id (UUID/randomUUID)
                 base {:tag/id tag-id
                       :entity/type :entity.type/tag
-                      :tag/name value}
+                      :tag/name value
+                      :tag/workspace workspace}
                 tx [(entity/with-ref db base)]
                 tx-result (attempt-transact conn tx "create tag")]
             (if-let [tx-error (:error tx-result)]
@@ -1108,17 +1158,18 @@
                      :tag/name value}}))))))
 
 (defn rename-tag!
-  [conn tag-id body]
+  [conn tag-id body actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
             {tag-name :value name-err :error} (tag-name-field (param-value body :tag/name))
             {parsed-id :value id-err :error} (normalize-uuid tag-id "tag id")]
         (cond
           id-err (error 400 id-err)
           name-err (error 400 name-err)
           :else
-          (let [tag (tag-by-id db parsed-id)
-                dup (existing-tag-by-name db tag-name)]
+          (let [tag (tag-by-id db parsed-id workspace)
+                dup (when tag-name (existing-tag-by-name db tag-name workspace))]
             (cond
               (nil? tag) (error 404 "Tag not found")
               (and dup (not= (:tag/id dup) parsed-id)) (error 409 "Tag name already exists")
@@ -1131,19 +1182,22 @@
                          :tag/name tag-name}}))))))))
 
 (defn delete-tag!
-  [conn tag-id]
+  [conn tag-id actor]
   (or (ensure-conn conn)
       (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
             {:keys [value id-err :error]} (normalize-uuid tag-id "tag id")]
         (cond
           id-err (error 400 id-err)
           :else
-          (if-let [tag (tag-by-id db value)]
+          (if-let [tag (tag-by-id db value workspace)]
             (let [tasks-with-tag (d/q '[:find ?t
-                                        :in $ ?tag-id
+                                        :in $ ?tag-id ?workspace
                                         :where [?t :task/tags ?tag]
-                                               [?tag :tag/id ?tag-id]]
-                                      db value)
+                                               [?tag :tag/id ?tag-id]
+                                               [?tag :tag/workspace ?workspace]
+                                               [?t :fact/workspace ?workspace]]
+                                      db value workspace)
                   tx-data (concat
                            (map (fn [[task-eid]]
                                   [:db/retract task-eid :task/tags [:tag/id value]])
@@ -1166,12 +1220,14 @@
                                         [(keyword? ?kw)]]
                                db)]
         (when (seq tasks-with-kw)
-          (let [kw->id (into {}
+          (let [workspace (workspace/default-id)
+                kw->id (into {}
                              (for [[_ kw] tasks-with-kw]
                                [kw (UUID/randomUUID)]))
                 create-tags (for [[kw id] kw->id]
                               {:tag/id id
-                               :tag/name (-> kw name (str/capitalize))})
+                               :tag/name (-> kw name (str/capitalize))
+                               :tag/workspace workspace})
                 tx-data (concat
                          create-tags
                          (mapcat (fn [[task kw]]

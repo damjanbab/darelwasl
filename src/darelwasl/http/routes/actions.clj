@@ -26,8 +26,9 @@
           action-id (actions/parse-action-id (some-> raw-id str))
           body (or (:body-params request) {})
           input (or (:input body) (get body "input") body)
+          workspace (common/workspace-id request)
           res (actions/execute! state {:action/id action-id
-                                       :actor (actions/actor-from-session (:auth/session request))
+                                       :actor (actions/actor-from-session (:auth/session request) workspace)
                                        :input input})]
       (if-let [err (:error res)]
         (handle-action-result res)

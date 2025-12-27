@@ -1,6 +1,7 @@
 (ns darelwasl.provenance
   "Small helper for attaching provenance metadata to tx maps."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [darelwasl.workspace :as workspace])
   (:import (java.util Date)))
 
 (def ^:private surface->adapter
@@ -15,7 +16,7 @@
       (get surface->adapter (:actor/surface actor))))
 
 (defn provenance
-  "Build a provenance map for writes. Adapter defaults to web-ui; workspace defaults to \"default\".
+  "Build a provenance map for writes. Adapter defaults to web-ui; workspace defaults to \"main\".
   Optionally accepts a run-id for batch/rule contexts."
   ([actor] (provenance actor (or (adapter-from-actor actor) :adapter/web-ui) nil))
   ([actor adapter] (provenance actor adapter nil))
@@ -28,7 +29,7 @@
                   :fact/run-id run-id
                   :fact/created-at (Date.)
                   :fact/valid-from (Date.)
-                  :fact/workspace "default"}))))
+                  :fact/workspace (workspace/actor-workspace actor)}))))
 
 (defn enrich-tx
   "Attach provenance to tx maps; leave retracts and datoms untouched."

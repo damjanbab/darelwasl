@@ -176,10 +176,15 @@
    {:ident :tag/name
     :type :db.type/string
     :cardinality :db.cardinality/one
-    :unique :db.unique/value
-    :doc "Tag display name"}]
+    :doc "Tag display name"}
+   {:ident :tag/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant for scoping"}]
   :enums []
-  :invariants ["Tag names unique (case-insensitive)" "Entity type set to :entity.type/tag"]
+  :invariants ["Tag names unique per workspace (case-insensitive)"
+               "Tags scoped by workspace"
+               "Entity type set to :entity.type/tag"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -1524,9 +1529,14 @@
    {:ident :file/created-by
     :type :db.type/ref
     :cardinality :db.cardinality/one
-    :doc "User who uploaded the file"}]
+    :doc "User who uploaded the file"}
+   {:ident :file/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant for scoping"}]
   :enums {:file/type [:file.type/image :file.type/pdf]}
   :invariants ["File id and slug must be unique"
+               "Files scoped by workspace"
                "File entities set :entity/type to :entity.type/file"
                "Storage path points to a locally stored file"]
   :history {:strategy :overwrite}

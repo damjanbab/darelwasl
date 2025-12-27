@@ -19,6 +19,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Every capability must be declared in its registry with required fields (ID, title, version, compatibility/flags, contracts/purpose, adapters where relevant).
 - No ad-hoc or internal-only changes outside registries. If a change is not reflected in the registry, it is not allowed.
 - Changes to side effects go through adapters; pure cores remain internal and composable.
+- Main app is the only process that connects to the main Datomic store; external services must use the admin Action Gateway (`/api/system/actions/:id`) with `X-Terminal-Admin-Token` and optional `X-Workspace-Id` (defaults to `main`).
 
 ### Registry Files
 - Schema Registry: `registries/schema.edn`
@@ -140,10 +141,11 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Separate daemon (not tied to the main app). Sessions survive app restarts and UI closes.
 - Access gated by role `:role/codex-terminal` (only Damjan for now).
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
+- Main app is the sole owner of the main Datomic connection; terminal service never connects to main Datomic directly.
 - Terminal backend switching: `/api/terminal/backend` (admin-only) reports `{active stable-url canary-url}` and accepts `{active|backend}` to switch between `:stable` (`TERMINAL_API_URL`) and `:canary` (`TERMINAL_CANARY_API_URL`); active backend persists in `TERMINAL_BACKEND_FILE` (default `data/terminal/backend.edn`).
 - Sessions persist until an operator explicitly completes them; PR verification does not close sessions.
 - Session types: `feature`, `bugfix`, `research`, `integrator`, `ops`, `main-ops` (main-ops is data/library only via command protocol; no code edits or PRs; kept as internal/fallback and not exposed in the UI).
-- Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`), plus `context.add`, `devbot.reset`, and `session.data-promote`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
+- Terminal command protocol: terminal output may emit `@command {json}` blocks; the UI can auto-run them by POSTing `/api/terminal/sessions/:id/commands`, which claims commands before executing. Supported command types map to task/file actions (`task.*`, `file.update`, `file.delete`, `file.upload`) via the action gateway, plus `context.add`, `devbot.reset`, and `workspace.promote`; results are echoed back as `[command-ok]`/`[command-error]` inputs.
 - Dev bot use is opt-in per session; only one session may run the dev bot at a time.
 - Dev bot defaults to polling when the public base URL is not HTTPS or uses a non-Telegram webhook port; webhook is only enabled for HTTPS URLs on ports 80/88/443/8443.
 - Dev bot auto-binds the first chat to `damjan` unless overridden by `TELEGRAM_DEV_AUTO_BIND_USERNAME`.
@@ -152,11 +154,9 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Session storage:
   - Work dirs: `TERMINAL_WORK_DIR` (default `data/terminal/sessions`)
   - Logs/worklogs: `TERMINAL_LOG_DIR` (default `data/terminal/logs`) retained forever
-- Session data snapshot & promotion:
-  - On create, sessions snapshot main Datomic + file storage into the session (`data-snapshot.edn` in the logs dir).
-  - All Datomic writes in a session are logged to `data-tx-log.edn` via `SESSION_TX_LOG_PATH`.
-  - Promotion state is tracked in `data-promote.edn` (`applied-lines`, `last-promoted-at`).
-  - Use `session.data-promote` to apply the logged tx-data + file copies back to main (integrator only).
+- Workspace staging:
+  - Terminal sessions use the action gateway with `X-Workspace-Id=<session-id>`; main app owns all Datomic writes.
+  - `workspace.promote` moves workspace-scoped tasks/tags/files/notes to `main` (admin-only action).
 - Terminal config envs:
   - `TERMINAL_API_URL` (optional override of base url)
   - `TERMINAL_CANARY_API_URL` (optional canary base url for backend switching)
@@ -165,6 +165,7 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_WORK_DIR`
   - `TERMINAL_LOG_DIR`
   - `TERMINAL_BACKEND_FILE` (optional override for backend switch state)
+  - `TERMINAL_MAIN_APP_URL` (main app base URL for action gateway + workspace staging)
   - `TERMINAL_REPO_URL` (repo clone for sessions)
   - `TERMINAL_CODEX_CMD` (default `codex`)
   - `TERMINAL_TMUX_BIN` (optional full path to tmux binary)
@@ -174,8 +175,6 @@ Maintain stable IDs; reference them in tasks/PRs.
   - `TERMINAL_PORT_RANGE_START`, `TERMINAL_PORT_RANGE_END` (per-session app/site ports)
   - `TERMINAL_POLL_MS` (output polling interval)
   - `TERMINAL_MAX_OUTPUT_BYTES` (per poll)
-  - `TERMINAL_MAIN_DATOMIC_DIR`, `TERMINAL_MAIN_DATOMIC_SYSTEM`, `TERMINAL_MAIN_DATOMIC_DB` (source of truth for session snapshots/promotion)
-  - `TERMINAL_MAIN_FILES_DIR` (source file storage dir for session snapshots/promotion)
   - `TELEGRAM_DEV_BOT_TOKEN` (use dev bot for terminal sessions)
   - `TELEGRAM_DEV_BOT_TOKEN_FILE` (optional file path for dev bot token)
   - `TELEGRAM_DEV_WEBHOOK_SECRET`, `TELEGRAM_DEV_WEBHOOK_BASE_URL` (optional dev webhook config)

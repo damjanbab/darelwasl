@@ -396,6 +396,24 @@
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 
+ {:id :cap/action/task-read
+  :title "Read Task"
+  :version "v1"
+  :inputs {:task/id :uuid}
+  :outputs {:task/id :uuid}
+  :side-effects ["Read task entity"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/read]
+          :fields [:task/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task]
+            :views [:cap/view/tasks]}
+  :tooling []}
+
  {:id :cap/action/parcel-import
   :title "Import land registry CSV"
   :version "v1"
@@ -996,6 +1014,9 @@
   :title "Upload File"
   :version "v1"
   :inputs {:file/upload :binary
+           :file/filename :string?
+           :file/mime :string?
+           :file/content-base64 :string?
            :file/slug :string?}
   :outputs {:file/id :uuid
             :file/slug :string
@@ -1030,6 +1051,42 @@
                   :flags []}
   :related {:schema [:cap/schema/file]
             :views [:cap/view/file-library]}
+  :tooling []}
+
+ {:id :cap/action/file-read
+  :title "Read File"
+  :version "v1"
+  :inputs {:file/id :uuid}
+  :outputs {:file/id :uuid}
+  :side-effects ["Read file metadata"]
+  :adapter {:integration :cap/integration/local-file-store}
+  :audit {:records [:file/read]
+          :fields [:file/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling []}
+
+ {:id :cap/action/workspace-promote
+  :title "Workspace Promote"
+  :version "v1"
+  :inputs {:workspace/id :string?
+           :workspace/target :string?}
+  :outputs {:promotion :map}
+  :side-effects ["Move workspace-scoped entities to target workspace"]
+  :adapter {:integration :local/db}
+  :audit {:records [:workspace/promote]
+          :fields [:workspace/id :workspace/target]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures [:fixtures/tasks :fixtures/tags]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/tag :cap/schema/file :cap/schema/note]}
   :tooling []}
 
  {:id :cap/action/github-pulls

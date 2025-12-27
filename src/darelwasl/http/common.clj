@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [clojure.tools.logging :as log]
             [darelwasl.db :as db]
-            [darelwasl.http.session-store :as session-store]))
+            [darelwasl.http.session-store :as session-store]
+            [darelwasl.workspace :as workspace]))
 
 (def session-opts
   (let [store-path (or (System/getenv "SESSION_STORE_PATH")
@@ -79,3 +80,7 @@
       (get-in request [:parameters :path :id])
       (get-in request [:parameters :path "id"])
       (some-> request :path-params vals first)))
+
+(defn workspace-id
+  [request]
+  (workspace/resolve-id (get-in request [:headers "x-workspace-id"])))

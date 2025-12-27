@@ -47,11 +47,7 @@
               :auto-start-app? true
               :auto-start-site? false
               :poll-ms 1000
-              :max-output-bytes 20000
-              :main-datomic-dir "data/datomic"
-              :main-datomic-system "darelwasl"
-              :main-datomic-db "darelwasl"
-              :main-files-dir "data/files"}
+              :max-output-bytes 20000}
    :github {:api-url "https://api.github.com"
             :timeout-ms 3000
             :repo-owner nil
@@ -195,19 +191,7 @@
                      public-base-url (env-str (get env "TERMINAL_PUBLIC_BASE_URL")
                                               (get-in default-config [:terminal :public-base-url]))
                      main-app-url (env-str (get env "TERMINAL_MAIN_APP_URL")
-                                           (get-in default-config [:terminal :main-app-url]))
-                     main-datomic-dir (normalize-storage-dir (or (get env "TERMINAL_MAIN_DATOMIC_DIR")
-                                                                 (get env "DATOMIC_STORAGE_DIR"))
-                                                             (get-in default-config [:terminal :main-datomic-dir]))
-                     main-datomic-system (env-str (or (get env "TERMINAL_MAIN_DATOMIC_SYSTEM")
-                                                      (get env "DATOMIC_SYSTEM"))
-                                                  (get-in default-config [:terminal :main-datomic-system]))
-                     main-datomic-db (env-str (or (get env "TERMINAL_MAIN_DATOMIC_DB")
-                                                  (get env "DATOMIC_DB_NAME"))
-                                              (get-in default-config [:terminal :main-datomic-db]))
-                     main-files-dir (env-str (or (get env "TERMINAL_MAIN_FILES_DIR")
-                                                 (get env "FILES_STORAGE_DIR"))
-                                             (get-in default-config [:terminal :main-files-dir]))]
+                                           (get-in default-config [:terminal :main-app-url]))]
                  {:host host
                   :port port
                   :base-url base-url
@@ -229,22 +213,18 @@
                                         (get-in default-config [:terminal :tmux-prefix]))
                   :codex-command (env-str (get env "TERMINAL_CODEX_CMD")
                                           (get-in default-config [:terminal :codex-command]))
-                 :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
+                  :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
                                                (get-in default-config [:terminal :port-range-start]))
-                 :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
+                  :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
                                              (get-in default-config [:terminal :port-range-end]))
-                 :auto-start-app? (env-bool (get env "TERMINAL_AUTO_START_APP")
-                                            (get-in default-config [:terminal :auto-start-app?]))
-                 :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
-                                             (get-in default-config [:terminal :auto-start-site?]))
-                 :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
-                                     (get-in default-config [:terminal :poll-ms]))
-                 :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
-                                              (get-in default-config [:terminal :max-output-bytes]))
-                 :main-datomic-dir main-datomic-dir
-                 :main-datomic-system main-datomic-system
-                 :main-datomic-db main-datomic-db
-                 :main-files-dir main-files-dir}))
+                  :auto-start-app? (env-bool (get env "TERMINAL_AUTO_START_APP")
+                                             (get-in default-config [:terminal :auto-start-app?]))
+                  :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
+                                              (get-in default-config [:terminal :auto-start-site?]))
+                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
+                                      (get-in default-config [:terminal :poll-ms]))
+                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
+                                               (get-in default-config [:terminal :max-output-bytes]))}))
         (assoc :github
                (let [default-token (get-in default-config [:github :token])
                      token-env (normalize-token (get env "GITHUB_TOKEN"))

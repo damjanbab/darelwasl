@@ -12,7 +12,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Checkout `main`, merge the requested PR branches, and resolve conflicts.
 - Run full checks before pushing (`scripts/checks.sh all` or registries+schema+actions+app-smoke).
 - Push directly to `main` (no integration PR).
-- If data/library changes were made in sessions, run `session.data-promote` for each session id provided.
+- If data/library changes were made in sessions, run `workspace.promote` for each session id provided.
 - Provide a concise status summary before asking for review.
 
 ## Verification matrix (required)
@@ -38,7 +38,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Supported types:
   - `task.create`, `task.update`, `task.set-status`, `task.assign`, `task.set-due`, `task.set-tags`, `task.archive`, `task.delete`
   - `file.upload`, `file.update`, `file.delete`
-  - `context.add`, `devbot.reset`, `session.data-promote`
+  - `context.add`, `devbot.reset`, `workspace.promote`
 - `file.upload` requires `filename`, `mime`, and either `content_base64` or `path`.
 - Command results are injected back into the session output; treat them as authoritative.
 

@@ -1,5 +1,6 @@
 (ns darelwasl.actions
   (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [darelwasl.automations :as automations]
@@ -9,23 +10,32 @@
             [darelwasl.github :as github]
             [darelwasl.tasks :as tasks]
             [darelwasl.users :as users]
-            [darelwasl.validation :as v]))
+            [darelwasl.validation :as v]
+            [darelwasl.workspace :as workspace]
+            [darelwasl.workspaces :as workspaces])
+  (:import (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)
+           (java.util Base64)))
 
 (defn actor-from-session
   "Normalize an HTTP session map into an actor map."
-  [session]
-  (when (map? session)
-    (cond-> session
-      (nil? (:actor/type session)) (assoc :actor/type :actor.type/user)
-      (nil? (:actor/surface session)) (assoc :actor/surface :surface/http))))
+  ([session] (actor-from-session session nil))
+  ([session workspace-id]
+   (when (map? session)
+     (cond-> session
+       (nil? (:actor/type session)) (assoc :actor/type :actor.type/user)
+       (nil? (:actor/surface session)) (assoc :actor/surface :surface/http)
+       :always (assoc :actor/workspace (workspace/resolve-id workspace-id))))))
 
 (defn actor-from-telegram
   "Normalize a Telegram-linked user map into an actor map."
-  [user]
-  (when (map? user)
-    (cond-> user
-      (nil? (:actor/type user)) (assoc :actor/type :actor.type/user)
-      (nil? (:actor/surface user)) (assoc :actor/surface :surface/telegram))))
+  ([user] (actor-from-telegram user nil))
+  ([user workspace-id]
+   (when (map? user)
+     (cond-> user
+       (nil? (:actor/type user)) (assoc :actor/type :actor.type/user)
+       (nil? (:actor/surface user)) (assoc :actor/surface :surface/telegram)
+       :always (assoc :actor/workspace (workspace/resolve-id workspace-id))))))
 
 (defn parse-action-id
   "Parse a URL-safe action id string like `cap.action.task-create` into a keyword
@@ -102,6 +112,14 @@
         task-id (:task/id body)]
     (tasks/delete-task! (conn state) task-id actor)))
 
+(defn- task-read
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (or (v/param-value body :task/id)
+                    (v/param-value body :task/ref)
+                    (v/param-value body :id))]
+    (tasks/fetch-task (conn state) task-id (workspace/actor-workspace actor))))
+
 (defn- betting-events
   [state {:keys [input]}]
   (let [body (or input {})]
@@ -148,25 +166,91 @@
                          {:bet-id (or (:bet-id body) (:betting.bet/id body))
                           :status (or (:status body) (:betting.bet/status body))})))
 
+(defn- decode-base64
+  [value]
+  (try
+    (.decode (Base64/getDecoder) (str value))
+    (catch Exception _
+      nil)))
+
+(defn- temp-file!
+  [filename bytes]
+  (let [suffix (when (and (string? filename) (str/includes? filename "."))
+                 (str "." (last (str/split filename #"\."))))
+        attrs (make-array FileAttribute 0)
+        path (Files/createTempFile "action-upload-" (or suffix "") attrs)]
+    (with-open [out (io/output-stream (.toFile path))]
+      (.write out bytes))
+    (.toFile path)))
+
+(defn- prepare-file-upload
+  [body]
+  (let [upload (:file/upload body)
+        filename (or (v/param-value body :file/filename)
+                     (v/param-value body :file/name)
+                     (v/param-value body :filename))
+        mime (or (v/param-value body :file/mime)
+                 (v/param-value body :mime))
+        content-b64 (or (v/param-value body :file/content-base64)
+                        (v/param-value body :file/content_base64)
+                        (v/param-value body :content_base64)
+                        (v/param-value body :content-base64))]
+    (cond
+      upload {:upload upload :temp? false}
+
+      (str/blank? (str content-b64))
+      {:error {:status 400
+               :message "file.upload requires file/upload or base64 content"}}
+
+      (str/blank? (str filename))
+      {:error {:status 400
+               :message "file.upload requires filename"}}
+
+      (str/blank? (str mime))
+      {:error {:status 400
+               :message "file.upload requires mime"}}
+
+      :else
+      (if-let [bytes (decode-base64 content-b64)]
+        (let [file (temp-file! filename bytes)]
+          {:upload {:filename filename
+                    :content-type mime
+                    :tempfile file
+                    :size (.length ^java.io.File file)}
+           :temp? true})
+        {:error {:status 400
+                 :message "file.upload base64 content invalid"}}))))
+
 (defn- file-upload
   [state {:keys [input actor]}]
   (let [body (or input {})
         storage-dir (or (:storage-dir body)
                         (get-in state [:config :files :storage-dir]))]
-    (files/create-file! (conn state)
-                        {:file (:file/upload body)
-                         :slug (:file/slug body)}
-                        actor
-                        storage-dir)))
+    (let [{:keys [upload error temp?]} (prepare-file-upload body)]
+      (if error
+        {:error error}
+        (try
+          (files/create-file! (conn state)
+                              {:file upload
+                               :slug (:file/slug body)}
+                              actor
+                              storage-dir)
+          (finally
+            (when (and temp? upload)
+              (try
+                (io/delete-file (:tempfile upload) true)
+                (catch Exception e
+                  (log/warn e "Failed to delete temp upload file"))))))))))
 
 (defn- file-delete
-  [state {:keys [input]}]
+  [state {:keys [input actor]}]
   (let [body (or input {})
         storage-dir (or (:storage-dir body)
                         (get-in state [:config :files :storage-dir]))]
     (files/delete-file! (conn state)
                         (:file/id body)
-                        storage-dir)))
+                        storage-dir
+                        actor)))
 
 (defn- file-update
   [state {:keys [input actor]}]
@@ -179,6 +263,43 @@
                         {:slug slug
                          :ref ref}
                         actor)))
+
+(defn- file-read
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        file-id (or (v/param-value body :file/id)
+                    (v/param-value body :file/ref)
+                    (v/param-value body :id))]
+    (files/fetch-file (conn state) file-id (workspace/actor-workspace actor))))
+
+(defn- tag-create
+  [state {:keys [input actor]}]
+  (tasks/create-tag! (conn state) (or input {}) actor))
+
+(defn- tag-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        tag-id (:tag/id body)]
+    (tasks/rename-tag! (conn state) tag-id (dissoc body :tag/id) actor)))
+
+(defn- tag-delete
+  [state {:keys [input actor]}]
+  (let [body (or input {})]
+    (tasks/delete-tag! (conn state) (:tag/id body) actor)))
+
+(defn- workspace-promote
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        workspace-id (or (:workspace/id body)
+                         (:workspace-id body)
+                         (:workspace body)
+                         (:actor/workspace actor))
+        target (or (:workspace/target body)
+                   (:target body)
+                   "main")]
+    (workspaces/promote-workspace! (conn state)
+                                   {:workspace-id workspace-id
+                                    :target target})))
 
 (defn- user-list
   [state _]
@@ -216,6 +337,7 @@
    :cap/action/task-edit-note task-edit-note
    :cap/action/task-delete-note task-delete-note
    :cap/action/task-delete task-delete
+   :cap/action/task-read task-read
    :cap/action/betting-events betting-events
    :cap/action/betting-odds betting-odds
    :cap/action/betting-bet-log betting-bet-log
@@ -224,6 +346,11 @@
    :cap/action/file-upload file-upload
    :cap/action/file-update file-update
    :cap/action/file-delete file-delete
+   :cap/action/file-read file-read
+   :cap/action/tag-create tag-create
+   :cap/action/tag-update tag-update
+   :cap/action/tag-delete tag-delete
+   :cap/action/workspace-promote workspace-promote
    :cap/action/github-pulls github-pulls
    :cap/action/user-list user-list
    :cap/action/user-create user-create

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `9cf7895acdf76407f29f26bef1322d27c2d3a11b1be0cb95c69d4ed9e6861596`
+- Catalog version: `3146e37028c614fa3eb64523987f845a9a867d9cf6503b96acc178d34804116e`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -44,7 +44,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (57)
+### Actions (62)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -62,6 +62,7 @@ This file is auto-generated. Do not edit by hand.
 - action/content-tags
 - action/content-v2
 - action/file-delete
+- action/file-read
 - action/file-upload
 - action/github-pulls
 - action/journey-phase-delete
@@ -74,6 +75,8 @@ This file is auto-generated. Do not edit by hand.
 - action/parcel-stats
 - action/person-detail
 - action/person-list
+- action/system-service-restart
+- action/system-services
 - action/tag-create
 - action/tag-delete
 - action/tag-update
@@ -84,6 +87,7 @@ This file is auto-generated. Do not edit by hand.
 - action/task-delete
 - action/task-delete-note
 - action/task-edit-note
+- action/task-read
 - action/task-set-due
 - action/task-set-status
 - action/task-set-tags
@@ -102,8 +106,9 @@ This file is auto-generated. Do not edit by hand.
 - action/user-delete
 - action/user-list
 - action/user-update
+- action/workspace-promote
 
-### Views (17)
+### Views (18)
 - view/betting
 - view/control-panel
 - view/file-library
@@ -118,11 +123,13 @@ This file is auto-generated. Do not edit by hand.
 - view/site-process
 - view/site-service-leaf
 - view/site-services
+- view/system-services
 - view/tasks
 - view/terminal
 - view/user-management
 
-### Integrations (7)
+### Integrations (8)
+- integration/action-gateway
 - integration/email
 - integration/github
 - integration/local-file-store
@@ -169,7 +176,6 @@ This file is auto-generated. Do not edit by hand.
 - file.delete
 - file.update
 - file.upload
-- session.data-promote
 - task.archive
 - task.assign
 - task.create
@@ -181,6 +187,7 @@ This file is auto-generated. Do not edit by hand.
 
 ## Routes
 
+- /+$
 - /:id
 - /:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}
 - /actions
@@ -195,7 +202,7 @@ This file is auto-generated. Do not edit by hand.
 - /blocks
 - /businesses
 - /catalog
-- /commands/claim
+- /commands/run
 - /comparison-rows
 - /complete
 - /contacts
@@ -233,28 +240,37 @@ This file is auto-generated. Do not edit by hand.
 - /resume
 - /rezultati/daily
 - /rezultati/match/:id
+- /services
+- /services/:id/restart
 - /session
 - /sessions
 - /sessions/
 - /sessions/:id
+- /sessions/:id/cleanup
 - /sessions/:id/commands
 - /sessions/:id/commands/claim
+- /sessions/:id/commands/run
 - /sessions/:id/complete
 - /sessions/:id/input
 - /sessions/:id/interrupt
 - /sessions/:id/keys
 - /sessions/:id/output
+- /sessions/:id/ports/reallocate
 - /sessions/:id/restart-app
 - /sessions/:id/resume
 - /sessions/:id/verify
+- /site/restart
 - /stats
 - /status
 - /support-entries
 - /system
+- /system/actions/:id
+- /system/restart
 - /tags
 - /tasks
 - /telegram
 - /terminal
+- /terminal/sessions/:id/app
 - /users
 - /v2
 - /verify
@@ -316,10 +332,7 @@ This file is auto-generated. Do not edit by hand.
 - TERMINAL_GITHUB_TOKEN
 - TERMINAL_HOST
 - TERMINAL_LOG_DIR
-- TERMINAL_MAIN_DATOMIC_DB
-- TERMINAL_MAIN_DATOMIC_DIR
-- TERMINAL_MAIN_DATOMIC_SYSTEM
-- TERMINAL_MAIN_FILES_DIR
+- TERMINAL_MAIN_APP_URL
 - TERMINAL_MAX_OUTPUT_BYTES
 - TERMINAL_POLL_MS
 - TERMINAL_PORT
@@ -372,6 +385,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.features.land
 - darelwasl.features.login
 - darelwasl.features.prs
+- darelwasl.features.services
 - darelwasl.features.tasks
 - darelwasl.features.terminal
 - darelwasl.features.users
@@ -414,12 +428,12 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.tasks
 - darelwasl.telegram
 - darelwasl.telegram.dev
+- darelwasl.terminal.app-client
 - darelwasl.terminal.backend
 - darelwasl.terminal.client
 - darelwasl.terminal.commands
 - darelwasl.terminal.http
 - darelwasl.terminal.main
-- darelwasl.terminal.promote
 - darelwasl.terminal.session
 - darelwasl.terminal.store
 - darelwasl.terminal.tmux
@@ -432,3 +446,5 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.workers.betting-scheduler
 - darelwasl.workers.outbox
 - darelwasl.workers.telegram-poller
+- darelwasl.workspace
+- darelwasl.workspaces

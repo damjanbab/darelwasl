@@ -125,7 +125,7 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :adapter {:library "clj-http"
+ :adapter {:library "clj-http"
             :notes "Main app proxies requests to the terminal service"}
   :related {:actions [:cap/action/terminal-sessions
                       :cap/action/terminal-session-create
@@ -134,5 +134,24 @@
                       :cap/action/terminal-session-resume
                       :cap/action/terminal-session-restart-app
                       :cap/action/terminal-session-complete]
+            :schema []}}
+
+ {:id :cap/integration/action-gateway
+  :title "Action Gateway (admin)"
+  :version "v1"
+  :external-system "Main app admin HTTP endpoint"
+  :contracts {:base-path "/api/system/actions/:id"
+              :headers ["X-Terminal-Admin-Token" "X-Workspace-Id"]
+              :payload {:input :map
+                        :actor :map?}}
+  :auth {:strategy :admin-token
+         :vars ["TERMINAL_ADMIN_TOKEN"]}
+  :failure-modes ["Missing/invalid admin token" "Unknown action id" "Action error response" "Main app unavailable"]
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :adapter {:library "clj-http"
+            :notes "Used by local daemons to invoke actions without a session cookie"}
+  :related {:actions []
             :schema []}}
 ]
