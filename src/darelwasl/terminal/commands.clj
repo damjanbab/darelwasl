@@ -9,9 +9,9 @@
 
 (defn- error
   [status message & [details]]
-  {:error {:status status
-           :message message
-           :details details}})
+  {:status status
+   :message message
+   :details details})
 
 (defn- normalize-type
   [value]
@@ -154,7 +154,15 @@
 
 (defn- format-error
   [command-type err]
-  (let [{:keys [message details]} err]
+  (let [err (if (and (map? err) (contains? err :error))
+              (:error err)
+              err)
+        {:keys [message details status]} err
+        message (cond
+                  (string? message) (when-not (str/blank? message) message)
+                  (some? message) (str message)
+                  :else nil)
+        message (or message (when status (str "status " status)) "unknown error")]
     (str (or command-type "command") " failed: " message
          (when (and details (not (str/blank? (str details))))
            (str " (" details ")")))))
