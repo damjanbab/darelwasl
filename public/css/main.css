@@ -1231,6 +1231,26 @@ textarea.form-input {
   color: var(--colors-success);
 }
 
+.chip.status.lead {
+  background: var(--colors-chip-todo-bg);
+  color: var(--colors-accent);
+}
+
+.chip.status.active {
+  background: var(--colors-chip-warning-bg);
+  color: var(--colors-warning);
+}
+
+.chip.status.waiting {
+  background: var(--colors-chip-danger-bg);
+  color: var(--colors-danger);
+}
+
+.chip.status.closed {
+  background: var(--colors-chip-success-bg);
+  color: var(--colors-success);
+}
+
 .chip.status.muted,
 .chip.status.neutral {
   background: var(--colors-chip-neutral-bg);

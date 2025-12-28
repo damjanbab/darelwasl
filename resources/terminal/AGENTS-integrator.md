@@ -10,7 +10,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed.
 - Checkout `main`, merge the requested PR branches, and resolve conflicts.
-- Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, confirm `APP_PORT` is free and `DATOMIC_STORAGE_DIR` is not locked.
+- Terminal sessions auto-start the app unless explicitly disabled; assume one app instance is already running in the session repo. Before running `scripts/run-service.sh`, verify the existing app on `APP_PORT` and that `DATOMIC_STORAGE_DIR` is not locked; only start a new instance if the app is not running.
 - Run full checks before pushing (`scripts/checks.sh all` or registries+schema+actions+app-smoke).
 - Push directly to `main` (no integration PR).
 - If data/library changes were made in sessions, run `workspace.promote` for each session id provided.

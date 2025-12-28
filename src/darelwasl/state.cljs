@@ -25,6 +25,19 @@
 (def task-status-options (remove #(nil? (:id %)) status-options))
 (def task-priority-options (remove #(nil? (:id %)) priority-options))
 
+(def client-status-options
+  [{:id nil :label "All statuses"}
+   {:id :lead :label "Lead"}
+   {:id :active :label "Active"}
+   {:id :waiting :label "Waiting"}
+   {:id :closed :label "Closed"}])
+
+(def client-channel-options
+  [{:id nil :label "Select channel"}
+   {:id :whatsapp :label "WhatsApp"}
+   {:id :phone :label "Phone"}
+   {:id :email :label "Email"}])
+
 (def fallback-assignees
   [{:id "00000000-0000-0000-0000-000000000001" :label "huda"}
    {:id "00000000-0000-0000-0000-000000000002" :label "damjan"}])
@@ -47,6 +60,7 @@
    :status :todo
    :pending-reason ""
    :priority :medium
+   :client nil
    :assignee nil
    :due-date ""
    :tags #{}
@@ -68,6 +82,44 @@
    :selected nil
    :assignees []
    :detail default-task-detail})
+
+(def default-client-filters
+  {:status nil
+   :page 1
+   :page-size 25})
+
+(def default-client-form
+  {:id nil
+   :name ""
+   :phone ""
+   :email ""
+   :channel nil
+   :status :lead
+   :notes ""})
+
+(def default-client-detail
+  {:mode :closed
+   :status :idle
+   :error nil
+   :form default-client-form
+   :next-action nil
+   :next-action-form nil
+   :next-action-status :idle
+   :next-action-error nil
+   :tasks []})
+
+(def default-clients-state
+  {:items []
+   :status :idle
+   :error nil
+   :filters default-client-filters
+   :selected nil
+   :pagination {:limit 25
+                :offset 0
+                :total 0
+                :page 1
+                :pages 1}
+   :detail default-client-detail})
 
 (def default-home-state
   {:status :pending
@@ -348,6 +400,7 @@
    :home default-home-state
    :login default-login-state
    :tasks default-task-state
+   :clients default-clients-state
    :files default-files-state
    :prs default-prs-state
    :land default-land-state
@@ -362,8 +415,11 @@
             :label "Home"
             :desc "Summary surface"}
            {:id :tasks
-            :label "Tasks"
-            :desc "Workboard"}
+           :label "Tasks"
+           :desc "Workboard"}
+           {:id :clients
+            :label "Clients"
+            :desc "Client list + follow-ups"}
            {:id :files
             :label "Library"
             :desc "Images, PDFs, Markdown"}

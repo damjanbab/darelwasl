@@ -5,6 +5,7 @@
   :task/title "Set up task app skeleton"
   :task/description "Scaffold UI and backend for tasks"
   :task/status :todo
+  :task/client [:client/id #uuid "20000000-0000-0000-0000-000000000002"]
   :task/assignee #uuid "00000000-0000-0000-0000-000000000001"
   :task/due-date #inst "2025-12-12T09:00:00.000Z"
   :task/priority :high
@@ -18,6 +19,7 @@
   :task/title "Polish design system"
   :task/description "Refine theme tokens and components"
   :task/status :in-progress
+  :task/client [:client/id #uuid "20000000-0000-0000-0000-000000000003"]
   :task/assignee #uuid "00000000-0000-0000-0000-000000000002"
   :task/due-date #inst "2025-12-14T15:00:00.000Z"
   :task/priority :medium
@@ -30,6 +32,7 @@
   :task/title "Reconcile monthly finances"
   :task/description "Close the books and schedule payments"
   :task/status :done
+  :task/client [:client/id #uuid "20000000-0000-0000-0000-000000000001"]
   :task/assignee #uuid "00000000-0000-0000-0000-000000000001"
   :task/due-date #inst "2025-12-05T00:00:00.000Z"
   :task/priority :low
@@ -42,6 +45,7 @@
   :task/title "Refresh home workspace"
   :task/description "Declutter desk, cables, and peripherals"
   :task/status :todo
+  :task/client [:client/id #uuid "20000000-0000-0000-0000-000000000001"]
   :task/assignee #uuid "00000000-0000-0000-0000-000000000002"
   :task/priority :medium
   :task/tags [[:tag/id #uuid "30000000-0000-0000-0000-000000000002"]]

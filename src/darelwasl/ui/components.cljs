@@ -275,6 +275,7 @@
         on-select (or on-select #(rf/dispatch [:darelwasl.app/select-task id]))
         tag-names (map (fn [t] (or (:tag/name t) (get tag-index (:tag/id t)) "Tag")) tag-list)
         assignee-name (or (:user/name assignee) (:user/username assignee) "Unassigned")
+        client-name (get-in task [:task/client :client/name])
         prov-label (util/provenance-label task)]
     [:button.task-card {:type "button"
                         :class (when selected? "selected")
@@ -284,6 +285,8 @@
        [:div.title-row
         [:h3 (or title "Untitled")]]
        [:div.meta-row
+        (when (and client-name (not (str/blank? (str client-name))))
+          [:span.meta client-name])
         (when due-date
           [:span.meta (str "Due " (util/format-date due-date))])
         [:span.meta assignee-name]]]

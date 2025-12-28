@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [datomic.client.api :as d]
             [darelwasl.auth :as auth]
+            [darelwasl.clients :as clients]
             [darelwasl.content :as content]
             [darelwasl.fixtures :as fixtures]
             [darelwasl.tasks :as tasks]
@@ -135,6 +136,19 @@
                                                                       :user/roles [:role/admin]}
                                                                      actor))
                                  :user))
+          default-client-id clients/default-client-id
+          created-client (some-> (ensure-success failures "Create client"
+                                                 (clients/create-client! conn {:client/name "Contract Client"
+                                                                               :client/status :active}
+                                                                         actor))
+                                 :client)
+          updated-client (when created-client
+                           (some-> (ensure-success failures "Update client"
+                                                   (clients/update-client! conn (:client/id created-client)
+                                                                           {:client/status :waiting
+                                                                            :client/notes "Waiting on docs"}
+                                                                           actor))
+                                   :client))
           assignee-huda (:user/id (get user-index "huda"))
            assignee-damjan (:user/id (get user-index "damjan"))
            tag-ops (:ops tag-index)
@@ -142,6 +156,7 @@
            create-body {:task/title "Write action harness"
                         :task/description "Add contract tests for auth and tasks"
                         :task/status :todo
+                        :task/client default-client-id
                         :task/assignee assignee-huda
                         :task/priority :high
                         :task/tags [tag-ops tag-urgent]
@@ -156,11 +171,18 @@
            (fail! failures "Update user should change display name" updated-user))
          (when-not (= #{:role/admin} (set (:user/roles updated-user)))
            (fail! failures "Update user should replace roles" updated-user)))
+       (when updated-client
+         (when-not (= :waiting (:client/status updated-client))
+           (fail! failures "Update client should change status" updated-client))
+         (when-not (= "Waiting on docs" (:client/notes updated-client))
+           (fail! failures "Update client should change notes" updated-client)))
        (when created-task
          (when-not (= :todo (:task/status created-task))
            (fail! failures "Create should set provided status" created-task))
          (when-not (= assignee-huda (:user/id (:task/assignee created-task)))
            (fail! failures "Create should assign to provided user" created-task))
+         (when-not (= default-client-id (:client/id (:task/client created-task)))
+           (fail! failures "Create should link provided client" created-task))
          (when-not (= #{tag-ops tag-urgent} (set (map :tag/id (:task/tags created-task))))
            (fail! failures "Create should persist tags" created-task)))
        (let [bad-create (tasks/create-task! conn {} actor)]
@@ -208,6 +230,12 @@
              (when assigned-task
                (when-not (= assignee-damjan (:user/id (:task/assignee assigned-task)))
                  (fail! failures "Assign should change assignee" assigned-task))))
+           (when created-client
+             (let [link (tasks/set-client! conn task-id {:task/client (:client/id created-client)} actor)
+                   linked-task (some-> (ensure-success failures "Set client" link) :task)]
+               (when linked-task
+                 (when-not (= (:client/id created-client) (get-in linked-task [:task/client :client/id]))
+                   (fail! failures "Set client should link task to client" linked-task)))))
            (let [due (tasks/set-due-date! conn task-id {:task/due-date "2025-12-24T12:00:00Z"} actor)
                  due-task (some-> (ensure-success failures "Set due date" due) :task)]
              (when due-task

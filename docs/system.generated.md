@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `0fef18e067632f3f5f90facf0d7e25e3f2f195fab509348db2e4f2017f464d41`
+- Catalog version: `22dcfa19ec15581809de274fdd14f1e0df8e2ed2e12e1dfa1f9e72e1dab2fd2d`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (35)
+### Schema (36)
 - schema/activation-step
 - schema/betting-bet
 - schema/betting-bookmaker
@@ -16,6 +16,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/betting-quote
 - schema/business
 - schema/channel
+- schema/client
 - schema/comparison-row
 - schema/contact
 - schema/content-block
@@ -44,7 +45,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (63)
+### Actions (66)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -54,6 +55,8 @@ This file is auto-generated. Do not edit by hand.
 - action/betting-odds
 - action/betting-settle
 - action/business-upsert
+- action/client-create
+- action/client-update
 - action/comparison-row-delete
 - action/comparison-row-upsert
 - action/contact-upsert
@@ -89,6 +92,7 @@ This file is auto-generated. Do not edit by hand.
 - action/task-delete-note
 - action/task-edit-note
 - action/task-read
+- action/task-set-client
 - action/task-set-due
 - action/task-set-status
 - action/task-set-tags
@@ -109,8 +113,9 @@ This file is auto-generated. Do not edit by hand.
 - action/user-update
 - action/workspace-promote
 
-### Views (18)
+### Views (19)
 - view/betting
+- view/clients
 - view/control-panel
 - view/file-library
 - view/home
@@ -203,6 +208,8 @@ This file is auto-generated. Do not edit by hand.
 - /blocks
 - /businesses
 - /catalog
+- /client
+- /clients
 - /commands/run
 - /comparison-rows
 - /complete
@@ -376,6 +383,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.checks.idempotency
 - darelwasl.checks.migration
 - darelwasl.checks.schema
+- darelwasl.clients
 - darelwasl.config
 - darelwasl.content
 - darelwasl.db
@@ -383,6 +391,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.entity
 - darelwasl.events
 - darelwasl.features.betting
+- darelwasl.features.clients
 - darelwasl.features.control-panel
 - darelwasl.features.files
 - darelwasl.features.home
@@ -403,6 +412,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.http.routes.auth
 - darelwasl.http.routes.betting
 - darelwasl.http.routes.catalog
+- darelwasl.http.routes.clients
 - darelwasl.http.routes.content
 - darelwasl.http.routes.events
 - darelwasl.http.routes.files

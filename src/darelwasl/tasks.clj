@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.clients :as clients]
             [darelwasl.db :as db]
             [darelwasl.entity :as entity]
             [darelwasl.provenance :as prov]
@@ -61,6 +62,7 @@
    :fact/valid-from
    :fact/valid-until
    {:task/assignee [:user/id :user/username :user/name]}
+   {:task/client [:client/id :client/name :client/status :client/channel :client/phone :client/email]}
    :task/due-date
    :task/priority
    {:task/tags [:tag/id :tag/name]}
@@ -79,7 +81,7 @@
   (Date/from (Instant/now)))
 
 (defn- pending-note-tx
-  [db task-id reason actor workspace-id]
+  [db task-id reason actor workspace-id {:keys [next-followup last-contact]}]
   (let [author-id (:user/id actor)
         base {:note/id (UUID/randomUUID)
               :entity/type :entity.type/note
@@ -89,6 +91,8 @@
               :note/created-at (now-inst)}
         base (entity/with-ref db base)]
     (cond-> base
+      next-followup (assoc :note/next-followup next-followup)
+      last-contact (assoc :note/last-contact last-contact)
       workspace-id (assoc :note/workspace workspace-id)
       author-id (assoc :note/author [:user/id author-id]))))
 
@@ -200,6 +204,15 @@
 (defn- resolve-task-id
   [db task-id]
   (entity/resolve-id db :task/id task-id "task id"))
+
+(defn- client-id-value
+  [value]
+  (cond
+    (map? value) (or (:client/id value)
+                     (:client/ref value)
+                     (:id value))
+    (vector? value) (second value)
+    :else value))
 
 (defn- task-eid
   [db task-id workspace-id]
@@ -321,6 +334,7 @@
         {priority :value priority-err :error} (v/normalize-enum (v/param-value params :priority) @allowed-priorities "priority")
         {tag :value tag-err :error} (v/normalize-uuid (v/param-value params :tag) "tag")
         {assignee :value assignee-err :error} (v/normalize-uuid (v/param-value params :assignee) "assignee")
+        {client :value client-err :error} (v/normalize-uuid (v/param-value params :client) "client")
         {archived :value archived-err :error} (v/normalize-boolean (v/param-value params :archived) "archived" {:default false
                                                                                                                 :allow-all? true})
         limit-raw (v/param-value params :limit)
@@ -341,6 +355,7 @@
       priority-err (error 400 priority-err)
       tag-err (error 400 tag-err)
       assignee-err (error 400 assignee-err)
+      client-err (error 400 client-err)
       archived-err (error 400 archived-err)
       (or (nil? limit) (<= limit 0)) (error 400 (str "Invalid limit; must be between 1 and " max-list-limit))
       (> limit max-list-limit) (error 400 (str "Limit too high; max " max-list-limit))
@@ -351,6 +366,7 @@
                        :priority priority
                        :tag tag
                        :assignee assignee
+                       :client client
                        :archived archived
                        :sort sort-key
                        :order order-key}
@@ -358,17 +374,19 @@
              :offset offset})))
 
 (defn- filter-task
-  [{:task/keys [status assignee tags priority archived?]}
+  [{:task/keys [status assignee tags priority archived? client]}
    filters]
   (let [status-filter (:status filters)
         priority-filter (:priority filters)
         assignee-filter (:assignee filters)
+        client-filter (:client filters)
         tag-filter (:tag filters)
         tag-set (->> tags (map :tag/id) set)
         archived-filter (:archived filters)]
     (and (or (nil? status-filter) (= status status-filter))
          (or (nil? priority-filter) (= priority priority-filter))
          (or (nil? assignee-filter) (= (:user/id assignee) assignee-filter))
+         (or (nil? client-filter) (= (:client/id client) client-filter))
          (or (nil? tag-filter) (and (seq tag-set) (contains? tag-set tag-filter)))
          (case archived-filter
            :all true
@@ -397,7 +415,7 @@
     tasks))
 
 (defn- task-eids-by-filters
-  [db {:keys [status priority assignee tag archived]} workspace-id]
+  [db {:keys [status priority assignee tag archived client]} workspace-id]
   (let [archived-filter (case archived
                           :all :all
                           true true
@@ -408,6 +426,9 @@
                 priority (conj ['?e :task/priority '?priority])
                 assignee (-> (conj ['?e :task/assignee '?assignee-entity])
                              (conj ['?assignee-entity :user/id '?assignee-id]))
+                client (-> (conj ['?e :task/client '?client-entity])
+                           (conj ['?client-entity :client/id '?client-id])
+                           (conj ['?client-entity :client/workspace '?workspace]))
                 tag (-> (conj ['?e :task/tags '?tag-entity])
                         (conj ['?tag-entity :tag/id '?tag-id])
                         (conj ['?tag-entity :tag/workspace '?workspace])))
@@ -415,11 +436,13 @@
              status (conj '?status)
              priority (conj '?priority)
              assignee (conj '?assignee-id)
+             client (conj '?client-id)
              tag (conj '?tag-id))
         args (cond-> [db workspace-id]
                status (conj status)
                priority (conj priority)
                assignee (conj assignee)
+               client (conj client)
                tag (conj tag))
         [where in args] (let [archived-clause ['(get-else $ ?e :task/archived? false) '?arch]]
                           (case archived-filter
@@ -542,6 +565,22 @@
       {:assignee assignee}
       (error 400 "Assignee not found"))))
 
+(defn- validate-client!
+  [db client-id workspace-id]
+  (cond
+    (nil? client-id) (error 400 "Client is required")
+    :else
+    (if-let [client (clients/client-by-id db client-id workspace-id)]
+      {:client client}
+      (error 400 "Client not found"))))
+
+(defn- param-present?
+  [params key]
+  (let [k (name key)]
+    (or (contains? params key)
+        (contains? params (keyword k))
+        (contains? params k))))
+
 (defn- validate-create
   [db body workspace]
   (let [{title :value title-err :error} (normalize-string-field (param-value body :task/title) "Title" {:required true
@@ -556,6 +595,8 @@
                                                                            "Pending reason"
                                                                            {:required pending?
                                                                             :allow-blank? false})
+        {next-followup :value follow-err :error} (normalize-instant (param-value body :note/next-followup) "next follow-up")
+        {last-contact :value contact-err :error} (normalize-instant (param-value body :note/last-contact) "last contact")
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
         {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) workspace {:default-on-nil #{}})
         {due-date :value due-err :error} (normalize-instant (param-value body :task/due-date) "due date")
@@ -565,12 +606,16 @@
                                                                               "automation key"
                                                                               {:required false
                                                                                :allow-blank? false})
-        {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")]
+        {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")
+        client-raw (param-value body :task/client)
+        client-id (client-id-value client-raw)]
     (cond
       title-err (error 400 title-err)
       desc-err (error 400 desc-err)
       status-err (error 400 status-err)
       pending-err (error 400 pending-err)
+      follow-err (error 400 follow-err)
+      contact-err (error 400 contact-err)
       priority-err (error 400 priority-err)
       (:error tags-result) (error 400 (:error tags-result))
       due-err (error 400 due-err)
@@ -579,9 +624,12 @@
       automation-err (error 400 automation-err)
       assignee-err (error 400 assignee-err)
       :else
-      (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)]
-        (if assignee-error
-          {:error assignee-error}
+      (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)
+            {client :client client-error :error} (validate-client! db client-id workspace)]
+        (cond
+          assignee-error {:error assignee-error}
+          client-error {:error client-error}
+          :else
           (let [tag-ids (or value #{})
                 base {:task/id (UUID/randomUUID)
                       :entity/type :entity.type/task
@@ -591,6 +639,7 @@
                       :task/priority priority
                       :task/tags (mapv (fn [tid] [:tag/id tid]) tag-ids)
                       :task/assignee [:user/id (:user/id assignee)]
+                      :task/client [:client/id (:client/id client)]
                       :task/archived? (boolean archived?)
                       :task/extended? (boolean extended?)}
                 base (entity/with-ref db base)
@@ -599,7 +648,9 @@
                        (and pending? pending-reason) (assoc :task/pending-reason pending-reason)
                        automation-key (assoc :task/automation-key automation-key))]
             {:data data
-             :pending-reason pending-reason}))))))
+             :pending-reason pending-reason
+             :pending-note {:note/next-followup next-followup
+                            :note/last-contact last-contact}})))))) 
 
 (defn- update-tags-tx
   [task-id existing-tags new-tag-ids]
@@ -619,7 +670,10 @@
                                                                                                                    :allow-blank? true})
         {priority :value priority-err :error} (normalize-enum (param-value body :task/priority) @allowed-priorities "priority")
         {:keys [value] :as tags-result} (normalize-tags db (param-value body :task/tags) workspace {:default-on-nil nil})
-        {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default nil})]
+        {extended? :value extended-err :error} (normalize-boolean (param-value body :task/extended?) "extended" {:default nil})
+        client-raw (param-value body :task/client)
+        client-present? (param-present? body :task/client)
+        client-id (client-id-value client-raw)]
     (cond
       id-err (error 400 id-err)
       title-err (error 400 title-err)
@@ -627,18 +681,23 @@
       priority-err (error 400 priority-err)
       (:error tags-result) (error 400 (:error tags-result))
       extended-err (error 400 extended-err)
-      (and (nil? title) (nil? desc) (nil? priority) (nil? value) (nil? extended?))
+      (and (nil? title) (nil? desc) (nil? priority) (nil? value) (nil? extended?) (not client-present?))
       (error 400 "No fields provided to update")
       :else
       (if-let [eid (task-eid db task-id workspace)]
-        {:eid eid
-         :task-id task-id
-         :updates (cond-> {:task/id task-id}
-                    title (assoc :task/title title)
-                    desc (assoc :task/description desc)
-                    priority (assoc :task/priority priority)
-                    (some? extended?) (assoc :task/extended? extended?))
-         :tags value}
+        (let [{client :client client-error :error} (when client-present?
+                                                     (validate-client! db client-id workspace))]
+          (if client-error
+            {:error client-error}
+            {:eid eid
+             :task-id task-id
+             :updates (cond-> {:task/id task-id}
+                        title (assoc :task/title title)
+                        desc (assoc :task/description desc)
+                        priority (assoc :task/priority priority)
+                        (some? extended?) (assoc :task/extended? extended?)
+                        client-present? (assoc :task/client [:client/id (:client/id client)]))
+             :tags value}))
         (error 404 "Task not found")))))
 
 (defn- validate-simple-status
@@ -651,17 +710,23 @@
         {pending-reason :value pending-err :error} (normalize-string-field pending-raw
                                                                            "Pending reason"
                                                                            {:required pending?
-                                                                            :allow-blank? false})]
+                                                                            :allow-blank? false})
+        {next-followup :value follow-err :error} (normalize-instant (param-value body :note/next-followup) "next follow-up")
+        {last-contact :value contact-err :error} (normalize-instant (param-value body :note/last-contact) "last contact")]
     (cond
       id-err (error 400 id-err)
       status-err (error 400 status-err)
       pending-err (error 400 pending-err)
+      follow-err (error 400 follow-err)
+      contact-err (error 400 contact-err)
       :else
       (if (task-eid db task-id workspace)
         {:task-id task-id
          :updates {:task/id task-id
                    :task/status status}
-         :pending-reason (when (= status :pending) pending-reason)}
+         :pending-reason (when (= status :pending) pending-reason)
+         :pending-note {:note/next-followup next-followup
+                        :note/last-contact last-contact}}
         (error 404 "Task not found")))))
 
 (defn- validate-assignee-update
@@ -693,6 +758,23 @@
          :eid eid
          :due-date due-date}
         (error 404 "Task not found")))))
+
+(defn- validate-client-update
+  [db task-id body workspace]
+  (let [{task-id :value id-err :error} (resolve-task-id db task-id)
+        client-raw (param-value body :task/client)
+        client-id (client-id-value client-raw)]
+    (cond
+      id-err (error 400 id-err)
+      (nil? client-id) (error 400 "Client is required")
+      :else
+      (let [{client :client client-error :error} (validate-client! db client-id workspace)]
+        (cond
+          client-error {:error client-error}
+          (not (task-eid db task-id workspace)) (error 404 "Task not found")
+          :else {:task-id task-id
+                 :updates {:task/id task-id
+                           :task/client [:client/id (:client/id client)]}})))))
 
 (defn- validate-tags-update
   [db task-id body workspace]
@@ -775,7 +857,7 @@
   (or (ensure-conn conn)
       (let [db (d/db conn)
             workspace (workspace/actor-workspace actor)
-            {:keys [data pending-reason error]} (validate-create db body workspace)]
+            {:keys [data pending-reason pending-note error]} (validate-create db body workspace)]
         (if error
           {:error error}
           (let [automation-key (:task/automation-key data)
@@ -796,7 +878,7 @@
                                        (assoc :task/pending-reason pending-reason))
                     note-tx (when (and (= :pending (:task/status data))
                                        (not (str/blank? pending-reason)))
-                              (pending-note-tx db (:task/id data) pending-reason actor workspace))
+                              (pending-note-tx db (:task/id data) pending-reason actor workspace pending-note))
                     tx-data (cond-> [(prov/enrich-tx data-with-reason tx-prov)]
                               note-tx (conj (prov/enrich-tx note-tx tx-prov)))
                     tx-result (attempt-transact conn tx-data "create task")]
@@ -861,13 +943,13 @@
             result (validate-simple-status db task-id body workspace)]
         (if-let [err (:error result)]
           {:error err}
-          (let [{:keys [task-id updates pending-reason]} result
+          (let [{:keys [task-id updates pending-reason pending-note]} result
                 current (when-let [eid (task-eid db task-id workspace)]
                           (pull-task db eid))
                 tx-prov (prov/provenance actor)
                 note-tx (when (and (= :pending (:task/status updates))
                                    (not (str/blank? pending-reason)))
-                          (pending-note-tx db task-id pending-reason actor workspace))
+                          (pending-note-tx db task-id pending-reason actor workspace pending-note))
                 retract-pending (when (and (not= (:task/status updates) :pending)
                                            (some? (:task/pending-reason current)))
                                   [:db/retract [:task/id task-id] :task/pending-reason (:task/pending-reason current)])
@@ -917,6 +999,31 @@
                                    (:task/assignee updates))
                         {:task updated})
               :else (error 500 "Task not available after assignment")))))))
+
+(defn set-client!
+  [conn task-id body actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            workspace (workspace/actor-workspace actor)
+            result (validate-client-update db task-id body workspace)]
+        (if-let [err (:error result)]
+          {:error err}
+          (let [{:keys [updates task-id]} result
+                tx-prov (prov/provenance actor)
+                tx-result (attempt-transact conn [(prov/enrich-tx updates tx-prov)] "set task client")
+                updated (when-let [db-after (:db-after tx-result)]
+                          (when-let [eid (task-eid db-after task-id workspace)]
+                            (some-> (pull-task db-after eid)
+                                    present-task)))]
+            (cond
+              (:error tx-result) {:error (:error tx-result)}
+              updated (do
+                        (log/infof "AUDIT task-set-client user=%s task=%s client=%s"
+                                   (or (:user/username actor) (:user/id actor))
+                                   task-id
+                                   (:task/client updates))
+                        {:task updated})
+              :else (error 500 "Task not available after client update")))))))
 
 (defn set-due-date!
   [conn task-id body actor]

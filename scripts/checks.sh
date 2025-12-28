@@ -154,6 +154,7 @@ check_edn_parse() {
                       (str root "/registries/theme.edn")
                       (str root "/registries/automations.edn")]
       fixture-paths {:users (str root "/fixtures/users.edn")
+                     :clients (str root "/fixtures/clients.edn")
                      :tasks (str root "/fixtures/tasks.edn")
                      :tags (str root "/fixtures/tags.edn")
                      :content (str root "/fixtures/content.edn")
@@ -161,6 +162,7 @@ check_edn_parse() {
       _ (doseq [f registry-paths] (read-single-edn! f))
       fixtures (into {} (for [[k path] fixture-paths] [k (read-single-edn! path)]))
       users (:users fixtures)
+      clients (:clients fixtures)
       tasks (:tasks fixtures)
       tags (:tags fixtures)
       content (or (:content fixtures) {})
@@ -197,6 +199,24 @@ check_edn_parse() {
                                          (str/blank? pwd))]
                           {:user/username uname :reason "Invalid id/username/password"}))
       user-id-set (set user-ids)
+      required-client-keys #{:client/id :client/name}
+      client-missing (seq (for [c clients
+                                :let [missing (set/difference required-client-keys (set (keys c)))]
+                                :when (seq missing)]
+                            {:client/id (:client/id c)
+                             :missing missing}))
+      client-ids (map :client/id clients)
+      duplicate-client-ids (seq (for [[id freq] (frequencies client-ids)
+                                      :when (> freq 1)]
+                                  id))
+      invalid-clients (seq (for [c clients
+                                 :let [cid (:client/id c)
+                                       name (:client/name c)]
+                                 :when (or (not (uuid? cid))
+                                           (not (string? name))
+                                           (str/blank? name))]
+                             {:client/id cid :reason "Invalid id/name"}))
+      client-id-set (set client-ids)
       required-tag-keys #{:tag/id :tag/name}
       tag-missing (seq (for [t tags
                              :let [missing (set/difference required-tag-keys (set (keys t)))]
@@ -219,6 +239,12 @@ check_edn_parse() {
                                    :when (not (contains? user-id-set assignee))]
                                {:task/id (:task/id t)
                                 :task/assignee assignee}))
+      missing-clients (seq (for [t tasks
+                                 :let [client-ref (:task/client t)
+                                       cid (lookup-id client-ref :client/id)]
+                                 :when (or (nil? cid) (not (contains? client-id-set cid)))]
+                             {:task/id (:task/id t)
+                              :task/client client-ref}))
       task-tag-errors (seq
                        (for [t tasks
                              tag (:task/tags t)
@@ -411,6 +437,17 @@ check_edn_parse() {
         (doseq [u invalid-users]
           (println "Invalid user fixture" u))
         (System/exit 1))
+  (when client-missing
+    (doseq [m client-missing]
+      (println "Client fixture missing keys" m))
+    (System/exit 1))
+  (when duplicate-client-ids
+    (println "Duplicate client IDs in fixtures:" duplicate-client-ids)
+    (System/exit 1))
+  (when invalid-clients
+    (doseq [c invalid-clients]
+      (println "Invalid client fixture" c))
+    (System/exit 1))
   (when tag-missing
     (doseq [m tag-missing]
       (println "Tag fixture missing keys" m))
@@ -424,6 +461,9 @@ check_edn_parse() {
     (System/exit 1))
   (when missing-assignees
     (println "Task assignees missing in user fixtures:" missing-assignees)
+    (System/exit 1))
+  (when missing-clients
+    (println "Task clients missing in client fixtures:" missing-clients)
     (System/exit 1))
   (when task-tag-errors
     (doseq [err task-tag-errors]
@@ -503,6 +543,7 @@ check_edn_parse() {
       (println "Invalid betting fact fixture" err))
     (System/exit 1))
   (println "User fixtures validated (count" (count users) ") and referenced by tasks.")
+  (println "Client fixtures validated (count" (count clients) ") and referenced by tasks.")
   (println "Tag fixtures validated (count" (count tags) ") and referenced by tasks.")
   (println "Content fixtures validated (tags" (count content-tags) ", pages" (count content-pages) ", blocks" (count content-blocks) ").")
   (println "Betting fixtures validated (events" (count betting-events)

@@ -107,6 +107,18 @@
                                             :actor (:auth/session request)}))
       (common/handle-task-result res))))
 
+(defn client-handler
+  [state]
+  (fn [request]
+    (let [workspace (common/workspace-id request)
+          task-id (common/task-id-param request)
+          action-res (actions/execute! state {:action/id :cap/action/task-set-client
+                                              :actor (actions/actor-from-session (:auth/session request) workspace)
+                                              :input (assoc (or (:body-params request) {})
+                                                            :task/id task-id)})
+          res (if (:error action-res) {:error (:error action-res)} (:result action-res))]
+      (common/handle-task-result res))))
+
 (defn tags-handler
   [state]
   (fn [request]
@@ -193,6 +205,7 @@
                    :delete (delete-task-handler state)}]
     [(str task-id-path "/status") {:post (set-status-handler state)}]
     [(str task-id-path "/assignee") {:post (assign-task-handler state)}]
+    [(str task-id-path "/client") {:post (client-handler state)}]
     [(str task-id-path "/due-date") {:post (due-date-handler state)}]
     [(str task-id-path "/tags") {:post (tags-handler state)}]
     [(str task-id-path "/archive") {:post (archive-handler state)}]]

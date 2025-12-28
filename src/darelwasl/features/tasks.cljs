@@ -204,6 +204,8 @@
 (defn task-preview []
   (r/with-let [show-advanced? (r/atom false)]
     (let [{:keys [assignees]} @(rf/subscribe [:darelwasl.app/tasks])
+          clients-state @(rf/subscribe [:darelwasl.app/clients])
+          clients (or (:items clients-state) [])
           detail @(rf/subscribe [:darelwasl.app/task-detail])
           task @(rf/subscribe [:darelwasl.app/selected-task])
           task-config (entity/detail-config :entity.type/task)
@@ -213,6 +215,12 @@
           create? (= mode :create)
           saving? (= detail-status :saving)
           available-assignees (if (seq assignees) assignees state/fallback-assignees)
+          client-options (if (seq clients)
+                           (map (fn [client]
+                                  {:id (:client/id client)
+                                   :label (or (:client/name client) "Client")})
+                                clients)
+                           [])
           close-sheet! #(rf/dispatch [:darelwasl.app/close-detail])]
       (let [placeholder (when (and (not create?) (nil? task))
                           [:div.placeholder-card
@@ -249,9 +257,10 @@
                        "Reset"]]
             :placeholder placeholder
             :content (when-not placeholder
-                       (let [{:keys [title description priority assignee due-date tags archived? extended?]} form
+                       (let [{:keys [title description priority assignee due-date tags archived? extended? client]} form
                              tag-state @(rf/subscribe [:darelwasl.app/tags])
                              current-assignee (or assignee (:id (first available-assignees)) "")
+                             current-client (or client (:id (first client-options)) "")
                              summary (->> [(if archived? "Archived" (when task-status (util/status-label task-status)))
                                            (when priority (str "Priority " (util/priority-label priority)))
                                            (when due-date (str "Due " (util/format-date due-date)))]
@@ -328,6 +337,18 @@
                                                 :placeholder "Name the task"
                                                 :on-change #(rf/dispatch [:darelwasl.app/update-detail-field :title (.. % -target -value)])
                                                 :disabled saving?}]]
+                           [:div.form-group
+                            [:label.form-label {:for "task-client"} "Client"]
+                            [:select.form-input {:id "task-client"
+                                                 :aria-label "Client"
+                                                 :value current-client
+                                                 :on-change #(rf/dispatch [:darelwasl.app/update-detail-field :client (.. % -target -value)])
+                                                 :disabled (or saving? (empty? client-options))}
+                             (when (empty? client-options)
+                               [:option {:value ""} "No clients available"])
+                             (for [{:keys [id label]} client-options]
+                               ^{:key (str "client-" id)}
+                               [:option {:value id} label])]]
                            [:div.form-group
                             [:label.form-label {:for "task-assignee"} "Assignee"]
                            [:select.form-input {:id "task-assignee"

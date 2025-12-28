@@ -62,6 +62,7 @@
                    [:task/id :entity.type/task]
                    [:tag/id :entity.type/tag]
                    [:note/id :entity.type/note]
+                   [:client/id :entity.type/person]
                    [:system/id :entity.type/system]
                    [:outbox/id :entity.type/outbox]
                    [:content.tag/id :entity.type/content-tag]
@@ -151,10 +152,15 @@
                                       :where [?e :note/id _]
                                              (not [?e :note/workspace _])]
                                     db))
+          client-eids (map first (d/q '[:find ?e
+                                        :where [?e :client/id _]
+                                               (not [?e :client/workspace _])]
+                                      db))
           tx-data (->> (concat (map (fn [e] [:db/add e :fact/workspace ws]) task-eids)
                                (map (fn [e] [:db/add e :tag/workspace ws]) tag-eids)
                                (map (fn [e] [:db/add e :file/workspace ws]) file-eids)
-                               (map (fn [e] [:db/add e :note/workspace ws]) note-eids))
+                               (map (fn [e] [:db/add e :note/workspace ws]) note-eids)
+                               (map (fn [e] [:db/add e :client/workspace ws]) client-eids))
                        vec)]
       (when (seq tx-data)
         (db/transact! conn {:tx-data tx-data})

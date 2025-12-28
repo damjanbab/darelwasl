@@ -7,6 +7,7 @@
             [darelwasl.features.login :as login]
             [darelwasl.features.prs :as prs-ui]
             [darelwasl.features.control-panel :as control-panel]
+            [darelwasl.features.clients :as clients-ui]
             [darelwasl.features.services :as services-ui]
             [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.users :as users-ui]
@@ -24,12 +25,17 @@
 (def priority-options state/priority-options)
 (def task-status-options state/task-status-options)
 (def task-priority-options state/task-priority-options)
+(def client-status-options state/client-status-options)
+(def client-channel-options state/client-channel-options)
 (def default-login-state state/default-login-state)
 (def fallback-assignees state/fallback-assignees)
 (def default-task-filters state/default-task-filters)
 (def default-task-form state/default-task-form)
 (def default-task-detail state/default-task-detail)
 (def default-task-state state/default-task-state)
+(def default-client-form state/default-client-form)
+(def default-client-detail state/default-client-detail)
+(def default-clients-state state/default-clients-state)
 (def default-prs-state state/default-prs-state)
 (def default-home-state state/default-home-state)
 (def default-tags-state state/default-tags-state)
@@ -88,6 +94,23 @@
                  (= archived :all) (conj ["archived" "all"])
                  sort (conj ["sort" (name sort)])
                  order (conj ["order" (name order)])
+                 limit-val (conj ["limit" limit-val])
+                 true (conj ["offset" offset-val]))]
+    (when (seq params)
+      (let [sp (js/URLSearchParams.)]
+        (doseq [[k v] params]
+          (.append sp k v))
+        (.toString sp)))))
+
+(defn- build-client-query
+  [{:keys [status page page-size limit offset]}]
+  (let [limit-val (max 1 (or page-size limit 25))
+        page-val (max 1 (or page 1))
+        offset-val (max 0 (if page-size
+                            (* (dec page-val) limit-val)
+                            (or offset 0)))
+        params (cond-> []
+                 status (conj ["status" (name status)])
                  limit-val (conj ["limit" limit-val])
                  true (conj ["offset" offset-val]))]
     (when (seq params)
@@ -308,6 +331,14 @@
       (:id (first assignees))
       (:id (first fallback-assignees))))
 
+(defn- default-client-id
+  [clients]
+  (or (some (fn [c]
+              (when (= "Inbox" (:client/name c))
+                (:client/id c)))
+            clients)
+      (:client/id (first clients))))
+
 (defn- status-count-cards
   [{:keys [todo in-progress pending done]}]
   [ui/stat-group {:cards [{:label "To do" :value (or todo 0)}
@@ -317,6 +348,7 @@
 
 (declare tag-chip)
 (declare entity-list task-card)
+(declare validate-task-form build-update-ops)
 
 (defn- tag-highlights [tags]
   [:div.tag-highlights
@@ -352,6 +384,18 @@
         (update :fact/adapter kw)
         (update :task/provenance kw-provenance))))
 
+(defn- normalize-client
+  [client]
+  (let [kw-safe (fn [v]
+                  (cond
+                    (keyword? v) v
+                    (string? v) (keyword v)
+                    :else v))]
+    (cond-> (-> client
+                (update :client/status kw-safe)
+                (update :client/channel kw-safe))
+      (:client/next-task client) (update :client/next-task normalize-task))))
+
 (defn- normalize-file
   [file]
   (-> file
@@ -368,13 +412,25 @@
           :title (or (:task/title task) "")
           :description (or (:task/description task) "")
           :status (:task/status task)
-          :pending-reason (:task/pending-reason task)
-          :priority (:task/priority task)
-          :assignee (get-in task [:task/assignee :user/id])
+         :pending-reason (:task/pending-reason task)
+         :priority (:task/priority task)
+         :client (get-in task [:task/client :client/id])
+         :assignee (get-in task [:task/assignee :user/id])
           :due-date (iso->input-date (:task/due-date task))
           :tags (set (map :tag/id (or (:task/tags task) [])))
           :archived? (boolean (:task/archived? task))
           :extended? (boolean (:task/extended? task))}))
+
+(defn- client->form
+  [client]
+  (merge default-client-form
+         {:id (:client/id client)
+          :name (or (:client/name client) "")
+          :phone (or (:client/phone client) "")
+          :email (or (:client/email client) "")
+          :channel (:client/channel client)
+          :status (:client/status client)
+          :notes (or (:client/notes client) "")}))
 
 (defn- detail-from-task
   [task]
@@ -386,22 +442,61 @@
              :form (task->form task))))
 
 (defn- blank-detail
-  [assignees session]
+  [assignees clients session]
   (-> default-task-detail
       (assoc :mode :create
              :status :idle
              :error nil
              :tag-entry ""
-             :form (assoc default-task-form :assignee (default-assignee-id assignees session)))))
+             :form (assoc default-task-form
+                          :assignee (default-assignee-id assignees session)
+                          :client (default-client-id clients)))))
 
 (defn- closed-detail
-  [assignees session]
+  [assignees clients session]
   (-> default-task-detail
       (assoc :mode :closed
              :status :idle
              :error nil
              :tag-entry ""
-             :form (assoc default-task-form :assignee (default-assignee-id assignees session)))))
+             :form (assoc default-task-form
+                          :assignee (default-assignee-id assignees session)
+                          :client (default-client-id clients)))))
+
+(defn- blank-next-action-form
+  [assignees session client-id]
+  (assoc default-task-form
+         :assignee (default-assignee-id assignees session)
+         :client client-id))
+
+(defn- client-detail
+  [client tasks next-task assignees session]
+  (let [client-id (:client/id client)]
+    (-> default-client-detail
+        (assoc :mode :edit
+               :status :idle
+               :error nil
+               :next-action-status :idle
+               :next-action-error nil
+               :form (client->form client)
+               :next-action next-task
+               :next-action-form (if next-task
+                                   (task->form next-task)
+                                   (blank-next-action-form assignees session client-id))
+               :tasks tasks))))
+
+(defn- blank-client-detail
+  []
+  (-> default-client-detail
+      (assoc :mode :create
+             :status :idle
+             :error nil
+             :next-action-status :idle
+             :next-action-error nil
+             :form default-client-form
+             :next-action nil
+             :next-action-form nil
+             :tasks [])))
 
 (defn- normalize-user
   [user]
@@ -514,7 +609,8 @@
          safe-route (if (contains? allowed route) route :home)
         dispatches (cond-> []
                       (= safe-route :home) (conj [::fetch-home])
-                      (= safe-route :tasks) (conj [::fetch-tasks])
+                      (= safe-route :tasks) (conj [::fetch-tasks] [::fetch-clients])
+                      (= safe-route :clients) (conj [::fetch-clients])
                       (= safe-route :files) (conj [::fetch-files])
                       (= safe-route :users) (conj [::fetch-users])
                       (= safe-route :prs) (conj [::fetch-prs])
@@ -583,6 +679,7 @@
                  (assoc :route preferred-route)
                  (assoc-in [:nav :last-route] preferred-route)
                  (assoc :tasks default-task-state)
+                 (assoc :clients default-clients-state)
                  (assoc :files default-files-state)
                  (assoc :prs default-prs-state)
                  (assoc :betting default-betting-state)
@@ -596,7 +693,8 @@
                  (assoc-in [:login :error] nil))]
     (let [dispatches (cond-> [[::fetch-tags]
                               [::fetch-home]
-                              [::fetch-tasks]]
+                              [::fetch-tasks]
+                              [::fetch-clients]]
                        (= preferred-route :files) (conj [::fetch-files])
                        (= preferred-route :users) (conj [::fetch-users])
                        (= preferred-route :prs) (conj [::fetch-prs])
@@ -647,6 +745,7 @@
                   :route :login
                   :nav default-nav-state
                   :tasks default-task-state
+                  :clients default-clients-state
                   :files default-files-state
                   :prs default-prs-state
                   :betting default-betting-state
@@ -678,6 +777,7 @@
                       current))
          assignees (let [opts (assignees-from-tasks tasks)]
                      (if (seq opts) opts fallback-assignees))
+         clients (or (get-in db [:clients :items]) [])
          pagination-raw (:pagination payload)
          fallback-limit (or (get-in db [:tasks :filters :page-size]) 25)
          fallback-page (or (get-in db [:tasks :filters :page]) 1)
@@ -707,10 +807,14 @@
                                                :tag-entry "")
                                         (update :form (fn [form]
                                                         (let [assignee (or (:assignee form)
-                                                                           (default-assignee-id assignees (:session db)))]
-                                                          (assoc form :assignee assignee)))))
+                                                                           (default-assignee-id assignees (:session db)))
+                                                              client (or (:client form)
+                                                                         (default-client-id clients))]
+                                                          (assoc form
+                                                                 :assignee assignee
+                                                                 :client client)))))
                        selected-task (detail-from-task selected-task)
-                       :else (closed-detail assignees (:session db)))))
+                       :else (closed-detail assignees clients (:session db)))))
           (assoc-in [:tasks :status] (if (seq tasks) :ready :empty))
          (assoc-in [:tasks :error] nil)))))
 
@@ -721,6 +825,340 @@
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load tasks.")]
      (-> (state/mark-error db [:tasks] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+;; Clients
+(rf/reg-event-fx
+ ::fetch-clients
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:clients :filters])]
+     {:db (state/mark-loading db [:clients])
+      ::fx/http {:url (str "/api/clients" (when-let [qs (build-client-query filters)] (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-clients-success]
+                 :on-error [::fetch-clients-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-clients-success
+ (fn [db [_ payload]]
+   (let [clients (mapv normalize-client (:clients payload))
+         current (get-in db [:clients :selected])
+         selected (when (some #(= (:client/id %) current) clients) current)
+         pagination-raw (:pagination payload)
+         fallback-limit (or (get-in db [:clients :filters :page-size]) 25)
+         fallback-page (or (get-in db [:clients :filters :page]) 1)
+         limit (max 1 (or (:limit pagination-raw) fallback-limit))
+         offset (max 0 (or (:offset pagination-raw) (* (dec fallback-page) fallback-limit)))
+         total (max (count clients) (or (:total pagination-raw) (count clients)))
+         page (max 1 (or (:page pagination-raw) (inc (quot offset limit))))
+         pages (max 1 (int (Math/ceil (/ total (double limit)))))
+         detail-mode (get-in db [:clients :detail :mode])
+         db' (-> db
+                 (assoc-in [:clients :items] clients)
+                 (assoc-in [:clients :selected] selected)
+                 (assoc-in [:clients :filters :page] page)
+                 (assoc-in [:clients :filters :page-size] limit)
+                 (assoc-in [:clients :pagination] {:limit limit
+                                                   :offset offset
+                                                   :total total
+                                                   :page page
+                                                   :pages pages})
+                 (assoc-in [:clients :status] (if (seq clients) :ready :empty))
+                 (assoc-in [:clients :error] nil))]
+     (if (or selected (= detail-mode :create))
+       db'
+       (assoc-in db' [:clients :detail] default-client-detail)))))
+
+(rf/reg-event-db
+ ::fetch-clients-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load clients.")]
+     (-> (state/mark-error db [:clients] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::fetch-client-detail
+ (fn [{:keys [db]} [_ client-id]]
+   (if (str/blank? (str client-id))
+     {:db db}
+     {:db (-> db
+              (assoc-in [:clients :detail :status] :loading)
+              (assoc-in [:clients :detail :error] nil))
+      ::fx/http {:url (str "/api/clients/" client-id)
+                 :method "GET"
+                 :on-success [::fetch-client-detail-success]
+                 :on-error [::fetch-client-detail-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-client-detail-success
+ (fn [db [_ payload]]
+   (let [client (some-> (:client payload) normalize-client)
+         tasks (mapv normalize-task (or (:tasks payload) []))
+         next-task (:client/next-task client)
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+     (if client
+       (-> db
+           (assoc-in [:clients :selected] (:client/id client))
+           (assoc-in [:clients :detail] (client-detail client tasks next-task assignees (:session db))))
+       (assoc-in db [:clients :detail :error] "Client not available.")))))
+
+(rf/reg-event-db
+ ::fetch-client-detail-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load client.")]
+     (-> db
+         (assoc-in [:clients :detail :status] :error)
+         (assoc-in [:clients :detail :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::select-client
+ (fn [{:keys [db]} [_ client-id]]
+   (if (str/blank? (str client-id))
+     {:db (-> db
+              (assoc-in [:clients :selected] nil)
+              (assoc-in [:clients :detail] default-client-detail))}
+     {:db (assoc-in db [:clients :selected] client-id)
+      :dispatch [::fetch-client-detail client-id]})))
+
+(rf/reg-event-db
+ ::set-client-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:clients :detail :form field] value)
+       (assoc-in [:clients :detail :status] :idle)
+       (assoc-in [:clients :detail :error] nil))))
+
+(defn- validate-client-form
+  [{:keys [name]}]
+  (when (str/blank? (str/trim (or name "")))
+    "Name is required"))
+
+(defn- client-form->payload
+  [{:keys [name phone email channel status notes]}]
+  (let [name' (present-str name)
+        phone' (present-str phone)
+        email' (present-str email)
+        notes' (present-str notes)]
+    (cond-> {:client/name name'}
+      phone' (assoc :client/phone phone')
+      email' (assoc :client/email email')
+      (some? channel) (assoc :client/channel channel)
+      (some? status) (assoc :client/status status)
+      notes' (assoc :client/notes notes'))))
+
+(rf/reg-event-fx
+ ::new-client
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:clients :selected] nil)
+            (assoc-in [:clients :detail] (blank-client-detail)))}))
+
+(rf/reg-event-fx
+ ::save-client
+ (fn [{:keys [db]} _]
+   (let [{:keys [form mode]} (get-in db [:clients :detail])
+         validation-error (validate-client-form form)
+         creating? (= mode :create)
+         client-id (:id form)
+         payload (client-form->payload form)]
+     (cond
+       validation-error
+       {:db (-> db
+                (assoc-in [:clients :detail :status] :error)
+                (assoc-in [:clients :detail :error] validation-error))}
+
+       (and (not creating?) (str/blank? (str client-id)))
+       {:db (-> db
+                (assoc-in [:clients :detail :status] :error)
+                (assoc-in [:clients :detail :error] "Select a client to update"))}
+
+       :else
+       {:db (-> db
+                (assoc-in [:clients :detail :status] :saving)
+                (assoc-in [:clients :detail :error] nil))
+        ::fx/http {:url (if creating?
+                          "/api/clients"
+                          (str "/api/clients/" client-id))
+                   :method (if creating? "POST" "PUT")
+                   :body payload
+                   :on-success [::save-client-success {:mode (if creating? :create :edit)}]
+                   :on-error [::save-client-failure]}}))))
+
+(rf/reg-event-fx
+ ::save-client-success
+ (fn [{:keys [db]} [_ _context payload]]
+   (let [client (some-> (:client payload) normalize-client)
+         client-id (:client/id client)]
+     {:db (-> db
+              (assoc-in [:clients :detail :status] :success)
+              (assoc-in [:clients :detail :error] nil)
+              (cond-> client
+                (assoc-in [:clients :selected] client-id)))
+      :dispatch-n (cond-> [[::fetch-clients]]
+                    client-id (conj [::fetch-client-detail client-id]))})))
+
+(rf/reg-event-db
+ ::save-client-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to save client.")]
+     (-> db
+         (assoc-in [:clients :detail :status] :error)
+         (assoc-in [:clients :detail :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::set-client-filter
+ (fn [{:keys [db]} [_ field value]]
+   {:db (-> db
+            (assoc-in [:clients :filters field] value)
+            (assoc-in [:clients :filters :page] 1))
+    :dispatch [::fetch-clients]}))
+
+(rf/reg-event-fx
+ ::set-client-page
+ (fn [{:keys [db]} [_ page]]
+   (let [pagination (get-in db [:clients :pagination])
+         pages (max 1 (or (:pages pagination) 1))
+         page' (-> page (or 1) int (max 1) (min pages))]
+     {:db (assoc-in db [:clients :filters :page] page')
+      :dispatch [::fetch-clients]})))
+
+(rf/reg-event-fx
+ ::set-client-page-size
+ (fn [{:keys [db]} [_ size]]
+   (let [size' (max 1 (or size 25))]
+     {:db (-> db
+              (assoc-in [:clients :filters :page-size] size')
+              (assoc-in [:clients :filters :page] 1))
+      :dispatch [::fetch-clients]})))
+
+(rf/reg-event-fx
+ ::set-next-action-field
+ (fn [{:keys [db]} [_ field value]]
+   {:db (-> db
+            (assoc-in [:clients :detail :next-action-form field] value)
+            (assoc-in [:clients :detail :next-action-status] :idle)
+            (assoc-in [:clients :detail :next-action-error] nil))}))
+
+(rf/reg-event-fx
+ ::reset-next-action
+ (fn [{:keys [db]} _]
+   (let [detail (get-in db [:clients :detail])
+         next-task (:next-action detail)
+         client-id (get-in detail [:form :id])
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+     {:db (-> db
+              (assoc-in [:clients :detail :next-action-form]
+                        (if next-task
+                          (task->form next-task)
+                          (blank-next-action-form assignees (:session db) client-id)))
+              (assoc-in [:clients :detail :next-action-status] :idle)
+              (assoc-in [:clients :detail :next-action-error] nil))})))
+
+(rf/reg-event-fx
+ ::save-next-action
+ (fn [{:keys [db]} _]
+   (let [detail (get-in db [:clients :detail])
+         form (get detail :next-action-form)
+         client-id (get-in detail [:form :id])
+         form (assoc form :client client-id)
+         current-task (:next-action detail)
+         creating? (nil? (:id form))
+         tags (set (:tags form))
+         validation-error (validate-task-form form)
+         due-iso (input-date->iso (:due-date form))]
+     (cond
+       validation-error
+       {:db (-> db
+                (assoc-in [:clients :detail :next-action-status] :error)
+                (assoc-in [:clients :detail :next-action-error] validation-error))}
+
+       (str/blank? (str client-id))
+       {:db (-> db
+                (assoc-in [:clients :detail :next-action-status] :error)
+                (assoc-in [:clients :detail :next-action-error] "Save the client before adding a next action"))}
+
+       creating?
+       (let [reason (some-> (:pending-reason form) str/trim)
+             pending? (= (:status form) :pending)
+             body (cond-> {:task/title (:title form)
+                           :task/description (:description form)
+                           :task/status (:status form)
+                           :task/priority (:priority form)
+                           :task/client (:client form)
+                           :task/assignee (:assignee form)
+                           :task/tags (vec tags)
+                           :task/due-date due-iso
+                           :task/archived? (boolean (:archived? form))
+                           :task/extended? (boolean (:extended? form))}
+                    (and pending? (not (str/blank? reason))) (assoc :pending-reason reason))]
+         {:db (-> db
+                  (assoc-in [:clients :detail :next-action-status] :saving)
+                  (assoc-in [:clients :detail :next-action-error] nil))
+          ::fx/http {:url "/api/tasks"
+                     :method "POST"
+                     :body body
+                     :on-success [::next-action-op-success [] {:mode :create}]
+                     :on-error [::next-action-save-failure]}})
+
+       :else
+       (let [ops (build-update-ops form current-task)]
+         (if (empty? ops)
+           {:db (-> db
+                    (assoc-in [:clients :detail :next-action-status] :idle)
+                    (assoc-in [:clients :detail :next-action-error] nil))}
+           {:db (-> db
+                    (assoc-in [:clients :detail :next-action-status] :saving)
+                    (assoc-in [:clients :detail :next-action-error] nil))
+            ::fx/http (assoc (first ops)
+                             :on-success [::next-action-op-success (vec (rest ops)) {:mode :update}]
+                             :on-error [::next-action-save-failure])}))))))
+
+(rf/reg-event-fx
+ ::next-action-op-success
+ (fn [{:keys [db]} [_ remaining context payload]]
+   (let [task (some-> (:task payload) normalize-task)
+         next-op (first remaining)
+         rest-ops (vec (rest remaining))
+         updated-db (cond-> db
+                      task (-> (assoc-in [:clients :detail :next-action] task)
+                               (assoc-in [:clients :detail :next-action-form] (task->form task)))
+                      true (-> (assoc-in [:clients :detail :next-action-error] nil)
+                               (assoc-in [:clients :detail :next-action-status] (if next-op :saving :success))))]
+     (if next-op
+       {:db updated-db
+        ::fx/http (assoc next-op
+                         :on-success [::next-action-op-success rest-ops context]
+                         :on-error [::next-action-save-failure])}
+       {:db updated-db
+        :dispatch-n [[::fetch-clients]
+                     [::fetch-client-detail (get-in db [:clients :detail :form :id])]
+                     [::fetch-tasks]]}))))
+
+(rf/reg-event-db
+ ::next-action-save-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to save next action.")]
+     (-> db
+         (assoc-in [:clients :detail :next-action-status] :error)
+         (assoc-in [:clients :detail :next-action-error] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -3518,12 +3956,13 @@
  ::select-task
  (fn [{:keys [db]} [_ task-id]]
    (let [task (some #(when (= (:task/id %) task-id) %) (get-in db [:tasks :items]))
-         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)
+         clients (or (get-in db [:clients :items]) [])]
      {:db (-> db
               (assoc-in [:tasks :selected] task-id)
               (assoc-in [:tasks :detail] (if task
                                            (detail-from-task task)
-                                           (closed-detail assignees (:session db)))))
+                                           (closed-detail assignees clients (:session db)))))
       ::set-body-scroll-lock false})))
 
 (rf/reg-event-fx
@@ -3545,10 +3984,11 @@
       :dispatch [::fetch-tasks]})))
 
 (defn- validate-task-form
-  [{:keys [title description status priority assignee pending-reason]}]
+  [{:keys [title description status priority assignee pending-reason client]}]
   (cond
     (str/blank? title) "Title is required"
     (str/blank? description) "Description is required"
+    (str/blank? (str client)) "Client is required"
     (nil? status) "Status is required"
     (and (= status :pending) (str/blank? pending-reason)) "Pending status requires a pending reason"
     (nil? priority) "Priority is required"
@@ -3560,6 +4000,7 @@
   (let [task-id (or (:id form) (:task/id current-task))
         tags (set (:tags form))
         current-tags (set (map :tag/id (or (:task/tags current-task) [])))
+        current-client (get-in current-task [:task/client :client/id])
         current-due (iso->input-date (:task/due-date current-task))
         due-iso (input-date->iso (:due-date form))
         status-op (when (and task-id (not= (:status form) (:task/status current-task)))
@@ -3582,6 +4023,9 @@
                                                  :method "PUT"
                                                  :body general-updates})
       status-op (conj status-op)
+      (and task-id (not= (:client form) current-client)) (conj {:url (str "/api/tasks/" task-id "/client")
+                                                                :method "POST"
+                                                                :body {:task/client (:client form)}})
       (and task-id (not= (:assignee form) (get-in current-task [:task/assignee :user/id]))) (conj {:url (str "/api/tasks/" task-id "/assignee")
                                                                                                    :method "POST"
                                                                                                    :body {:task/assignee (:assignee form)}})
@@ -3595,10 +4039,11 @@
 (rf/reg-event-fx
  ::start-new-task
  (fn [{:keys [db]} _]
-   (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+   (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)
+         clients (or (get-in db [:clients :items]) [])]
      {:db (-> db
               (assoc-in [:tasks :selected] nil)
-              (assoc-in [:tasks :detail] (blank-detail assignees (:session db))))
+              (assoc-in [:tasks :detail] (blank-detail assignees clients (:session db))))
       ::set-body-scroll-lock false})))
 
 (rf/reg-event-db
@@ -3607,18 +4052,20 @@
    (let [tasks (get-in db [:tasks :items])
          selected-id (get-in db [:tasks :selected])
          selected-task (some #(when (= (:task/id %) selected-id) %) tasks)
-         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)
+         clients (or (get-in db [:clients :items]) [])]
      (assoc-in db [:tasks :detail] (if selected-task
                                      (detail-from-task selected-task)
-                                     (blank-detail assignees (:session db)))))))
+                                     (blank-detail assignees clients (:session db)))))))
 
 (rf/reg-event-fx
  ::close-detail
  (fn [{:keys [db]} _]
-   (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+   (let [assignees (or (get-in db [:tasks :assignees]) fallback-assignees)
+         clients (or (get-in db [:clients :items]) [])]
      {:db (-> db
               (assoc-in [:tasks :selected] nil)
-              (assoc-in [:tasks :detail] (closed-detail assignees (:session db))))
+              (assoc-in [:tasks :detail] (closed-detail assignees clients (:session db))))
       ::set-body-scroll-lock false})))
 
 (rf/reg-event-db
@@ -3673,6 +4120,7 @@
                            :task/description (:description form)
                            :task/status (:status form)
                            :task/priority (:priority form)
+                           :task/client (:client form)
                            :task/assignee (:assignee form)
                            :task/tags (vec tags)
                            :task/due-date due-iso
@@ -3720,13 +4168,14 @@
                         (remove #(= (:task/id %) task-id))
                         vec)
          next-task (first remaining)
-         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)]
+         assignees (or (get-in db [:tasks :assignees]) fallback-assignees)
+         clients (or (get-in db [:clients :items]) [])]
      {:db (-> db
               (assoc-in [:tasks :items] remaining)
               (assoc-in [:tasks :selected] (:task/id next-task))
               (assoc-in [:tasks :detail] (if next-task
                                            (detail-from-task next-task)
-                                           (blank-detail assignees (:session db)))))
+                                           (blank-detail assignees clients (:session db)))))
       :dispatch-n [[::fetch-tasks]]})))
 
 (rf/reg-event-fx
@@ -3766,6 +4215,7 @@
 (rf/reg-sub ::session (fn [db _] (:session db)))
 (rf/reg-sub ::nav (fn [db _] (:nav db)))
 (rf/reg-sub ::tasks (fn [db _] (:tasks db)))
+(rf/reg-sub ::clients (fn [db _] (:clients db)))
 (rf/reg-sub ::files (fn [db _] (:files db)))
 (rf/reg-sub ::prs (fn [db _] (:prs db)))
 (rf/reg-sub ::users (fn [db _] (:users db)))
@@ -3783,6 +4233,12 @@
    (let [selected (get-in db [:tasks :selected])
          items (get-in db [:tasks :items])]
      (some #(when (= (:task/id %) selected) %) items))))
+(rf/reg-sub
+ ::selected-client
+ (fn [db _]
+   (let [selected (get-in db [:clients :selected])
+         items (get-in db [:clients :items])]
+     (some #(when (= (:client/id %) selected) %) items))))
 (rf/reg-sub
  ::selected-file
  (fn [db _]
@@ -3802,6 +4258,7 @@
          items (get-in db [:users :items])]
      (some #(when (= (:user/id %) selected) %) items))))
 (rf/reg-sub ::task-detail (fn [db _] (get-in db [:tasks :detail])))
+(rf/reg-sub ::client-detail (fn [db _] (get-in db [:clients :detail])))
 
 
 (def app-options state/app-options)
@@ -3818,6 +4275,7 @@
          :services [services-ui/services-shell]
          :control-panel [control-panel/control-panel-shell]
          :files [files-ui/file-library-shell]
+         :clients [clients-ui/clients-shell]
          :users [users-ui/users-shell]
          :prs [prs-ui/prs-shell]
          :land (if land-enabled? [land/land-shell] [home/home-shell])

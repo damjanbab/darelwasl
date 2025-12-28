@@ -17,6 +17,7 @@
            :meta-fn (fn [items] (str (count items) " items"))
            :render-row (fn [task selected? {:keys [on-select]}]
                          (let [{:task/keys [id title status priority due-date tags assignee archived?]} task
+                               client-name (get-in task [:task/client :client/name])
                                handle-select (when on-select #(on-select task))
                                status-label (if archived? "Archived" (when status (util/status-label status)))
                                priority-label (when priority (util/priority-label priority))
@@ -28,6 +29,7 @@
                                              (remove #(or (nil? %) (str/blank? %)))
                                              (str/join " · "))]
                            [ui/list-row {:title (or title "Untitled")
+                                         :meta (when-not (str/blank? (str client-name)) client-name)
                                          :trailing trailing
                                          :selected? selected?
                                          :class "compact"

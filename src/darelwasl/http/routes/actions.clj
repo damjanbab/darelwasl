@@ -4,6 +4,7 @@
 
 (def ^:private created-actions
   #{:cap/action/task-create
+    :cap/action/client-create
     :cap/action/tag-create
     :cap/action/user-create})
 

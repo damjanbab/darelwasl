@@ -2,7 +2,8 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [darelwasl.clients :as clients])
   (:import (java.io PushbackReader)))
 
 (def default-registry-path "registries/automations.edn")
@@ -47,6 +48,7 @@
                 :task/description "You successfully linked Telegram. Try: /tasks and /new <title> | <desc>."
                 :task/status :todo
                 :task/priority :low
+                :task/client clients/default-client-id
                 :task/assignee user-id
                 :task/automation-key (str (name id) ":" user-id)}}])))
 
@@ -77,4 +79,3 @@
                            []))))))
          (remove nil?)
          vec)))
-

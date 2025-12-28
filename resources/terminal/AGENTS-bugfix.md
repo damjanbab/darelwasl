@@ -9,7 +9,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed (services, env vars, roles, deploy).
-- Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, confirm `APP_PORT` is free and `DATOMIC_STORAGE_DIR` is not locked.
+- Terminal sessions auto-start the app unless explicitly disabled; assume one app instance is already running in the session repo. Before running `scripts/run-service.sh`, verify the existing app on `APP_PORT` and that `DATOMIC_STORAGE_DIR` is not locked; only start a new instance if the app is not running.
 - Run only the checks needed to prove the fix, but include the required proofs below.
 - Capture browser console + network errors; save logs into `$TERMINAL_LOG_DIR` (`app-console.log`, `app-network.log`).
 - Fail closed on test errors and report exact failures only after fixing them.

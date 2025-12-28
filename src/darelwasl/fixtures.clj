@@ -10,6 +10,7 @@
            (java.util Date)))
 
 (def default-users-path "fixtures/users.edn")
+(def default-clients-path "fixtures/clients.edn")
 (def default-tags-path "fixtures/tags.edn")
 (def default-tasks-path "fixtures/tasks.edn")
 (def default-content-path "fixtures/content.edn")
@@ -26,12 +27,13 @@
       (edn/read r))))
 
 (defn load-fixtures
-  "Read fixture data from disk. Returns {:users [...] :tags [...] :tasks [...] :content {...} :betting {...}}.
+  "Read fixture data from disk. Returns {:users [...] :clients [...] :tags [...] :tasks [...] :content {...} :betting {...}}.
   Content includes tags/pages/blocks plus optional v2 entities (businesses, contacts, licenses, comparison rows, journey phases, activation steps, personas, support entries, hero stats/flows, faqs, values, team members).
-  Paths default to fixtures/users.edn, fixtures/tags.edn, fixtures/tasks.edn, fixtures/content.edn, and fixtures/betting.edn."
-  ([] (load-fixtures default-users-path default-tags-path default-tasks-path default-content-path default-betting-path))
-  ([users-path tags-path tasks-path content-path betting-path]
+  Paths default to fixtures/users.edn, fixtures/clients.edn, fixtures/tags.edn, fixtures/tasks.edn, fixtures/content.edn, and fixtures/betting.edn."
+  ([] (load-fixtures default-users-path default-clients-path default-tags-path default-tasks-path default-content-path default-betting-path))
+  ([users-path clients-path tags-path tasks-path content-path betting-path]
    {:users (read-fixture users-path)
+    :clients (read-fixture clients-path)
     :tags (read-fixture tags-path)
     :tasks (read-fixture tasks-path)
     :content (read-fixture content-path)
@@ -63,7 +65,7 @@
   :users n :tags n :tasks n :content-tags n :content-pages n :content-blocks n ...} or {:error e} on failure."
   ([conn] (seed-conn! conn (load-fixtures) {}))
   ([conn fixtures] (seed-conn! conn fixtures {}))
-  ([conn {:keys [users tags tasks content betting]} {:keys [add-marker?] :or {add-marker? true}}]
+  ([conn {:keys [users clients tags tasks content betting]} {:keys [add-marker?] :or {add-marker? true}}]
    (let [content (or content {})
          content-tags (:tags content)
          content-pages (:pages content)
@@ -99,6 +101,8 @@
      (try
        (when (seq users)
          (db/transact! conn {:tx-data users}))
+       (when (seq clients)
+         (db/transact! conn {:tx-data clients}))
        (when (seq tags)
          (db/transact! conn {:tx-data tags}))
        (when (seq tasks)
@@ -130,6 +134,7 @@
          (db/transact! conn {:tx-data [(seed-marker-tx)]}))
        {:status :ok
         :users (count users)
+        :clients (count clients)
         :tags (count tags)
         :tasks (count tasks)
         :content-tags (count content-tags)

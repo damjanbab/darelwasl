@@ -5,13 +5,15 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.actions :as actions]
+            [darelwasl.clients :as clients]
             [darelwasl.db :as db]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
             [darelwasl.users :as users]
             [darelwasl.tasks :as tasks]
             [darelwasl.provenance :as prov])
-  (:import (java.util UUID Date)))
+  (:import (java.time Duration Instant LocalDate ZoneId)
+           (java.util UUID Date)))
 
 (def ^:private default-timeout-ms 3000)
 
@@ -29,6 +31,12 @@
   (atom {}))
 
 (defonce pending-reasons
+  (atom {}))
+
+(defonce pending-client-links
+  (atom {}))
+
+(defonce pending-next-actions
   (atom {}))
 
 (defonce pending-edits
@@ -58,6 +66,28 @@
   []
   (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
     (swap! pending-reasons
+           (fn [entries]
+             (into {}
+                   (filter (fn [[_ v]]
+                             (let [ts (:created-at v 0)]
+                               (>= ts cutoff))))
+                   entries)))))
+
+(defn- prune-pending-client-links!
+  []
+  (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
+    (swap! pending-client-links
+           (fn [entries]
+             (into {}
+                   (filter (fn [[_ v]]
+                             (let [ts (:created-at v 0)]
+                               (>= ts cutoff))))
+                   entries)))))
+
+(defn- prune-pending-next-actions!
+  []
+  (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
+    (swap! pending-next-actions
            (fn [entries]
              (into {}
                    (filter (fn [[_ v]]
@@ -128,12 +158,13 @@
          "\n\nSave these tasks?")))
 
 (defn- task-body
-  [chat-user {:keys [title desc]}]
-  {:task/title title
-   :task/description (or desc (str "Captured via chat: " title))
-   :task/status :todo
-   :task/priority :medium
-   :task/assignee (:user/id chat-user)})
+  [chat-user {:keys [title desc client-id]}]
+  (cond-> {:task/title title
+           :task/description (or desc (str "Captured via chat: " title))
+           :task/status :todo
+           :task/priority :medium
+           :task/assignee (:user/id chat-user)}
+    client-id (assoc :task/client client-id)))
 
 (defn- parse-task-command
   [rest]
@@ -172,6 +203,50 @@
   [chat-id]
   (prune-pending-reasons!)
   (get @pending-reasons (pending-reason-key chat-id)))
+
+(defn- pending-client-key
+  [chat-id]
+  (str chat-id))
+
+(defn- save-pending-client!
+  [chat-id payload]
+  (prune-pending-client-links!)
+  (swap! pending-client-links assoc (pending-client-key chat-id) (assoc payload :created-at (System/currentTimeMillis))))
+
+(defn- get-pending-client!
+  [chat-id]
+  (prune-pending-client-links!)
+  (get @pending-client-links (pending-client-key chat-id)))
+
+(defn- take-pending-client!
+  [chat-id]
+  (prune-pending-client-links!)
+  (let [k (pending-client-key chat-id)
+        value (get @pending-client-links k)]
+    (swap! pending-client-links dissoc k)
+    value))
+
+(defn- pending-next-action-key
+  [chat-id]
+  (str chat-id))
+
+(defn- save-pending-next-action!
+  [chat-id payload]
+  (prune-pending-next-actions!)
+  (swap! pending-next-actions assoc (pending-next-action-key chat-id) (assoc payload :created-at (System/currentTimeMillis))))
+
+(defn- get-pending-next-action!
+  [chat-id]
+  (prune-pending-next-actions!)
+  (get @pending-next-actions (pending-next-action-key chat-id)))
+
+(defn- take-pending-next-action!
+  [chat-id]
+  (prune-pending-next-actions!)
+  (let [k (pending-next-action-key chat-id)
+        value (get @pending-next-actions k)]
+    (swap! pending-next-actions dissoc k)
+    value))
 
 (defn- pending-edit-key
   [chat-id]
@@ -239,6 +314,30 @@
       (str (subs s 0 trim-len) "..."))
     s))
 
+(defn- now-inst
+  []
+  (Date/from (Instant/now)))
+
+(defn- followup-date
+  [option]
+  (case option
+    :tomorrow (Date/from (.plus (Instant/now) (Duration/ofDays 1)))
+    :in-3-days (Date/from (.plus (Instant/now) (Duration/ofDays 3)))
+    :next-week (Date/from (.plus (Instant/now) (Duration/ofDays 7)))
+    nil))
+
+(defn- parse-followup-date
+  [text]
+  (let [raw (str/trim (or text ""))]
+    (or (try
+          (Date/from (Instant/parse raw))
+          (catch Exception _ nil))
+        (try
+          (let [date (LocalDate/parse raw)
+                zoned (.atStartOfDay date (ZoneId/systemDefault))]
+            (Date/from (.toInstant zoned)))
+          (catch Exception _ nil)))))
+
 (defn- latest-pending-reason
   [db task-id]
   (when (and db task-id)
@@ -296,13 +395,95 @@
 (defn- capture-inline-keyboard
   [message-id]
   {:inline_keyboard
-   [[(inline-button "Create task" (str "capture:create:" message-id))
+   [[(inline-button "Task" (str "capture:task:" message-id))
+     (inline-button "Client" (str "capture:client:" message-id))
      (inline-button "Dismiss" (str "capture:cancel:" message-id))]]})
+
+(defn- link-client-inline-keyboard
+  [task-id]
+  {:inline_keyboard
+   [[(inline-button "Pick client" (str "task:client:pick:" task-id))
+     (inline-button "Create client" (str "task:client:create:" task-id))]
+    [(inline-button "Skip" (str "task:client:skip:" task-id))]]})
+
+(defn- client-pick-inline-keyboard
+  [task-id clients]
+  (let [buttons (map (fn [{:client/keys [id name]}]
+                       (inline-button (truncate-text (or name "Client") 22)
+                                      (str "task:client:set:" task-id ":" id)))
+                     clients)
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))]
+    {:inline_keyboard
+     (conj rows [(inline-button "Create client" (str "task:client:create:" task-id))
+                 (inline-button "Cancel" (str "task:client:cancel:" task-id))])}))
+
+(defn- client-cancel-inline-keyboard
+  [task-id]
+  {:inline_keyboard
+   [[(inline-button "Cancel" (str "task:client:cancel:" task-id))]]})
+
+(defn- client-next-action-inline-keyboard
+  [client-id]
+  {:inline_keyboard
+   [[(inline-button "Call client" (str "client:action:" client-id ":call"))
+     (inline-button "Request docs" (str "client:action:" client-id ":docs"))]
+    [(inline-button "Follow up" (str "client:action:" client-id ":followup"))
+     (inline-button "Schedule meeting" (str "client:action:" client-id ":meeting"))]
+    [(inline-button "Custom..." (str "client:action:" client-id ":custom"))
+     (inline-button "Dismiss" (str "client:action:" client-id ":dismiss"))]]})
+
+(defn- client-action-cancel-inline-keyboard
+  [client-id]
+  {:inline_keyboard
+   [[(inline-button "Cancel" (str "client:action:" client-id ":dismiss"))]]})
+
+(def ^:private pending-reason-options
+  [{:id :client-waiting :label "Waiting on client"}
+   {:id :docs :label "Need documents"}
+   {:id :schedule :label "Scheduling"}
+   {:id :payment :label "Payment pending"}
+   {:id :custom :label "Custom..."}])
+
+(defn- pending-reason-text
+  [reason-id]
+  (let [rid (cond
+              (keyword? reason-id) (name reason-id)
+              (string? reason-id) reason-id
+              :else nil)]
+    (or (some (fn [{:keys [id label]}]
+                (when (= (name id) rid) label))
+              pending-reason-options)
+        rid)))
+
+(def ^:private pending-followup-options
+  [{:id :tomorrow :label "Tomorrow"}
+   {:id :in-3-days :label "In 3 days"}
+   {:id :next-week :label "Next week"}
+   {:id :pick-date :label "Pick date"}])
 
 (defn- pending-reason-inline-keyboard
   [task-id]
-  {:inline_keyboard
-   [[(inline-button "Cancel" (str "pending:cancel:" task-id))]]})
+  (let [buttons (map (fn [{:keys [id label]}]
+                       (inline-button label (str "pending:reason:" task-id ":" (name id))))
+                     pending-reason-options)
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))]
+    {:inline_keyboard
+     (conj rows [(inline-button "Cancel" (str "pending:cancel:" task-id))])}))
+
+(defn- pending-followup-inline-keyboard
+  [task-id]
+  (let [buttons (map (fn [{:keys [id label]}]
+                       (inline-button label (str "pending:followup:" task-id ":" (name id))))
+                     pending-followup-options)
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))]
+    {:inline_keyboard
+     (conj rows [(inline-button "Cancel" (str "pending:cancel:" task-id))])}))
 
 (defn- pending-edit-inline-keyboard
   [task-id]
@@ -491,7 +672,6 @@
     (request-json cfg "answerCallbackQuery" (cond-> {:callback_query_id callback-id}
                                               (some? text) (assoc :text text)
                                               show-alert? (assoc :show_alert true)))))
-
 (defn set-webhook!
   [cfg {:keys [webhook-url secret-token]}]
   (cond
@@ -754,8 +934,11 @@
   [task pending-reason]
   (let [status (status-label (:task/status task))
         due (or (:task/due-date task) "none")
-        title (or (:task/title task) "Untitled task")]
+        title (or (:task/title task) "Untitled task")
+        client-name (get-in task [:task/client :client/name])]
     (str "- " status " " title " (due " due ")"
+         (when client-name
+           (str " · " client-name))
          (when pending-reason
            (str " · Reason: " (truncate-text pending-reason 80))))))
 
@@ -806,9 +989,11 @@
     "Task not found or not assigned to you."
     (let [status (status-label (:task/status task))
           due (or (:task/due-date task) "none")
-          assignee (get-in task [:task/assignee :user/username] "n/a")]
+          assignee (get-in task [:task/assignee :user/username] "n/a")
+          client-name (get-in task [:task/client :client/name])]
       (str (or (:task/title task) "Untitled task") "\n"
            "Status: " status "\n"
+           (when client-name (str "Client: " client-name "\n"))
            (when pending-reason (str "Pending reason: " (truncate-text pending-reason 120) "\n"))
            "Due: " due "\n"
            "Assignee: " assignee))))
@@ -841,6 +1026,52 @@
                             :message-key message-key
                             :reply-markup keyboard}))))
 
+(defn- ensure-default-client-id
+  [state workspace]
+  (when-let [conn (ensure-conn state)]
+    (or (:client/id (clients/ensure-default-client! conn workspace))
+        clients/default-client-id)))
+
+(defn- prompt-link-client!
+  [state chat-id task]
+  (let [cfg (get-in state [:config :telegram])
+        task-id (str (:task/id task))
+        title (or (:task/title task) "Task")
+        prompt (str "Link to client for:\n" title)
+        keyboard (link-client-inline-keyboard task-id)]
+    (send-message! cfg {:chat-id chat-id
+                        :text prompt
+                        :message-key (str "task-link-client-" task-id "-" (System/currentTimeMillis))
+                        :reply-markup keyboard})))
+
+(defn- prompt-client-pick!
+  [state chat-id task-id]
+  (let [cfg (get-in state [:config :telegram])
+        conn (ensure-conn state)
+        workspace nil
+        res (clients/list-clients conn {:limit 6} workspace)
+        client-list (or (:clients res) [])
+        prompt (if (seq client-list)
+                 "Pick a client:"
+                 "No clients available yet. Create one?")
+        keyboard (client-pick-inline-keyboard task-id client-list)]
+    (send-message! cfg {:chat-id chat-id
+                        :text prompt
+                        :message-key (str "client-pick-" task-id "-" (System/currentTimeMillis))
+                        :reply-markup keyboard})))
+
+(defn- prompt-next-action!
+  [state chat-id client]
+  (let [cfg (get-in state [:config :telegram])
+        client-id (str (:client/id client))
+        name (or (:client/name client) "Client")
+        prompt (str "Next action for " name "?")
+        keyboard (client-next-action-inline-keyboard client-id)]
+    (send-message! cfg {:chat-id chat-id
+                        :text prompt
+                        :message-key (str "client-next-action-" client-id "-" (System/currentTimeMillis))
+                        :reply-markup keyboard})))
+
 (defn- list-user-tasks
   [conn user-id {:keys [status archived limit] :or {limit 5}}]
   (let [archived (case archived
@@ -867,13 +1098,8 @@
 
 (defn- handle-freeform-message
   [state chat-user chat-id text]
-  (let [body {:task/title text
-              :task/description (str "Captured via chat: " text)
-              :task/status :todo
-              :task/priority :medium
-              :task/assignee (:user/id chat-user)}
-        cfg (get-in state [:config :telegram])
-        prompt (str "Capture:\n" text "\n\nSave as a task?")
+  (let [cfg (get-in state [:config :telegram])
+        prompt (str "Create from text?\n\n" text)
         send-res (send-message! cfg {:chat-id chat-id
                                      :text prompt
                                      :message-key (str "capture-" (System/currentTimeMillis))
@@ -883,36 +1109,138 @@
                           :text (str "Unable to capture: " err)
                           :message-key (str "capture-error-" (System/currentTimeMillis))})
       (let [message-id (:telegram/message-id send-res)]
-        (save-capture! chat-id message-id {:body body
-                                           :user chat-user
+        (save-capture! chat-id message-id {:user chat-user
                                            :text text})
         (edit-message! cfg {:chat-id chat-id
                             :message-id message-id
                             :text prompt
-                                           :reply-markup (capture-inline-keyboard message-id)})))))
+                            :reply-markup (capture-inline-keyboard message-id)})))))
 
 (defn- handle-pending-reason-message
   [state chat-user chat-id text]
   (let [cfg (get-in state [:config :telegram])
         pending (get-pending-reason! chat-id)]
     (when pending
-      (if (str/blank? text)
+      (let [task-id (:task-id pending)
+            stage (:stage pending)
+            reason (:reason pending)
+            trimmed (some-> text str/trim)]
+        (cond
+          (= stage :followup-date)
+          (if-let [followup (parse-followup-date trimmed)]
+            (let [res (actions/execute! state {:action/id :cap/action/task-set-status
+                                               :actor (actions/actor-from-telegram chat-user)
+                                               :input (cond-> {:task/id task-id
+                                                               :task/status :pending
+                                                               :note/body reason
+                                                               :note/last-contact (now-inst)}
+                                                        followup (assoc :note/next-followup followup))})]
+              (take-pending-reason! chat-id)
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to set pending: " (:message err))
+                                    :message-key (str "pending-reason-error-" (System/currentTimeMillis))})
+                (send-task-card! state chat-id (get-in res [:result :task]) {})))
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send a follow-up date in YYYY-MM-DD or ISO-8601."
+                                :message-key (str "pending-followup-date-" (System/currentTimeMillis))}))
+
+          (= stage :followup)
+          (if-let [followup (parse-followup-date trimmed)]
+            (let [res (actions/execute! state {:action/id :cap/action/task-set-status
+                                               :actor (actions/actor-from-telegram chat-user)
+                                               :input (cond-> {:task/id task-id
+                                                               :task/status :pending
+                                                               :note/body reason
+                                                               :note/last-contact (now-inst)}
+                                                        followup (assoc :note/next-followup followup))})]
+              (take-pending-reason! chat-id)
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to set pending: " (:message err))
+                                    :message-key (str "pending-reason-error-" (System/currentTimeMillis))})
+                (send-task-card! state chat-id (get-in res [:result :task]) {})))
+            (send-message! cfg {:chat-id chat-id
+                                :text "Choose a follow-up option from the buttons."
+                                :message-key (str "pending-followup-button-" (System/currentTimeMillis))}))
+
+          :else
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Pending reason cannot be blank. Reply with a reason or tap Cancel."
+                                :message-key (str "pending-reason-empty-" (System/currentTimeMillis))})
+            (do
+              (save-pending-reason! chat-id (assoc pending :stage :followup :reason trimmed))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "When should I follow up?"
+                                  :message-key (str "pending-followup-" (System/currentTimeMillis))
+                                  :reply-markup (pending-followup-inline-keyboard task-id)}))))))))
+
+(defn- handle-pending-client-message
+  [state chat-user chat-id text]
+  (let [cfg (get-in state [:config :telegram])
+        pending (get-pending-client! chat-id)
+        name (some-> text str/trim)]
+    (when pending
+      (if (str/blank? name)
         (send-message! cfg {:chat-id chat-id
-                            :text "Pending reason cannot be blank. Reply with a reason or tap Cancel."
-                            :message-key (str "pending-reason-empty-" (System/currentTimeMillis))})
-        (let [task-id (:task-id pending)
-              res (actions/execute! state {:action/id :cap/action/task-set-status
+                            :text "Client name cannot be blank. Reply with a name or tap Cancel."
+                            :message-key (str "client-name-empty-" (System/currentTimeMillis))})
+        (let [res (actions/execute! state {:action/id :cap/action/client-create
                                            :actor (actions/actor-from-telegram chat-user)
-                                           :input {:task/id task-id
-                                                   :task/status :pending
-                                                   :note/body text}})]
+                                           :input {:client/name name}})
+              client (get-in res [:result :client])
+              task-id (:task-id pending)
+              mode (:mode pending)]
+          (take-pending-client! chat-id)
           (if-let [err (:error res)]
             (send-message! cfg {:chat-id chat-id
-                                :text (str "Unable to set pending: " (:message err))
-                                :message-key (str "pending-reason-error-" (System/currentTimeMillis))})
-            (do
-              (take-pending-reason! chat-id)
-              (send-task-card! state chat-id (get-in res [:result :task]) {}))))))))
+                                :text (str "Unable to create client: " (:message err))
+                                :message-key (str "client-create-error-" (System/currentTimeMillis))})
+            (if (and (= mode :link) task-id)
+              (let [link-res (actions/execute! state {:action/id :cap/action/task-set-client
+                                                      :actor (actions/actor-from-telegram chat-user)
+                                                      :input {:task/id task-id
+                                                              :task/client (:client/id client)}})]
+                (if-let [link-err (:error link-res)]
+                  (send-message! cfg {:chat-id chat-id
+                                      :text (str "Unable to link client: " (:message link-err))
+                                      :message-key (str "client-link-error-" (System/currentTimeMillis))})
+                  (do
+                    (send-message! cfg {:chat-id chat-id
+                                        :text (str "Client linked: " name)
+                                        :message-key (str "client-linked-" (System/currentTimeMillis))})
+                    (send-task-card! state chat-id (get-in link-res [:result :task]) {}))))
+              (do
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Client created: " name)
+                                    :message-key (str "client-created-" (System/currentTimeMillis))})
+                (prompt-next-action! state chat-id client)))))))))
+
+(defn- handle-pending-next-action-message
+  [state chat-user chat-id text]
+  (let [cfg (get-in state [:config :telegram])
+        pending (get-pending-next-action! chat-id)
+        title (some-> text str/trim)]
+    (when pending
+      (if (str/blank? title)
+        (send-message! cfg {:chat-id chat-id
+                            :text "Action cannot be blank. Reply with a title or tap Cancel."
+                            :message-key (str "client-action-empty-" (System/currentTimeMillis))})
+        (let [client-id (:client-id pending)
+              desc (str "Next action for " (or (:client-name pending) "client"))
+              body (task-body chat-user {:title title
+                                         :desc desc
+                                         :client-id client-id})
+              res (actions/execute! state {:action/id :cap/action/task-create
+                                           :actor (actions/actor-from-telegram chat-user)
+                                           :input body})]
+          (take-pending-next-action! chat-id)
+          (if-let [err (:error res)]
+            (send-message! cfg {:chat-id chat-id
+                                :text (str "Unable to create task: " (:message err))
+                                :message-key (str "client-action-error-" (System/currentTimeMillis))})
+            (send-task-card! state chat-id (get-in res [:result :task]) {})))))))
 
 (defn- edit-prompt-text
   [edit-type title]
@@ -1017,18 +1345,44 @@
     (when callback-id
       (answer-callback! cfg {:callback-id callback-id}))
     (case (:type parsed)
-      :capture/create (let [capture (take-capture! chat-id message-id)
-                            body (:body capture)
-                            actor (actions/actor-from-telegram (:user capture))]
-                        (if (and capture actor)
-                          (let [res (actions/execute! state {:action/id :cap/action/task-create
+      :capture/task (let [capture (take-capture! chat-id message-id)
+                          actor (actions/actor-from-telegram (:user capture))]
+                      (if (and capture actor)
+                        (let [default-client (ensure-default-client-id state (:actor/workspace actor))
+                              body (task-body (:user capture) {:title (:text capture)
+                                                               :desc nil
+                                                               :client-id default-client})
+                              res (actions/execute! state {:action/id :cap/action/task-create
+                                                           :actor actor
+                                                           :input body})]
+                          (if-let [err (:error res)]
+                            (send-message! cfg {:chat-id chat-id
+                                                :text (str "Unable to create task: " (:message err))
+                                                :message-key (str "capture-create-error-" message-id)})
+                            (let [task (get-in res [:result :task])]
+                              (send-task-card! state chat-id task {:reply-to-message-id message-id})
+                              (prompt-link-client! state chat-id task))))
+                        (edit-message! cfg {:chat-id chat-id
+                                            :message-id message-id
+                                            :text "Capture expired."
+                                            :reply-markup {:inline_keyboard []}})))
+      :capture/client (let [capture (take-capture! chat-id message-id)
+                            actor (actions/actor-from-telegram (:user capture))
+                            name (some-> (:text capture) str/trim)]
+                        (if (and capture actor (present-string? name))
+                          (let [res (actions/execute! state {:action/id :cap/action/client-create
                                                              :actor actor
-                                                             :input body})]
+                                                             :input {:client/name name}})]
                             (if-let [err (:error res)]
                               (send-message! cfg {:chat-id chat-id
-                                                  :text (str "Unable to create task: " (:message err))
-                                                  :message-key (str "capture-create-error-" message-id)})
-                              (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id})))
+                                                  :text (str "Unable to create client: " (:message err))
+                                                  :message-key (str "capture-client-error-" message-id)})
+                              (do
+                                (edit-message! cfg {:chat-id chat-id
+                                                    :message-id message-id
+                                                    :text (str "Client created: " name)
+                                                    :reply-markup {:inline_keyboard []}})
+                                (prompt-next-action! state chat-id (get-in res [:result :client])))))
                           (edit-message! cfg {:chat-id chat-id
                                               :message-id message-id
                                               :text "Capture expired."
@@ -1045,6 +1399,72 @@
                                              :message-id message-id
                                              :text "Pending reason cancelled."
                                              :reply-markup {:inline_keyboard []}}))
+      :pending/reason (let [tid (:task-id parsed)
+                            task-id (try (UUID/fromString tid) (catch Exception _ nil))
+                            reason-id (:value parsed)
+                            current (get-pending-reason! chat-id)]
+                        (if (and chat-user task-id (or (nil? current) (= (:task-id current) task-id)))
+                          (if (= "custom" reason-id)
+                            (let [task (find-user-task conn (:user/id chat-user) task-id)
+                                  title (or (:task/title task) "Task")
+                                  prompt (str "Send a pending reason for:\n" title)]
+                              (take-pending-edit! chat-id)
+                              (save-pending-reason! chat-id {:task-id task-id
+                                                             :user chat-user
+                                                             :stage :reason})
+                              (send-message! cfg {:chat-id chat-id
+                                                  :text prompt
+                                                  :message-key (str "pending-custom-" tid)
+                                                  :reply-markup (pending-reason-inline-keyboard tid)}))
+                            (let [reason (pending-reason-text reason-id)]
+                              (if (str/blank? (str reason))
+                                (send-message! cfg {:chat-id chat-id
+                                                    :text "Choose a valid pending reason."
+                                                    :message-key (str "pending-reason-invalid-" tid)})
+                                (do
+                                  (save-pending-reason! chat-id {:task-id task-id
+                                                                 :user chat-user
+                                                                 :stage :followup
+                                                                 :reason reason})
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text "When should I follow up?"
+                                                      :message-key (str "pending-followup-" tid)
+                                                      :reply-markup (pending-followup-inline-keyboard tid)})))))
+                          (send-message! cfg {:chat-id chat-id
+                                              :text "Pending reason expired."
+                                              :message-key (str "pending-reason-expired-" (System/currentTimeMillis))})))
+      :pending/followup (let [tid (:task-id parsed)
+                              task-id (try (UUID/fromString tid) (catch Exception _ nil))
+                              followup-id (:value parsed)
+                              pending (get-pending-reason! chat-id)]
+                          (if (and chat-user task-id pending (= (:task-id pending) task-id))
+                            (if (present-string? (:reason pending))
+                              (if (= "pick-date" followup-id)
+                                (do
+                                  (save-pending-reason! chat-id (assoc pending :stage :followup-date))
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text "Send the follow-up date (YYYY-MM-DD)."
+                                                      :message-key (str "pending-followup-date-" tid)}))
+                                (let [followup (followup-date (keyword followup-id))
+                                      res (actions/execute! state {:action/id :cap/action/task-set-status
+                                                                   :actor (actions/actor-from-telegram chat-user)
+                                                                   :input (cond-> {:task/id task-id
+                                                                                   :task/status :pending
+                                                                                   :note/body (:reason pending)
+                                                                                   :note/last-contact (now-inst)}
+                                                                            followup (assoc :note/next-followup followup))})]
+                                  (take-pending-reason! chat-id)
+                                  (if-let [err (:error res)]
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text (str "Unable to set pending: " (:message err))
+                                                        :message-key (str "pending-followup-error-" tid)})
+                                    (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id}))))
+                              (send-message! cfg {:chat-id chat-id
+                                                  :text "Pending reason missing. Start again."
+                                                  :message-key (str "pending-reason-missing-" (System/currentTimeMillis))}))
+                            (send-message! cfg {:chat-id chat-id
+                                                :text "Pending reason expired."
+                                                :message-key (str "pending-followup-expired-" (System/currentTimeMillis))}))))
       :task/edit-cancel (do
                           (take-pending-edit! chat-id)
                           (edit-message! cfg {:chat-id chat-id
@@ -1095,6 +1515,57 @@
                             (send-message! cfg {:chat-id chat-id
                                                 :text "Cannot delete note."
                                                 :message-key (str "task-note-delete-invalid-" (System/currentTimeMillis))})))
+      :task/client-pick (let [tid (:task-id parsed)
+                              task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                          (if (and chat-user task-id)
+                            (prompt-client-pick! state chat-id (str task-id))
+                            (send-message! cfg {:chat-id chat-id
+                                                :text "Cannot pick client."
+                                                :message-key (str "task-client-pick-error-" (System/currentTimeMillis))})))
+      :task/client-create (let [tid (:task-id parsed)
+                                task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                            (if (and chat-user task-id)
+                              (let [task (find-user-task conn (:user/id chat-user) task-id)
+                                    title (or (:task/title task) "Task")
+                                    prompt (str "Send a client name to link for:\n" title)]
+                                (save-pending-client! chat-id {:task-id task-id
+                                                               :user chat-user
+                                                               :mode :link})
+                                (send-message! cfg {:chat-id chat-id
+                                                    :text prompt
+                                                    :message-key (str "task-client-create-" tid)
+                                                    :reply-markup (client-cancel-inline-keyboard tid)}))
+                              (send-message! cfg {:chat-id chat-id
+                                                  :text "Cannot create client."
+                                                  :message-key (str "task-client-create-error-" (System/currentTimeMillis))})))
+      :task/client-skip (do
+                          (take-pending-client! chat-id)
+                          (send-message! cfg {:chat-id chat-id
+                                              :text "Client link skipped."
+                                              :message-key (str "task-client-skip-" (System/currentTimeMillis))}))
+      :task/client-cancel (do
+                            (take-pending-client! chat-id)
+                            (edit-message! cfg {:chat-id chat-id
+                                                :message-id message-id
+                                                :text "Client link cancelled."
+                                                :reply-markup {:inline_keyboard []}}))
+      :task/client-set (let [tid (:task-id parsed)
+                             task-id (try (UUID/fromString tid) (catch Exception _ nil))
+                             cid (:client-id parsed)
+                             client-id (try (UUID/fromString (str cid)) (catch Exception _ nil))]
+                         (if (and chat-user task-id client-id)
+                           (let [res (actions/execute! state {:action/id :cap/action/task-set-client
+                                                              :actor (actions/actor-from-telegram chat-user)
+                                                              :input {:task/id task-id
+                                                                      :task/client client-id}})]
+                             (if-let [err (:error res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Unable to link client: " (:message err))
+                                                   :message-key (str "task-client-set-error-" (System/currentTimeMillis))})
+                               (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id})))
+                           (send-message! cfg {:chat-id chat-id
+                                               :text "Invalid client selection."
+                                               :message-key (str "task-client-set-invalid-" (System/currentTimeMillis))})))
       :tasks/filter (let [filters (or (get-task-list! chat-id message-id)
                                       {:status nil :archived :active})
                           new-filters (case (:filter parsed)
@@ -1146,7 +1617,7 @@
                        (if (= new-status :pending)
                          (if-let [task (find-user-task conn (:user/id chat-user) task-id)]
                            (let [title (or (:task/title task) "Task")
-                                 prompt (str "Send a pending reason for:\n" title)
+                                 prompt (str "Why is this pending?\n" title)
                                  send-res (send-message! cfg {:chat-id chat-id
                                                               :text prompt
                                                               :message-key (str "pending-reason-" tid)
@@ -1154,7 +1625,8 @@
                              (when-not (:error send-res)
                                (take-pending-edit! chat-id)
                                (save-pending-reason! chat-id {:task-id task-id
-                                                              :user chat-user}))
+                                                              :user chat-user
+                                                              :stage :reason}))
                              send-res)
                            (send-message! cfg {:chat-id chat-id
                                                :text "Task not found."
@@ -1187,7 +1659,47 @@
                         (send-message! cfg {:chat-id chat-id
                                             :text "Invalid archive action."
                                             :message-key (str "task-archive-invalid-" (System/currentTimeMillis))})))
-      nil)))
+      :client/action (let [cid (:client-id parsed)
+                           client-id (try (UUID/fromString (str cid)) (catch Exception _ nil))
+                           action-key (:value parsed)
+                           client (when (and client-id db) (clients/client-by-id db client-id nil))
+                           name (or (:client/name client) "client")]
+                       (if (and chat-user client-id action-key)
+                         (case action-key
+                           "custom" (do
+                                      (save-pending-next-action! chat-id {:client-id client-id
+                                                                          :user chat-user
+                                                                          :client-name name})
+                                      (send-message! cfg {:chat-id chat-id
+                                                          :text (str "Send the next action for " name ".")
+                                                          :message-key (str "client-custom-" (System/currentTimeMillis))
+                                                          :reply-markup (client-action-cancel-inline-keyboard client-id)}))
+                           "dismiss" (do
+                                       (take-pending-next-action! chat-id)
+                                       (send-message! cfg {:chat-id chat-id
+                                                           :text "Next action skipped."
+                                                           :message-key (str "client-dismiss-" (System/currentTimeMillis))}))
+                           (let [[title desc] (case action-key
+                                                "call" [(str "Call " name) (str "Call " name)]
+                                                "docs" [(str "Request docs from " name) (str "Request docs from " name)]
+                                                "followup" [(str "Follow up with " name) (str "Follow up with " name)]
+                                                "meeting" [(str "Schedule meeting with " name) (str "Schedule meeting with " name)]
+                                                [(str "Follow up with " name) (str "Follow up with " name)])
+                                 body (task-body chat-user {:title title
+                                                            :desc desc
+                                                            :client-id client-id})
+                                 res (actions/execute! state {:action/id :cap/action/task-create
+                                                              :actor (actions/actor-from-telegram chat-user)
+                                                              :input body})]
+                             (if-let [err (:error res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Unable to create task: " (:message err))
+                                                   :message-key (str "client-action-error-" (System/currentTimeMillis))})
+                               (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id}))))
+                         (send-message! cfg {:chat-id chat-id
+                                             :text "Invalid client action."
+                                             :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
+      nil))
 (defn- parse-callback
   [data]
   (when (present-string? data)
@@ -1208,11 +1720,18 @@
           nil)
         "capture"
         (case (second parts)
-          "create" {:type :capture/create}
+          "task" {:type :capture/task}
+          "client" {:type :capture/client}
           "cancel" {:type :capture/cancel}
           nil)
         "pending"
         (case (second parts)
+          "reason" {:type :pending/reason
+                    :task-id (nth parts 2 nil)
+                    :value (nth parts 3 nil)}
+          "followup" {:type :pending/followup
+                      :task-id (nth parts 2 nil)
+                      :value (nth parts 3 nil)}
           "cancel" {:type :pending/cancel
                     :task-id (nth parts 2 nil)}
           nil)
@@ -1221,6 +1740,19 @@
           "status" {:type :task/status
                     :task-id (nth parts 2 nil)
                     :value (nth parts 3 nil)}
+          "client" (case (nth parts 2 nil)
+                     "pick" {:type :task/client-pick
+                             :task-id (nth parts 3 nil)}
+                     "create" {:type :task/client-create
+                               :task-id (nth parts 3 nil)}
+                     "skip" {:type :task/client-skip
+                             :task-id (nth parts 3 nil)}
+                     "set" {:type :task/client-set
+                            :task-id (nth parts 3 nil)
+                            :client-id (nth parts 4 nil)}
+                     "cancel" {:type :task/client-cancel
+                               :task-id (nth parts 3 nil)}
+                     nil)
           "archive" {:type :task/archive
                      :task-id (nth parts 2 nil)
                      :value (nth parts 3 nil)}
@@ -1242,6 +1774,12 @@
                    "delete" {:type :task/note-delete
                              :task-id (nth parts 3 nil)}
                    nil)
+          nil)
+        "client"
+        (case (second parts)
+          "action" {:type :client/action
+                    :client-id (nth parts 2 nil)
+                    :value (nth parts 3 nil)}
           nil)
         nil))))
 
@@ -1368,21 +1906,26 @@
                                   (map str/trim (str/split raw #"\|" 2))
                                   [(str/trim raw) nil])
                    title (when-not (str/blank? title) title)
-                   desc (when-not (str/blank? desc) desc)]
+                   desc (when-not (str/blank? desc) desc)
+                   actor (actions/actor-from-telegram chat-user)
+                   default-client (ensure-default-client-id state (:actor/workspace actor))]
                (cond
                  (nil? title) {:text "Usage: /new <title> [| description]"}
+                 (nil? default-client) {:text "Unable to resolve default client."}
                  :else
                  (let [body {:task/title title
                              :task/description (or desc (str "Created via Telegram: " title))
                              :task/status :todo
                              :task/priority :medium
-                             :task/assignee (:user/id chat-user)}
+                             :task/assignee (:user/id chat-user)
+                             :task/client default-client}
                        action-res (actions/execute! state {:action/id :cap/action/task-create
-                                                          :actor (actions/actor-from-telegram chat-user)
+                                                          :actor actor
                                                           :input body})]
                    (if-let [err (:error action-res)]
                      {:text (str "Unable to create task: " (:message err))}
-                     {:task (get-in action-res [:result :task])})))))
+                     {:task (get-in action-res [:result :task])
+                      :link-task (get-in action-res [:result :task])})))))
       {:text "Unknown command. Send /help for available commands."})))
 
 (defn notify-task-event!
@@ -1461,9 +2004,13 @@
                                        (handle-pending-edit-message state chat-user chat-id text)
                                        (if (get-pending-reason! chat-id)
                                          (handle-pending-reason-message state chat-user chat-id text)
-                                         (handle-freeform-message state chat-user chat-id text)))
+                                         (if (get-pending-client! chat-id)
+                                           (handle-pending-client-message state chat-user chat-id text)
+                                           (if (get-pending-next-action! chat-id)
+                                             (handle-pending-next-action-message state chat-user chat-id text)
+                                             (handle-freeform-message state chat-user chat-id text)))))
                                      {:text "Chat not linked. Use /start <token> to link."})))
-                {:keys [text tasks task task-list]} response]
+                {:keys [text tasks task task-list link-task]} response]
             (cond
               task-list (let [{:keys [tasks filters pending-reasons]} task-list
                               header (str "Tasks"
@@ -1485,6 +2032,8 @@
                           {:status :handled})
               task (do
                      (send-task-card! state chat-id task {})
+                     (when link-task
+                       (prompt-link-client! state chat-id link-task))
                      {:status :handled})
               tasks (do
                       (doseq [t tasks]

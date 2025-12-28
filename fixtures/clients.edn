@@ -1,0 +1,25 @@
+[
+ {:client/id #uuid "20000000-0000-0000-0000-000000000001"
+  :entity/type :entity.type/person
+  :client/name "Inbox"
+  :client/status :active
+  :client/workspace "main"
+  :person/roles [:role/client]}
+ {:client/id #uuid "20000000-0000-0000-0000-000000000002"
+  :entity/type :entity.type/person
+  :client/name "Amina Hadzic"
+  :client/phone "+385 98 555 123"
+  :client/channel :whatsapp
+  :client/status :lead
+  :client/workspace "main"
+  :person/roles [:role/client]}
+ {:client/id #uuid "20000000-0000-0000-0000-000000000003"
+  :entity/type :entity.type/person
+  :client/name "Mateo Kovac"
+  :client/email "mateo@example.com"
+  :client/channel :email
+  :client/status :waiting
+  :client/notes "Awaiting documents"
+  :client/workspace "main"
+  :person/roles [:role/client]}
+]

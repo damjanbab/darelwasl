@@ -110,6 +110,7 @@
            :task/description :string
            :task/status :keyword
            :task/assignee :uuid
+           :task/client :uuid
            :task/due-date :instant?
            :task/priority :keyword
            :task/tags :uuid-set
@@ -136,7 +137,8 @@
            :task/title :string?
            :task/description :string?
            :task/priority :keyword?
-           :task/tags :uuid-set?}
+           :task/tags :uuid-set?
+           :task/client :uuid?}
   :outputs {:task/id :uuid}
   :side-effects ["Persist changes"]
   :adapter {:integration :local/db}
@@ -195,7 +197,7 @@
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
 
- {:id :cap/action/task-set-due
+{:id :cap/action/task-set-due
   :title "Set Due Date"
   :version "v1"
   :inputs {:task/id :uuid
@@ -215,6 +217,76 @@
   :related {:schema [:cap/schema/task]
             :views [:cap/view/tasks]}
   :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/task-set-client
+  :title "Set Task Client"
+  :version "v1"
+  :inputs {:task/id :uuid
+           :task/client :uuid}
+  :outputs {:task/id :uuid
+            :task/client :uuid}
+  :side-effects ["Persist client link"]
+  :adapter {:integration :local/db}
+  :audit {:records [:task/change]
+          :fields [:task/id :task/client]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:task/id :task/client]}
+  :contracts {:fixtures [:fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/client]
+            :views [:cap/view/tasks]}
+  :tooling [:cap/tooling/action-contract]}
+
+ {:id :cap/action/client-create
+  :title "Create Client"
+  :version "v1"
+  :inputs {:client/name :string
+           :client/phone :string?
+           :client/email :string?
+           :client/channel :keyword?
+           :client/status :keyword?
+           :client/notes :string?}
+  :outputs {:client/id :uuid}
+  :side-effects ["Persist client"]
+  :adapter {:integration :local/db}
+  :audit {:records [:client/change]
+          :fields [:client/id :client/name]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/name]}
+  :contracts {:fixtures [:fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client]
+            :views [:cap/view/tasks]}
+  :tooling []}
+
+ {:id :cap/action/client-update
+  :title "Update Client"
+  :version "v1"
+  :inputs {:client/id :uuid
+           :client/name :string?
+           :client/phone :string?
+           :client/email :string?
+           :client/channel :keyword?
+           :client/status :keyword?
+           :client/notes :string?}
+  :outputs {:client/id :uuid}
+  :side-effects ["Persist client updates"]
+  :adapter {:integration :local/db}
+  :audit {:records [:client/change]
+          :fields [:client/id :client/name]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id]}
+  :contracts {:fixtures [:fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client]
+            :views [:cap/view/tasks]}
+  :tooling []}
 
  {:id :cap/action/task-set-tags
   :title "Set Task Tags"

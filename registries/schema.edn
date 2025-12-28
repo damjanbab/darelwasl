@@ -217,6 +217,10 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Reason provided when task is pending"}
+   {:ident :task/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
    {:ident :task/assignee
     :type :db.type/ref
     :cardinality :db.cardinality/one
@@ -248,7 +252,7 @@
     :doc "Stable idempotency key for automation-created tasks (optional, unique when set)"}]
   :enums {:task/status [:todo :in-progress :pending :done]
           :task/priority [:low :medium :high]}
-  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Tags reference existing tag entities" "Entity type set to :entity.type/task" "Automation key unique when present"]
+  :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Client required" "Tags reference existing tag entities" "Entity type set to :entity.type/task" "Automation key unique when present"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -261,6 +265,55 @@
                       :cap/action/task-set-tags
                       :cap/action/task-archive]
             :views [:cap/view/tasks :cap/view/login]}}
+
+ {:id :cap/schema/client
+  :title "Client"
+  :version "v1"
+  :attributes
+  [{:ident :client/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Client identity"}
+   {:ident :client/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Client name"}
+   {:ident :client/phone
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Primary phone"}
+   {:ident :client/email
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Primary email"}
+   {:ident :client/channel
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Preferred channel (whatsapp/phone/email)"}
+   {:ident :client/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Client status (lead|active|waiting|closed)"}
+   {:ident :client/notes
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Notes or context"}
+   {:ident :client/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}]
+  :enums {:client/status [:lead :active :waiting :closed]
+          :client/channel [:whatsapp :phone :email]}
+  :invariants ["Client name required" "Entity type set to :entity.type/person" "Workspace required when multi-tenant"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]
+            :actions [:cap/action/client-create
+                      :cap/action/client-update]
+            :views [:cap/view/tasks]}}
 
  {:id :cap/schema/person
   :title "Person (Land Registry)"
@@ -1355,6 +1408,14 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Note content"}
+   {:ident :note/next-followup
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Scheduled follow-up time (optional)"}
+   {:ident :note/last-contact
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last contact time (optional)"}
    {:ident :note/subject
     :type :db.type/ref
     :cardinality :db.cardinality/one

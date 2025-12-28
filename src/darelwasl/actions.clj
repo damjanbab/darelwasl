@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [darelwasl.automations :as automations]
             [darelwasl.betting :as betting]
+            [darelwasl.clients :as clients]
             [darelwasl.events :as events]
             [darelwasl.files :as files]
             [darelwasl.github :as github]
@@ -87,6 +88,12 @@
   (let [body (or input {})
         task-id (:task/id body)]
     (tasks/set-tags! (conn state) task-id (dissoc body :task/id) actor)))
+
+(defn- task-set-client
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        task-id (:task/id body)]
+    (tasks/set-client! (conn state) task-id (dissoc body :task/id) actor)))
 
 (defn- task-archive
   [state {:keys [input actor]}]
@@ -320,6 +327,16 @@
   (let [body (or input {})
         user-id (:user/id body)]
     (users/delete-user! (conn state) user-id actor)))
+
+(defn- client-create
+  [state {:keys [input actor]}]
+  (clients/create-client! (conn state) (or input {}) actor))
+
+(defn- client-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        client-id (:client/id body)]
+    (clients/update-client! (conn state) client-id (dissoc body :client/id) actor)))
 (defn- github-pulls
   [state {:keys [input]}]
   (let [body (or input {})]
@@ -337,6 +354,7 @@
    :cap/action/task-assign task-assign
    :cap/action/task-set-due task-set-due
    :cap/action/task-set-tags task-set-tags
+   :cap/action/task-set-client task-set-client
    :cap/action/task-archive task-archive
    :cap/action/task-add-note task-add-note
    :cap/action/task-edit-note task-edit-note
@@ -361,7 +379,9 @@
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update
-   :cap/action/user-delete user-delete})
+   :cap/action/user-delete user-delete
+   :cap/action/client-create client-create
+   :cap/action/client-update client-update})
 
 (defn dispatch!
   "Execute an action invocation and return a uniform action result:
@@ -416,6 +436,7 @@
     (cond
       (and (= action-id :cap/action/task-create) task) [(task-event :task/created actor task)]
       (and (= action-id :cap/action/task-update) task) [(task-event :task/updated actor task)]
+      (and (= action-id :cap/action/task-set-client) task) [(task-event :task/updated actor task)]
       (and (= action-id :cap/action/task-set-status) task) [(task-event :task/status-changed actor task)]
       (and (= action-id :cap/action/task-assign) task) [(task-event :task/assigned actor task)]
       (and (= action-id :cap/action/task-set-due) task) [(task-event :task/due-changed actor task)]

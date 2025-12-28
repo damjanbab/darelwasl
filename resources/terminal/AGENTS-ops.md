@@ -10,8 +10,8 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Read relevant sections of `darelwasl/docs/system.md` before making ops changes.
 - Log the exact commands used and outcomes.
 - If code changes are required, open a PR; otherwise report actions only.
-- Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, confirm `APP_PORT` is free and `DATOMIC_STORAGE_DIR` is not locked.
- - Verify service status and at least one relevant endpoint (health or feature-specific).
+- Terminal sessions auto-start the app unless explicitly disabled; assume one app instance is already running in the session repo. Before running `scripts/run-service.sh`, verify the existing app on `APP_PORT` and that `DATOMIC_STORAGE_DIR` is not locked; only start a new instance if the app is not running.
+- Verify service status and at least one relevant endpoint (health or feature-specific).
 - Dev-local Datomic allows a single process per storage dir; do not run multiple app instances against the same `DATOMIC_STORAGE_DIR`.
 
 ## Verification matrix (required when code changes)
