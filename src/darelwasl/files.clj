@@ -66,11 +66,26 @@
         (some-> (subs ref 5) str/trim)
         ref))))
 
-(defn- file-type
+(defn- markdown-filename?
+  [filename]
+  (let [name (some-> filename str/lower-case str/trim)]
+    (boolean
+     (and (seq name)
+          (or (str/ends-with? name ".md")
+              (str/ends-with? name ".markdown"))))))
+
+(defn- markdown-mime?
   [mime]
+  (contains? #{"text/markdown" "text/x-markdown"} mime))
+
+(defn- file-type
+  [mime filename]
   (cond
     (and mime (str/starts-with? mime "image/")) :file.type/image
     (= mime "application/pdf") :file.type/pdf
+    (or (markdown-mime? mime)
+        (and (= mime "text/plain") (markdown-filename? filename)))
+    :file.type/markdown
     :else nil))
 
 (defn- sha256
@@ -215,12 +230,14 @@
             mime (:content-type upload)
             tempfile (:tempfile upload)
             size (or (:size upload) (when tempfile (.length ^File tempfile)))
-            ftype (file-type mime)
+            ftype (file-type mime filename)
             workspace (workspace/actor-workspace actor)]
         (cond
           (nil? upload) (error 400 "File is required")
           (nil? tempfile) (error 400 "Upload missing file data")
-          (nil? ftype) (error 400 "Only images and PDFs are supported")
+          (nil? ftype) (error 400 "Only images, PDFs, and Markdown are supported"
+                               {:mime mime
+                                :filename filename})
           :else
           (let [db (d/db conn)
                 {slug-val :value slug-err :error} (normalize-string slug "slug" {:required false

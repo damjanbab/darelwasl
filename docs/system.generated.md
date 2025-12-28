@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `1a62e197145d4788319b4cfb2c04f301ef05e261d32b416188ce581f0df1fdaa`
+- Catalog version: `88e16de331e4164ae4c6976ebc3e3cebabb0bedc79d4f88285becf2e6fc7b53d`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -44,7 +44,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (59)
+### Actions (62)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -62,6 +62,7 @@ This file is auto-generated. Do not edit by hand.
 - action/content-tags
 - action/content-v2
 - action/file-delete
+- action/file-read
 - action/file-upload
 - action/github-pulls
 - action/journey-phase-delete
@@ -86,6 +87,7 @@ This file is auto-generated. Do not edit by hand.
 - action/task-delete
 - action/task-delete-note
 - action/task-edit-note
+- action/task-read
 - action/task-set-due
 - action/task-set-status
 - action/task-set-tags
@@ -104,6 +106,7 @@ This file is auto-generated. Do not edit by hand.
 - action/user-delete
 - action/user-list
 - action/user-update
+- action/workspace-promote
 
 ### Views (18)
 - view/betting
@@ -125,7 +128,8 @@ This file is auto-generated. Do not edit by hand.
 - view/terminal
 - view/user-management
 
-### Integrations (7)
+### Integrations (8)
+- integration/action-gateway
 - integration/email
 - integration/github
 - integration/local-file-store
@@ -172,8 +176,6 @@ This file is auto-generated. Do not edit by hand.
 - file.delete
 - file.update
 - file.upload
-- library.add
-- session.data-promote
 - task.archive
 - task.assign
 - task.create
@@ -262,7 +264,7 @@ This file is auto-generated. Do not edit by hand.
 - /status
 - /support-entries
 - /system
-- /system/datastore/snapshot
+- /system/actions/:id
 - /system/restart
 - /tags
 - /tasks
@@ -331,10 +333,6 @@ This file is auto-generated. Do not edit by hand.
 - TERMINAL_HOST
 - TERMINAL_LOG_DIR
 - TERMINAL_MAIN_APP_URL
-- TERMINAL_MAIN_DATOMIC_DB
-- TERMINAL_MAIN_DATOMIC_DIR
-- TERMINAL_MAIN_DATOMIC_SYSTEM
-- TERMINAL_MAIN_FILES_DIR
 - TERMINAL_MAX_OUTPUT_BYTES
 - TERMINAL_POLL_MS
 - TERMINAL_PORT
@@ -430,12 +428,12 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.tasks
 - darelwasl.telegram
 - darelwasl.telegram.dev
+- darelwasl.terminal.app-client
 - darelwasl.terminal.backend
 - darelwasl.terminal.client
 - darelwasl.terminal.commands
 - darelwasl.terminal.http
 - darelwasl.terminal.main
-- darelwasl.terminal.promote
 - darelwasl.terminal.session
 - darelwasl.terminal.store
 - darelwasl.terminal.tmux
@@ -448,3 +446,5 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.workers.betting-scheduler
 - darelwasl.workers.outbox
 - darelwasl.workers.telegram-poller
+- darelwasl.workspace
+- darelwasl.workspaces
