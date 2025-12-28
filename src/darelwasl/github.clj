@@ -62,20 +62,26 @@
       :else
       (some-> (git-config-origin-url) parse-github-repo))))
 
-(defn- request-json
-  [{:keys [api-url token timeout-ms]} path query]
+(defn- request-json*
+  [{:keys [api-url token timeout-ms]} method path query body]
   (let [url (str (normalize-base-url api-url) path)
         headers (cond-> {"Accept" "application/vnd.github+json"
                          "User-Agent" default-user-agent}
                   (and token (not (str/blank? token)))
                   (assoc "Authorization" (str "token " token)))]
     (try
-      (let [resp (http/get url {:as :text
+      (let [payload (when (some? body)
+                      (json/write-str body))
+            resp (http/request {:method method
+                                :url url
+                                :as :text
                                 :throw-exceptions false
                                 :socket-timeout (or timeout-ms default-timeout-ms)
                                 :conn-timeout (or timeout-ms default-timeout-ms)
                                 :headers headers
-                                :query-params query})
+                                :query-params query
+                                :body payload
+                                :content-type :json})
             status (:status resp)
             raw (:body resp)
             body (when (and raw (not (str/blank? raw)))
@@ -92,6 +98,10 @@
       (catch Exception e
         (log/warn e "GitHub request failed" {:path path})
         (error 502 "GitHub request failed")))))
+
+(defn- request-json
+  [cfg path query]
+  (request-json* cfg :get path query nil))
 
 (defn- pr-summary
   [pr commits]
@@ -156,3 +166,28 @@
                                 (pr-summary pr commits)))
                             pulls)]
             {:pulls items}))))))
+
+(defn close-pr
+  [cfg params]
+  (let [body (or params {})
+        pr-number (or (:pr/number body)
+                      (:pr-number body)
+                      (:number body))
+        resolved (resolve-repo cfg)]
+    (cond
+      (nil? resolved)
+      (error 500 "GitHub repo not configured")
+
+      (nil? pr-number)
+      (error 400 "PR number is required")
+
+      :else
+      (let [{:keys [owner repo]} resolved
+            resp (request-json* (:github cfg)
+                                :patch
+                                (str "/repos/" owner "/" repo "/pulls/" pr-number)
+                                nil
+                                {:state "closed"})]
+        (if-let [err (:error resp)]
+          {:error err}
+          {:pr (pr-summary (:body resp) [])})))))

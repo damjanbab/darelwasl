@@ -85,7 +85,8 @@
 
 (defn- detail-panel
   []
-  (let [pr @(rf/subscribe [:darelwasl.app/selected-pr])]
+  (let [pr @(rf/subscribe [:darelwasl.app/selected-pr])
+        {:keys [close]} @(rf/subscribe [:darelwasl.app/prs])]
     [:div.panel.prs-detail
      [:div.section-header
       [:div
@@ -97,7 +98,12 @@
         [:p "Choose a pull request to see details and commits."]]
        (let [state (:pr/state pr)
              merged-at (:pr/merged-at pr)
-             commits (:pr/commits pr)]
+             commits (:pr/commits pr)
+             close-status (:status close)
+             close-error (:error close)
+             close-disabled? (or (= state :closed)
+                                 (and merged-at (seq (str merged-at)))
+                                 (= close-status :loading))]
          [:div.prs-detail-body
           [:div.prs-detail-header
            [:div
@@ -109,7 +115,14 @@
             [:a.button.secondary {:href (:pr/url pr)
                                   :target "_blank"
                                   :rel "noreferrer"}
-             "Open on GitHub"]]]
+             "Open on GitHub"]
+            [ui/button {:variant :danger
+                        :disabled close-disabled?
+                        :on-click #(when (js/confirm "Close this pull request?")
+                                     (rf/dispatch [:darelwasl.app/close-pr (:pr/number pr)]))}
+             (if (= close-status :loading) "Closing..." "Close PR")]]]
+          (when close-error
+            [:div.form-error close-error])
           [:div.prs-detail-meta
            [:div.meta-row
             [:span.meta-label "Branches"]

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `4770fda5887c5caa26c6a43d8120e1ed7b37d7a57494283d7c64cefdd3612e4a`
+- Catalog version: `ca1801f0d18cc2ccfac832a29b80c3354882dd9ed608b74c86a3babaaa878d31`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -44,7 +44,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (62)
+### Actions (63)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -64,6 +64,7 @@ This file is auto-generated. Do not edit by hand.
 - action/file-delete
 - action/file-read
 - action/file-upload
+- action/github-close-pr
 - action/github-pulls
 - action/journey-phase-delete
 - action/journey-phase-upsert
@@ -232,6 +233,7 @@ This file is auto-generated. Do not edit by hand.
 - /people/:id
 - /personas
 - /pulls
+- /pulls/:number/close
 - /recent
 - /recognize
 - /registries

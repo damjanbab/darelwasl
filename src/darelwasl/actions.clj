@@ -325,6 +325,11 @@
   (let [body (or input {})]
     (github/list-pulls (:config state) body)))
 
+(defn- github-close-pr
+  [state {:keys [input]}]
+  (let [body (or input {})]
+    (github/close-pr (:config state) body)))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -352,6 +357,7 @@
    :cap/action/tag-delete tag-delete
    :cap/action/workspace-promote workspace-promote
    :cap/action/github-pulls github-pulls
+   :cap/action/github-close-pr github-close-pr
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update

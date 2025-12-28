@@ -114,6 +114,8 @@
   {:items []
    :status :idle
    :error nil
+   :close {:status :idle
+           :error nil}
    :selected nil
    :filters {:state "open"}})
 

@@ -1306,6 +1306,61 @@
  (fn [db [_ value]]
    (assoc-in db [:prs :filters :state] value)))
 
+(rf/reg-event-fx
+ ::close-pr
+ (fn [{:keys [db]} [_ pr-number]]
+   (if (nil? pr-number)
+     {:db db}
+     {:db (-> db
+              (assoc-in [:prs :close :status] :loading)
+              (assoc-in [:prs :close :error] nil))
+      ::fx/http {:url (str "/api/github/pulls/" pr-number "/close")
+                 :method "POST"
+                 :on-success [::close-pr-success pr-number]
+                 :on-error [::close-pr-failure]}})))
+
+(rf/reg-event-db
+ ::close-pr-success
+ (fn [db [_ pr-number payload]]
+   (let [updated-pr (some-> (:pr payload) normalize-pr)
+         items (get-in db [:prs :items])
+         open-only? (= "open" (get-in db [:prs :filters :state]))
+         next-items (cond
+                      (and updated-pr open-only?)
+                      (vec (remove #(= (:pr/number %) pr-number) items))
+
+                      updated-pr
+                      (mapv (fn [item]
+                              (if (= (:pr/number item) pr-number)
+                                (merge item updated-pr)
+                                item))
+                            items)
+
+                      :else items)
+         next-selected (let [selected (get-in db [:prs :selected])]
+                         (if (and open-only? (= selected pr-number))
+                           (:pr/number (first next-items))
+                           selected))]
+     (-> db
+         (assoc-in [:prs :items] next-items)
+         (assoc-in [:prs :selected] next-selected)
+         (assoc-in [:prs :status] (if (seq next-items) :ready :empty))
+         (assoc-in [:prs :close :status] :success)
+         (assoc-in [:prs :close :error] nil)))))
+
+(rf/reg-event-db
+ ::close-pr-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to close pull request.")]
+     (-> db
+         (assoc-in [:prs :close :status] :error)
+         (assoc-in [:prs :close :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
 ;; Control panel content
 (rf/reg-event-fx
  ::fetch-content

@@ -116,7 +116,8 @@
   :data {:sources [{:id :github/pulls
                     :source :cap/action/github-pulls
                     :pull [:pulls]}]}
-  :actions [:cap/action/github-pulls]
+  :actions [:cap/action/github-pulls
+            :cap/action/github-close-pr]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 300}
        :state-model :finite

@@ -1103,6 +1103,24 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
+ :related {:schema []
+           :views [:cap/view/pr-overview]}
+ :tooling []}
+
+ {:id :cap/action/github-close-pr
+  :title "GitHub Close Pull Request"
+  :version "v1"
+  :inputs {:pr/number :long}
+  :outputs {:pr :map}
+  :side-effects ["Close a PR via the GitHub API"]
+  :adapter {:integration :cap/integration/github}
+  :audit {:records [:github/pull-close]
+          :fields [:pr/number]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:schema []
             :views [:cap/view/pr-overview]}
   :tooling []}
