@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `88e16de331e4164ae4c6976ebc3e3cebabb0bedc79d4f88285becf2e6fc7b53d`
+- Catalog version: `4770fda5887c5caa26c6a43d8120e1ed7b37d7a57494283d7c64cefdd3612e4a`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -334,6 +334,7 @@ This file is auto-generated. Do not edit by hand.
 - TERMINAL_LOG_DIR
 - TERMINAL_MAIN_APP_URL
 - TERMINAL_MAX_OUTPUT_BYTES
+- TERMINAL_MAX_RUNNING_SESSIONS
 - TERMINAL_POLL_MS
 - TERMINAL_PORT
 - TERMINAL_PORT_RANGE_END
@@ -353,6 +354,7 @@ This file is auto-generated. Do not edit by hand.
 - run-service.sh
 - run-site.sh
 - run-terminal.sh
+- terminal-log-maintenance.sh
 - terminal-verify.sh
 - tg-spinup.sh
 - tg-watch-webhook.sh
