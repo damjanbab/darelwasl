@@ -7,7 +7,8 @@
 (defn pulls-handler
   [state]
   (fn [request]
-    (let [state-param (get-in request [:query-params :state])
+    (let [state-param (or (get-in request [:query-params :state])
+                          (get-in request [:query-params "state"]))
           action-res (actions/execute! state {:action/id :cap/action/github-pulls
                                               :actor (actions/actor-from-session (:auth/session request))
                                               :input (cond-> {}
