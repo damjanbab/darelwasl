@@ -9,4 +9,5 @@ if [[ -n "${TERMINAL_SESSION_ID:-}" && ! -f "public/js/main.js" ]]; then
   npm install --no-progress --no-audit
   npm run build
 fi
+: "${DATOMIC_ROLE:=app}"
 exec clojure -M:dev

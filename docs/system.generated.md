@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `ca1801f0d18cc2ccfac832a29b80c3354882dd9ed608b74c86a3babaaa878d31`
+- Catalog version: `238372107ade59ac69610f2212435f78cb87a412768206bd477b3c1331382329`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -291,6 +291,8 @@ This file is auto-generated. Do not edit by hand.
 - BETTING_SCHEDULER_ENABLED
 - BETTING_SCHEDULER_POLL_MS
 - DATOMIC_DB_NAME
+- DATOMIC_INSTANCE
+- DATOMIC_ROLE
 - DATOMIC_STORAGE_DIR
 - DATOMIC_SYSTEM
 - FILES_STORAGE_DIR
@@ -353,9 +355,12 @@ This file is auto-generated. Do not edit by hand.
 - deploy.sh
 - generate-docs.sh
 - load_github_token.sh
+- run-import.sh
+- run-seed.sh
 - run-service.sh
 - run-site.sh
 - run-terminal.sh
+- run-tg-dev.sh
 - terminal-log-maintenance.sh
 - terminal-verify.sh
 - tg-spinup.sh

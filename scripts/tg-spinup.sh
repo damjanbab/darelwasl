@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 mkdir -p .cpcache/tg
+: "${DATOMIC_ROLE:=app}"
 
 TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_bot_token}"
 SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_webhook_secret}"

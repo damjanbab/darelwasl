@@ -93,6 +93,33 @@
          (remove str/blank?)
          vec)))
 
+(defn- normalize-token-fragment
+  [value]
+  (let [raw (some-> value str/trim)]
+    (when (and raw (not (str/blank? raw)))
+      (-> raw
+          str/lower-case
+          (str/replace #"[^a-z0-9-]+" "-")
+          (str/replace #"^-+" "")
+          (str/replace #"-+$" "")))))
+
+(defn- datomic-suffix
+  [role instance]
+  (let [role (normalize-token-fragment role)
+        instance (normalize-token-fragment instance)]
+    (cond
+      (and role instance) (str role "-" instance)
+      role role
+      instance (str "instance-" instance)
+      :else nil)))
+
+(defn- suffix-storage-dir
+  [storage-dir suffix]
+  (cond
+    (nil? storage-dir) nil
+    (= storage-dir :mem) :mem
+    :else (.getAbsolutePath (io/file storage-dir suffix))))
+
 (defn- read-secret-file
   [path]
   (when (and path (not (str/blank? path)))
@@ -117,8 +144,8 @@
 (defn load-config
   "Load configuration from environment with sensible defaults for local dev."
   []
-  (let [env (System/getenv)]
-    (-> default-config
+  (let [env (System/getenv)
+        cfg (-> default-config
         (assoc-in [:http :port]
                   (parse-int (get env "APP_PORT")
                              (get-in default-config [:http :port])))
@@ -268,4 +295,13 @@
                            (get-in default-config [:datomic :db-name])))
         (assoc :fixtures
                {:auto-seed? (env-bool (get env "ALLOW_FIXTURE_SEED")
-                                      (get-in default-config [:fixtures :auto-seed?]))}))))
+                                     (get-in default-config [:fixtures :auto-seed?]))}))
+        suffix (datomic-suffix (get env "DATOMIC_ROLE")
+                               (get env "DATOMIC_INSTANCE"))]
+    (if (and suffix (not (str/blank? suffix)))
+      (-> cfg
+          (update-in [:datomic :db-name]
+                     (fn [db-name] (str db-name "-" suffix)))
+          (update-in [:datomic :storage-dir]
+                     (fn [storage-dir] (suffix-storage-dir storage-dir suffix))))
+      cfg)))
