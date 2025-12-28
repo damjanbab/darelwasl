@@ -140,6 +140,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 ## Terminal Service (Codex Sessions)
 - Separate daemon (not tied to the main app). Sessions survive app restarts and UI closes.
 - Access gated by role `:role/codex-terminal` (only Damjan for now).
+- Dev-local universal architecture spec: `docs/devlocal-universal.md`.
 - Terminal service runs locally (default `TERMINAL_HOST=127.0.0.1`, `TERMINAL_PORT=4010`); main app proxies `/api/terminal/*` to it.
 - Main app is the sole owner of the main Datomic connection; terminal service never connects to main Datomic directly.
 - Terminal backend switching: `/api/terminal/backend` (admin-only) reports `{active stable-url canary-url}` and accepts `{active|backend}` to switch between `:stable` (`TERMINAL_API_URL`) and `:canary` (`TERMINAL_CANARY_API_URL`); active backend persists in `TERMINAL_BACKEND_FILE` (default `data/terminal/backend.edn`).
