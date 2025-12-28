@@ -44,6 +44,7 @@
               :codex-command "codex"
               :port-range-start 4100
               :port-range-end 4199
+              :max-running-sessions nil
               :auto-start-app? true
               :auto-start-site? false
               :poll-ms 1000
@@ -191,7 +192,9 @@
                      public-base-url (env-str (get env "TERMINAL_PUBLIC_BASE_URL")
                                               (get-in default-config [:terminal :public-base-url]))
                      main-app-url (env-str (get env "TERMINAL_MAIN_APP_URL")
-                                           (get-in default-config [:terminal :main-app-url]))]
+                                           (get-in default-config [:terminal :main-app-url]))
+                     max-running-sessions (parse-int (get env "TERMINAL_MAX_RUNNING_SESSIONS")
+                                                     (get-in default-config [:terminal :max-running-sessions]))]
                  {:host host
                   :port port
                   :base-url base-url
@@ -217,6 +220,7 @@
                                                (get-in default-config [:terminal :port-range-start]))
                   :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
                                              (get-in default-config [:terminal :port-range-end]))
+                  :max-running-sessions max-running-sessions
                   :auto-start-app? (env-bool (get env "TERMINAL_AUTO_START_APP")
                                              (get-in default-config [:terminal :auto-start-app?]))
                   :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")

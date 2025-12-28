@@ -128,6 +128,24 @@
        (filter number?)
        set))
 
+(defn- running-session-count
+  [store]
+  (->> (store/list-sessions store)
+       (filter #(tmux/running? (:tmux %)))
+       count))
+
+(defn- enforce-running-limit!
+  [store cfg]
+  (let [limit (:max-running-sessions cfg)]
+    (when (and (number? limit) (pos? limit))
+      (let [running (running-session-count store)]
+        (when (>= running limit)
+          (throw (ex-info "Too many running sessions"
+                          {:status 429
+                           :message "Too many running sessions"
+                           :limit limit
+                           :running running})))))))
+
 (defn- allocate-ports
   [cfg store & [opts]]
   (let [{:keys [exclude-id avoid-ports]} (if (map? opts) opts {:exclude-id opts})
@@ -667,12 +685,13 @@
         dev-bot? (true? dev-bot?)
         work-root (ensure-dir! (:work-dir cfg))
         logs-root (ensure-dir! (:logs-dir cfg))
+        _ (enforce-running-limit! store cfg)
         session-root (io/file work-root id)
-         repo-dir (io/file session-root "repo")
-         datomic-dir (io/file session-root "datomic")
-         files-dir (io/file session-root "files")
-         chat-file (io/file session-root "chat.log")
-         env-file (io/file session-root "session.env")
+        repo-dir (io/file session-root "repo")
+        datomic-dir (io/file session-root "datomic")
+        files-dir (io/file session-root "files")
+        chat-file (io/file session-root "chat.log")
+        env-file (io/file session-root "session.env")
          askpass-file (io/file session-root "git-askpass.sh")
          logs-dir (io/file logs-root id)
          ports (allocate-ports cfg store)
@@ -740,6 +759,12 @@
                       "DATOMIC_DB_NAME" datomic-db
                       "FILES_STORAGE_DIR" (.getPath files-dir)
                       "ALLOW_FIXTURE_SEED" "false"
+                      "BETTING_SCHEDULER_ENABLED" "false"
+                      "OUTBOX_WORKER_ENABLED" "false"
+                      "TELEGRAM_WEBHOOK_ENABLED" "false"
+                      "TELEGRAM_POLLING_ENABLED" "false"
+                      "TELEGRAM_COMMANDS_ENABLED" "false"
+                      "TELEGRAM_NOTIFICATIONS_ENABLED" "false"
                       "TERMINAL_SESSION_ID" id
                       "TERMINAL_LOG_DIR" (.getPath logs-dir)
                       "TERMINAL_API_URL" (:base-url cfg)
