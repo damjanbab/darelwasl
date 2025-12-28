@@ -6,7 +6,8 @@
   {:http {:port 3000
           :host "0.0.0.0"}
    :site {:port 3200
-          :host "0.0.0.0"}
+          :host "0.0.0.0"
+          :enabled? true}
    :telegram {:webhook-enabled? false
               :commands-enabled? true
               :notifications-enabled? false
@@ -131,6 +132,9 @@
         (assoc-in [:site :host]
                   (env-str (get env "SITE_HOST")
                            (get-in default-config [:site :host])))
+        (assoc-in [:site :enabled?]
+                  (env-bool (get env "SITE_ENABLED")
+                            (get-in default-config [:site :enabled?])))
         (assoc :telegram
                {:bot-token (env-str (get env "TELEGRAM_BOT_TOKEN") nil)
                 :webhook-secret (env-str (get env "TELEGRAM_WEBHOOK_SECRET") nil)

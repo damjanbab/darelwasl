@@ -104,7 +104,8 @@
  {:id :cap/tooling/site-process
   :title "Public Site Process"
   :version "v0"
-  :invocation {:dev "scripts/run-site.sh" :prod "systemd unit (site)"}
+  :invocation {:dev "scripts/run-service.sh (SITE_ENABLED=true SITE_PORT=3200)"
+               :prod "darelwasl.service with SITE_ENABLED=true"}
   :scope {:writes? false :reads [:datomic]}
   :determinism :high
   :enforces {:capabilities [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `ca1801f0d18cc2ccfac832a29b80c3354882dd9ed608b74c86a3babaaa878d31`
+- Catalog version: `0fef18e067632f3f5f90facf0d7e25e3f2f195fab509348db2e4f2017f464d41`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -307,6 +307,7 @@ This file is auto-generated. Do not edit by hand.
 - REZULTATI_BASE_URL
 - REZULTATI_CACHE_TTL_MS
 - REZULTATI_TIMEOUT_MS
+- SITE_ENABLED
 - SITE_HOST
 - SITE_PORT
 - SUPERSPORT_BASE_URL
@@ -354,7 +355,6 @@ This file is auto-generated. Do not edit by hand.
 - generate-docs.sh
 - load_github_token.sh
 - run-service.sh
-- run-site.sh
 - run-terminal.sh
 - terminal-log-maintenance.sh
 - terminal-verify.sh
@@ -425,13 +425,11 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.server
 - darelwasl.shared.block-types
 - darelwasl.site.http
-- darelwasl.site.main
 - darelwasl.site.server
 - darelwasl.site.templates
 - darelwasl.state
 - darelwasl.tasks
 - darelwasl.telegram
-- darelwasl.telegram.dev
 - darelwasl.terminal.app-client
 - darelwasl.terminal.backend
 - darelwasl.terminal.client

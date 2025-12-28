@@ -213,7 +213,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Compatibility/flags: additive; no existing content removed. Public site renders v2 sections by default (no flag presently).
 - Fixtures: `fixtures/content.edn` now seeds the Saudi license site content (business/contact, licenses, comparison rows, journey/activation steps, personas, support roles, hero stats/flows, FAQs, values, team) alongside the presentation/about pages and blocks; IDs are fixed and carry `:entity/type` for backfill.
 
-## Public Site Design Contract (run-site-premium-001)
+## Public Site Design Contract (site-premium-001)
 - Visual tone: “calm authority” with strong hierarchy, generous whitespace, minimal decoration; high-trust cues via early stats/proof and consistent primary CTA.
 - Nav & CTA: top-level nav items = Home, Services, Comparison, Process, About, Contact; site-wide primary CTA button = “Schedule a meeting”; max 2 levels (Services may list up to 6–9 leaves; others single level); mobile hamburger must be keyboard navigable with visible focus and Escape to close.
 - IA & sections:
@@ -315,26 +315,22 @@ Maintain stable IDs; reference them in tasks/PRs.
 
 ## Deployment (Hetzner plan)
 - Host: Debian (CPX22) at IPv4 `77.42.30.144` (IPv6 /64 available); `haloeddepth.com` points here; no reverse proxy/SSL yet—serve on the raw IP/domain for now (port 3000).
-- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env files at `/etc/darelwasl/app.env` and `/etc/darelwasl/site.env` (owned by `darelwasl`, root-readable); Datomic storage under `/var/lib/darelwasl/datomic`.
-- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; site on `SITE_HOST=0.0.0.0`, `SITE_PORT=3200` (configurable). Reserve 80/443 for a future reverse proxy/SSL front.
-- Ports/firewall: allow inbound 22 (SSH) and 3000 (app) + 3200 (site); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
-- Logging: systemd journal for both services (no separate log files initially); optional logrotate can be added later.
+- Service user and paths: create `darelwasl` user; clone repo to `/opt/darelwasl`; env file at `/etc/darelwasl/app.env` (owned by `darelwasl`, root-readable) carries app + site settings; Datomic storage under `/var/lib/darelwasl/datomic`.
+- Runtime bind: `APP_HOST=0.0.0.0`, `APP_PORT=3000`; enable the public site with `SITE_ENABLED=true`, `SITE_HOST=0.0.0.0`, `SITE_PORT=3200` (configurable). Reserve 80/443 for a future reverse proxy/SSL front.
+- Ports/firewall: allow inbound 22 (SSH) and 3000 (app) + 3200 (site when enabled); add 80/443 only when proxy is configured; outbound SMTP 25/465 blocked by provider (not used).
+- Logging: systemd journal for the app service (includes site when enabled); optional logrotate can be added later.
 - SSH: add maintainer public key to root and `darelwasl` user `~/.ssh/authorized_keys` before running prep; use repo origin over HTTPS per system rules.
 - Env file template (`/etc/darelwasl/app.env`):
   - `APP_HOST=0.0.0.0`
   - `APP_PORT=3000`
-  - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
-  - `DATOMIC_SYSTEM=darelwasl`
-  - `DATOMIC_DB_NAME=darelwasl`
-  - `ALLOW_FIXTURE_SEED=false` (prod: disable fixture reseed)
-  - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
-- Site env file template (`/etc/darelwasl/site.env`):
+  - `SITE_ENABLED=true`
   - `SITE_HOST=0.0.0.0`
   - `SITE_PORT=3200`
   - `DATOMIC_STORAGE_DIR=/var/lib/darelwasl/datomic`
   - `DATOMIC_SYSTEM=darelwasl`
   - `DATOMIC_DB_NAME=darelwasl`
-  - `ALLOW_FIXTURE_SEED=false`
+  - `ALLOW_FIXTURE_SEED=false` (prod: disable fixture reseed)
+  - Optional: `NODE_ENV=production`, JVM opts via `JAVA_OPTS` if needed.
 - Systemd unit (`/etc/systemd/system/darelwasl.service`):
   ```
   [Unit]
@@ -356,27 +352,6 @@ Maintain stable IDs; reference them in tasks/PRs.
   WantedBy=multi-user.target
   ```
   Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl`.
-- Site Systemd unit (`/etc/systemd/system/darelwasl-site.service`):
-  ```
-  [Unit]
-  Description=DarelWasl public site
-  After=network.target
-
-  [Service]
-  Type=simple
-  User=darelwasl
-  WorkingDirectory=/opt/darelwasl
-  EnvironmentFile=/etc/darelwasl/site.env
-  ExecStart=/opt/darelwasl/scripts/run-site.sh
-  Restart=on-failure
-  RestartSec=5
-  StandardOutput=journal
-  StandardError=journal
-
-  [Install]
-  WantedBy=multi-user.target
-  ```
-  Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-site`.
 - Terminal Systemd unit (`/etc/systemd/system/darelwasl-terminal.service`):
   ```
   [Unit]
@@ -398,12 +373,12 @@ Maintain stable IDs; reference them in tasks/PRs.
   WantedBy=multi-user.target
   ```
   Reload/enable: `sudo systemctl daemon-reload && sudo systemctl enable --now darelwasl-terminal`.
-- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl darelwasl-site`.
+- CI deploy: GitHub Actions workflow `.github/workflows/deploy.yml` (triggers on `main` push) SSHes to the host using secrets `HETZNER_SSH_HOST`, `HETZNER_SSH_USER`, `HETZNER_SSH_KEY` and runs `/opt/darelwasl/scripts/deploy.sh` then `systemctl restart darelwasl`.
 - Service ops (Hetzner):
-  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl darelwasl-site`.
-- Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`; same for `darelwasl-site`.
+  - Deploy manually on server: `cd /opt/darelwasl && sudo -u darelwasl ./scripts/deploy.sh && sudo systemctl restart darelwasl`.
+- Service commands: `systemctl status darelwasl`, `journalctl -u darelwasl -f`, `systemctl restart darelwasl`, `systemctl stop darelwasl`.
   - Terminal: `systemctl status darelwasl-terminal`, `journalctl -u darelwasl-terminal -f`, `systemctl restart darelwasl-terminal`.
-  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed) and `curl http://127.0.0.1:3200/` (site).
+  - Health: `curl http://127.0.0.1:3000/health` (or use `http://haloeddepth.com:3000/health` while exposed) and `curl http://127.0.0.1:3200/` when `SITE_ENABLED=true`.
   - Secrets in GitHub: set `HETZNER_SSH_HOST=77.42.30.144`, `HETZNER_SSH_USER=root` (or deploy user), `HETZNER_SSH_KEY` (private key matching server authorized_keys).
 
 ## Product Spec: Entity Foundation + App Suite (Home + Tasks)
@@ -693,7 +668,7 @@ Maintain stable IDs; reference them in tasks/PRs.
 - Entity helper: `darelwasl.entity` provides basic `:entity/type` helpers (list/pull, ensure type); startups backfill types and seeds set them on create flows (tasks/tags).
 - Home data (backend): `/api/tasks/recent` returns recent tasks (sorted by updated, default limit 5, archived excluded unless `archived=true`); `/api/tasks/counts` returns counts by status (archived excluded unless `archived=true`). Both require auth and reuse task pulls.
 - :fixtures/land-registry-sample (`fixtures/land_registry_sample.csv`): trimmed CSV (one parcel, nine ownership rows) mirroring the HRIB structure for fast importer checks; uses the same header as the full dataset.
-- Public site process: `clojure -M:site --dry-run` initializes schema/fixtures for the public site process without starting Jetty; run `scripts/run-site.sh` (env `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`) to serve the v2 public site (Home/About/Contact) rendering live v2 entities (hero stats/flows, licenses, comparison rows, journey/activation, personas/support, FAQs, values, team, contact) with visibility filtering.
+- Public site process: served by the main app when `SITE_ENABLED=true` (configure `SITE_HOST`/`SITE_PORT`, defaults `0.0.0.0:3200`); run `scripts/run-service.sh` to serve the v2 public site (Home/About/Contact) rendering live v2 entities (hero stats/flows, licenses, comparison rows, journey/activation, personas/support, FAQs, values, team, contact) with visibility filtering.
 
 ## Data & Provenance: Entity + Fact Model (v1)
 - Identity:

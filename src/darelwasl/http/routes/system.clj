@@ -97,15 +97,22 @@
 (defn- site-restart-handler
   [state]
   (fn [_request]
-    (if-let [restart! (:site/restart! state)]
-      (try
-        (restart!)
-        {:status 202
-         :body {:status "restarting"}}
-        (catch Exception e
-          (log/warn e "Failed to restart site")
-          (common/error-response 500 "Unable to restart site.")))
-      (common/error-response 500 "Site restart unavailable."))))
+    (let [site-enabled? (true? (get-in state [:config :site :enabled?]))]
+      (cond
+        (not site-enabled?)
+        (common/error-response 400 "Site disabled.")
+
+        (nil? (:site/restart! state))
+        (common/error-response 500 "Site restart unavailable.")
+
+        :else
+        (try
+          ((:site/restart! state))
+          {:status 202
+           :body {:status "restarting"}}
+          (catch Exception e
+            (log/warn e "Failed to restart site")
+            (common/error-response 500 "Unable to restart site.")))))))
 
 (defn- http-health
   [url path]
@@ -176,34 +183,38 @@
   [state]
   (fn [_request]
     (let [cfg (:config state)
+          site-enabled? (true? (get-in cfg [:site :enabled?]))
           app-url (service-url (get-in cfg [:http :host]) (get-in cfg [:http :port]))
-          site-url (service-url (get-in cfg [:site :host]) (get-in cfg [:site :port]))
+          site-url (when site-enabled?
+                     (service-url (get-in cfg [:site :host]) (get-in cfg [:site :port])))
           terminal-url (get-in cfg [:terminal :base-url])
           canary-url (get-in cfg [:terminal :canary-base-url])
           token (get-in cfg [:terminal :admin-token])
           checked-at (now-ms)
-          services [{:id "app"
-                     :label "App API"
-                     :url app-url
-                     :restartable? (boolean (:app/restart! state))
-                     :health (assoc (app-health state) :checked-at checked-at)}
-                    {:id "site"
-                     :label "Public site"
-                     :url site-url
-                     :restartable? (boolean (:site/restart! state))
-                     :health (assoc (site-health site-url) :checked-at checked-at)}
-                    {:id "terminal-stable"
-                     :label "Terminal (stable)"
-                     :url terminal-url
-                     :restartable? (and (not (str/blank? (str terminal-url)))
-                                        (not (str/blank? (str token))))
-                     :health (assoc (http-health terminal-url "/health") :checked-at checked-at)}
-                    {:id "terminal-canary"
-                     :label "Terminal (canary)"
-                     :url canary-url
-                     :restartable? (and (not (str/blank? (str canary-url)))
-                                        (not (str/blank? (str token))))
-                     :health (assoc (http-health canary-url "/health") :checked-at checked-at)}]]
+          services (cond-> [{:id "app"
+                             :label "App API"
+                             :url app-url
+                             :restartable? (boolean (:app/restart! state))
+                             :health (assoc (app-health state) :checked-at checked-at)}]
+                     site-enabled?
+                     (conj {:id "site"
+                            :label "Public site"
+                            :url site-url
+                            :restartable? (boolean (:site/restart! state))
+                            :health (assoc (site-health site-url) :checked-at checked-at)}))
+          services (into services
+                         [{:id "terminal-stable"
+                           :label "Terminal (stable)"
+                           :url terminal-url
+                           :restartable? (and (not (str/blank? (str terminal-url)))
+                                              (not (str/blank? (str token))))
+                           :health (assoc (http-health terminal-url "/health") :checked-at checked-at)}
+                          {:id "terminal-canary"
+                           :label "Terminal (canary)"
+                           :url canary-url
+                           :restartable? (and (not (str/blank? (str canary-url)))
+                                              (not (str/blank? (str token))))
+                           :health (assoc (http-health canary-url "/health") :checked-at checked-at)}])]
       {:status 200
        :body {:services services}})))
 
@@ -214,7 +225,9 @@
           cfg (:config state)]
       (case service-id
         "app" ((restart-handler state) request)
-        "site" ((site-restart-handler state) request)
+        "site" (if (true? (get-in cfg [:site :enabled?]))
+                 ((site-restart-handler state) request)
+                 (common/error-response 400 "Site disabled."))
         "terminal-stable"
         (let [res (terminal-restart cfg (get-in cfg [:terminal :base-url]))]
           (if-let [err (:error res)]

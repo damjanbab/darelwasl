@@ -10,7 +10,7 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed (services, env vars, roles, deploy).
 - Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, check that the app is not already running on `APP_PORT` and that `DATOMIC_STORAGE_DIR` is not locked.
-- Start services and build the UI when needed (`scripts/run-service.sh` for the app, `scripts/run-site.sh` for the public site).
+- Start services and build the UI when needed (`scripts/run-service.sh`); the public site is served by the app when `SITE_ENABLED=true` and `SITE_PORT` is set.
 - Run smoke/verification checks automatically (`scripts/checks.sh app-smoke` or `scripts/app-smoke.js`).
 - Capture browser console + network errors; save logs into `$TERMINAL_LOG_DIR` (`app-console.log`, `app-network.log`).
 - Fail closed on test errors and report exact failures only after fixing them.

@@ -515,14 +515,6 @@
                     (:env-file session)
                     "scripts/run-service.sh"))
 
-(defn- start-site-window!
-  [session]
-  (tmux/new-window! (:tmux session)
-                    "site"
-                    (:repo-dir session)
-                    (:env-file session)
-                    "scripts/run-site.sh"))
-
 (defn- list-session-dirs
   [work-dir]
   (let [root (ensure-dir! work-dir)
@@ -754,6 +746,7 @@
         (write-askpass! askpass-file github-token))
       (let [base-env {"APP_HOST" "0.0.0.0"
                       "APP_PORT" (:app ports)
+                      "SITE_ENABLED" (if site-enabled? "true" "false")
                       "DATOMIC_STORAGE_DIR" (.getPath datomic-dir)
                       "DATOMIC_SYSTEM" datomic-system
                       "DATOMIC_DB_NAME" datomic-db
@@ -801,10 +794,6 @@
         (start-app-window! {:tmux tmux-session
                             :repo-dir (.getPath repo-dir)
                             :env-file (.getPath env-file)}))
-      (when auto-start-site?
-        (start-site-window! {:tmux tmux-session
-                             :repo-dir (.getPath repo-dir)
-                             :env-file (.getPath env-file)}))
       (let [session {:id id
                      :name session-name
                      :type session-type
@@ -992,12 +981,16 @@
 
 (defn- apply-ports-to-env!
   [session ports]
-  (let [site-port (:site ports)]
+  (let [site-port (:site ports)
+        site-enabled? (some? site-port)]
     (update-env! (:env-file session)
                  (fn [env]
-                   (cond-> (assoc env "APP_PORT" (:app ports))
-                     site-port (assoc "SITE_PORT" site-port)
-                     (nil? site-port) (dissoc "SITE_PORT"))))))
+                   (cond-> (assoc env
+                                  "APP_PORT" (:app ports)
+                                  "SITE_ENABLED" (if site-enabled? "true" "false"))
+                     site-enabled? (assoc "SITE_PORT" site-port
+                                          "SITE_HOST" (or (get env "SITE_HOST") "0.0.0.0"))
+                     (not site-enabled?) (dissoc "SITE_PORT"))))))
 
 (defn reallocate-ports!
   [store cfg session]
@@ -1017,9 +1010,6 @@
     (apply-ports-to-env! session next-ports)
     (tmux/kill-window! (:tmux session) "app")
     (start-app-window! session)
-    (tmux/kill-window! (:tmux session) "site")
-    (when site-enabled?
-      (start-site-window! session))
     (let [next-session (assoc session
                               :ports next-ports
                               :updated-at now
@@ -1105,8 +1095,6 @@
     (when auto-start-app?
       (start-app-window! session)
       (reset! started-app? true))
-    (when site-enabled?
-      (start-site-window! session))
     (let [now (now-ms)
           next-session (assoc session
                               :status :running

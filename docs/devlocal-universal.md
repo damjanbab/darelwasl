@@ -42,8 +42,8 @@ The main app is the Datomic owner. Public site and bot must not open Datomic.
 - Pros: independent lifecycles, easier to scale separately.
 - Cons: needs stable API contracts and auth between services.
 
-**Decision needed:** choose A or B. For dev-local stability, A is the safest
-default; B is fine if the bot/site never open Datomic.
+**Decision:** Option A is the default for dev-local stability. Option B is only
+allowed if the bot/site are API-only clients and never open Datomic.
 
 ## Session Workspace Topology
 Each terminal session owns its Datomic store and can run its own app + dev bot.
@@ -106,6 +106,5 @@ Session workspace:
 4. Ensure bot/site never open Datomic unless co-located.
 
 ## Open Questions
-- Pick **Option A** (co-located) or **Option B** (client-only) for site/bot.
 - Snapshot format: EDN datoms vs Datomic backup/restore.
 - Do we need a snapshot retention policy (e.g., last N per day)?
