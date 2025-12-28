@@ -25,18 +25,82 @@
     (catch Exception _
       nil)))
 
+(def ^:private surface-aliases
+  {"http" :surface/http
+   "telegram" :surface/telegram
+   "automation" :surface/automation
+   "rule" :surface/rule
+   "import" :surface/import})
+
+(def ^:private actor-type-aliases
+  {"user" :actor.type/user
+   "automation" :actor.type/automation
+   "integration" :integration
+   "system" :actor.type/system})
+
+(def ^:private adapter-aliases
+  {"web-ui" :adapter/web-ui
+   "telegram" :adapter/telegram
+   "rule" :adapter/rule
+   "import" :adapter/import})
+
+(defn- normalize-actor-type
+  [value]
+  (cond
+    (keyword? value) (if (namespace value)
+                       value
+                       (get actor-type-aliases (name value) value))
+    (string? value) (get actor-type-aliases (str/lower-case (str/trim value)))
+    :else nil))
+
+(defn- normalize-actor-surface
+  [value]
+  (cond
+    (keyword? value) (if (namespace value)
+                       value
+                       (get surface-aliases (name value) value))
+    (string? value) (get surface-aliases (str/lower-case (str/trim value)))
+    :else nil))
+
+(defn- normalize-actor-adapter
+  [value]
+  (cond
+    (keyword? value) (if (namespace value)
+                       value
+                       (get adapter-aliases (name value) value))
+    (string? value) (get adapter-aliases (str/lower-case (str/trim value)))
+    :else nil))
+
+(defn- actor-value
+  [actor keys]
+  (some #(get actor %) keys))
+
 (defn- normalize-actor
   [actor]
   (if (map? actor)
-    (let [raw-id (or (:user/id actor) (get actor "user/id"))
+    (let [raw-id (actor-value actor [:user/id "user/id" :id "id"])
+          raw-username (actor-value actor [:user/username "user/username" :username "username"])
+          raw-name (actor-value actor [:user/name "user/name" :name "name"])
+          raw-roles (actor-value actor [:user/roles "user/roles" :roles "roles"])
+          raw-type (actor-value actor [:actor/type "actor/type" :type "type"])
+          raw-surface (actor-value actor [:actor/surface "actor/surface" :surface "surface"])
+          raw-adapter (actor-value actor [:actor/adapter "actor/adapter" :adapter "adapter"])
           user-id (cond
                     (instance? java.util.UUID raw-id) raw-id
                     (string? raw-id) (parse-uuid raw-id)
-                    :else nil)]
-      (cond
-        (some? user-id) (assoc actor :user/id user-id)
-        raw-id (dissoc actor :user/id)
-        :else actor))
+                    :else nil)
+          actor-type (normalize-actor-type raw-type)
+          actor-surface (normalize-actor-surface raw-surface)
+          actor-adapter (normalize-actor-adapter raw-adapter)]
+      (cond-> actor
+        (some? user-id) (assoc :user/id user-id)
+        (and raw-id (nil? user-id)) (dissoc :user/id)
+        raw-username (assoc :user/username raw-username)
+        raw-name (assoc :user/name raw-name)
+        raw-roles (assoc :user/roles raw-roles)
+        actor-type (assoc :actor/type actor-type)
+        actor-surface (assoc :actor/surface actor-surface)
+        actor-adapter (assoc :actor/adapter actor-adapter)))
     actor))
 
 (defn- ok
