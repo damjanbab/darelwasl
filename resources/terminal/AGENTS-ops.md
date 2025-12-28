@@ -10,14 +10,16 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 - Read relevant sections of `darelwasl/docs/system.md` before making ops changes.
 - Log the exact commands used and outcomes.
 - If code changes are required, open a PR; otherwise report actions only.
+- Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, confirm `APP_PORT` is free and `DATOMIC_STORAGE_DIR` is not locked.
  - Verify service status and at least one relevant endpoint (health or feature-specific).
+- Dev-local Datomic allows a single process per storage dir; do not run multiple app instances against the same `DATOMIC_STORAGE_DIR`.
 
 ## Verification matrix (required when code changes)
 - Identify touched areas and run the corresponding proofs:
   - registries/schema: `scripts/checks.sh registries` and `scripts/checks.sh schema`
   - actions/backend: `scripts/checks.sh actions` + a targeted API call that mirrors the UI payload shape (unnamespaced keys)
   - UI: `scripts/checks.sh app-smoke` (or `node scripts/app-smoke.js`) + verify a key UI state in the feature itself
-  - terminal: create a session, confirm app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
+  - terminal: create a session, confirm the auto-started app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
   - integrations (GitHub/Rezultati/Supersport/Telegram): perform a minimal call that validates auth + response shape
 - Mandatory proofs by change type (do not skip):
   - terminal sessions/UI: create a session, confirm app link is live, send input, confirm output updates, execute at least one `@command` end-to-end

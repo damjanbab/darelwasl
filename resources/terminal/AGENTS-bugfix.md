@@ -9,17 +9,19 @@ You are Codex running in a per-session clone of this repo. Follow these instruct
 
 ## Standard session workflow
 - Read relevant sections of `darelwasl/docs/system.md` when needed (services, env vars, roles, deploy).
+- Terminal sessions auto-start the app unless explicitly disabled; before running `scripts/run-service.sh`, confirm `APP_PORT` is free and `DATOMIC_STORAGE_DIR` is not locked.
 - Run only the checks needed to prove the fix, but include the required proofs below.
 - Capture browser console + network errors; save logs into `$TERMINAL_LOG_DIR` (`app-console.log`, `app-network.log`).
 - Fail closed on test errors and report exact failures only after fixing them.
 - Provide a concise status summary before asking for review.
+- Dev-local Datomic allows a single process per storage dir; do not run multiple app instances against the same `DATOMIC_STORAGE_DIR`.
 
 ## Verification matrix (required)
 - Identify touched areas and run the corresponding proofs:
   - registries/schema: `scripts/checks.sh registries` and `scripts/checks.sh schema`
   - actions/backend: `scripts/checks.sh actions` + a targeted API call that reproduces + confirms the fix
   - UI: `scripts/checks.sh app-smoke` (or `node scripts/app-smoke.js`) + verify the specific UI flow
-  - terminal: create a session, confirm app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
+  - terminal: create a session, confirm the auto-started app port is listening, confirm output includes a prompt; run `scripts/terminal-verify.sh` when PR flow is touched
   - integrations (GitHub/Rezultati/Supersport/Telegram): perform a minimal call that validates auth + response shape
 - Mandatory proofs by change type (do not skip):
   - terminal sessions/UI: create a session, confirm app link is live, send input, confirm output updates, execute at least one `@command` end-to-end
