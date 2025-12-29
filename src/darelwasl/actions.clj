@@ -9,6 +9,7 @@
             [darelwasl.events :as events]
             [darelwasl.files :as files]
             [darelwasl.github :as github]
+            [darelwasl.site.screenshots :as site-screenshots]
             [darelwasl.tasks :as tasks]
             [darelwasl.users :as users]
             [darelwasl.validation :as v]
@@ -347,6 +348,10 @@
   (let [body (or input {})]
     (github/close-pr (:config state) body)))
 
+(defn- site-screenshot-bundle
+  [state {:keys [input actor]}]
+  (site-screenshots/capture-site-bundle! state {:input (or input {}) :actor actor}))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -376,6 +381,7 @@
    :cap/action/workspace-promote workspace-promote
    :cap/action/github-pulls github-pulls
    :cap/action/github-close-pr github-close-pr
+   :cap/action/site-screenshot-bundle site-screenshot-bundle
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update

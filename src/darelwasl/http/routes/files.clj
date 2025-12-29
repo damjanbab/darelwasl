@@ -2,6 +2,7 @@
 (ns darelwasl.http.routes.files
   (:require [clojure.java.io :as io]
             [darelwasl.actions :as actions]
+            [darelwasl.bundles :as bundles]
             [darelwasl.files :as files]
             [darelwasl.http.common :as common]
             [ring.util.response :as response]))
@@ -20,6 +21,14 @@
      (files/list-files (get-in state [:db :conn])
                        (:query-params request)
                        (common/workspace-id request)))))
+
+(defn list-bundles-handler
+  [state]
+  (fn [request]
+    (common/handle-task-result
+     (bundles/list-bundles (get-in state [:db :conn])
+                           (:query-params request)
+                           (common/workspace-id request)))))
 
 (defn upload-file-handler
   [state]
@@ -89,6 +98,7 @@
                   (common/require-roles #{:role/file-library :role/admin})]}
     ["" {:get (list-files-handler state)
          :post (upload-file-handler state)}]
+    ["/bundles" {:get (list-bundles-handler state)}]
     [file-id-path {:put (update-file-handler state)
                    :delete (delete-file-handler state)}]
     [(str file-id-path "/content") {:get (file-content-handler state)}]]])

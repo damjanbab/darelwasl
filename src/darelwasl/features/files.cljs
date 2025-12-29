@@ -13,6 +13,25 @@
     :file.type/markdown "Markdown"
     "File"))
 
+(defn- bundle-type-label
+  [t]
+  (case t
+    :bundle.type/site-screenshot "Site screenshots"
+    "Bundle"))
+
+(defn- bundle-row
+  [bundle selected?]
+  (let [title (or (:bundle/title bundle) "Untitled bundle")
+        count (or (:bundle/count bundle) (count (:bundle/files bundle)) 0)
+        created (or (util/format-date (:bundle/created-at bundle)) "—")
+        meta (str (bundle-type-label (:bundle/type bundle)) " · " count " items")
+        trailing created]
+    [ui/list-row {:title title
+                  :meta meta
+                  :trailing trailing
+                  :selected? selected?
+                  :on-click #(rf/dispatch [:darelwasl.app/select-bundle (:bundle/id bundle)])}]))
+
 (defn- file-row
   [file selected?]
   (let [name (or (:file/name file) "Untitled")
@@ -102,12 +121,35 @@
 
 (defn- list-panel
   []
-  (let [{:keys [items status error selected]} @(rf/subscribe [:darelwasl.app/files])]
+  (let [{:keys [items status error selected bundles]} @(rf/subscribe [:darelwasl.app/files])
+        bundle-items (:items bundles)
+        bundle-status (:status bundles)
+        bundle-error (:error bundles)
+        bundle-selected (:selected bundles)]
     [:div.panel.files-list
      [:div.section-header
       [:div
        [:h2 "Library"]
        [:span.meta (str (count items) " items")]]]
+     [:div.files-bundles
+      [:div.section-header
+       [:div
+        [:h3 "Bundles"]
+        [:span.meta (str (count bundle-items) " bundles")]]
+       [:div.controls
+        [ui/button {:variant :secondary
+                    :disabled (= bundle-status :loading)
+                    :on-click #(rf/dispatch [:darelwasl.app/fetch-bundles])}
+         "Refresh"]]]
+      (case bundle-status
+        :loading [ui/loading-state "Loading bundles..."]
+        :error [ui/error-state bundle-error #(rf/dispatch [:darelwasl.app/fetch-bundles])]
+        (if (seq bundle-items)
+          [:div.files-bundles-items
+           (for [bundle bundle-items]
+             ^{:key (str (:bundle/id bundle))}
+             [bundle-row bundle (= (:bundle/id bundle) bundle-selected)])]
+          [ui/empty-state "No bundles yet" "Create a screenshot bundle to organize your visuals."]))]
      [search-panel]
      (case status
        :loading [ui/loading-state "Loading files..."]
@@ -121,8 +163,10 @@
 
 (defn- preview-panel
   []
-  (let [file @(rf/subscribe [:darelwasl.app/selected-file])
-        {:keys [detail]} @(rf/subscribe [:darelwasl.app/files])
+  (let [{:keys [detail bundles]} @(rf/subscribe [:darelwasl.app/files])
+        file @(rf/subscribe [:darelwasl.app/selected-file])
+        selected-bundle-id (:selected bundles)
+        selected-bundle (some #(when (= (:bundle/id %) selected-bundle-id) %) (:items bundles))
         {:keys [form status error]} detail
         saving? (= status :saving)
         success? (= status :success)]
@@ -131,10 +175,38 @@
       [:div
        [:h2 "Details"]
        [:span.meta "Preview + references"]]]
-     (if-not file
+     (cond
+       selected-bundle
+       [:div.bundle-detail
+        [:div.bundle-header
+         [:div
+          [:h3 (or (:bundle/title selected-bundle) "Untitled bundle")]
+          [:div.meta (str (bundle-type-label (:bundle/type selected-bundle))
+                          " · "
+                          (or (:bundle/count selected-bundle)
+                              (count (:bundle/files selected-bundle))
+                              0)
+                          " items")]]
+         [:div.meta (or (util/format-date (:bundle/created-at selected-bundle)) "—")]]
+        (if (seq (:bundle/files selected-bundle))
+          [:div.bundle-gallery
+           (for [f (:bundle/files selected-bundle)]
+             ^{:key (str (:file/id f))}
+             [:button.bundle-thumb
+              {:type "button"
+               :on-click #(rf/dispatch [:darelwasl.app/select-file (:file/id f)])}
+              (if (= :file.type/image (:file/type f))
+                [:img {:src (:file/url f)
+                       :alt (or (:file/name f) "Bundle image")}]
+                [:span.meta (or (:file/name f) "File")])])]
+          [ui/empty-state "No files" "Bundle files could not be loaded."])]
+
+       (nil? file)
        [:div.state.empty
         [:strong "Select a file"]
         [:p "Pick a file from the list to see details and preview."]]
+
+       :else
        [:div.files-detail-body
         [:div.files-preview
          (case (:file/type file)

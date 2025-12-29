@@ -1118,11 +1118,36 @@
   :idempotency {:strategy :dedupe-on
                 :keys [:file/id]}
   :contracts {:fixtures []}
+ :compatibility {:backward true
+                 :forward true
+                 :flags []}
+  :related {:schema [:cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling []}
+
+ {:id :cap/action/site-screenshot-bundle
+  :title "Capture Site Screenshot Bundle"
+  :version "v1"
+  :inputs {:bundle/title :string?
+           :bundle/type :keyword?
+           :pages :vector
+           :viewports :vector}
+  :outputs {:bundle/id :uuid
+            :bundle/slug :string
+            :bundle/count :long}
+  :side-effects ["Capture screenshots via Playwright"
+                 "Store images in file library"
+                 "Persist bundle metadata in Datomic"]
+  :adapter {:integration :cap/integration/local-file-store}
+  :audit {:records [:bundle/change]
+          :fields [:bundle/id :bundle/type]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/file]
-            :views [:cap/view/file-library]}
+  :related {:schema [:cap/schema/file :cap/schema/library-bundle]
+            :views [:cap/view/home :cap/view/file-library]}
   :tooling []}
 
  {:id :cap/action/file-read
