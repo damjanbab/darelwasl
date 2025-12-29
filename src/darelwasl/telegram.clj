@@ -48,6 +48,7 @@
    :in-progress "🟡"
    :pending "🔴"
    :done "🟢"})
+(def ^:private tasks-list-limit 200)
 (declare ensure-conn)
 (declare bind-chat-for-user!)
 
@@ -508,6 +509,8 @@
       [(inline-button "Add note" (str "task:note:add:" id))
        (inline-button "Edit note" (str "task:note:edit:" id))]
       [(inline-button "Delete note" (str "task:note:delete:" id))
+       (inline-button "Delete task" (str "task:delete:" id))]
+      [(inline-button "Tasks" "filter:refresh")
        (inline-button (if archived? "Unarchive" "Archive")
                       (str "task:archive:" id ":" (if archived? "false" "true")))]
       [(inline-button "Refresh" (str "task:view:" id))]]}))
@@ -946,7 +949,7 @@
   [tasks pending-reasons]
   (if (empty? tasks)
     "You have no tasks assigned."
-    (str "Your top tasks:\n"
+    (str "Your tasks:\n"
          (str/join "\n"
                    (map (fn [task]
                           (format-task-line task (get pending-reasons (:task/id task))))
@@ -1073,7 +1076,7 @@
                         :reply-markup keyboard})))
 
 (defn- list-user-tasks
-  [conn user-id {:keys [status archived limit] :or {limit 5}}]
+  [conn user-id {:keys [status archived limit] :or {limit tasks-list-limit}}]
   (let [archived (case archived
                    :archived true
                    :all :all
@@ -1090,7 +1093,8 @@
 
 (defn- find-user-task
   [conn user-id task-id]
-  (let [res (list-user-tasks conn user-id 100)]
+  (let [res (list-user-tasks conn user-id {:limit tasks-list-limit
+                                           :archived :all})]
     (when-not (:error res)
       (->> (:tasks res)
            (filter #(= (:task/id %) task-id))
@@ -1516,6 +1520,27 @@
                             (send-message! cfg {:chat-id chat-id
                                                 :text "Cannot delete note."
                                                 :message-key (str "task-note-delete-invalid-" (System/currentTimeMillis))})))
+      :task/delete (let [tid (:task-id parsed)
+                         task-id (try (UUID/fromString tid) (catch Exception _ nil))]
+                     (if (and chat-user task-id)
+                       (let [res (actions/execute! state {:action/id :cap/action/task-delete
+                                                          :actor (actions/actor-from-telegram chat-user)
+                                                          :input {:task/id task-id}})]
+                         (if-let [err (:error res)]
+                           (send-message! cfg {:chat-id chat-id
+                                               :text (str "Unable to delete task: " (:message err))
+                                               :message-key (str "task-delete-error-" (System/currentTimeMillis))})
+                           (if message-id
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text "Task deleted."
+                                                 :reply-markup {:inline_keyboard []}})
+                             (send-message! cfg {:chat-id chat-id
+                                                 :text "Task deleted."
+                                                 :message-key (str "task-delete-" (System/currentTimeMillis))}))))
+                       (send-message! cfg {:chat-id chat-id
+                                           :text "Cannot delete task."
+                                           :message-key (str "task-delete-invalid-" (System/currentTimeMillis))})))
       :task/client-pick (let [tid (:task-id parsed)
                               task-id (try (UUID/fromString tid) (catch Exception _ nil))]
                           (if (and chat-user task-id)
@@ -1568,7 +1593,7 @@
                                                :text "Invalid client selection."
                                                :message-key (str "task-client-set-invalid-" (System/currentTimeMillis))})))
       :tasks/filter (let [filters (or (get-task-list! chat-id message-id)
-                                      {:status nil :archived :active})
+                                      {:status nil :archived :active :limit tasks-list-limit})
                           new-filters (case (:filter parsed)
                                         :status (assoc filters :status (:value parsed))
                                         :archived (assoc filters :archived (:value parsed))
@@ -1762,6 +1787,8 @@
           "archive" {:type :task/archive
                      :task-id (nth parts 2 nil)
                      :value (nth parts 3 nil)}
+          "delete" {:type :task/delete
+                    :task-id (nth parts 2 nil)}
           "view" {:type :task/view
                   :task-id (nth parts 2 nil)}
           "edit" (case (nth parts 2 nil)
@@ -1832,7 +1859,7 @@
                 {:text "Chat unlinked. Notifications stopped."}))
       :tasks (if-not chat-user
                {:text "Chat not linked. Use /start <token> from the app to link."}
-               (let [filters {:status nil :archived :active}
+               (let [filters {:status nil :archived :active :limit tasks-list-limit}
                      resp (list-user-tasks conn (:user/id chat-user) filters)
                      tasks (:tasks resp)
                      pending-reasons (into {}
