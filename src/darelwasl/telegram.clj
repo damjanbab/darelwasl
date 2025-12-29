@@ -1701,7 +1701,7 @@
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
       (do
         (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-        nil))))
+        nil)))
 (defn- parse-callback
   [data]
   (when (present-string? data)
