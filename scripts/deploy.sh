@@ -47,6 +47,8 @@ else
 fi
 
 echo "Seeding schema/fixtures into temp DB to validate..."
-clojure -M:seed --temp >/tmp/darelwasl-seed.log 2>&1 || { echo \"Seed validation failed; see /tmp/darelwasl-seed.log\"; exit 1; }
+mkdir -p "$ROOT/.cpcache"
+SEED_LOG="$ROOT/.cpcache/darelwasl-seed.log"
+clojure -M:seed --temp >"$SEED_LOG" 2>&1 || { echo "Seed validation failed; see $SEED_LOG"; exit 1; }
 
 echo "Deploy steps complete."
