@@ -12,6 +12,7 @@
             [darelwasl.features.terminal :as terminal-ui]
             [darelwasl.features.users :as users-ui]
             [darelwasl.features.tasks :as tasks-ui]
+            [darelwasl.features.knowledge :as knowledge-ui]
             [darelwasl.fx :as fx]
             [darelwasl.state :as state]
             [darelwasl.shared.block-types :as block-types]
@@ -55,6 +56,7 @@
 (def default-user-form state/default-user-form)
 (def default-user-detail state/default-user-detail)
 (def default-users-state state/default-users-state)
+(def default-knowledge-state state/default-knowledge-state)
 (def default-page-form state/default-page-form)
 (def default-block-form state/default-block-form)
 (def default-tag-form state/default-tag-form)
@@ -171,6 +173,25 @@
     (let [sp (js/URLSearchParams.)]
       (.append sp "state" s)
       (.toString sp))))
+
+(defn- build-knowledge-query
+  [{:keys [query doc-type authority-band org language topic issued-from issued-to effective-from effective-to publication-from publication-to has-decisions?]}]
+  (let [sp (js/URLSearchParams.)]
+    (when-let [q (present-str query)] (.append sp "q" q))
+    (when doc-type (.append sp "type" (name doc-type)))
+    (when authority-band (.append sp "authority" (name authority-band)))
+    (when-let [o (present-str org)] (.append sp "org" o))
+    (when language (.append sp "language" (name language)))
+    (when-let [t (present-str topic)] (.append sp "topic" t))
+    (when-let [v (present-str issued-from)] (.append sp "issued_from" v))
+    (when-let [v (present-str issued-to)] (.append sp "issued_to" v))
+    (when-let [v (present-str effective-from)] (.append sp "effective_from" v))
+    (when-let [v (present-str effective-to)] (.append sp "effective_to" v))
+    (when-let [v (present-str publication-from)] (.append sp "publication_from" v))
+    (when-let [v (present-str publication-to)] (.append sp "publication_to" v))
+    (when (true? has-decisions?) (.append sp "has_decisions" "true"))
+    (let [qs (.toString sp)]
+      (when (seq qs) qs))))
 
 (defn- parse-long-safe
   [v]
@@ -625,6 +646,7 @@
                       (= safe-route :betting) (conj [::fetch-betting-events])
                       (= safe-route :terminal) (conj [::fetch-terminal-sessions])
                       (= safe-route :services) (conj [::fetch-services])
+                      (= safe-route :knowledge) (conj [::fetch-knowledge] [::fetch-knowledge-sources])
                       (= safe-route :control-panel) (conj [::fetch-content]))]
      {:db (-> db
               (assoc :route safe-route)
@@ -694,6 +716,7 @@
                  (assoc :users default-users-state)
                  (assoc :terminal default-terminal-state)
                  (assoc :services default-services-state)
+                 (assoc :knowledge default-knowledge-state)
                  (assoc :home default-home-state)
                  (assoc-in [:login :status] :success)
                  (assoc-in [:login :password] "")
@@ -707,7 +730,8 @@
                        (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
                        (= preferred-route :terminal) (conj [::fetch-terminal-sessions])
-                       (= preferred-route :services) (conj [::fetch-services]))]
+                       (= preferred-route :services) (conj [::fetch-services])
+                       (= preferred-route :knowledge) (conj [::fetch-knowledge] [::fetch-knowledge-sources]))]
       {:db db'
        ::persist-last-route preferred-route
        :dispatch-n dispatches}))))
@@ -1355,6 +1379,165 @@
        (update-in [:services :restarting] disj (str service-id))
        (assoc-in [:services :error] (or (:error body) "Unable to restart service."))
        (assoc-in [:services :notice] nil))))
+
+;; Knowledge graph
+(rf/reg-event-db
+ ::set-knowledge-filter
+ (fn [db [_ k v]]
+   (-> db
+       (assoc-in [:knowledge :filters k] v)
+       (assoc-in [:knowledge :error] nil))))
+
+(rf/reg-event-db
+ ::set-knowledge-view
+ (fn [db [_ view]]
+   (assoc-in db [:knowledge :view] view)))
+
+(rf/reg-event-fx
+ ::fetch-knowledge
+ (fn [{:keys [db]} _]
+   (let [filters (get-in db [:knowledge :filters])
+         qs (build-knowledge-query filters)]
+     {:db (-> db
+              (assoc-in [:knowledge :status] :loading)
+              (assoc-in [:knowledge :error] nil))
+      ::fx/http {:url (str "/api/knowledge/search" (when qs (str "?" qs)))
+                 :method "GET"
+                 :on-success [::fetch-knowledge-success]
+                 :on-error [::fetch-knowledge-failure]}})))
+
+(rf/reg-event-fx
+ ::fetch-knowledge-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [entries (vec (:entries payload))
+         selected (get-in db [:knowledge :selected])
+         next-selected (if (some #(= (:instrument/id %) selected) entries)
+                         selected
+                         (:instrument/id (first entries)))]
+     {:db (-> db
+              (assoc-in [:knowledge :results] entries)
+              (assoc-in [:knowledge :selected] next-selected)
+              (assoc-in [:knowledge :status] (if (seq entries) :ready :empty))
+              (assoc-in [:knowledge :error] nil))
+      :dispatch (when next-selected [::fetch-knowledge-instrument next-selected])})))
+
+(rf/reg-event-db
+ ::fetch-knowledge-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load knowledge search.")]
+     (-> db
+         (assoc-in [:knowledge :status] :error)
+         (assoc-in [:knowledge :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::fetch-knowledge-instrument
+ (fn [{:keys [db]} [_ instrument-id]]
+   (if (nil? instrument-id)
+     {:db db}
+     {:db (-> db
+              (assoc-in [:knowledge :detail :status] :loading)
+              (assoc-in [:knowledge :detail :error] nil))
+      :dispatch-n [[::fetch-knowledge-instrument-meta instrument-id]
+                   [::fetch-knowledge-instrument-text instrument-id]]})))
+
+(rf/reg-event-fx
+ ::fetch-knowledge-instrument-meta
+ (fn [{:keys [db]} [_ instrument-id]]
+   {:db db
+    ::fx/http {:url (str "/api/knowledge/instruments/" instrument-id)
+               :method "GET"
+               :on-success [::fetch-knowledge-instrument-meta-success]
+               :on-error [::fetch-knowledge-instrument-failure]}}))
+
+(rf/reg-event-db
+ ::fetch-knowledge-instrument-meta-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:knowledge :detail :instrument] (:instrument payload))
+       (assoc-in [:knowledge :detail :versions] (vec (:versions payload)))
+       (assoc-in [:knowledge :detail :status] :ready)
+       (assoc-in [:knowledge :detail :error] nil))))
+
+(rf/reg-event-fx
+ ::fetch-knowledge-instrument-text
+ (fn [{:keys [db]} [_ instrument-id]]
+   (let [version-id (or (get-in db [:knowledge :detail :selected-version])
+                        (-> db :knowledge :detail :versions first :instrument.version/id))]
+     {:db db
+      ::fx/http {:url (str "/api/knowledge/instruments/" instrument-id "/text"
+                           (when version-id (str "?version=" version-id)))
+                 :method "GET"
+                 :on-success [::fetch-knowledge-instrument-text-success]
+                 :on-error [::fetch-knowledge-instrument-failure]}})))
+
+(rf/reg-event-db
+ ::fetch-knowledge-instrument-text-success
+ (fn [db [_ payload]]
+   (-> db
+       (assoc-in [:knowledge :detail :sections] (vec (:sections payload)))
+       (assoc-in [:knowledge :detail :status] :ready)
+       (assoc-in [:knowledge :detail :error] nil))))
+
+(rf/reg-event-db
+ ::fetch-knowledge-instrument-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load instrument.")]
+     (-> db
+         (assoc-in [:knowledge :detail :status] :error)
+         (assoc-in [:knowledge :detail :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-fx
+ ::fetch-knowledge-sources
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:knowledge :sources :status] :loading)
+            (assoc-in [:knowledge :sources :error] nil))
+    ::fx/http {:url "/api/knowledge/sources"
+               :method "GET"
+               :on-success [::fetch-knowledge-sources-success]
+               :on-error [::fetch-knowledge-sources-failure]}}))
+
+(rf/reg-event-db
+ ::fetch-knowledge-sources-success
+ (fn [db [_ payload]]
+   (let [runs (vec (:runs payload))]
+     (-> db
+         (assoc-in [:knowledge :sources :runs] runs)
+         (assoc-in [:knowledge :sources :status] (if (seq runs) :ready :empty))
+         (assoc-in [:knowledge :sources :error] nil)))))
+
+(rf/reg-event-db
+ ::fetch-knowledge-sources-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load sources.")]
+     (-> db
+         (assoc-in [:knowledge :sources :status] :error)
+         (assoc-in [:knowledge :sources :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::select-knowledge-instrument
+ (fn [db [_ instrument-id]]
+   (assoc-in db [:knowledge :selected] instrument-id)))
+
+(rf/reg-event-db
+ ::set-knowledge-detail-tab
+ (fn [db [_ tab]]
+   (assoc-in db [:knowledge :detail :tab] tab)))
 
 ;; File library
 (rf/reg-event-fx
@@ -4321,6 +4504,7 @@
 (rf/reg-sub ::betting (fn [db _] (:betting db)))
 (rf/reg-sub ::terminal (fn [db _] (:terminal db)))
 (rf/reg-sub ::services (fn [db _] (:services db)))
+(rf/reg-sub ::knowledge (fn [db _] (:knowledge db)))
 (rf/reg-sub ::route (fn [db _] (:route db)))
 (rf/reg-sub
  ::selected-task
@@ -4368,6 +4552,7 @@
          :betting [betting-ui/betting-shell]
          :terminal [terminal-ui/terminal-shell]
          :services [services-ui/services-shell]
+         :knowledge [knowledge-ui/knowledge-shell]
          :control-panel [control-panel/control-panel-shell]
          :files [files-ui/file-library-shell]
          :clients [clients-ui/clients-shell]

@@ -1654,7 +1654,636 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:actions [:cap/action/site-screenshot-bundle]
+ :related {:actions [:cap/action/site-screenshot-bundle]
             :views [:cap/view/file-library]
             :schema [:cap/schema/entity :cap/schema/user :cap/schema/file]}}
+
+ {:id :cap/schema/url
+  :title "Crawl URL"
+  :version "v1"
+  :attributes
+  [{:ident :url/normalized
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Normalized URL (unique)"}
+   {:ident :url/original
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Original URL as discovered"}
+   {:ident :url/host
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "URL host"}
+   {:ident :url/path
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "URL path"}
+   {:ident :url/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Crawl status enum"}
+   {:ident :url/last-seen-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last time URL was seen"}]
+  :enums {:url/status [:url.status/seen :url.status/fetched :url.status/blocked :url.status/error]}
+  :invariants ["Normalized URL unique" "URL entries set :entity/type to :entity.type/url"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/blob
+  :title "Fetched Blob"
+  :version "v1"
+  :attributes
+  [{:ident :blob/sha256
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "SHA-256 checksum"}
+   {:ident :blob/mime
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "MIME type"}
+   {:ident :blob/size-bytes
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Blob size in bytes"}
+   {:ident :blob/uri
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Blob storage URI/path"}
+   {:ident :blob/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Blob creation time"}]
+  :enums []
+  :invariants ["Blob sha256 unique" "Blob entities set :entity/type to :entity.type/blob"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/crawl-run
+  :title "Crawl Run"
+  :version "v1"
+  :attributes
+  [{:ident :crawl.run/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Run identity"}
+   {:ident :crawl.run/started-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Run start time"}
+   {:ident :crawl.run/finished-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Run finish time"}
+   {:ident :crawl.run/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Run status"}
+   {:ident :crawl.run/source-metrics
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "EDN metrics per source adapter"}
+   {:ident :crawl.run/errors
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "EDN list of crawl errors"}
+   {:ident :crawl.run/git-sha
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Git SHA for the crawl code"}]
+  :enums {:crawl.run/status [:crawl.run.status/running :crawl.run.status/succeeded :crawl.run.status/failed]}
+  :invariants ["Crawl runs set :entity/type to :entity.type/crawl-run"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/fetch
+  :title "Fetch Result"
+  :version "v1"
+  :attributes
+  [{:ident :fetch/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Fetch identity"}
+   {:ident :fetch/at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Fetch time"}
+   {:ident :fetch/status
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "HTTP status"}
+   {:ident :fetch/headers
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "EDN-encoded headers"}
+   {:ident :fetch/url
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "URL ref"}
+   {:ident :fetch/blob
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Blob ref"}
+   {:ident :fetch/run
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Crawl run ref"}
+   {:ident :fetch/error
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Error message"}]
+  :enums []
+  :invariants ["Fetch entries set :entity/type to :entity.type/fetch"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/url :cap/schema/blob :cap/schema/crawl-run]}}
+
+ {:id :cap/schema/doc
+  :title "Semantic Document"
+  :version "v1"
+  :attributes
+  [{:ident :doc/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Document identity"}
+   {:ident :doc/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Document title"}
+   {:ident :doc/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Full extracted text"
+    :fulltext true}
+   {:ident :doc/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Document type enum"}
+   {:ident :doc/source
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Source site or adapter name"}
+   {:ident :doc/org
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Issuing organization"}
+   {:ident :doc/language
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Language enum"}
+   {:ident :doc/representation
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Representation enum"}
+   {:ident :doc/url
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Source URL ref"}
+   {:ident :doc/blob
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Blob ref"}
+   {:ident :doc/instrument-version
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked instrument version"}
+   {:ident :doc/issued-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Issue date"}
+   {:ident :doc/effective-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Effective date"}
+   {:ident :doc/publication-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Publication date"}
+   {:ident :doc/last-seen-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last seen time"}
+   {:ident :doc/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Document status"}
+   {:ident :doc/source-links
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Outbound link refs"}]
+  :enums {:doc/type [:doc.type/law
+                     :doc.type/implementing-regulation
+                     :doc.type/regulatory-rule
+                     :doc.type/guidance
+                     :doc.type/decision
+                     :doc.type/procedure
+                     :doc.type/treaty
+                     :doc.type/draft
+                     :doc.type/dataset
+                     :doc.type/api
+                     :doc.type/unknown]
+          :doc/representation [:doc.repr/pdf :doc.repr/html :doc.repr/text]
+          :doc/language [:lang/ar :lang/en :lang/mixed :lang/unknown]
+          :doc/status [:doc.status/active :doc.status/superseded :doc.status/withdrawn :doc.status/draft]}
+  :invariants ["Document id unique"
+               "Documents set :entity/type to :entity.type/doc"
+               "Doc text holds extracted content for search"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/url :cap/schema/blob :cap/schema/instrument-version]}}
+
+ {:id :cap/schema/doc-span
+  :title "Document Span"
+  :version "v1"
+  :attributes
+  [{:ident :doc.span/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Span identity"}
+   {:ident :doc.span/doc
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Document ref"}
+   {:ident :doc.span/page
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Page number (1-indexed)"}
+   {:ident :doc.span/idx
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Span index within document"}
+   {:ident :doc.span/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Span text"}
+   {:ident :doc.span/text-search
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :fulltext true
+    :doc "Span text for fulltext search"}]
+  :enums []
+  :invariants ["Doc spans set :entity/type to :entity.type/doc-span"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/doc]}}
+
+ {:id :cap/schema/instrument
+  :title "Instrument"
+  :version "v1"
+  :attributes
+  [{:ident :instrument/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Instrument identity"}
+   {:ident :instrument/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Canonical instrument name"}
+   {:ident :instrument/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Instrument type enum"}
+   {:ident :instrument/authority-rank
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Authority rank (0-100)"}
+   {:ident :instrument/org
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Issuing organization"}
+   {:ident :instrument/jurisdiction
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Jurisdiction enum"}
+   {:ident :instrument/topics
+    :type :db.type/keyword
+    :cardinality :db.cardinality/many
+    :doc "Topic tags"}
+   {:ident :instrument/languages
+    :type :db.type/keyword
+    :cardinality :db.cardinality/many
+    :doc "Language coverage"}
+   {:ident :instrument/aka
+    :type :db.type/string
+    :cardinality :db.cardinality/many
+    :doc "Alternate names"}
+   {:ident :instrument/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Instrument status"}]
+  :enums {:instrument/type [:doc.type/law
+                            :doc.type/implementing-regulation
+                            :doc.type/regulatory-rule
+                            :doc.type/guidance
+                            :doc.type/decision
+                            :doc.type/procedure
+                            :doc.type/treaty
+                            :doc.type/draft
+                            :doc.type/dataset
+                            :doc.type/api
+                            :doc.type/unknown]
+          :instrument/jurisdiction [:jurisdiction/ksa :jurisdiction/gcc :jurisdiction/international]
+          :instrument/status [:instrument.status/active :instrument.status/superseded :instrument.status/archived]}
+  :invariants ["Instrument id unique"
+               "Instruments set :entity/type to :entity.type/instrument"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/instrument-version
+  :title "Instrument Version"
+  :version "v1"
+  :attributes
+  [{:ident :instrument.version/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Version identity"}
+   {:ident :instrument.version/instrument
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Instrument ref"}
+   {:ident :instrument.version/label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Version label"}
+   {:ident :instrument.version/amended-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Amendment date"}
+   {:ident :instrument.version/docs
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Linked documents"}
+   {:ident :instrument.version/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Version status"}]
+  :enums {:instrument.version/status [:instrument.version.status/current
+                                      :instrument.version.status/superseded
+                                      :instrument.version.status/draft]}
+  :invariants ["Instrument versions set :entity/type to :entity.type/instrument-version"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/instrument :cap/schema/doc]}}
+
+ {:id :cap/schema/section
+  :title "Instrument Section"
+  :version "v1"
+  :attributes
+  [{:ident :section/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Section identity"}
+   {:ident :section/version
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Instrument version ref"}
+   {:ident :section/parent
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Parent section ref"}
+   {:ident :section/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Section heading"}
+   {:ident :section/number
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Article/section number"}
+   {:ident :section/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Order index"}
+   {:ident :section/level
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Depth level"}
+   {:ident :section/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Section text"}
+   {:ident :section/spans
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Evidence spans"}]
+  :enums []
+  :invariants ["Sections set :entity/type to :entity.type/section"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/instrument-version :cap/schema/doc-span]}}
+
+ {:id :cap/schema/xref
+  :title "Cross Reference"
+  :version "v1"
+  :attributes
+  [{:ident :xref/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Reference identity"}
+   {:ident :xref/from-instrument
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Source instrument ref"}
+   {:ident :xref/from-section
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Source section ref"}
+   {:ident :xref/to-instrument
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Target instrument ref"}
+   {:ident :xref/to-section
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Target section ref"}
+   {:ident :xref/text
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Reference text"}
+   {:ident :xref/doc
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Source document ref"}
+   {:ident :xref/evidence
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Evidence spans"}
+   {:ident :xref/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Resolution status"}]
+  :enums {:xref/status [:xref.status/resolved :xref.status/unresolved]}
+  :invariants ["Xrefs set :entity/type to :entity.type/xref"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/instrument :cap/schema/section :cap/schema/doc :cap/schema/doc-span]}}
+
+ {:id :cap/schema/decision
+  :title "Decision"
+  :version "v1"
+  :attributes
+  [{:ident :decision/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Decision identity"}
+   {:ident :decision/doc
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Decision document ref"}
+   {:ident :decision/date
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Decision date"}
+   {:ident :decision/outcome
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Outcome summary"}
+   {:ident :decision/authority
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Issuing authority"}
+   {:ident :decision/cited-instruments
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Cited instruments"}
+   {:ident :decision/cited-sections
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Cited sections"}
+   {:ident :decision/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Decision status"}]
+  :enums {:decision/status [:decision.status/active :decision.status/archived]}
+  :invariants ["Decision entities set :entity/type to :entity.type/decision"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/doc :cap/schema/instrument :cap/schema/section]}}
+
+ {:id :cap/schema/dataset
+  :title "Dataset Catalog"
+  :version "v1"
+  :attributes
+  [{:ident :dataset/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Dataset identity"}
+   {:ident :dataset/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Dataset title"}
+   {:ident :dataset/description
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Dataset description"}
+   {:ident :dataset/source
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Source portal"}
+   {:ident :dataset/provider
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Provider organization"}
+   {:ident :dataset/url
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Dataset URL"}
+   {:ident :dataset/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update time"}
+   {:ident :dataset/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Dataset status"}]
+  :enums {:dataset/status [:dataset.status/active :dataset.status/archived]}
+  :invariants ["Datasets set :entity/type to :entity.type/dataset"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/url]}}
+
+ {:id :cap/schema/api
+  :title "API Catalog"
+  :version "v1"
+  :attributes
+  [{:ident :api/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "API identity"}
+   {:ident :api/name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "API name"}
+   {:ident :api/description
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "API description"}
+   {:ident :api/provider
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Provider organization"}
+   {:ident :api/base-url
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "API base URL"}
+   {:ident :api/source
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Discovery source"}
+   {:ident :api/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update time"}
+   {:ident :api/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "API status"}]
+  :enums {:api/status [:api.status/active :api.status/archived]}
+  :invariants ["API records set :entity/type to :entity.type/api"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
 ]

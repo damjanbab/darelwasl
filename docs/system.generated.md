@@ -2,18 +2,20 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `0ab4150f54dbaba6e5470390d03d0af9d3bd953487dbbe1392f22c57657d1fdf`
+- Catalog version: `116ac07cdb32e1fda8b105426967fe86ab4b4f6620186e6e723989b8418205ac`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (37)
+### Schema (50)
 - schema/activation-step
+- schema/api
 - schema/betting-bet
 - schema/betting-bookmaker
 - schema/betting-event
 - schema/betting-fact
 - schema/betting-quote
+- schema/blob
 - schema/business
 - schema/channel
 - schema/client
@@ -22,11 +24,19 @@ This file is auto-generated. Do not edit by hand.
 - schema/content-block
 - schema/content-page
 - schema/content-tag
+- schema/crawl-run
+- schema/dataset
+- schema/decision
+- schema/doc
+- schema/doc-span
 - schema/entity
 - schema/faq
+- schema/fetch
 - schema/file
 - schema/hero-flow
 - schema/hero-stat
+- schema/instrument
+- schema/instrument-version
 - schema/journey-phase
 - schema/library-bundle
 - schema/license
@@ -37,14 +47,17 @@ This file is auto-generated. Do not edit by hand.
 - schema/person
 - schema/persona
 - schema/provenance
+- schema/section
 - schema/support-responsibility
 - schema/system
 - schema/tag
 - schema/task
 - schema/team-member
 - schema/telegram-message
+- schema/url
 - schema/user
 - schema/value
+- schema/xref
 
 ### Actions (67)
 - action/activation-step-delete
@@ -115,12 +128,15 @@ This file is auto-generated. Do not edit by hand.
 - action/user-update
 - action/workspace-promote
 
-### Views (19)
+### Views (23)
 - view/betting
 - view/clients
 - view/control-panel
+- view/decision
 - view/file-library
 - view/home
+- view/instrument
+- view/knowledge-search
 - view/land-registry
 - view/login
 - view/pr-overview
@@ -131,6 +147,7 @@ This file is auto-generated. Do not edit by hand.
 - view/site-process
 - view/site-service-leaf
 - view/site-services
+- view/source-explorer
 - view/system-services
 - view/tasks
 - view/terminal
@@ -220,6 +237,7 @@ This file is auto-generated. Do not edit by hand.
 - /content
 - /counts
 - /data
+- /decisions/:id
 - /due-date
 - /events
 - /events/:id/close
@@ -228,9 +246,12 @@ This file is auto-generated. Do not edit by hand.
 - /github
 - /health
 - /input
+- /instruments/:id
+- /instruments/:id/text
 - /interrupt
 - /journey-phases
 - /keys
+- /knowledge
 - /land
 - /licenses
 - /link-token
@@ -252,6 +273,7 @@ This file is auto-generated. Do not edit by hand.
 - /resume
 - /rezultati/daily
 - /rezultati/match/:id
+- /search
 - /services
 - /services/:id/restart
 - /session
@@ -272,6 +294,7 @@ This file is auto-generated. Do not edit by hand.
 - /sessions/:id/resume
 - /sessions/:id/verify
 - /site/restart
+- /sources
 - /stats
 - /status
 - /support-entries
@@ -312,6 +335,10 @@ This file is auto-generated. Do not edit by hand.
 - GITHUB_TIMEOUT_MS
 - GITHUB_TOKEN
 - GITHUB_TOKEN_FILE
+- KNOWLEDGE_CRAWL_ADAPTERS
+- KNOWLEDGE_CRAWL_DELAY_MS
+- KNOWLEDGE_CRAWL_MAX_URLS
+- KNOWLEDGE_STORAGE_DIR
 - OUTBOX_WORKER_ENABLED
 - OUTBOX_WORKER_POLL_MS
 - REZULTATI_BASE_URL
@@ -400,6 +427,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.features.control-panel
 - darelwasl.features.files
 - darelwasl.features.home
+- darelwasl.features.knowledge
 - darelwasl.features.land
 - darelwasl.features.login
 - darelwasl.features.prs
@@ -422,6 +450,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.http.routes.events
 - darelwasl.http.routes.files
 - darelwasl.http.routes.github
+- darelwasl.http.routes.knowledge
 - darelwasl.http.routes.land
 - darelwasl.http.routes.registries
 - darelwasl.http.routes.system
@@ -431,6 +460,17 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.http.routes.users
 - darelwasl.http.session-store
 - darelwasl.importer
+- darelwasl.knowledge.adapters
+- darelwasl.knowledge.allowlist
+- darelwasl.knowledge.classify
+- darelwasl.knowledge.crawler
+- darelwasl.knowledge.extract
+- darelwasl.knowledge.http
+- darelwasl.knowledge.pipeline
+- darelwasl.knowledge.query
+- darelwasl.knowledge.robots
+- darelwasl.knowledge.store
+- darelwasl.knowledge.util
 - darelwasl.land
 - darelwasl.main
 - darelwasl.outbox

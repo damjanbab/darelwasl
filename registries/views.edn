@@ -388,4 +388,68 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema []}}]
+  :related {:schema []}}
+
+ {:id :cap/view/knowledge-search
+  :title "Knowledge Search"
+  :version "v1"
+  :purpose "Search Saudi business domain instruments with filters."
+  :data {:source :cap/schema/doc
+         :pull [:doc/id :doc/title :doc/type :doc/org :doc/language :doc/issued-at :doc/effective-at :doc/publication-at]}
+  :actions []
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "search + results + detail" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/doc :cap/schema/instrument :cap/schema/instrument-version]}}
+
+ {:id :cap/view/instrument
+  :title "Instrument Page"
+  :version "v1"
+  :purpose "Single instrument view with versions, references, decisions."
+  :data {:source :cap/schema/instrument
+         :pull [:instrument/id :instrument/name :instrument/type :instrument/authority-rank :instrument/org]}
+  :actions []
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "tabs" :mobile "tabs + stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/instrument :cap/schema/instrument-version :cap/schema/section :cap/schema/xref :cap/schema/decision :cap/schema/doc]}}
+
+ {:id :cap/view/decision
+  :title "Decision Page"
+  :version "v1"
+  :purpose "GSTC decision metadata and citations."
+  :data {:source :cap/schema/decision
+         :pull [:decision/id :decision/date :decision/outcome :decision/authority]}
+  :actions []
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "detail" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/decision :cap/schema/doc :cap/schema/instrument :cap/schema/section]}}
+
+ {:id :cap/view/source-explorer
+  :title "Source Explorer"
+  :version "v1"
+  :purpose "Monitor source adapters and crawl runs."
+  :data {:source :cap/schema/crawl-run
+         :pull [:crawl.run/id :crawl.run/started-at :crawl.run/finished-at :crawl.run/status]}
+  :actions []
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 300}
+       :state-model :finite
+       :layout {:desktop "list" :mobile "stacked"}}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/crawl-run]}}]

@@ -22,13 +22,14 @@
        (edn/read r)))))
 
 (defn- attribute->tx
-  [{:keys [ident type cardinality unique doc] :as attr}]
+  [{:keys [ident type cardinality unique doc fulltext] :as attr}]
   (when (or (nil? ident) (nil? type) (nil? cardinality))
     (throw (ex-info "Schema attribute missing required fields" {:attribute attr})))
   (cond-> {:db/ident ident
            :db/valueType type
            :db/cardinality cardinality}
     unique (assoc :db/unique unique)
+    fulltext (assoc :db/fulltext true)
     doc (assoc :db/doc doc)))
 
 (defn registry->tx-data
@@ -83,6 +84,19 @@
                    [:team.member/id :entity.type/team-member]
                    [:file/id :entity.type/file]
                    [:bundle/id :entity.type/library-bundle]
+                   [:url/normalized :entity.type/url]
+                   [:blob/sha256 :entity.type/blob]
+                   [:crawl.run/id :entity.type/crawl-run]
+                   [:fetch/id :entity.type/fetch]
+                   [:doc/id :entity.type/doc]
+                   [:doc.span/id :entity.type/doc-span]
+                   [:instrument/id :entity.type/instrument]
+                   [:instrument.version/id :entity.type/instrument-version]
+                   [:section/id :entity.type/section]
+                   [:xref/id :entity.type/xref]
+                   [:decision/id :entity.type/decision]
+                   [:dataset/id :entity.type/dataset]
+                   [:api/id :entity.type/api]
                    [:betting.event/id :entity.type/betting-event]
                    [:betting.bookmaker/id :entity.type/betting-bookmaker]
                    [:betting.quote/id :entity.type/betting-quote]
