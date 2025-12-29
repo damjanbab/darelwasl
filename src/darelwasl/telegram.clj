@@ -1344,7 +1344,8 @@
         cfg (get-in state [:config :telegram])]
     (when callback-id
       (answer-callback! cfg {:callback-id callback-id}))
-    (condp = (:type parsed)
+    (try
+      (condp = (:type parsed)
       :capture/task (let [capture (take-capture! chat-id message-id)
                           actor (actions/actor-from-telegram (:user capture))]
                       (if (and capture actor)
@@ -1464,7 +1465,7 @@
                                                   :message-key (str "pending-reason-missing-" (System/currentTimeMillis))}))
                             (send-message! cfg {:chat-id chat-id
                                                 :text "Pending reason expired."
-                                                :message-key (str "pending-followup-expired-" (System/currentTimeMillis))}))))
+                                                :message-key (str "pending-followup-expired-" (System/currentTimeMillis))})))
       :task/edit-cancel (do
                           (take-pending-edit! chat-id)
                           (edit-message! cfg {:chat-id chat-id
@@ -1701,7 +1702,10 @@
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
       (do
         (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-        nil)))
+        nil))
+      (catch IllegalArgumentException e
+        (log/warn e "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+        nil))))
 (defn- parse-callback
   [data]
   (when (present-string? data)
