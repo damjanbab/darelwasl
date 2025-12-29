@@ -1344,7 +1344,7 @@
         cfg (get-in state [:config :telegram])]
     (when callback-id
       (answer-callback! cfg {:callback-id callback-id}))
-    (case (:type parsed)
+    (condp = (:type parsed)
       :capture/task (let [capture (take-capture! chat-id message-id)
                           actor (actions/actor-from-telegram (:user capture))]
                       (if (and capture actor)
