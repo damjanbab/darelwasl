@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `22dcfa19ec15581809de274fdd14f1e0df8e2ed2e12e1dfa1f9e72e1dab2fd2d`
+- Catalog version: `0ab4150f54dbaba6e5470390d03d0af9d3bd953487dbbe1392f22c57657d1fdf`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (36)
+### Schema (37)
 - schema/activation-step
 - schema/betting-bet
 - schema/betting-bookmaker
@@ -28,6 +28,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/hero-flow
 - schema/hero-stat
 - schema/journey-phase
+- schema/library-bundle
 - schema/license
 - schema/note
 - schema/outbox
@@ -45,7 +46,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (66)
+### Actions (67)
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/auth-login
@@ -79,6 +80,7 @@ This file is auto-generated. Do not edit by hand.
 - action/parcel-stats
 - action/person-detail
 - action/person-list
+- action/site-screenshot-bundle
 - action/system-service-restart
 - action/system-services
 - action/tag-create
@@ -206,6 +208,7 @@ This file is auto-generated. Do not edit by hand.
 - /bets/:id/settle
 - /betting
 - /blocks
+- /bundles
 - /businesses
 - /catalog
 - /client
@@ -363,6 +366,7 @@ This file is auto-generated. Do not edit by hand.
 - load_github_token.sh
 - run-service.sh
 - run-terminal.sh
+- site-screenshot.js
 - terminal-log-maintenance.sh
 - terminal-verify.sh
 - tg-spinup.sh
@@ -377,6 +381,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.automations
 - darelwasl.betting
 - darelwasl.bootstrap
+- darelwasl.bundles
 - darelwasl.catalog
 - darelwasl.catalog.generate
 - darelwasl.checks.actions
@@ -435,6 +440,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.server
 - darelwasl.shared.block-types
 - darelwasl.site.http
+- darelwasl.site.screenshots
 - darelwasl.site.server
 - darelwasl.site.templates
 - darelwasl.state

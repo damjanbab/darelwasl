@@ -1607,4 +1607,54 @@
   :related {:actions [:cap/action/file-upload :cap/action/file-delete]
             :views [:cap/view/file-library]
             :schema [:cap/schema/entity :cap/schema/user]}}
+
+ {:id :cap/schema/library-bundle
+  :title "Library Bundle"
+  :version "v1"
+  :attributes
+  [{:ident :bundle/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Bundle identity"}
+   {:ident :bundle/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Bundle title"}
+   {:ident :bundle/slug
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Stable slug for referencing the bundle"}
+   {:ident :bundle/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Bundle type enum"}
+   {:ident :bundle/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :bundle/created-by
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "User who created the bundle"}
+   {:ident :bundle/files
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Files contained in the bundle"}
+   {:ident :bundle/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant for scoping"}]
+  :enums {:bundle/type [:bundle.type/site-screenshot]}
+  :invariants ["Bundle id and slug must be unique"
+               "Bundles scoped by workspace"
+               "Bundle entities set :entity/type to :entity.type/library-bundle"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:actions [:cap/action/site-screenshot-bundle]
+            :views [:cap/view/file-library]
+            :schema [:cap/schema/entity :cap/schema/user :cap/schema/file]}}
 ]

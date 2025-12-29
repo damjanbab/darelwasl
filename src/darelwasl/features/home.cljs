@@ -1,5 +1,6 @@
 (ns darelwasl.features.home
   (:require [clojure.string :as str]
+            [darelwasl.state :as state]
             [darelwasl.ui.components :as ui]
             [darelwasl.ui.entity :as entity]
             [darelwasl.ui.shell :as shell]
@@ -43,6 +44,11 @@
         restarting? (:restarting? home)
         restart-error (:restart-error home)
         restart-notice (:restart-notice home)
+        capture-status (:capture-status home)
+        capture-error (:capture-error home)
+        capture-notice (:capture-notice home)
+        capturing? (= capture-status :loading)
+        library-enabled? (state/file-library-enabled? session)
         admin? (admin-session? session)]
     (when (= :pending (:status home))
       (rf/dispatch [:darelwasl.app/fetch-home]))
@@ -59,11 +65,16 @@
                   [:h2 "Welcome back"]
                   [:p "Quick overview of your workspace."]]
                  [:div.button-row
-                  [ui/button {:variant :primary
+                 [ui/button {:variant :primary
                               :on-click #(do
                                            (rf/dispatch [:darelwasl.app/navigate :tasks])
                                            (rf/dispatch [:darelwasl.app/start-new-task]))}
                    "New task"]
+                  (when library-enabled?
+                    [ui/button {:variant :secondary
+                                :disabled capturing?
+                                :on-click #(rf/dispatch [:darelwasl.app/capture-site-bundle])}
+                     (if capturing? "Capturing..." "Capture site bundle")])
                   (when admin?
                     [ui/button {:variant :danger
                                 :disabled restarting?
@@ -72,7 +83,11 @@
                  (when restart-error
                    [:div.form-error restart-error])
                  (when restart-notice
-                   [:div.helper-text restart-notice])]
+                   [:div.helper-text restart-notice])
+                 (when capture-error
+                   [:div.form-error capture-error])
+                 (when capture-notice
+                   [:div.form-success capture-notice])]
                  [status-count-cards counts]
                  [:div.home-section
                   [:h3 "Recent"]

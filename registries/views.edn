@@ -159,7 +159,7 @@
                    {:id :tasks/counts
                     :source :cap/schema/task
                     :pull []}]}
-  :actions [:cap/action/task-create]
+ :actions [:cap/action/task-create :cap/action/site-screenshot-bundle]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 200}
        :state-model :finite
@@ -222,8 +222,11 @@
   :version "v1"
   :data {:sources [{:id :files/library
                     :source :cap/schema/file
-                    :pull [:file/id :file/name :file/slug :file/type :file/mime :file/size-bytes :file/created-at]}]}
-  :actions [:cap/action/file-upload :cap/action/file-delete]
+                    :pull [:file/id :file/name :file/slug :file/type :file/mime :file/size-bytes :file/created-at]}
+                   {:id :files/bundles
+                    :source :cap/schema/library-bundle
+                    :pull [:bundle/id :bundle/title :bundle/slug :bundle/type :bundle/created-at :bundle/files]}]}
+  :actions [:cap/action/file-upload :cap/action/file-delete :cap/action/site-screenshot-bundle]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 250
                      :pagination {:default-limit 25 :max-limit 200}}
@@ -232,7 +235,7 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/file]}}
+  :related {:schema [:cap/schema/file :cap/schema/library-bundle]}}
  {:id :cap/view/site-home
   :title "Public Site · Home"
   :version "v1"

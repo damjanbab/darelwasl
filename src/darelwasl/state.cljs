@@ -128,7 +128,10 @@
    :counts {:todo 0 :in-progress 0 :pending 0 :done 0}
    :restarting? false
    :restart-error nil
-   :restart-notice nil})
+   :restart-notice nil
+   :capture-status :idle
+   :capture-error nil
+   :capture-notice nil})
 
 (def default-tags-state
   {:items []
@@ -160,6 +163,10 @@
    :error nil
    :filters default-files-filters
    :selected nil
+   :bundles {:items []
+             :status :idle
+             :error nil
+             :selected nil}
    :upload default-files-upload
    :detail default-file-detail})
 (def default-prs-state

@@ -401,6 +401,13 @@
   (-> file
       (update :file/type kw)))
 
+(defn- normalize-bundle
+  [bundle]
+  (-> bundle
+      (update :bundle/type kw)
+      (update :bundle/files (fn [files]
+                              (mapv normalize-file (or files []))))))
+
 (defn- normalize-pr
   [pr]
   (update pr :pr/state kw))
@@ -611,7 +618,7 @@
                       (= safe-route :home) (conj [::fetch-home])
                       (= safe-route :tasks) (conj [::fetch-tasks] [::fetch-clients])
                       (= safe-route :clients) (conj [::fetch-clients])
-                      (= safe-route :files) (conj [::fetch-files])
+                      (= safe-route :files) (conj [::fetch-files] [::fetch-bundles])
                       (= safe-route :users) (conj [::fetch-users])
                       (= safe-route :prs) (conj [::fetch-prs])
                       (= safe-route :land) (conj [::fetch-land])
@@ -695,7 +702,7 @@
                               [::fetch-home]
                               [::fetch-tasks]
                               [::fetch-clients]]
-                       (= preferred-route :files) (conj [::fetch-files])
+                       (= preferred-route :files) (conj [::fetch-files] [::fetch-bundles])
                        (= preferred-route :users) (conj [::fetch-users])
                        (= preferred-route :prs) (conj [::fetch-prs])
                        (= preferred-route :betting) (conj [::fetch-betting-events])
@@ -1246,6 +1253,47 @@
        (assoc-in [:home :restart-notice] nil))))
 
 (rf/reg-event-fx
+ ::capture-site-bundle
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:home :capture-status] :loading)
+            (assoc-in [:home :capture-error] nil)
+            (assoc-in [:home :capture-notice] nil))
+    ::fx/http {:url "/api/actions/cap.action.site-screenshot-bundle"
+               :method "POST"
+               :body {}
+               :on-success [::capture-site-bundle-success]
+               :on-error [::capture-site-bundle-failure]}}))
+
+(rf/reg-event-fx
+ ::capture-site-bundle-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [bundle (get-in payload [:result :bundle])
+         title (or (:bundle/title bundle) "Site screenshots")
+         count (or (:bundle/count bundle) (count (:bundle/files bundle)))]
+     {:db (-> db
+              (assoc-in [:home :capture-status] :success)
+              (assoc-in [:home :capture-error] nil)
+              (assoc-in [:home :capture-notice]
+                        (str "Captured " (or count 0) " screens in \"" title "\".")))
+      :dispatch-n [[::fetch-files]
+                   [::fetch-bundles]]})))
+
+(rf/reg-event-db
+ ::capture-site-bundle-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to capture site screenshots.")]
+     (cond-> (-> db
+                 (assoc-in [:home :capture-status] :error)
+                 (assoc-in [:home :capture-error] message)
+                 (assoc-in [:home :capture-notice] nil))
+       (= status 401)
+       (assoc :session nil
+              :route :login)))))
+
+(rf/reg-event-fx
  ::fetch-services
  (fn [{:keys [db]} _]
    {:db (-> db
@@ -1319,6 +1367,17 @@
                  :on-success [::fetch-files-success]
                  :on-error [::fetch-files-failure]}})))
 
+(rf/reg-event-fx
+ ::fetch-bundles
+ (fn [{:keys [db]} _]
+   {:db (-> db
+            (assoc-in [:files :bundles :status] :loading)
+            (assoc-in [:files :bundles :error] nil))
+    ::fx/http {:url "/api/files/bundles"
+               :method "GET"
+               :on-success [::fetch-bundles-success]
+               :on-error [::fetch-bundles-failure]}}))
+
 (rf/reg-event-db
  ::fetch-files-success
  (fn [db [_ payload]]
@@ -1336,12 +1395,38 @@
          (assoc-in [:files :error] nil)))))
 
 (rf/reg-event-db
+ ::fetch-bundles-success
+ (fn [db [_ payload]]
+   (let [bundles (mapv normalize-bundle (:bundles payload))
+         selected (get-in db [:files :bundles :selected])
+         valid-selected? (some #(= (:bundle/id %) selected) bundles)
+         next-selected (if valid-selected? selected nil)]
+     (-> db
+         (assoc-in [:files :bundles :items] bundles)
+         (assoc-in [:files :bundles :selected] next-selected)
+         (assoc-in [:files :bundles :status] (if (seq bundles) :ready :empty))
+         (assoc-in [:files :bundles :error] nil)))))
+
+(rf/reg-event-db
  ::fetch-files-failure
  (fn [db [_ {:keys [status body]}]]
    (let [message (or (:error body)
                      (when (= status 401) "Session expired. Please sign in again.")
                      "Unable to load files.")]
      (-> (state/mark-error db [:files] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
+(rf/reg-event-db
+ ::fetch-bundles-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to load bundles.")]
+     (-> db
+         (assoc-in [:files :bundles :status] :error)
+         (assoc-in [:files :bundles :error] message)
          (cond-> (= status 401)
            (assoc :session nil
                   :route :login))))))
@@ -1556,7 +1641,17 @@
    (let [file (some #(when (= (:file/id %) file-id) %) (get-in db [:files :items]))]
      (-> db
          (assoc-in [:files :selected] file-id)
-         (assoc-in [:files :detail] (file-detail file))))))
+         (assoc-in [:files :detail] (file-detail file))
+         (assoc-in [:files :bundles :selected] nil)))))
+
+(rf/reg-event-db
+ ::select-bundle
+ (fn [db [_ bundle-id]]
+   (let [bundle (some #(when (= (:bundle/id %) bundle-id) %) (get-in db [:files :bundles :items]))]
+     (cond-> db
+       bundle (assoc-in [:files :bundles :selected] bundle-id)
+       bundle (assoc-in [:files :selected] nil)
+       bundle (assoc-in [:files :detail] (file-detail nil))))))
 
 (rf/reg-event-db
  ::set-file-query
