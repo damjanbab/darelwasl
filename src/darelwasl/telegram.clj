@@ -1698,8 +1698,10 @@
                                (send-task-card! state chat-id (get-in res [:result :task]) {:reply-to-message-id message-id}))))
                          (send-message! cfg {:chat-id chat-id
                                              :text "Invalid client action."
-                                             :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
-      nil))
+                                                :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
+      (do
+        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+        nil))))
 (defn- parse-callback
   [data]
   (when (present-string? data)

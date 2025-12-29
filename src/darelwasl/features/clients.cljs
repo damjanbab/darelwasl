@@ -172,7 +172,8 @@
         tasks-state @(rf/subscribe [:darelwasl.app/tasks])
         {:keys [form mode error next-action next-action-form next-action-status next-action-error tasks]} detail
         detail-status (:status detail)
-        {:keys [name phone email channel notes id]} form
+        {:keys [phone email channel notes id] :as form} form
+        client-name (:name form)
         client-status (:status form)
         create? (= mode :create)
         saving? (= detail-status :saving)
@@ -189,7 +190,7 @@
         current-assignee (or assignee (:id (first assignees)) "")
         title-text (cond
                      create? "New client"
-                     selected (or name "Client")
+                     selected (or client-name "Client")
                      :else "Client")
         meta (when (and (not create?) selected)
                (client-status-label client-status))
@@ -230,7 +231,7 @@
                         [:label.form-label {:for "client-name"} "Name"]
                         [:input.form-input {:id "client-name"
                                             :type "text"
-                                            :value (or name "")
+                                            :value (or client-name "")
                                             :placeholder "Client name"
                                             :on-change #(rf/dispatch [:darelwasl.app/set-client-field :name (.. % -target -value)])
                                             :disabled saving?}]]
