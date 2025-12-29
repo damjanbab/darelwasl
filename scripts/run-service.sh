@@ -38,8 +38,26 @@ DATOMIC_DB_NAME="${DATOMIC_DB_NAME:-darelwasl}"
 if [[ "${DATOMIC_STORAGE_DIR}" != ":mem" && -n "${DATOMIC_STORAGE_DIR}" ]]; then
   LOCK_PATH="${DATOMIC_STORAGE_DIR}/${DATOMIC_SYSTEM}/${DATOMIC_DB_NAME}/.lock"
   if [[ -f "${LOCK_PATH}" ]]; then
-    echo "Datomic lock detected at ${LOCK_PATH}. Another process is using this store."
-    exit 1
+    LOCK_IN_USE=""
+    if command -v lsof >/dev/null 2>&1; then
+      if lsof "${LOCK_PATH}" >/dev/null 2>&1; then
+        LOCK_IN_USE="1"
+      fi
+    elif command -v fuser >/dev/null 2>&1; then
+      if fuser "${LOCK_PATH}" >/dev/null 2>&1; then
+        LOCK_IN_USE="1"
+      fi
+    else
+      if pgrep -af "darelwasl.main|clojure -M:dev" >/dev/null 2>&1; then
+        LOCK_IN_USE="1"
+      fi
+    fi
+    if [[ -n "${LOCK_IN_USE}" ]]; then
+      echo "Datomic lock detected at ${LOCK_PATH}. Another process is using this store."
+      exit 1
+    fi
+    echo "Stale Datomic lock detected at ${LOCK_PATH}; removing."
+    rm -f "${LOCK_PATH}"
   fi
 fi
 exec clojure -M:dev
