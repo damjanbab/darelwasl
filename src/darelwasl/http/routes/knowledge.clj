@@ -105,9 +105,11 @@
   [state]
   (fn [_request]
     (let [db (d/db (get-in state [:db :conn]))
-          runs (kq/list-sources db)]
+          sources (kq/list-sources db)
+          runs (kq/list-source-runs db)]
       {:status 200
-       :body {:runs runs}})))
+       :body {:sources sources
+              :runs runs}})))
 
 (defn routes
   [state]

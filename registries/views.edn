@@ -442,8 +442,12 @@
   :title "Source Explorer"
   :version "v1"
   :purpose "Monitor source adapters and crawl runs."
-  :data {:source :cap/schema/crawl-run
-         :pull [:crawl.run/id :crawl.run/started-at :crawl.run/finished-at :crawl.run/status]}
+  :data {:sources {:source :cap/schema/crawl-run
+                   :derived [:source/id :source/name :source/status :source/blocker
+                             :source/last-attempt-at :source/last-success-at :source/metrics]}
+         :runs {:source :cap/schema/crawl-run
+                :pull [:crawl.run/id :crawl.run/started-at :crawl.run/finished-at
+                       :crawl.run/status :crawl.run/source-metrics]}}
   :actions []
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 300}

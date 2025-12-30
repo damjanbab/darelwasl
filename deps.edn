@@ -9,6 +9,7 @@
         org.clojure/data.csv {:mvn/version "1.0.1"}
         org.clojure/data.json {:mvn/version "2.5.0"}
         clj-http/clj-http {:mvn/version "3.12.3"}
+        dnsjava/dnsjava {:mvn/version "3.5.2"}
         org.jsoup/jsoup {:mvn/version "1.17.2"}
         org.apache.pdfbox/pdfbox {:mvn/version "2.0.30"}
         ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}

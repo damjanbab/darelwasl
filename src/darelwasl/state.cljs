@@ -425,6 +425,7 @@
 (def default-knowledge-sources
   {:status :idle
    :error nil
+   :sources []
    :runs []})
 
 (def default-knowledge-state

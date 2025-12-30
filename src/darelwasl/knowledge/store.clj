@@ -65,12 +65,12 @@
   (or (ensure-conn conn)
       (let [db (d/db conn)
             existing (find-entity db :blob/sha256 sha256)
-            tx (cond-> {:blob/sha256 sha256
-                        :blob/mime mime
-                        :blob/size-bytes size
-                        :blob/uri uri
-                        :blob/created-at (kutil/now-inst)
-                        :entity/type :entity.type/blob}
+            tx (cond-> (-> {:blob/sha256 sha256
+                            :blob/created-at (kutil/now-inst)
+                            :entity/type :entity.type/blob}
+                           (assoc-some :blob/mime mime)
+                           (assoc-some :blob/size-bytes size)
+                           (assoc-some :blob/uri uri))
                  existing (assoc :db/id existing))]
         (when-not existing
           (db/transact! conn {:tx-data [tx]}))
@@ -79,15 +79,15 @@
 (defn record-fetch!
   [conn {:keys [fetch-id status headers url blob run error]}]
   (or (ensure-conn conn)
-      (let [tx (cond-> {:fetch/id fetch-id
-                        :fetch/at (kutil/now-inst)
-                        :fetch/status status
-                        :fetch/headers (when headers (pr-str headers))
-                        :fetch/url url
-                        :fetch/blob blob
-                        :fetch/run run
-                        :entity/type :entity.type/fetch}
-                 (some? error) (assoc :fetch/error error))]
+      (let [tx (cond-> (-> {:fetch/id fetch-id
+                            :fetch/at (kutil/now-inst)
+                            :fetch/status (or status 0)
+                            :fetch/url url
+                            :fetch/run run
+                            :entity/type :entity.type/fetch}
+                           (assoc-some :fetch/headers (when headers (pr-str headers)))
+                           (assoc-some :fetch/blob blob)
+                           (assoc-some :fetch/error error)))]
         (db/transact! conn {:tx-data [tx]})
         fetch-id)))
 
@@ -250,11 +250,61 @@
 (defn finish-crawl-run!
   [conn {:keys [run-id finished-at status metrics errors git-sha]}]
   (or (ensure-conn conn)
-      (let [tx (cond-> {:crawl.run/id run-id
+      (let [max-datomic-string 4000
+            bounded-edn (fn [& candidates]
+                          (loop [[candidate & rest] candidates]
+                            (let [candidate (or candidate [])
+                                  rendered (pr-str candidate)]
+                              (cond
+                                (<= (count rendered) max-datomic-string) rendered
+                                (seq rest) (recur rest)
+                                :else (pr-str [])))))
+            sanitize-blocker (fn [blocker]
+                               (when blocker
+                                 (select-keys blocker [:type :reason :host])))
+            sanitize-discovery-errors (fn [errs limit]
+                                        (->> (or errs [])
+                                             (map (fn [entry]
+                                                    (select-keys entry [:url :status :error :error-type :attempts :dns])))
+                                             (take limit)
+                                             vec))
+            sanitize-metrics (fn [entries limit]
+                               (->> (or entries [])
+                                    (map (fn [entry]
+                                           (cond-> (select-keys entry [:adapter
+                                                                       :source
+                                                                       :status
+                                                                       :blocker
+                                                                       :last-attempt-at
+                                                                       :last-success-at
+                                                                       :metrics
+                                                                       :mirror-for])
+                                             (seq (:discovery-errors entry))
+                                             (assoc :discovery-errors (sanitize-discovery-errors (:discovery-errors entry) limit))
+                                             (:blocker entry)
+                                             (update :blocker sanitize-blocker))))
+                                    vec))
+            sanitize-errors (fn [entries limit]
+                              (->> (or entries [])
+                                   (map (fn [entry]
+                                          (-> entry
+                                              (select-keys [:url :status :blocker])
+                                              (update :blocker sanitize-blocker))))
+                                   (take limit)
+                                   vec))
+            metrics-str (bounded-edn (sanitize-metrics metrics 5)
+                                     (sanitize-metrics metrics 1)
+                                     (mapv #(select-keys % [:adapter :source :status :blocker])
+                                           (sanitize-metrics metrics 1))
+                                     [])
+            errors-str (bounded-edn (sanitize-errors errors 10)
+                                    (sanitize-errors errors 3)
+                                    [])
+            tx (cond-> {:crawl.run/id run-id
                         :crawl.run/finished-at finished-at
                         :crawl.run/status status
-                        :crawl.run/source-metrics (pr-str metrics)
-                        :crawl.run/errors (pr-str errors)
+                        :crawl.run/source-metrics metrics-str
+                        :crawl.run/errors errors-str
                         :entity/type :entity.type/crawl-run}
                  (some? git-sha) (assoc :crawl.run/git-sha git-sha))]
         (db/transact! conn {:tx-data [tx]}))))

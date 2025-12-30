@@ -149,7 +149,10 @@
       (if-not (allowlisted? uri)
         {:state state
          :status :blocked
-         :url normalized}
+         :url normalized
+         :blocker {:type :allowlist
+                   :reason :not-allowlisted
+                   :host host}}
         (let [[state robots] (ensure-robots state host)
               delay (robots/crawl-delay robots "*" (:default-delay-ms state))
               delay-ms (if (and (number? delay) (< delay 1000)) (* 1000 delay) delay)
@@ -161,8 +164,11 @@
                                        :status :url.status/blocked})
               {:state state
                :status :blocked
-               :url normalized})
-            (let [{:keys [status headers body error]} (http/request-bytes normalized {:timeout-ms 10000})
+               :url normalized
+               :blocker {:type :robots
+                         :reason :disallowed
+                         :host host}})
+            (let [{:keys [status headers body error error-type]} (http/request-bytes normalized {:timeout-ms 10000})
                   content-type (content-type headers)
                   url-eid (store/ensure-url! conn {:normalized normalized
                                                    :original url
@@ -189,7 +195,12 @@
                              (String. ^bytes bytes "UTF-8"))
                       extract (extract/safe-extract content-type bytes html)]
                   (if (:error extract)
-                    {:state state :status :error :url normalized}
+                    {:state state
+                     :status :error
+                     :url normalized
+                     :blocker {:type error-type
+                               :reason :extract
+                               :host host}}
                     (let [doc-type (classify/infer-doc-type {:host host
                                                              :url normalized
                                                              :title (:title extract)})
@@ -271,23 +282,32 @@
                        :status :ok
                        :url normalized
                        :doc-id doc-id})))
-                {:state state :status :error :url normalized}))))))
+                {:state state
+                 :status :error
+                 :url normalized
+                 :blocker {:type error-type
+                           :reason :http
+                           :host host}}))))))
     {:state state :status :error :url nil}))
 
 (defn crawl-urls
   [state urls]
   (reduce (fn [acc url]
-            (let [{:keys [state status]} (crawl-url (:state acc) url)
+            (let [{:keys [state status blocker]} (crawl-url (:state acc) url)
                   metrics (update-in (:metrics acc) [:fetched] (fnil inc 0))
-                  metrics (if (= status :ok)
-                            (update-in metrics [:ok] (fnil inc 0))
-                            (update-in metrics [:failed] (fnil inc 0)))]
+                  metrics (cond
+                            (= status :ok) (update-in metrics [:ok] (fnil inc 0))
+                            (= status :blocked) (update-in metrics [:blocked] (fnil inc 0))
+                            :else (update-in metrics [:failed] (fnil inc 0)))
+                  error-entry (when (contains? #{:error :blocked} status)
+                                (merge {:url url :status status}
+                                       (when blocker {:blocker blocker})))]
               {:state state
                :metrics metrics
-               :errors (if (= status :error)
-                         (conj (:errors acc) {:url url :status status})
+               :errors (if error-entry
+                         (conj (:errors acc) error-entry)
                          (:errors acc))}))
-          {:state state :metrics {:fetched 0 :ok 0 :failed 0} :errors []}
+          {:state state :metrics {:fetched 0 :ok 0 :failed 0 :blocked 0} :errors []}
           urls))
 
 (defn start-state

@@ -1510,10 +1510,12 @@
 (rf/reg-event-db
  ::fetch-knowledge-sources-success
  (fn [db [_ payload]]
-   (let [runs (vec (:runs payload))]
+   (let [runs (vec (:runs payload))
+         sources (vec (:sources payload))]
      (-> db
          (assoc-in [:knowledge :sources :runs] runs)
-         (assoc-in [:knowledge :sources :status] (if (seq runs) :ready :empty))
+         (assoc-in [:knowledge :sources :sources] sources)
+         (assoc-in [:knowledge :sources :status] (if (seq sources) :ready :empty))
          (assoc-in [:knowledge :sources :error] nil)))))
 
 (rf/reg-event-db

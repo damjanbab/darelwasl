@@ -20,6 +20,30 @@
     :doc.type/api "API"
     "Unknown"))
 
+(defn- source-status-label
+  [status]
+  (case status
+    :source.status/reachable "reachable"
+    :source.status/network-blocked "network-blocked"
+    :source.status/allowlist-blocked "allowlist-blocked"
+    "unknown"))
+
+(defn- blocker-label
+  [blocker]
+  (let [{:keys [type reason]} blocker
+        type-label (case type
+                     :dns "DNS failure"
+                     :timeout "timeout"
+                     :ipv6 "IPv6-only timeout"
+                     :allowlist "allowlist"
+                     :robots "robots.txt blocked"
+                     "unknown")]
+    (case reason
+      :www-mismatch "www mismatch"
+      :not-allowlisted "not allowlisted"
+      :disallowed "robots.txt disallow"
+      type-label)))
+
 (defn- authority-band-options
   []
   [{:id nil :label "All"}
@@ -303,7 +327,7 @@
 (defn- sources-panel
   []
   (let [sources @(rf/subscribe [:darelwasl.app/knowledge])
-        {:keys [status error runs]} (:sources sources)]
+        {:keys [status error sources runs]} (:sources sources)]
     [:div.panel.knowledge-sources
      [:div.section-header
       [:div
@@ -317,18 +341,22 @@
      (case status
        :loading [ui/loading-state "Loading sources..."]
        :error [ui/error-state (or error "Unable to load sources") #(rf/dispatch [:darelwasl.app/fetch-knowledge-sources])]
-       (if (seq runs)
+       (if (seq sources)
          [:div.knowledge-source-list
-          (for [run runs]
-            ^{:key (str (:crawl.run/id run))}
+          (for [source sources]
+            ^{:key (str (:source/id source))}
             [:div.knowledge-source
-             [:div.title (str "Run " (:crawl.run/id run))]
-             [:div.meta (str "Status: " (name (:crawl.run/status run)))]
-             [:div.meta (str "Started: " (some-> (:crawl.run/started-at run) util/format-date))]
-             (when-let [finished (:crawl.run/finished-at run)]
-               [:div.meta (str "Finished: " (util/format-date finished))])
-             [:div.meta (str "Metrics: " (or (:crawl.run/source-metrics run) "—"))]])]
-         [ui/empty-state "No crawl runs yet" "Run the crawler to populate source history."]))]))
+             [:div.title (or (:source/name source) (str (:source/id source)))]
+             [:div.meta (str "Status: " (source-status-label (:source/status source)))]
+             (when-let [blocker (:source/blocker source)]
+               [:div.meta (str "Blocker: " (blocker-label blocker))])
+             (when-let [attempt (:source/last-attempt-at source)]
+               [:div.meta (str "Last attempt: " (util/format-date attempt))])
+             (when-let [success (:source/last-success-at source)]
+               [:div.meta (str "Last success: " (util/format-date success))])
+             (when-let [metrics (:source/metrics source)]
+               [:div.meta (str "Metrics: " metrics)])])]
+         [ui/empty-state "No sources yet" "Run the crawler to populate source history."]))]))
 
 (defn knowledge-shell
   []

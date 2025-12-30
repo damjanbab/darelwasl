@@ -1,5 +1,6 @@
 (ns darelwasl.knowledge.query
-  (:require [clojure.string :as str]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [datomic.client.api :as d]))
 
 (defn- parse-date
@@ -172,7 +173,7 @@
                 {:decision/cited-sections [:section/id :section/number :section/title]}]
             eid)))
 
-(defn list-sources
+(defn list-source-runs
   [db]
   (let [runs (d/q '[:find ?r ?started ?finished ?status ?metrics
                     :where [?r :crawl.run/id _]
@@ -188,3 +189,50 @@
             :crawl.run/status status
             :crawl.run/source-metrics metrics})
          runs)))
+
+(defn- parse-metrics
+  [metrics]
+  (when (seq metrics)
+    (try
+      (edn/read-string metrics)
+      (catch Exception _ nil))))
+
+(defn list-sources
+  [db]
+  (let [runs (->> (list-source-runs db)
+                  (sort-by :crawl.run/started-at #(compare %2 %1)))
+        entries (mapcat (fn [run]
+                          (let [metrics (parse-metrics (:crawl.run/source-metrics run))]
+                            (for [entry metrics]
+                              (assoc entry
+                                     :run/id (:crawl.run/id run)
+                                     :run/started-at (:crawl.run/started-at run)
+                                     :run/finished-at (:crawl.run/finished-at run)))))
+                        runs)]
+    (->> entries
+         (reduce (fn [acc entry]
+                   (let [adapter (:adapter entry)
+                         current (get acc adapter)
+                         last-attempt (or (:last-attempt-at entry) (:run/started-at entry))
+                         last-success (or (:last-success-at entry)
+                                          (when (pos? (long (or (get-in entry [:metrics :ok]) 0)))
+                                            (:run/finished-at entry)))]
+                     (assoc acc adapter
+                            (cond-> {:source/id adapter
+                                     :source/name (:source entry)
+                                     :source/status (:status entry)
+                                     :source/blocker (:blocker entry)
+                                     :source/last-attempt-at last-attempt
+                                     :source/last-success-at last-success
+                                     :source/metrics (:metrics entry)}
+                              (and current (nil? last-success))
+                              (assoc :source/last-success-at (:source/last-success-at current))
+                              (and current (nil? last-attempt))
+                              (assoc :source/last-attempt-at (:source/last-attempt-at current))
+                              (and current (nil? (:blocker entry)))
+                              (assoc :source/blocker (:source/blocker current))
+                              (and current (nil? (:status entry)))
+                              (assoc :source/status (:source/status current))))))
+                 {})
+         vals
+         vec)))

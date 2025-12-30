@@ -80,16 +80,22 @@
     :name "Saudi API Inventory"
     :base-url "https://api.gov.sa/"}])
 
+(defn- canonical-host
+  [host]
+  (some-> host
+          clojure.string/lower-case
+          (clojure.string/replace #"^www\." "")))
+
 (def allowlist-hosts
   (->> sources
        (map (fn [src]
               (let [url (java.net.URI. (:base-url src))]
-                (.getHost url))))
+                (canonical-host (.getHost url)))))
        set))
 
 (defn allowlisted-host?
   [host]
-  (contains? allowlist-hosts host))
+  (contains? allowlist-hosts (canonical-host host)))
 
 (defn allowlisted-url?
   [^java.net.URI uri]
@@ -98,4 +104,6 @@
 
 (defn source-by-host
   [host]
-  (some #(when (= host (-> (java.net.URI. (:base-url %)) .getHost)) %) sources))
+  (let [canonical (canonical-host host)]
+    (some #(when (= canonical (canonical-host (-> (java.net.URI. (:base-url %)) .getHost))) %)
+          sources)))
