@@ -58,6 +58,10 @@
             :prs-per-page 20
             :commits-per-pr 10}
    :files {:storage-dir "data/files"}
+   :knowledge {:storage-dir "data/knowledge"
+               :crawl-delay-ms 2000
+               :crawl-max-urls nil
+               :crawl-adapters nil}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -256,6 +260,15 @@
         (assoc :files
                {:storage-dir (env-str (get env "FILES_STORAGE_DIR")
                                       (get-in default-config [:files :storage-dir]))})
+        (assoc :knowledge
+               {:storage-dir (env-str (get env "KNOWLEDGE_STORAGE_DIR")
+                                      (get-in default-config [:knowledge :storage-dir]))
+                :crawl-delay-ms (parse-int (get env "KNOWLEDGE_CRAWL_DELAY_MS")
+                                           (get-in default-config [:knowledge :crawl-delay-ms]))
+                :crawl-max-urls (parse-int (get env "KNOWLEDGE_CRAWL_MAX_URLS")
+                                           (get-in default-config [:knowledge :crawl-max-urls]))
+                :crawl-adapters (env-csv (get env "KNOWLEDGE_CRAWL_ADAPTERS")
+                                         (get-in default-config [:knowledge :crawl-adapters]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))

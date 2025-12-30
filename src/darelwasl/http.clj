@@ -10,6 +10,7 @@
             [darelwasl.http.routes.files :as files-routes]
             [darelwasl.http.routes.github :as github-routes]
             [darelwasl.http.routes.land :as land-routes]
+            [darelwasl.http.routes.knowledge :as knowledge-routes]
             [darelwasl.http.routes.registries :as registries-routes]
             [darelwasl.http.routes.system :as system-routes]
             [darelwasl.http.routes.tasks :as task-routes]
@@ -52,6 +53,7 @@
          (github-routes/routes state)
          (task-routes/routes state)
          (content-routes/routes state)
+         (knowledge-routes/routes state)
          (registries-routes/routes state)
          (system-routes/routes state)
          (terminal-routes/routes state)
