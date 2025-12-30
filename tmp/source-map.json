@@ -1,0 +1,1166 @@
+{
+  "generatedAt": "2025-12-30T16:38:58.236311Z",
+  "sources": [
+    {
+      "id": "uqn.gov.sa",
+      "base": "https://uqn.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://uqn.gov.sa/robots.txt",
+        "code": "404",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "boe.gov.sa",
+      "base": "https://boe.gov.sa/en/Pages/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://boe.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://boe.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://boe.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://boe.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://boe.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://boe.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://boe.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "laws.boe.gov.sa",
+      "base": "https://laws.boe.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://laws.boe.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths",
+        "Listing URL: https://laws.boe.gov.sa/BoeLaws/Laws/Folders/2?FolderId=cf5e8242-b191-4200-ae90-0fb3c3a4c280&PartId=4a68f8e1-ff14-4a0d-8a07-ee67f2701019"
+      ]
+    },
+    {
+      "id": "ncar.gov.sa",
+      "base": "https://ncar.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://ncar.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://ncar.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://ncar.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://ncar.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://ncar.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://ncar.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://ncar.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "zatca.gov.sa",
+      "base": "https://zatca.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://zatca.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://zatca.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "gstc.gov.sa",
+      "base": "https://gstc.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://gstc.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://gstc.gov.sa:443/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "mc.gov.sa",
+      "base": "https://mc.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mc.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://mc.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "saudibusiness.gov.sa",
+      "base": "https://saudibusiness.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://saudibusiness.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://saudibusiness.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "misa.gov.sa",
+      "base": "https://misa.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://misa.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://misa.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://misa.gov.sa/sitemap_index.xml",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "investsaudi.sa",
+      "base": "https://investsaudi.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://investsaudi.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://investsaudi.sa/en/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "hrsd.gov.sa",
+      "base": "https://hrsd.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://hrsd.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.hrsd.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "qiwa.sa",
+      "base": "https://qiwa.sa/ar",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://qiwa.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://qiwa.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://qiwa.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://qiwa.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://qiwa.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://qiwa.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://qiwa.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "muqeem.sa",
+      "base": "https://muqeem.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://muqeem.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://muqeem.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://muqeem.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://muqeem.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "absher.sa",
+      "base": "https://absher.sa/wps/portal",
+      "baseCheck": {
+        "code": "302",
+        "method": "curl",
+        "finalUrl": "https://www.absher.sa/portal/landing.html"
+      },
+      "robots": {
+        "url": "https://absher.sa/robots.txt",
+        "code": "000",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "Deferred (login required). Base redirects to www.absher.sa; curl connection resets."
+      ]
+    },
+    {
+      "id": "www.moi.gov.sa",
+      "base": "https://www.moi.gov.sa/wps/portal/Home/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://www.moi.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "mudad.com.sa",
+      "base": "https://mudad.com.sa/landing-page/home",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mudad.com.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://mudad.com.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "rulebook.sama.gov.sa",
+      "base": "https://rulebook.sama.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://rulebook.sama.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.sama.gov.sa/en-US/pages/sitemap.aspx",
+          "from": "manual"
+        }
+      ],
+      "notes": [
+        "No sitemap discovered via robots/common paths",
+        "Sitemap link found on homepage (requires Playwright)."
+      ]
+    },
+    {
+      "id": "cma.org.sa",
+      "base": "https://cma.org.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://cma.org.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://cma.gov.sa:443/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "sdaia.gov.sa",
+      "base": "https://sdaia.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://sdaia.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://sdaia.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "nca.gov.sa",
+      "base": "https://nca.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://nca.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://nca.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "gac.gov.sa",
+      "base": "https://gac.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://gac.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://gac.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://gac.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://gac.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://gac.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://gac.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://gac.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "moj.gov.sa",
+      "base": "https://moj.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://moj.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://moj.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://moj.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://moj.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://moj.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://moj.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "najiz.sa",
+      "base": "https://najiz.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://najiz.sa/robots.txt",
+        "code": "404",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "safiu.gov.sa",
+      "base": "https://safiu.gov.sa/",
+      "baseCheck": {
+        "code": "000",
+        "method": "playwright",
+        "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://safiu.gov.sa/\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      },
+      "robots": {
+        "url": "https://safiu.gov.sa/robots.txt",
+        "code": "000",
+        "method": "playwright",
+        "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://safiu.gov.sa/robots.txt\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      },
+      "sitemaps": [],
+      "notes": [
+        "Base unreachable via Playwright",
+        "robots.txt unreachable via Playwright",
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "momrah.gov.sa",
+      "base": "https://momrah.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://momrah.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://momah.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "rega.gov.sa",
+      "base": "https://rega.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "playwright",
+        "finalUrl": "https://rega.gov.sa/"
+      },
+      "robots": {
+        "url": "https://rega.gov.sa/robots.txt",
+        "code": "200",
+        "method": "playwright"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "mim.gov.sa",
+      "base": "https://mim.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mim.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.mim.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "monshaat.gov.sa",
+      "base": "https://monshaat.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://monshaat.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://monshaat.gov.sa/sitemap.xml",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "modon.gov.sa",
+      "base": "https://modon.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "playwright",
+        "finalUrl": "https://modon.gov.sa/ar/Pages/default.aspx"
+      },
+      "robots": {
+        "url": "https://modon.gov.sa/robots.txt",
+        "code": "200",
+        "method": "playwright"
+      },
+      "sitemaps": [
+        {
+          "url": "https://modon.gov.sa:443/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "tga.gov.sa",
+      "base": "https://tga.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://tga.gov.sa/robots.txt",
+        "code": "404",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "gaca.gov.sa",
+      "base": "https://gaca.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://gaca.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://gaca.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "mawani.gov.sa",
+      "base": "https://mawani.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mawani.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://mawani.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mawani.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mawani.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mawani.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mawani.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://mawani.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "mot.gov.sa",
+      "base": "https://mot.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mot.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://mot.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "moh.gov.sa",
+      "base": "https://moh.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://moh.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.moh.gov.sa/SiteMap/sitemap.xml",
+          "from": "robots"
+        },
+        {
+          "url": "https://www.moh.gov.sa/en/SiteMap/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "dga.gov.sa",
+      "base": "https://dga.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://dga.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [],
+      "notes": [
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "ndmo.gov.sa",
+      "base": "https://ndmo.gov.sa/",
+      "baseCheck": {
+        "code": "000",
+        "method": "playwright",
+        "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://ndmo.gov.sa/\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      },
+      "robots": {
+        "url": "https://ndmo.gov.sa/robots.txt",
+        "code": "000",
+        "method": "playwright",
+        "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://ndmo.gov.sa/robots.txt\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      },
+      "sitemaps": [],
+      "notes": [
+        "Base unreachable via Playwright",
+        "robots.txt unreachable via Playwright",
+        "No sitemap discovered via robots/common paths"
+      ]
+    },
+    {
+      "id": "mof.gov.sa",
+      "base": "https://mof.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://mof.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://mof.gov.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mof.gov.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mof.gov.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mof.gov.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://mof.gov.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://mof.gov.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "etimad.sa",
+      "base": "https://etimad.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://etimad.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://etimad.sa/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://etimad.sa/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://etimad.sa/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://etimad.sa/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://etimad.sa/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://etimad.sa/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "cst.gov.sa",
+      "base": "https://cst.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://cst.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.cst.gov.sa/api/sitemap",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "www.sfda.gov.sa",
+      "base": "https://www.sfda.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://www.sfda.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.sfda.gov.sa/sitemap.xml",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "saso.gov.sa",
+      "base": "https://saso.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://saso.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "http://ryd1-exwb19-04:80/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": [
+        "Playwright homepage navigation timed out; manual discovery needed."
+      ]
+    },
+    {
+      "id": "www.mewa.gov.sa",
+      "base": "https://www.mewa.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://www.mewa.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.mewa.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "saip.gov.sa",
+      "base": "https://saip.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://saip.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.saip.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "www.moenergy.gov.sa",
+      "base": "https://www.moenergy.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://www.moenergy.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.moenergy.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "www.gcc-sg.org",
+      "base": "https://www.gcc-sg.org/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://www.gcc-sg.org/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.gcc-sg.org/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://www.gcc-sg.org/sitemap_index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://www.gcc-sg.org/sitemap-index.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://www.gcc-sg.org/sitemap/sitemap.xml",
+          "from": "common"
+        },
+        {
+          "url": "https://www.gcc-sg.org/sitemap.xml.gz",
+          "from": "common"
+        },
+        {
+          "url": "https://www.gcc-sg.org/sitemap_index.xml.gz",
+          "from": "common"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "www.oecd.org",
+      "base": "https://www.oecd.org/",
+      "baseCheck": {
+        "code": "200",
+        "method": "playwright",
+        "finalUrl": "https://www.oecd.org/"
+      },
+      "robots": {
+        "url": "https://www.oecd.org/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://www.oecd.org/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "data.gov.sa",
+      "base": "https://data.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "curl"
+      },
+      "robots": {
+        "url": "https://data.gov.sa/robots.txt",
+        "code": "200",
+        "method": "curl"
+      },
+      "sitemaps": [
+        {
+          "url": "https://data.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "id": "my.gov.sa",
+      "base": "https://my.gov.sa/",
+      "baseCheck": {
+        "code": "200",
+        "method": "playwright",
+        "finalUrl": "https://my.gov.sa/ar"
+      },
+      "robots": {
+        "url": "https://my.gov.sa/robots.txt",
+        "code": "200",
+        "method": "playwright"
+      },
+      "sitemaps": [
+        {
+          "url": "https://my.gov.sa/sitemap.xml",
+          "from": "robots"
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

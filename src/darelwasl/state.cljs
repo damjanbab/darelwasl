@@ -399,6 +399,45 @@
    :selected nil
    :detail default-user-detail})
 
+(def default-knowledge-filters
+  {:query ""
+   :doc-type nil
+   :authority-band nil
+   :org ""
+   :language nil
+   :topic ""
+   :issued-from ""
+   :issued-to ""
+   :effective-from ""
+   :effective-to ""
+   :publication-from ""
+   :publication-to ""
+   :has-decisions? false})
+
+(def default-knowledge-detail
+  {:status :idle
+   :error nil
+   :tab :overview
+   :instrument nil
+   :versions []
+   :sections []})
+
+(def default-knowledge-sources
+  {:status :idle
+   :error nil
+   :sources []
+   :runs []})
+
+(def default-knowledge-state
+  {:status :idle
+   :error nil
+   :filters default-knowledge-filters
+   :results []
+   :selected nil
+   :detail default-knowledge-detail
+   :sources default-knowledge-sources
+   :view :search})
+
 (def default-db
   {:route :login
    :session nil
@@ -415,7 +454,8 @@
    :terminal default-terminal-state
    :services default-services-state
    :users default-users-state
-   :control default-control-state})
+   :control default-control-state
+   :knowledge default-knowledge-state})
 
 (def base-app-options
   (cond-> [{:id :home
@@ -430,6 +470,9 @@
            {:id :files
             :label "Library"
             :desc "Images, PDFs, Markdown"}
+           {:id :knowledge
+            :label "Knowledge"
+            :desc "Saudi domain map"}
            {:id :betting
             :label "Betting CLV"
             :desc "Browse odds and log bets"}

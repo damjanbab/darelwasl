@@ -9,6 +9,9 @@
         org.clojure/data.csv {:mvn/version "1.0.1"}
         org.clojure/data.json {:mvn/version "2.5.0"}
         clj-http/clj-http {:mvn/version "3.12.3"}
+        dnsjava/dnsjava {:mvn/version "3.5.2"}
+        org.jsoup/jsoup {:mvn/version "1.17.2"}
+        org.apache.pdfbox/pdfbox {:mvn/version "2.0.30"}
         ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}
  :aliases {:dev {:main-opts ["-m" "darelwasl.main"]
                  :jvm-opts ["-Dclojure.main.report=stderr"]
@@ -18,4 +21,6 @@
            :seed {:main-opts ["-m" "darelwasl.fixtures"]
                   :jvm-opts ["-Dclojure.main.report=stderr"]}
            :import {:main-opts ["-m" "darelwasl.importer"]
-                    :jvm-opts ["-Dclojure.main.report=stderr"]}}}
+                    :jvm-opts ["-Dclojure.main.report=stderr"]}
+           :knowledge-crawl {:main-opts ["-m" "darelwasl.knowledge.pipeline"]
+                             :jvm-opts ["-Dclojure.main.report=stderr"]}}}

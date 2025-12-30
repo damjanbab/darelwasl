@@ -1,0 +1,457 @@
+{
+  "https://boe.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://boe.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://boe.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://boe.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://boe.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://boe.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1679"
+  },
+  "https://ncar.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://ncar.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://ncar.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://ncar.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://ncar.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://ncar.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "14185"
+  },
+  "https://zatca.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "426750"
+  },
+  "https://gstc.gov.sa:443/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "15042"
+  },
+  "https://mc.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "345"
+  },
+  "https://saudibusiness.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://saudibusiness.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://saudibusiness.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://saudibusiness.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://saudibusiness.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://saudibusiness.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://misa.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml; charset=UTF-8",
+    "content_length": ""
+  },
+  "https://misa.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/xml; charset=UTF-8",
+    "content_length": ""
+  },
+  "https://www.hrsd.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": ""
+  },
+  "https://qiwa.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://qiwa.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://qiwa.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://qiwa.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://qiwa.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://qiwa.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1351"
+  },
+  "https://muqeem.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": "413"
+  },
+  "https://muqeem.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "1116"
+  },
+  "https://muqeem.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "1116"
+  },
+  "https://mudad.com.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": "1292"
+  },
+  "https://cma.gov.sa:443/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "347"
+  },
+  "https://sdaia.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "244"
+  },
+  "https://nca.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": ""
+  },
+  "https://gac.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://gac.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://gac.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://gac.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://gac.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://gac.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "11540"
+  },
+  "https://moj.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "339"
+  },
+  "https://moj.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "0"
+  },
+  "https://moj.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "0"
+  },
+  "https://moj.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "28015"
+  },
+  "https://moj.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "28015"
+  },
+  "https://momah.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": "221842"
+  },
+  "https://www.mim.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml; charset=utf-8",
+    "content_length": ""
+  },
+  "https://monshaat.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml; charset=utf-8",
+    "content_length": ""
+  },
+  "https://modon.gov.sa:443/sitemap.xml": {
+    "code": "000",
+    "content_type": "",
+    "content_length": ""
+  },
+  "https://gaca.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "27958"
+  },
+  "https://mawani.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mawani.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mawani.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mawani.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mawani.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mawani.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "4363"
+  },
+  "https://mot.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml;charset=UTF-8",
+    "content_length": "10702"
+  },
+  "https://www.moh.gov.sa/SiteMap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "239930"
+  },
+  "https://www.moh.gov.sa/en/SiteMap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "3284126"
+  },
+  "https://mof.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1596"
+  },
+  "https://mof.gov.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1596"
+  },
+  "https://mof.gov.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1596"
+  },
+  "https://mof.gov.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "1596"
+  },
+  "https://mof.gov.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "1128"
+  },
+  "https://mof.gov.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "1129"
+  },
+  "https://etimad.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://etimad.sa/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://etimad.sa/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://etimad.sa/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://etimad.sa/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://etimad.sa/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "2222"
+  },
+  "https://www.cst.gov.sa/api/sitemap": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "3472663"
+  },
+  "https://www.sfda.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml; charset=utf-8",
+    "content_length": "496703"
+  },
+  "http://ryd1-exwb19-04:80/sitemap.xml": {
+    "code": "000",
+    "content_type": "",
+    "content_length": ""
+  },
+  "https://www.mewa.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/xml",
+    "content_length": "357"
+  },
+  "https://www.saip.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": "189"
+  },
+  "https://www.moenergy.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "application/xml",
+    "content_length": "133289"
+  },
+  "https://www.gcc-sg.org/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.gcc-sg.org/sitemap_index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.gcc-sg.org/sitemap-index.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.gcc-sg.org/sitemap/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.gcc-sg.org/sitemap.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.gcc-sg.org/sitemap_index.xml.gz": {
+    "code": "200",
+    "content_type": "text/html",
+    "content_length": "2817"
+  },
+  "https://www.oecd.org/sitemap.xml": {
+    "code": "403",
+    "content_type": "text/html; charset=UTF-8",
+    "content_length": "7010"
+  },
+  "https://data.gov.sa/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "247"
+  },
+  "https://my.gov.sa/sitemap.xml": {
+    "code": "403",
+    "content_type": "text/html; charset=UTF-8",
+    "content_length": ""
+  },
+  "https://investsaudi.sa/en/sitemap.xml": {
+    "code": "200",
+    "content_type": "text/plain;charset=UTF-8",
+    "content_length": "128"
+  },
+  "https://www.sama.gov.sa/en-US/pages/sitemap.aspx": {
+    "code": "000",
+    "content_type": "",
+    "content_length": ""
+  }
+}
