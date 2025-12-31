@@ -3,9 +3,13 @@
             [clojure.string :as str]
             [darelwasl.terminal.app-client :as app-client]
             [darelwasl.terminal.client :as terminal]
+            [darelwasl.terminal.plan :as plan]
+            [darelwasl.terminal.spec :as spec]
+            [darelwasl.terminal.store :as store]
             [darelwasl.validation :as v])
   (:import (java.nio.file Files)
-           (java.util Base64)))
+           (java.security MessageDigest)
+           (java.util Base64 UUID)))
 
 (defn- error
   [status message & [details]]
@@ -56,6 +60,19 @@
     (Files/probeContentType (.toPath file))
     (catch Exception _
       nil)))
+
+(defn- now-ms
+  []
+  (System/currentTimeMillis))
+
+(defn- sha256-hex
+  [^bytes bytes]
+  (let [digest (.digest (MessageDigest/getInstance "SHA-256") bytes)]
+    (apply str (map #(format "%02x" (bit-and % 0xff)) digest))))
+
+(defn- session-call
+  [sym & args]
+  (apply (requiring-resolve sym) args))
 
 (defn- prepare-upload
   [input]
@@ -208,6 +225,180 @@
       file-id (context-from-file state input workspace-id)
       :else (error 400 "context.add requires text, task, or file reference"))))
 
+(defn- submit-spec
+  [state input]
+  (let [value (or (v/param-value input :spec)
+                  (v/param-value input :text)
+                  (v/param-value input :value))
+        {:keys [status errors spec]} (spec/validate-spec value)]
+    (cond
+      (= status :invalid)
+      {:error (error 400 "Invalid spec" errors)}
+
+      :else
+      (let [spec (assoc spec :status status)
+            stored (store/upsert-spec! (:terminal/store state) {:id (:spec/id spec)
+                                                                :created-at (:spec/created-at spec)
+                                                                :status status
+                                                                :spec spec})]
+        {:message (str "Spec " (:id stored) " accepted")
+         :result {:spec stored}}))))
+
+(defn- generate-plan
+  [state input]
+  (let [spec-id (or (v/param-value input :spec/id)
+                    (v/param-value input :spec-id)
+                    (v/param-value input :id))
+        spec-record (store/get-spec (:terminal/store state) spec-id)]
+    (cond
+      (nil? spec-id) {:error (error 400 "spec.id is required")}
+      (nil? spec-record) {:error (error 404 "Spec not found")}
+      :else
+      (let [plan (plan/generate-plan (:spec spec-record))
+            stored (store/upsert-plan! (:terminal/store state)
+                                       (assoc plan :status :plan.status/generated))]
+        {:message (str "Plan " (:id stored) " generated")
+         :result {:plan stored}}))))
+
+(defn- attach-artifact
+  [state input]
+  (let [path (v/param-value input :path)
+        uri (v/param-value input :uri)
+        artifact-id (or (v/param-value input :id) (str (UUID/randomUUID)))
+        artifact-type (or (v/param-value input :type) (v/param-value input :artifact/type))
+        file (when path (io/file path))]
+    (cond
+      (and (nil? path) (nil? uri))
+      {:error (error 400 "artifact.attach requires path or uri")}
+
+      (and path (not (.exists file)))
+      {:error (error 404 "Artifact path not found")}
+
+      :else
+      (let [bytes (when path (read-file-bytes file))
+            sha (when bytes (sha256-hex bytes))
+            size (when bytes (count bytes))
+            stored (store/upsert-artifact! (:terminal/store state)
+                                           {:id artifact-id
+                                            :created-at (now-ms)
+                                            :type artifact-type
+                                            :path path
+                                            :uri uri
+                                            :sha256 sha
+                                            :size-bytes size
+                                            :step-id (v/param-value input :step/id)
+                                            :session-id (v/param-value input :session-id)})]
+        {:message (str "Artifact " (:id stored) " attached")
+         :result {:artifact stored}}))))
+
+(defn- update-step
+  [state input status]
+  (let [plan-id (or (v/param-value input :plan/id)
+                    (v/param-value input :plan-id))
+        step-id (or (v/param-value input :step/id)
+                    (v/param-value input :step-id))
+        plan (store/get-plan (:terminal/store state) plan-id)]
+    (cond
+      (nil? plan-id) {:error (error 400 "plan.id is required")}
+      (nil? step-id) {:error (error 400 "step.id is required")}
+      (nil? plan) {:error (error 404 "Plan not found")}
+      :else
+      (let [next-plan (plan/update-step-status plan step-id status)
+            stored (store/upsert-plan! (:terminal/store state) next-plan)]
+        {:message (str "Step " step-id " set to " (name status))
+         :result {:plan stored}}))))
+
+(defn- create-agent-run
+  [state parent-session-id input]
+  (let [store (:terminal/store state)
+        cfg (:terminal/config state)
+        name (or (v/param-value input :name) "subagent")
+        prompt (or (v/param-value input :prompt)
+                   (v/param-value input :input)
+                   (v/param-value input :spec))
+        session (session-call 'darelwasl.terminal.session/create-session!
+                              store cfg {:name name :type "subagent" :dev-bot? false})
+        agentrun-id (str (UUID/randomUUID))
+        agent-run {:id agentrun-id
+                   :created-at (now-ms)
+                   :status :running
+                   :parent-session-id parent-session-id
+                   :session-id (:id session)
+                   :spec prompt}]
+    (when (and prompt (not (str/blank? (str prompt))))
+      (session-call 'darelwasl.terminal.session/send-input! session (str prompt)))
+    (store/upsert-agent-run! store agent-run)
+    {:message (str "Subagent " agentrun-id " started")
+     :result {:agent-run agent-run
+              :session (session-call 'darelwasl.terminal.session/present-session session)}}))
+
+(defn- agent-status
+  [state input]
+  (let [store (:terminal/store state)
+        agentrun-id (or (v/param-value input :agentrun/id)
+                        (v/param-value input :agentrun-id)
+                        (v/param-value input :id))
+        agent-run (store/get-agent-run store agentrun-id)
+        session-id (:session-id agent-run)
+        session (when session-id (store/get-session store session-id))]
+    (cond
+      (nil? agentrun-id) {:error (error 400 "agentrun.id is required")}
+      (nil? agent-run) {:error (error 404 "Agent run not found")}
+      :else
+      {:message (str "Subagent " agentrun-id " status " (name (:status agent-run)))
+       :result {:agent-run agent-run
+                :session (when session
+                           (session-call 'darelwasl.terminal.session/present-session session))}})))
+
+(defn- read-chat-tail
+  [path max-bytes]
+  (let [file (io/file path)]
+    (when (.exists file)
+      (let [bytes (Files/readAllBytes (.toPath file))
+            len (count bytes)
+            start (max 0 (- len max-bytes))]
+        (String. bytes start (- len start) "UTF-8")))))
+
+(defn- agent-collect
+  [state input]
+  (let [store (:terminal/store state)
+        agentrun-id (or (v/param-value input :agentrun/id)
+                        (v/param-value input :agentrun-id)
+                        (v/param-value input :id))
+        max-bytes (or (v/param-value input :max-bytes) 8000)
+        agent-run (store/get-agent-run store agentrun-id)
+        session-id (:session-id agent-run)
+        session (when session-id (store/get-session store session-id))]
+    (cond
+      (nil? agentrun-id) {:error (error 400 "agentrun.id is required")}
+      (nil? agent-run) {:error (error 404 "Agent run not found")}
+      (nil? session) {:error (error 404 "Subagent session not found")}
+      :else
+      (let [output (read-chat-tail (:chat-log session) max-bytes)]
+        {:message (str "Subagent " agentrun-id " output collected")
+         :result {:agent-run agent-run
+                  :output output}}))))
+
+(defn- agent-cancel
+  [state input]
+  (let [store (:terminal/store state)
+        agentrun-id (or (v/param-value input :agentrun/id)
+                        (v/param-value input :agentrun-id)
+                        (v/param-value input :id))
+        agent-run (store/get-agent-run store agentrun-id)
+        session-id (:session-id agent-run)
+        session (when session-id (store/get-session store session-id))]
+    (cond
+      (nil? agentrun-id) {:error (error 400 "agentrun.id is required")}
+      (nil? agent-run) {:error (error 404 "Agent run not found")}
+      (nil? session) {:error (error 404 "Subagent session not found")}
+      :else
+      (do
+        (session-call 'darelwasl.terminal.session/interrupt-session! store session)
+        (store/upsert-agent-run! store (assoc agent-run :status :blocked))
+        {:message (str "Subagent " agentrun-id " interrupted")
+         :result {:agent-run (store/get-agent-run store agentrun-id)}}))))
+
 (defn- devbot-reset
   [state session-id input]
   (let [force? (boolean (v/param-value input :force))
@@ -241,6 +432,30 @@
     (cond
       (str/blank? command-type)
       (error 400 "Command type is required")
+
+      (= command-type "spec.submit")
+      (submit-spec state input)
+
+      (= command-type "plan.generate")
+      (generate-plan state input)
+
+      (= command-type "artifact.attach")
+      (attach-artifact state input)
+
+      (= command-type "step.verify")
+      (update-step state input :step.status/verified)
+
+      (= command-type "agent.run")
+      (create-agent-run state session-id input)
+
+      (= command-type "agent.status")
+      (agent-status state input)
+
+      (= command-type "agent.collect")
+      (agent-collect state input)
+
+      (= command-type "agent.cancel")
+      (agent-cancel state input)
 
       (= command-type "context.add")
       (context-add state input workspace-id)

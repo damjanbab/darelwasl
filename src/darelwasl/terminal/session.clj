@@ -347,6 +347,7 @@
 (def ^:private ansi-osc-re #"\u001B\][^\u0007]*(?:\u0007|\u001B\\)")
 (def ^:private ansi-single-re #"\u001B[@-Z\\-_]")
 (def ^:private command-re #"@command\s+(\{[^\n]+\})")
+(def ^:private spec-re #"@spec\s+(\{[^\n]+\})")
 (def ^:private input-submit-delay-ms 200)
 (def ^:private session-type-default :feature)
 (def ^:private session-type-aliases
@@ -357,6 +358,7 @@
    "bugfix/hotfix" :bugfix
    "research" :research
    "spike" :research
+   "subagent" :subagent
    "integrator" :integrator
    "integration" :integrator
    "ops" :ops
@@ -369,6 +371,7 @@
   {:feature "terminal/AGENTS.md"
    :bugfix "terminal/AGENTS-bugfix.md"
    :research "terminal/AGENTS-research.md"
+   :subagent "terminal/AGENTS-research.md"
    :integrator "terminal/AGENTS-integrator.md"
    :ops "terminal/AGENTS-ops.md"
    :main-ops "terminal/AGENTS-main-ops.md"})
@@ -431,6 +434,10 @@
     (json/read-str text :key-fn keyword)
     (catch Exception _ nil)))
 
+(defn- spec-command-id
+  [text]
+  (str (UUID/nameUUIDFromBytes (.getBytes (str text) "UTF-8"))))
+
 (defn- normalize-command
   [command]
   (let [id (or (:id command) (:command/id command))
@@ -452,6 +459,17 @@
                    (assoc acc (:id cmd) cmd))
                  {})
          vals
+         vec)))
+
+(defn- extract-spec-commands
+  [output]
+  (let [matches (re-seq spec-re (or output ""))]
+    (->> matches
+         (map second)
+         (map (fn [text]
+                {:id (spec-command-id text)
+                 :type "spec.submit"
+                 :input {:spec text}}))
          vec)))
 
 (defn- codex-idle?
@@ -970,7 +988,8 @@
 (defn auto-run-commands!
   [state store session output]
   (let [auto-run? (get session :auto-run-commands? true)
-        commands (extract-commands output)]
+        commands (concat (extract-commands output)
+                         (extract-spec-commands output))]
     (when (and auto-run?
                (tmux/running? (:tmux session))
                (seq commands))
