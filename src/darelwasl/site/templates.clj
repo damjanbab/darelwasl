@@ -124,7 +124,7 @@
                                                            (escape-html (:hero.flow/title f))
                                                            (escape-html (:hero.flow/detail f))))
                                                 hero-flows))))]
-    (format "<section class=\"hero\"><p class=\"pill\">%s</p><h1 class=\"headline\">%s</h1><p class=\"strapline\">%s</p>%s<div class=\"meta\">Gate review: preview pipeline smoke OK.</div>%s</section>"
+    (format "<section class=\"hero\"><p class=\"pill\">%s</p><h1 class=\"headline\">%s</h1><p class=\"strapline\">%s</p>%s<div class=\"meta\">Gate review: leave with your next step and required inputs.</div>%s</section>"
             (escape-html nav-label)
             (escape-html headline)
             (escape-html strapline)
