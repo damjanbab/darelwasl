@@ -74,6 +74,19 @@
        [:option {:value "both"} "Site + App"]
        [:option {:value "site"} "Site only"]
        [:option {:value "app"} "App only"]]]
+     (when (#{ "both" "site"} (or (:mode composer) "both"))
+       [:<>
+        [:div.field-group
+         [:label "Website find (exact text)"]
+         [ui/form-input {:value (or (:website_find composer) "")
+                         :placeholder "Paste the exact current text from the website"
+                         :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :website_find (.. % -target -value)])}]]
+        [:div.field-group
+         [:label "Website replace (new text)"]
+         [ui/form-input {:value (or (:website_replace composer) "")
+                         :placeholder "Paste the new text you want"
+                         :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :website_replace (.. % -target -value)])}]]
+        [:div.meta "Rule: find text must match exactly once across the public site (otherwise preview start fails)."]])
      [:div.field-group
       [:label "Request"]
       [:textarea.form-input {:rows 4

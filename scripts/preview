@@ -74,6 +74,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Apply current working tree diffs onto the preview worktree (useful for previewing uncommitted changes)",
     )
     p_start.add_argument("--review-window-hours", type=int, default=6, help="How long the user has to respond (default: 6)")
+    p_start.add_argument(
+        "--website-find",
+        default="",
+        help="(agent-control) Exact text to find on the public site (must match exactly once under src/darelwasl/site or public).",
+    )
+    p_start.add_argument(
+        "--website-replace",
+        default="",
+        help="(agent-control) Replacement text for --website-find (applied and committed on preview branch before starting preview).",
+    )
 
     p_stop = sub.add_parser("stop", help="Stop a preview run and unpublish URLs")
     p_stop.add_argument("id", help="Run id")
@@ -256,8 +266,78 @@ def ensure_worktree(root: Path, run_id: str, ref: str) -> None:
         # We intentionally do NOT `git clean -fdx` because we keep shared node_modules as a symlink.
         run(["git", "checkout", "-B", branch, ref], cwd=wt)
         run(["git", "reset", "--hard", ref], cwd=wt)
+        subprocess.run(["git", "clean", "-fd"], cwd=str(wt), check=False)
         return
     run(["git", "worktree", "add", "-B", branch, str(wt), ref], cwd=root)
+
+
+def _iter_text_files_under(wt: Path, rel_dir: str) -> list[Path]:
+    base = (wt / rel_dir).resolve()
+    if not base.exists():
+        return []
+    exts = {".clj", ".cljs", ".cljc", ".edn", ".html", ".css", ".md", ".txt", ".svg"}
+    files: list[Path] = []
+    for p in base.rglob("*"):
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in exts:
+            continue
+        try:
+            if p.stat().st_size > 2_000_000:
+                continue
+        except Exception:
+            continue
+        files.append(p)
+    return files
+
+
+def _website_replace_copy(wt: Path, *, find_text: str, replace_text: str) -> dict:
+    if not find_text.strip():
+        raise SystemExit("website change requires --website-find")
+    if not replace_text.strip():
+        raise SystemExit("website change requires --website-replace")
+    if find_text == replace_text:
+        raise SystemExit("--website-replace must differ from --website-find")
+
+    candidates: list[Path] = []
+    for rel in ("src/darelwasl/site", "public"):
+        candidates.extend(_iter_text_files_under(wt, rel))
+
+    hits: list[tuple[Path, int]] = []
+    for p in candidates:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        n = text.count(find_text)
+        if n:
+            hits.append((p, n))
+
+    total = sum(n for _p, n in hits)
+    if total == 0:
+        raise SystemExit("website change: find text not found (0 matches)")
+    if total != 1:
+        detail = ", ".join([f"{p.relative_to(wt)}({n})" for p, n in hits[:10]])
+        raise SystemExit(f"website change: find text must match exactly once (found {total}). Hits: {detail}")
+
+    target, _n = hits[0]
+    before = target.read_text(encoding="utf-8")
+    after = before.replace(find_text, replace_text, 1)
+    target.write_text(after, encoding="utf-8")
+    return {"file": str(target.relative_to(wt)).replace("\\\\", "/"), "matches": 1}
+
+
+def _git_commit_if_dirty(wt: Path, *, message: str) -> None:
+    proc = subprocess.run(["git", "status", "--porcelain"], cwd=str(wt), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    if proc.stdout.strip() == "":
+        return
+    env = os.environ.copy()
+    env.setdefault("GIT_AUTHOR_NAME", "agent-control")
+    env.setdefault("GIT_AUTHOR_EMAIL", "agent-control@haloeddepth.com")
+    env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
+    env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+    subprocess.run(["git", "add", "-A"], cwd=str(wt), env=env, check=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=str(wt), env=env, check=True)
 
 
 def apply_dirty_diff(root: Path, wt: Path) -> None:
@@ -480,8 +560,14 @@ def cmd_start(args: argparse.Namespace) -> int:
     ensure_worktree(root, args.id, args.ref)
     wt = worktree_path(root, args.id)
     ensure_shared_node_modules(root, wt)
+    # Always sync the worktree to the requested ref (ensure_worktree will create or reset).
+    # If we apply changes below we commit them on the preview branch so promote works.
     if args.include_dirty:
         apply_dirty_diff(root, wt)
+
+    if (args.website_find or "").strip():
+        change = _website_replace_copy(wt, find_text=args.website_find, replace_text=args.website_replace)
+        _git_commit_if_dirty(wt, message=f"website: {args.id} replace copy ({change['file']})")
 
     existing = manifest_path(root, args.id)
     existing_data: dict | None = None

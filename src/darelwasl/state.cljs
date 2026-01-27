@@ -371,11 +371,13 @@
    :detail {:status :idle
             :error nil
             :data nil}
-   :composer {:id ""
-              :message ""
-              :mode "both"
-              :status :idle
-              :error nil}
+	   :composer {:id ""
+	              :message ""
+	              :website_find ""
+	              :website_replace ""
+	              :mode "both"
+	              :status :idle
+	              :error nil}
    :log {:job nil
          :status :idle
          :error nil

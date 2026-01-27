@@ -645,6 +645,67 @@ def _op_write_policy_report(*, root: Path, scan_path: Path, report_path: Path) -
     report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _iter_text_files_under(root: Path, rel_dir: str) -> list[Path]:
+    base = (root / rel_dir).resolve()
+    if not base.exists():
+        return []
+    exts = {".clj", ".cljs", ".cljc", ".edn", ".html", ".css", ".md", ".txt", ".svg"}
+    files: list[Path] = []
+    for p in base.rglob("*"):
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in exts:
+            continue
+        try:
+            if p.stat().st_size > 2_000_000:
+                continue
+        except Exception:
+            continue
+        files.append(p)
+    return files
+
+
+def _op_website_replace_copy(*, root: Path, find_text: str, replace_text: str, allowed_roots: list[str]) -> dict:
+    if not find_text.strip():
+        raise ValueError("website/replace-copy: missing find")
+    if find_text == replace_text:
+        raise ValueError("website/replace-copy: replace must differ from find")
+
+    website_roots = ["src/darelwasl/site/", "public/"]
+    for r in website_roots:
+        if not _is_path_allowed(r, allowed_roots):
+            raise ValueError(f"website/replace-copy: allowed_paths must include {r}")
+
+    candidates: list[Path] = []
+    for rel in ("src/darelwasl/site", "public"):
+        candidates.extend(_iter_text_files_under(root, rel))
+
+    hits: list[tuple[str, int]] = []
+    for p in candidates:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        n = text.count(find_text)
+        if n:
+            relp = str(p.relative_to(root)).replace("\\", "/")
+            hits.append((relp, n))
+
+    total = sum(n for _f, n in hits)
+    if total == 0:
+        raise ValueError("website/replace-copy: find text not found (0 matches).")
+    if total != 1:
+        details = ", ".join([f"{f}({n})" for f, n in hits[:10]])
+        raise ValueError(f"website/replace-copy: find text must match exactly once (found {total}). Hits: {details}")
+
+    target_rel, _ = hits[0]
+    target = root / target_rel
+    before = target.read_text(encoding="utf-8")
+    after = before.replace(find_text, replace_text, 1)
+    target.write_text(after, encoding="utf-8")
+    return {"changed_file": target_rel, "matches": 1}
+
+
 def _run_subagent(*, root: Path, name: str, argv: list[str], extra_args: list[str] | None = None) -> dict:
     runs_dir = root / "target" / "agent-runs"
     _ensure_dir(runs_dir)
@@ -1051,6 +1112,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                         rc = _run_shell_command(root=root, command=str(cmd), log_file=log)
                         if rc != 0:
                             return False, f"proof command failed: {cmd}"
+                elif op == "website/replace-copy":
+                    inputs = step.get("inputs", {}) if isinstance(step.get("inputs"), dict) else {}
+                    find_text = str(inputs.get("find", "") or "")
+                    replace_text = str(inputs.get("replace", "") or "")
+                    _op_website_replace_copy(root=root, find_text=find_text, replace_text=replace_text, allowed_roots=allowed_paths)
                 else:
                     return False, f"unsupported operation_type: {op}"
         except Exception as e:

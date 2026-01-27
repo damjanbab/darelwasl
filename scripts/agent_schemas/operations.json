@@ -2,6 +2,13 @@
   "version": 1,
   "operations": [
     {
+      "id": "website/replace-copy",
+      "title": "Website: replace exact copy",
+      "requires_primary": false,
+      "required_inputs": ["find", "replace"],
+      "outputs": ["<repo files under src/darelwasl/site/ and public/>"]
+    },
+    {
       "id": "report/policies",
       "title": "Generate policies report",
       "requires_primary": true,
@@ -32,4 +39,3 @@
     }
   ]
 }
-
