@@ -145,6 +145,10 @@
         :else
         (let [query-token (or (get-in request [:query-params "t"])
                               (get-in request [:parameters :query "t"]))
+              query-token (or query-token
+                              (some-> (:query-string request)
+                                      codec/form-decode
+                                      (get "t")))
               cookie-token (get-in request [:cookies preview-cookie-name :value])
               token (or query-token cookie-token)
               expires-at (parse-instant (:expires_at manifest))]
