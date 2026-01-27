@@ -1,0 +1,20 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="saudi-sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1E31"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="saudi-sand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F4E9D8"/>
+      <stop offset="1" stop-color="#F7F3E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#saudi-sky)"/>
+  <circle cx="930" cy="180" r="120" fill="rgba(255,255,255,0.12)"/>
+  <path d="M0 640C180 600 320 560 520 570C760 585 930 660 1200 690V900H0V640Z" fill="url(#saudi-sand)"/>
+  <rect x="180" y="420" width="110" height="180" fill="rgba(255,255,255,0.2)"/>
+  <rect x="320" y="380" width="140" height="220" fill="rgba(255,255,255,0.24)"/>
+  <rect x="500" y="340" width="180" height="260" fill="rgba(255,255,255,0.18)"/>
+  <rect x="720" y="400" width="120" height="200" fill="rgba(255,255,255,0.2)"/>
+  <rect x="880" y="360" width="140" height="240" fill="rgba(255,255,255,0.18)"/>
+</svg>

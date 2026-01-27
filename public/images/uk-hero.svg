@@ -1,0 +1,20 @@
+<svg width="1200" height="900" viewBox="0 0 1200 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="uk-sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B2747"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="uk-river" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E6F0F8"/>
+      <stop offset="1" stop-color="#F5FBFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#uk-sky)"/>
+  <path d="M0 640C210 620 370 600 560 610C760 625 940 680 1200 720V900H0V640Z" fill="url(#uk-river)"/>
+  <rect x="220" y="420" width="90" height="200" fill="rgba(255,255,255,0.2)"/>
+  <rect x="340" y="380" width="130" height="240" fill="rgba(255,255,255,0.24)"/>
+  <rect x="500" y="320" width="150" height="300" fill="rgba(255,255,255,0.18)"/>
+  <rect x="690" y="360" width="110" height="260" fill="rgba(255,255,255,0.2)"/>
+  <rect x="840" y="400" width="140" height="220" fill="rgba(255,255,255,0.18)"/>
+  <circle cx="960" cy="250" r="80" fill="rgba(255,255,255,0.14)"/>
+</svg>

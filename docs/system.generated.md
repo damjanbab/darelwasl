@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `0ab4150f54dbaba6e5470390d03d0af9d3bd953487dbbe1392f22c57657d1fdf`
+- Catalog version: `366ef44db1d481b791c78adddfc1e39c33b52cc7ac0fa88b342bae2daabe4d06`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -46,9 +46,18 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (67)
+### Actions (69)
 - action/activation-step-delete
 - action/activation-step-upsert
+- action/agent-control-accept
+- action/agent-control-admins
+- action/agent-control-job-log
+- action/agent-control-preview-start
+- action/agent-control-run-create
+- action/agent-control-run-detail
+- action/agent-control-run-list
+- action/agent-control-run-revise
+- action/agent-control-trash
 - action/auth-login
 - action/betting-bet-log
 - action/betting-close
@@ -102,13 +111,6 @@ This file is auto-generated. Do not edit by hand.
 - action/telegram-handle-update
 - action/telegram-send-message
 - action/telegram-set-webhook
-- action/terminal-session-complete
-- action/terminal-session-create
-- action/terminal-session-input
-- action/terminal-session-output
-- action/terminal-session-restart-app
-- action/terminal-session-resume
-- action/terminal-sessions
 - action/user-create
 - action/user-delete
 - action/user-list
@@ -116,6 +118,7 @@ This file is auto-generated. Do not edit by hand.
 - action/workspace-promote
 
 ### Views (19)
+- view/agent-control
 - view/betting
 - view/clients
 - view/control-panel
@@ -133,18 +136,15 @@ This file is auto-generated. Do not edit by hand.
 - view/site-services
 - view/system-services
 - view/tasks
-- view/terminal
 - view/user-management
 
-### Integrations (8)
-- integration/action-gateway
+### Integrations (6)
 - integration/email
 - integration/github
 - integration/local-file-store
 - integration/local-session
 - integration/rezultati
 - integration/telegram-bot
-- integration/terminal-service
 
 ### Tooling (10)
 - tooling/action-contract
@@ -166,44 +166,21 @@ This file is auto-generated. Do not edit by hand.
 ### Automations (1)
 - automation/telegram-onboarding-task
 
-## Terminal
-
-### Session types
-
-- Bugfix/Hotfix
-- Feature Build
-- Integrator
-- Main Ops (Data)
-- Ops/Admin
-- Research/Spike
-
-### Command types
-
-- context.add
-- devbot.reset
-- file.delete
-- file.update
-- file.upload
-- task.archive
-- task.assign
-- task.create
-- task.delete
-- task.set-due
-- task.set-status
-- task.set-tags
-- task.update
-
 ## Routes
 
 - /+$
 - /:id
 - /:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}
+- /_preview/
+- /_preview/([^/]+)/([^/]+)(?:/.*)?$
+- /_preview/*
 - /actions
 - /activation-steps
+- /admins
+- /agent-control
 - /api
 - /archive
 - /assignee
-- /backend
 - /bets
 - /bets/:id/settle
 - /betting
@@ -213,9 +190,7 @@ This file is auto-generated. Do not edit by hand.
 - /catalog
 - /client
 - /clients
-- /commands/run
 - /comparison-rows
-- /complete
 - /contacts
 - /content
 - /counts
@@ -227,15 +202,11 @@ This file is auto-generated. Do not edit by hand.
 - /files
 - /github
 - /health
-- /input
-- /interrupt
 - /journey-phases
-- /keys
 - /land
 - /licenses
 - /link-token
 - /login
-- /output
 - /pages
 - /parcels
 - /parcels/:id
@@ -248,44 +219,28 @@ This file is auto-generated. Do not edit by hand.
 - /recognize
 - /registries
 - /restart
-- /restart-app
-- /resume
 - /rezultati/daily
 - /rezultati/match/:id
+- /runs
+- /runs/:id
+- /runs/:id/accept
+- /runs/:id/jobs/:job/log
+- /runs/:id/preview/start
+- /runs/:id/revise
+- /runs/:id/trash
 - /services
 - /services/:id/restart
 - /session
-- /sessions
-- /sessions/
-- /sessions/:id
-- /sessions/:id/cleanup
-- /sessions/:id/commands
-- /sessions/:id/commands/claim
-- /sessions/:id/commands/run
-- /sessions/:id/complete
-- /sessions/:id/input
-- /sessions/:id/interrupt
-- /sessions/:id/keys
-- /sessions/:id/output
-- /sessions/:id/ports/reallocate
-- /sessions/:id/restart-app
-- /sessions/:id/resume
-- /sessions/:id/verify
 - /site/restart
 - /stats
 - /status
 - /support-entries
 - /system
-- /system/actions/:id
-- /system/restart
 - /tags
 - /tasks
 - /telegram
-- /terminal
-- /terminal/sessions/:id/app
 - /users
 - /v2
-- /verify
 - /webhook
 
 ## Config Env Vars (from config.clj)
@@ -317,6 +272,7 @@ This file is auto-generated. Do not edit by hand.
 - REZULTATI_BASE_URL
 - REZULTATI_CACHE_TTL_MS
 - REZULTATI_TIMEOUT_MS
+- SITE_BASE_PATH
 - SITE_ENABLED
 - SITE_HOST
 - SITE_PORT
@@ -334,41 +290,30 @@ This file is auto-generated. Do not edit by hand.
 - TELEGRAM_WEBHOOK_BASE_URL
 - TELEGRAM_WEBHOOK_ENABLED
 - TELEGRAM_WEBHOOK_SECRET
-- TERMINAL_ADMIN_TOKEN
-- TERMINAL_API_URL
-- TERMINAL_AUTO_START_APP
-- TERMINAL_AUTO_START_SITE
-- TERMINAL_BACKEND_FILE
-- TERMINAL_CANARY_API_URL
-- TERMINAL_CODEX_CMD
-- TERMINAL_DATA_DIR
-- TERMINAL_GITHUB_TOKEN
-- TERMINAL_HOST
-- TERMINAL_LOG_DIR
-- TERMINAL_MAIN_APP_URL
-- TERMINAL_MAX_OUTPUT_BYTES
-- TERMINAL_MAX_RUNNING_SESSIONS
-- TERMINAL_POLL_MS
-- TERMINAL_PORT
-- TERMINAL_PORT_RANGE_END
-- TERMINAL_PORT_RANGE_START
-- TERMINAL_PUBLIC_BASE_URL
-- TERMINAL_REPO_URL
-- TERMINAL_TMUX_PREFIX
-- TERMINAL_WORK_DIR
 
 ## Scripts
 
+- agent
+- agentcpython-313.pyc
 - app-smoke.js
 - checks.sh
 - deploy.sh
 - generate-docs.sh
+- high_intake.cpython-313.pyc
+- high_intake.py
+- llm_smoke.cpython-313.pyc
+- llm_smoke.py
 - load_github_token.sh
+- operations.json
+- plan.schema.json
+- preview
+- previewcpython-313.pyc
+- promote-live.sh
 - run-service.sh
-- run-terminal.sh
 - site-screenshot.js
-- terminal-log-maintenance.sh
-- terminal-verify.sh
+- spec.schema.json
+- tester_actions.cpython-313.pyc
+- tester_actions.py
 - tg-spinup.sh
 - tg-watch-webhook.sh
 - theme-css-vars.sh
@@ -376,6 +321,7 @@ This file is auto-generated. Do not edit by hand.
 ## Namespaces
 
 - darelwasl.actions
+- darelwasl.agent-control.gc
 - darelwasl.app
 - darelwasl.auth
 - darelwasl.automations
@@ -395,6 +341,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.docs.generate
 - darelwasl.entity
 - darelwasl.events
+- darelwasl.features.agent-control
 - darelwasl.features.betting
 - darelwasl.features.clients
 - darelwasl.features.control-panel
@@ -405,7 +352,6 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.features.prs
 - darelwasl.features.services
 - darelwasl.features.tasks
-- darelwasl.features.terminal
 - darelwasl.features.users
 - darelwasl.files
 - darelwasl.fixtures
@@ -414,6 +360,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.http
 - darelwasl.http.common
 - darelwasl.http.routes.actions
+- darelwasl.http.routes.agent-control
 - darelwasl.http.routes.auth
 - darelwasl.http.routes.betting
 - darelwasl.http.routes.catalog
@@ -423,11 +370,11 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.http.routes.files
 - darelwasl.http.routes.github
 - darelwasl.http.routes.land
+- darelwasl.http.routes.preview
 - darelwasl.http.routes.registries
 - darelwasl.http.routes.system
 - darelwasl.http.routes.tasks
 - darelwasl.http.routes.telegram
-- darelwasl.http.routes.terminal
 - darelwasl.http.routes.users
 - darelwasl.http.session-store
 - darelwasl.importer
@@ -446,15 +393,6 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.state
 - darelwasl.tasks
 - darelwasl.telegram
-- darelwasl.terminal.app-client
-- darelwasl.terminal.backend
-- darelwasl.terminal.client
-- darelwasl.terminal.commands
-- darelwasl.terminal.http
-- darelwasl.terminal.main
-- darelwasl.terminal.session
-- darelwasl.terminal.store
-- darelwasl.terminal.tmux
 - darelwasl.ui.components
 - darelwasl.ui.entity
 - darelwasl.ui.shell

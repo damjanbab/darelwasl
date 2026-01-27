@@ -8,8 +8,7 @@
   [{:id :role/admin :label "Admin" :note "Full access"}
    {:id :role/content-editor :label "Content editor" :note "Manage website content"}
    {:id :role/file-library :label "File library" :note "Upload/delete files"}
-   {:id :role/betting-engineer :label "Betting" :note "Access betting tools"}
-   {:id :role/codex-terminal :label "Terminal" :note "Access Codex sessions"}])
+   {:id :role/betting-engineer :label "Betting" :note "Access betting tools"}])
 
 (defn- role-label
   [role]

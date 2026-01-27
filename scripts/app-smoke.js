@@ -6,9 +6,12 @@ const path = require("path");
 const { request } = require("playwright");
 
 const BASE_URL = process.env.APP_URL || "http://localhost:3000";
+const PREVIEW_TOKEN = process.env.APP_PREVIEW_TOKEN || "";
 const HEALTH_ATTEMPTS = Number.parseInt(process.env.APP_SMOKE_HEALTH_ATTEMPTS || "120", 10);
 const HEALTH_INTERVAL_MS = Number.parseInt(process.env.APP_SMOKE_HEALTH_INTERVAL_MS || "750", 10);
-const ARTIFACT_DIR = path.join(__dirname, "..", ".cpcache");
+const ARTIFACT_DIR = process.env.APP_SMOKE_ARTIFACT_DIR
+  ? path.resolve(process.env.APP_SMOKE_ARTIFACT_DIR)
+  : path.join(__dirname, "..", ".cpcache");
 const LOG_DIR = process.env.TERMINAL_LOG_DIR || ARTIFACT_DIR;
 const SCREENSHOT_PATH = path.join(ARTIFACT_DIR, "app-smoke.png");
 const A11Y_REPORT_PATH = path.join(ARTIFACT_DIR, "app-a11y.json");
@@ -18,7 +21,11 @@ const NETWORK_LOG_PATH = path.join(LOG_DIR, "app-network.log");
 async function waitForHealth(baseURL) {
   const api = await request.newContext({ baseURL });
   for (let i = 0; i < HEALTH_ATTEMPTS; i++) {
-    const resp = await api.get("/health").catch(() => null);
+    const url = new URL(baseURL);
+    const match = url.pathname.match(/^\/_preview\/[^/]+\/app/);
+    const prefix = match ? match[0] : "";
+    const tokenQ = PREVIEW_TOKEN ? `?t=${encodeURIComponent(PREVIEW_TOKEN)}` : "";
+    const resp = await api.get(`${prefix}/health${tokenQ}`).catch(() => null);
     if (resp && resp.ok()) {
       await api.dispose();
       return;
@@ -30,8 +37,12 @@ async function waitForHealth(baseURL) {
 }
 
 async function loginViaApi(context) {
+  const url = new URL(BASE_URL);
+  const prefixMatch = url.pathname.match(/^\/_preview\/[^/]+\/app/);
+  const prefix = prefixMatch ? prefixMatch[0] : "";
   const api = await request.newContext({ baseURL: BASE_URL });
-  const resp = await api.post("/api/login", {
+  const tokenQ = PREVIEW_TOKEN ? `?t=${encodeURIComponent(PREVIEW_TOKEN)}` : "";
+  const resp = await api.post(`${prefix}/api/login${tokenQ}`, {
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     data: { "user/username": "huda", "user/password": "Damjan1!" },
   });
@@ -43,17 +54,18 @@ async function loginViaApi(context) {
     throw new Error("API login succeeded but no Set-Cookie header found");
   }
   // Extract ring-session cookie value
-  const match = /ring-session=([^;]+)/.exec(setCookie);
-  if (!match) {
+  const cookieMatch = /ring-session=([^;]+)/.exec(setCookie);
+  if (!cookieMatch) {
     throw new Error("Unable to parse ring-session cookie");
   }
-  const cookieValue = match[1];
+  const cookieValue = cookieMatch[1];
+  const cookieDomain = new URL(BASE_URL).hostname;
   await context.addCookies([
     {
       name: "ring-session",
       value: cookieValue,
-      domain: "localhost",
-      path: "/",
+      domain: cookieDomain,
+      path: prefix || "/",
       httpOnly: true,
     },
   ]);
@@ -65,7 +77,7 @@ async function ensureLogin(page) {
   const sessionOk = await page
     .evaluate(async () => {
       try {
-        const resp = await fetch("/api/session", { credentials: "include" });
+        const resp = await fetch("api/session", { credentials: "include" });
         return resp.ok;
       } catch (_) {
         return false;

@@ -7,22 +7,27 @@
             [ring.util.response :as resp]))
 
 (defn handle-request
-  [{:keys [db]} request]
+  [{:keys [db config]} request]
   (let [start (System/nanoTime)
         conn (:conn db)
+        base-path (or (get-in config [:site :base-path]) "")
         raw-path (:uri request)
         query (codec/form-decode (or (:query-string request) ""))
         clean-path (if (and (not= raw-path "/") (str/ends-with? raw-path "/"))
                      (subs raw-path 0 (dec (count raw-path)))
                      raw-path)]
-    (if (or (str/starts-with? clean-path "/css/")
-            (= clean-path "/logo.jpg"))
+    (if (= clean-path "/health")
+      {:status 200
+       :headers {"Content-Type" "text/plain; charset=utf-8"}
+       :body "ok"}
+      (if (or (str/starts-with? clean-path "/css/")
+              (= clean-path "/logo.jpg"))
       (let [static-resp (resp/file-response (subs clean-path 1) {:root "public"})]
         (if static-resp
           (if (str/starts-with? clean-path "/css/")
             (resp/content-type static-resp "text/css")
             static-resp)
-          (templates/render-not-found clean-path "")))
+          (templates/render-not-found clean-path "" base-path)))
       (let [data (content/list-content-v2 conn)
         {:keys [error licenses comparison-rows journey-phases activation-steps personas support-entries hero-stats hero-flows faqs values team-members businesses contacts]} data
        nav-items [{:path "/" :label "Home"}
@@ -32,7 +37,7 @@
                    {:path "/about" :label "About"}
                    {:path "/contact" :label "Contact"}
                    {:path "/contact" :label "Schedule a meeting" :cta? true}]
-        nav (templates/nav-links nav-items clean-path)
+        nav (templates/nav-links nav-items clean-path base-path)
         response (cond
                    error
                    {:status 500
@@ -66,8 +71,8 @@
                                            (map #(get flow-index (templates/ref-id % :hero.flow/id)))
                                            (remove nil?)
                                            (sort-by #(or (:hero.flow/order %) Long/MAX_VALUE)))
-                       nav (templates/nav-links nav-items clean-path)
-                       footer-cta (templates/render-footer-cta business selected-contact)]
+                       nav (templates/nav-links nav-items clean-path base-path)
+                       footer-cta (templates/render-footer-cta business selected-contact base-path)]
                      (case clean-path
                        "/"
                        (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Home")
@@ -80,7 +85,8 @@
                                                           (templates/render-how-it-works linked-flows)
                                                           (templates/render-path-selector-teaser visible-licenses)
                                                           (templates/render-faqs (take 3 visible-faqs))]))
-                                      footer-cta)
+                                      footer-cta
+                                      base-path)
 
                        "/services"
                        (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Services")
@@ -93,10 +99,12 @@
                                                                                  "entrepreneur" :license.type/entrepreneur
                                                                                  "gcc" :license.type/gcc
                                                                                  "general" :license.type/general
-                                                                                 nil))
+                                                                                 nil)
+                                                                               base-path)
                                                           (templates/render-outcomes sorted-values)
                                                           (templates/render-faqs visible-faqs)]))
-                                      footer-cta)
+                                      footer-cta
+                                      base-path)
 
                        "/comparison"
                        (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Comparison")
@@ -105,7 +113,8 @@
                                                          [(templates/render-hero-light "Compare license paths" "Side-by-side details across processing, cost, ownership, and required documents.")
                                                           (templates/render-funnel :compare)
                                                           (templates/render-comparison sorted-comparison)]))
-                                      footer-cta)
+                                      footer-cta
+                                      base-path)
 
                        "/process"
                        (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Process")
@@ -113,7 +122,8 @@
                                       (apply str (remove nil?
                                                          [(templates/render-hero-light "Process and activation" "Understand the phases, inputs, and outputs for going live in KSA.")
                                                           (templates/render-journey sorted-phases sorted-activation)]))
-                                      footer-cta)
+                                      footer-cta
+                                      base-path)
 
                        "/about"
                        (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - About")
@@ -122,17 +132,19 @@
                                                          [(templates/render-hero-light "About Dar Alwasl" "Principles and operating model for calm, evidence-led execution.")
                                                           (templates/render-about-overview business)
                                                           (templates/render-values-team sorted-values sorted-team)]))
-                                      footer-cta)
+                                      footer-cta
+                                      base-path)
 
                       "/contact"
                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Contact")
                                       nav
                                       (apply str [(templates/render-hero-light "Talk to the team" "Schedule a meeting or email us with your activities and timing.")
                                                   (templates/render-funnel :schedule)
-                                                  (templates/render-contact business selected-contact)])
-                                      footer-cta)
+                                                  (templates/render-contact business selected-contact base-path)])
+                                      footer-cta
+                                      base-path)
 
-                       (templates/render-not-found clean-path nav))))
+                       (templates/render-not-found clean-path nav base-path))))
         dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
     (log/infof "site request path=%s status=%s dur=%.1fms content={licenses %s, journey %s, personas %s, faqs %s}"
                clean-path
@@ -142,7 +154,7 @@
                (count journey-phases)
                (count personas)
                (count faqs))
-    response))))
+    response)))))
 
 (defn app
   "Ring handler for the public site process."

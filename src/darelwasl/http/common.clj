@@ -1,5 +1,6 @@
 (ns darelwasl.http.common
   (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [darelwasl.db :as db]
             [darelwasl.http.session-store :as session-store]
@@ -7,11 +8,13 @@
 
 (def session-opts
   (let [store-path (or (System/getenv "SESSION_STORE_PATH")
-                       "data/sessions.edn")]
+                       "data/sessions.edn")
+        cookie-path (or (some-> (System/getenv "SESSION_COOKIE_PATH") str/trim not-empty)
+                        "/")]
     {:store (session-store/file-session-store store-path)
      :cookie-attrs {:http-only true
                     :same-site :lax
-                    :path "/"}}))
+                    :path cookie-path}}))
 
 (defn error-response
   [status message & [details]]

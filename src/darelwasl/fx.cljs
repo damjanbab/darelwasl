@@ -1,6 +1,27 @@
 (ns darelwasl.fx
   (:require [re-frame.core :as rf]))
 
+(defn- preview-app-base-path
+  []
+  (try
+    (let [path (.-pathname js/location)
+          m (re-matches #"^(/_preview/[^/]+/app)(?:/.*)?$" path)]
+      (when (and m (string? (second m)))
+        (second m)))
+    (catch :default _ nil)))
+
+(defn- maybe-prefix-preview
+  [url]
+  (let [u (or url "")]
+    (cond
+      (or (not (string? u))
+          (= "" u)
+          (re-find #"^[a-zA-Z][a-zA-Z0-9+.-]*://" u)) u
+      (not (re-find #"^/api(?:/|$)" u)) u
+      :else (if-let [base (preview-app-base-path)]
+              (str base u)
+              u))))
+
 (defn- ensure-headers [base has-body? extra]
   (let [default {"Accept" "application/json"}
         content {"Content-Type" "application/json"
@@ -32,7 +53,8 @@
 (rf/reg-fx
  ::http
  (fn [{:keys [url method body headers credentials on-success on-error]}]
-   (let [has-body? (some? body)
+   (let [url (maybe-prefix-preview url)
+         has-body? (some? body)
          opts (clj->js (cond-> {:method (or method "GET")
                                 :headers (ensure-headers headers has-body? nil)
                                 :credentials (or credentials "same-origin")}
@@ -47,7 +69,8 @@
 (rf/reg-fx
  ::http-form
  (fn [{:keys [url method form-data headers credentials on-success on-error]}]
-   (let [opts (clj->js (cond-> {:method (or method "POST")
+   (let [url (maybe-prefix-preview url)
+         opts (clj->js (cond-> {:method (or method "POST")
                                 :credentials (or credentials "same-origin")
                                 :headers (ensure-headers headers false nil)}
                          form-data (assoc :body form-data)))]

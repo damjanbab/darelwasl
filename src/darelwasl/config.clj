@@ -7,6 +7,7 @@
           :host "0.0.0.0"}
    :site {:port 3200
           :host "0.0.0.0"
+          :base-path ""
           :enabled? true}
    :telegram {:webhook-enabled? false
               :commands-enabled? true
@@ -29,27 +30,6 @@
              :event-horizon-hours 72
              :scheduler-enabled? true
              :scheduler-poll-ms 60000}
-   :terminal {:host "127.0.0.1"
-              :port 4010
-              :base-url "http://127.0.0.1:4010"
-              :canary-base-url "http://127.0.0.1:4011"
-              :public-base-url nil
-              :main-app-url "http://127.0.0.1:3000"
-              :admin-token nil
-              :data-dir "data/terminal"
-              :work-dir "data/terminal/sessions"
-              :logs-dir "data/terminal/logs"
-              :backend-file "data/terminal/backend.edn"
-              :repo-url "https://github.com/damjanbab/darelwasl.git"
-              :tmux-prefix "codex"
-              :codex-command "codex"
-              :port-range-start 4100
-              :port-range-end 4199
-              :max-running-sessions nil
-              :auto-start-app? true
-              :auto-start-site? false
-              :poll-ms 1000
-              :max-output-bytes 20000}
    :github {:api-url "https://api.github.com"
             :timeout-ms 3000
             :repo-owner nil
@@ -132,6 +112,9 @@
         (assoc-in [:site :host]
                   (env-str (get env "SITE_HOST")
                            (get-in default-config [:site :host])))
+        (assoc-in [:site :base-path]
+                  (env-str (get env "SITE_BASE_PATH")
+                           (get-in default-config [:site :base-path])))
         (assoc-in [:site :enabled?]
                   (env-bool (get env "SITE_ENABLED")
                             (get-in default-config [:site :enabled?])))
@@ -184,62 +167,12 @@
                                               (get-in default-config [:betting :scheduler-enabled?]))
                 :scheduler-poll-ms (parse-int (get env "BETTING_SCHEDULER_POLL_MS")
                                               (get-in default-config [:betting :scheduler-poll-ms]))})
-        (assoc :terminal
-               (let [host (env-str (get env "TERMINAL_HOST")
-                                   (get-in default-config [:terminal :host]))
-                     port (parse-int (get env "TERMINAL_PORT")
-                                     (get-in default-config [:terminal :port]))
-                     base-url (env-str (get env "TERMINAL_API_URL")
-                                       (str "http://" host ":" port))
-                     canary-base-url (env-str (get env "TERMINAL_CANARY_API_URL")
-                                              (get-in default-config [:terminal :canary-base-url]))
-                     public-base-url (env-str (get env "TERMINAL_PUBLIC_BASE_URL")
-                                              (get-in default-config [:terminal :public-base-url]))
-                     main-app-url (env-str (get env "TERMINAL_MAIN_APP_URL")
-                                           (get-in default-config [:terminal :main-app-url]))
-                     max-running-sessions (parse-int (get env "TERMINAL_MAX_RUNNING_SESSIONS")
-                                                     (get-in default-config [:terminal :max-running-sessions]))]
-                 {:host host
-                  :port port
-                  :base-url base-url
-                  :canary-base-url canary-base-url
-                  :public-base-url public-base-url
-                  :main-app-url main-app-url
-                  :admin-token (env-str (get env "TERMINAL_ADMIN_TOKEN") nil)
-                  :data-dir (env-str (get env "TERMINAL_DATA_DIR")
-                                     (get-in default-config [:terminal :data-dir]))
-                  :work-dir (env-str (get env "TERMINAL_WORK_DIR")
-                                     (get-in default-config [:terminal :work-dir]))
-                  :logs-dir (env-str (get env "TERMINAL_LOG_DIR")
-                                     (get-in default-config [:terminal :logs-dir]))
-                  :backend-file (env-str (get env "TERMINAL_BACKEND_FILE")
-                                         (get-in default-config [:terminal :backend-file]))
-                  :repo-url (env-str (get env "TERMINAL_REPO_URL")
-                                     (get-in default-config [:terminal :repo-url]))
-                  :tmux-prefix (env-str (get env "TERMINAL_TMUX_PREFIX")
-                                        (get-in default-config [:terminal :tmux-prefix]))
-                  :codex-command (env-str (get env "TERMINAL_CODEX_CMD")
-                                          (get-in default-config [:terminal :codex-command]))
-                  :port-range-start (parse-int (get env "TERMINAL_PORT_RANGE_START")
-                                               (get-in default-config [:terminal :port-range-start]))
-                  :port-range-end (parse-int (get env "TERMINAL_PORT_RANGE_END")
-                                             (get-in default-config [:terminal :port-range-end]))
-                  :max-running-sessions max-running-sessions
-                  :auto-start-app? (env-bool (get env "TERMINAL_AUTO_START_APP")
-                                             (get-in default-config [:terminal :auto-start-app?]))
-                  :auto-start-site? (env-bool (get env "TERMINAL_AUTO_START_SITE")
-                                              (get-in default-config [:terminal :auto-start-site?]))
-                  :poll-ms (parse-int (get env "TERMINAL_POLL_MS")
-                                      (get-in default-config [:terminal :poll-ms]))
-                  :max-output-bytes (parse-int (get env "TERMINAL_MAX_OUTPUT_BYTES")
-                                               (get-in default-config [:terminal :max-output-bytes]))}))
         (assoc :github
                (let [default-token (get-in default-config [:github :token])
                      token-env (normalize-token (get env "GITHUB_TOKEN"))
                      token-file (env-str (get env "GITHUB_TOKEN_FILE") ".secrets/github_token")
                      token-file-value (normalize-token (read-secret-file token-file))
-                     terminal-token (normalize-token (get env "TERMINAL_GITHUB_TOKEN"))
-                     token (or token-env token-file-value terminal-token default-token)]
+                     token (or token-env token-file-value default-token)]
                  {:api-url (env-str (get env "GITHUB_API_URL")
                                     (get-in default-config [:github :api-url]))
                   :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")

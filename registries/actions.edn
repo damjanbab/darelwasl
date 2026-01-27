@@ -1065,23 +1065,6 @@
             :views [:cap/view/betting]}
   :tooling []}
 
- {:id :cap/action/terminal-sessions
-  :title "Terminal Sessions"
-  :version "v1"
-  :inputs {}
-  :outputs {:sessions :list}
-  :side-effects ["Read terminal session store"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/sessions]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
  {:id :cap/action/file-upload
   :title "Upload File"
   :version "v1"
@@ -1222,117 +1205,6 @@
             :views [:cap/view/pr-overview]}
   :tooling []}
 
- {:id :cap/action/terminal-session-create
-  :title "Terminal Session Create"
-  :version "v1"
-  :inputs {:terminal.session/name :string?}
-  :outputs {:terminal.session/id :string}
-  :side-effects ["Clone repo" "Allocate ports" "Start tmux + codex session"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-create]
-          :fields [:terminal.session/name]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
- {:id :cap/action/terminal-session-input
-  :title "Terminal Session Input"
-  :version "v1"
-  :inputs {:terminal.session/id :string
-           :terminal.input/text :string}
-  :outputs {:status :string}
-  :side-effects ["Send input to tmux session"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-input]
-          :fields [:terminal.session/id]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
- {:id :cap/action/terminal-session-output
-  :title "Terminal Session Output"
-  :version "v1"
-  :inputs {:terminal.session/id :string
-           :terminal.output/cursor :long?}
-  :outputs {:terminal.output/chunk :string
-            :terminal.output/cursor :long}
-  :side-effects ["Read terminal session output buffer"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-output]
-          :fields [:terminal.session/id]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
- :related {:schema []
-            :views [:cap/view/terminal]}
- :tooling []}
-
- {:id :cap/action/terminal-session-resume
-  :title "Terminal Session Resume"
-  :version "v1"
-  :inputs {:terminal.session/id :string}
-  :outputs {:status :string}
-  :side-effects ["Start tmux session" "Reattach output pipe" "Restart app/site windows if configured"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-resume]
-          :fields [:terminal.session/id]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
- {:id :cap/action/terminal-session-restart-app
-  :title "Terminal Session Restart App"
-  :version "v1"
-  :inputs {:terminal.session/id :string}
-  :outputs {:status :string}
-  :side-effects ["Restart terminal app window"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-restart-app]
-          :fields [:terminal.session/id]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
- {:id :cap/action/terminal-session-complete
-  :title "Terminal Session Complete"
-  :version "v1"
-  :inputs {:terminal.session/id :string}
-  :outputs {:status :string}
-  :side-effects ["Stop tmux session" "Delete repo/db/chat transcript" "Retain logs"]
-  :adapter {:integration :cap/integration/terminal-service}
-  :audit {:records [:terminal/session-complete]
-          :fields [:terminal.session/id]}
-  :idempotency {:strategy :none}
-  :contracts {:fixtures []}
- :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []
-            :views [:cap/view/terminal]}
-  :tooling []}
-
  {:id :cap/action/system-services
   :title "List System Services"
   :version "v1"
@@ -1366,7 +1238,183 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
+ :related {:schema []
+           :views [:cap/view/system-services]}
+ :tooling []}
+
+ {:id :cap/action/agent-control-admins
+  :title "Agent Control: Admins + Users"
+  :version "v1"
+  :inputs {}
+  :outputs {:admins :vector
+            :users :vector}
+  :side-effects []
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/read]
+          :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user]
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-run-list
+  :title "Agent Control: List Runs"
+  :version "v1"
+  :inputs {}
+  :outputs {:runs :vector}
+  :side-effects []
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/read]
+          :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
   :related {:schema []
-            :views [:cap/view/system-services]}
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-run-create
+  :title "Agent Control: Create Run"
+  :version "v1"
+  :inputs {:id :string?
+           :mode :string?
+           :message :string}
+  :outputs {:id :string
+            :status :string}
+  :side-effects ["Create run record on disk"]
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/change]
+          :fields [:id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-run-detail
+  :title "Agent Control: Run Detail"
+  :version "v1"
+  :inputs {:id :string}
+  :outputs {:run :map}
+  :side-effects []
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/read]
+          :fields [:id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-run-revise
+  :title "Agent Control: Revise Run"
+  :version "v1"
+  :inputs {:id :string
+           :message :string}
+  :outputs {:run :map}
+  :side-effects ["Append revision to run record"]
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/change]
+          :fields [:id]}
+  :idempotency {:strategy :append-only}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-preview-start
+  :title "Agent Control: Start/Update Preview"
+  :version "v1"
+  :inputs {:id :string
+           :mode :string?}
+  :outputs {:job :string
+            :run_id :string}
+  :side-effects ["Starts preview process and runs verification"]
+  :adapter {:integration :local/scripts}
+  :audit {:records [:agent-control/execute]
+          :fields [:id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-accept
+  :title "Agent Control: Accept + Promote"
+  :version "v1"
+  :inputs {:id :string}
+  :outputs {:job :string
+            :run_id :string}
+  :side-effects ["Promotes preview to live via scripts/promote-live.sh"]
+  :adapter {:integration :local/scripts}
+  :audit {:records [:agent-control/execute]
+          :fields [:id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-trash
+  :title "Agent Control: Trash Run"
+  :version "v1"
+  :inputs {:id :string}
+  :outputs {:job :string
+            :run_id :string}
+  :side-effects ["Stops preview and marks run as trashed"]
+  :adapter {:integration :local/scripts}
+  :audit {:records [:agent-control/execute]
+          :fields [:id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:id]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
+  :tooling []}
+
+ {:id :cap/action/agent-control-job-log
+  :title "Agent Control: Job Log"
+  :version "v1"
+  :inputs {:id :string
+           :job :string}
+  :outputs {:log :string}
+  :side-effects []
+  :adapter {:integration :local/app}
+  :audit {:records [:agent-control/read]
+          :fields [:id :job]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema []
+            :views [:cap/view/agent-control]}
   :tooling []}
 ]

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://darelwasl.local/schemas/spec.schema.json",
+  "title": "Darelwasl Agent Spec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "created_at", "request_type", "goal", "policy_requirement", "scope", "proofs", "constraints"],
+  "properties": {
+    "format": { "const": "darelwasl/spec" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "request_type": {
+      "type": "string",
+      "enum": ["exploration", "change"]
+    },
+    "goal": { "type": "string", "minLength": 1 },
+    "primary_operation_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "High-level operation category (e.g. report, service-control, cleanup)."
+    },
+    "policy_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "notes"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["policy-first"],
+          "description": "When mode=policy-first, execution steps must cite policies (existing or created by earlier steps)."
+        },
+        "notes": { "type": "string", "default": "" }
+      }
+    },
+    "context_questions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": []
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_paths", "notes"],
+      "properties": {
+        "allowed_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "notes": { "type": "string", "default": "" }
+      }
+    },
+    "proofs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "notes"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "notes": { "type": "string", "default": "" }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["non_goals", "risk_notes"],
+      "properties": {
+        "non_goals": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "risk_notes": { "type": "string", "default": "" }
+      }
+    }
+  }
+}

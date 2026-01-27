@@ -14,21 +14,9 @@
    :theme "registries/theme.edn"
    :automations "registries/automations.edn"})
 
-(def ^:private terminal-session-types
-  [{:id :feature :label "Feature Build"}
-   {:id :bugfix :label "Bugfix/Hotfix"}
-   {:id :research :label "Research/Spike"}
-   {:id :integrator :label "Integrator"}
-   {:id :ops :label "Ops/Admin"}
-   {:id :main-ops :label "Main Ops (Data)"}])
-
-(def ^:private command-prefixes
-  ["task." "file." "context." "devbot." "session." "library."])
-
 (def ^:private route-root-paths
   ["src/darelwasl/http/routes"
-   "src/darelwasl/http.clj"
-   "src/darelwasl/terminal/http.clj"])
+   "src/darelwasl/http.clj"])
 
 (defn- read-edn
   [path]
@@ -112,33 +100,6 @@
             :source "src/darelwasl/config.clj"})
          vars)))
 
-(defn- command-types
-  []
-  (let [text (slurp "src/darelwasl/terminal/commands.clj")
-        raw (->> (re-seq #"\"([a-z][a-z0-9\.\-]+)\"" text)
-                 (map second))
-        commands (->> raw
-                      (filter (fn [value]
-                                (some #(str/starts-with? value %) command-prefixes)))
-                      distinct
-                      sort)]
-    (map (fn [cmd]
-           {:id (str "terminal-command/" cmd)
-            :kind :terminal-command
-            :name cmd
-            :source "src/darelwasl/terminal/commands.clj"})
-         commands)))
-
-(defn- session-type-entries
-  []
-  (map (fn [{:keys [id label]}]
-         {:id (str "terminal-session/" (name id))
-          :kind :terminal-session-type
-          :name label
-          :value id
-          :source "src/darelwasl/features/terminal.cljs"})
-       terminal-session-types))
-
 (defn- script-entries
   []
   (let [root (io/file "scripts")]
@@ -191,8 +152,6 @@
                       (registry-catalog)
                       (list-namespaces)
                       (config-env-vars)
-                      (command-types)
-                      (session-type-entries)
                       (script-entries)
                       (route-paths))
                      (remove nil?)

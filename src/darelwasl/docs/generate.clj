@@ -55,8 +55,6 @@
                               (registry-summary entries :tooling "Tooling")
                               (registry-summary entries :theme "Theme")
                               (registry-summary entries :automation "Automations"))
-        session-types (list-by-kind entries :terminal-session-type)
-        command-types (list-by-kind entries :terminal-command)
         routes (list-routes entries)
         envs (list-envs entries)
         scripts (list-by-kind entries :script)
@@ -67,12 +65,7 @@
          "- Catalog file: `" catalog-path "`\n\n"
          "## Registry Summary\n\n"
          registry-section
-         "## Terminal\n\n"
-         "### Session types\n\n"
-         (bullet-list session-types)
-         "\n### Command types\n\n"
-         (bullet-list command-types)
-         "\n## Routes\n\n"
+         "## Routes\n\n"
          (bullet-list routes)
          "\n## Config Env Vars (from config.clj)\n\n"
          (bullet-list envs)
@@ -90,4 +83,3 @@
   (let [catalog (catalog-gen/write-catalog! catalog-path)]
     (write-system-generated! system-generated-path catalog)
     (println "Generated" system-generated-path "and" catalog-path)))
-

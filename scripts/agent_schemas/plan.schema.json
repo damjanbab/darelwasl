@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://darelwasl.local/schemas/plan.schema.json",
+  "title": "Darelwasl Agent Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "created_at", "spec_path", "steps"],
+  "properties": {
+    "format": { "const": "darelwasl/plan" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "spec_path": { "type": "string", "minLength": 1 },
+    "notes": { "type": "string", "default": "" },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "step": {
+      "oneOf": [
+        { "$ref": "#/$defs/policy_create_step" },
+        { "$ref": "#/$defs/execute_step" }
+      ]
+    },
+    "base_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "title", "depends_on", "operation_type", "allowed_paths", "proof_commands"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,64}$" },
+        "role": { "type": "string", "enum": ["high", "low", "medium", "tester"] },
+        "kind": { "type": "string", "enum": ["policy_create", "execute"] },
+        "title": { "type": "string", "minLength": 1 },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,64}$" },
+          "default": []
+        },
+        "parallel_group": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional label: steps with same group and satisfied deps may run concurrently."
+        },
+        "operation_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Operation category (e.g. report, service-control, cleanup). Used for policy-first gating."
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "proof_commands": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "creates_policy": {
+          "type": "string",
+          "pattern": "^policies/.+\\.md$",
+          "description": "Policy file path created by kind=policy_create."
+        },
+        "policies": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^policies/.+\\.md$" },
+          "default": [],
+          "description": "Policy file path(s) cited by kind=execute."
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean", "null"] },
+          "default": {}
+        }
+      }
+    },
+    "policy_create_step": {
+      "allOf": [
+        { "$ref": "#/$defs/base_step" },
+        {
+          "type": "object",
+          "required": ["kind", "creates_policy"],
+          "properties": {
+            "kind": { "const": "policy_create" },
+            "creates_policy": {
+              "type": "string",
+              "pattern": "^policies/.+\\.md$",
+              "description": "Policy file path to be created by this step."
+            },
+            "policies": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "default": []
+            }
+          }
+        }
+      ]
+    },
+    "execute_step": {
+      "allOf": [
+        { "$ref": "#/$defs/base_step" },
+        {
+          "type": "object",
+          "required": ["kind", "policies"],
+          "properties": {
+            "kind": { "const": "execute" },
+            "policies": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^policies/.+\\.md$" },
+              "minItems": 1,
+              "description": "Policy file path(s) justifying this step. Must exist or be created by a prior policy_create step."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

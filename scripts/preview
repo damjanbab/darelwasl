@@ -1,0 +1,771 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shlex
+import socket
+import subprocess
+import sys
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from secrets import token_urlsafe
+
+
+@dataclass(frozen=True)
+class PreviewPorts:
+    app: int
+    site: int
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def run(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, cwd=str(cwd), env=env, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+def require(cmd: str) -> None:
+    if shutil_which(cmd) is None:
+        raise SystemExit(f"Missing required command: {cmd}")
+
+
+def shutil_which(cmd: str) -> str | None:
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(p) / cmd
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="scripts/preview")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_auth = sub.add_parser("auth", help="Manage preview auth")
+    auth_sub = p_auth.add_subparsers(dest="auth_cmd", required=True)
+    p_auth_init = auth_sub.add_parser("init", help="Create global basic auth for previews (idempotent)")
+    p_auth_init.add_argument("--username", default="preview", help="Basic auth username")
+    p_auth_init.set_defaults(_fn="auth_init")
+    p_auth_show = auth_sub.add_parser("show", help="Show current preview basic auth username/password")
+    p_auth_show.set_defaults(_fn="auth_show")
+
+    p_start = sub.add_parser("start", help="Start a sandboxed preview run and publish URLs via Caddy")
+    p_start.add_argument("id", help="Run id (kebab-case, e.g. pr-123)")
+    p_start.add_argument("--ref", default="HEAD", help="Git ref to base preview on (default: HEAD)")
+    p_start.add_argument("--mode", choices=["site", "app", "both", "telegram"], default="both", help="Which module to preview")
+    p_start.add_argument("--domain", default="preview.haloeddepth.com", help="(deprecated) Base preview domain")
+    p_start.add_argument("--public-host", default="https://haloeddepth.com", help="Public host where previews are reachable")
+    p_start.add_argument("--skip-verify", action="store_true", help="Skip automatic verification step(s)")
+    p_start.add_argument("--no-reload-caddy", action="store_true", help="Write Caddy snippet but do not reload Caddy")
+    p_start.add_argument(
+        "--include-dirty",
+        action="store_true",
+        help="Apply current working tree diffs onto the preview worktree (useful for previewing uncommitted changes)",
+    )
+    p_start.add_argument("--review-window-hours", type=int, default=6, help="How long the user has to respond (default: 6)")
+
+    p_stop = sub.add_parser("stop", help="Stop a preview run and unpublish URLs")
+    p_stop.add_argument("id", help="Run id")
+    p_stop.add_argument("--domain", default="preview.haloeddepth.com", help="Base preview domain")
+    p_stop.add_argument("--no-reload-caddy", action="store_true", help="Remove Caddy snippet but do not reload Caddy")
+
+    p_status = sub.add_parser("status", help="Show preview run info")
+    p_status.add_argument("id", help="Run id")
+
+    p_verify = sub.add_parser("verify", help="Run verification for a preview run")
+    p_verify.add_argument("id", help="Run id")
+    p_verify.add_argument("--mode", choices=["site", "app", "both", "telegram"], default="both")
+
+    p_respond = sub.add_parser("respond", help="User response for a preview run (accept or request changes)")
+    p_respond.add_argument("id", help="Run id")
+    p_respond.add_argument("decision", choices=["accept", "revise"], help="accept promotes; revise records notes and extends window")
+    p_respond.add_argument("--message", default="", help="Optional message / further instructions")
+
+    p_promote = sub.add_parser("promote", help="Promote an accepted preview to live")
+    p_promote.add_argument("id", help="Run id")
+    p_promote.add_argument("--no-restart", action="store_true", help="Do not restart systemd service (build/merge only)")
+
+    p_gc = sub.add_parser("gc", help="Garbage-collect expired previews (stops and unpublishes)")
+    p_gc.add_argument("--no-reload-caddy", action="store_true")
+    p_gc.add_argument("--now", help="Override current time (ISO8601) for testing")
+
+    return p.parse_args(argv)
+
+
+def validate_id(run_id: str) -> None:
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,48}", run_id):
+        raise SystemExit("Invalid id. Use kebab-case [a-z0-9-], length 3..49.")
+
+
+def previews_dir(root: Path) -> Path:
+    return root / "target" / "previews"
+
+
+def preview_dir(root: Path, run_id: str) -> Path:
+    return previews_dir(root) / run_id
+
+
+def manifest_path(root: Path, run_id: str) -> Path:
+    return preview_dir(root, run_id) / "preview.json"
+
+
+def caddy_snippet_dir(root: Path) -> Path:
+    return root / "target" / "caddy" / "previews"
+
+
+def caddy_snippet_path(root: Path, run_id: str) -> Path:
+    return caddy_snippet_dir(root) / f"{run_id}.caddy"
+
+
+def auth_secret_path(root: Path) -> Path:
+    return previews_dir(root) / "_auth.json"
+
+def telegram_active_path(root: Path) -> Path:
+    return previews_dir(root) / "_telegram_active.json"
+
+
+def auth_snippet_path(root: Path) -> Path:
+    # Must NOT match the global import glob (/*.caddy), otherwise Caddy will try to parse it as a site block.
+    return caddy_snippet_dir(root) / "_auth.inc"
+
+
+@contextmanager
+def file_lock(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = path.open("a+")
+    try:
+        import fcntl
+
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            import fcntl
+
+            fcntl.flock(f, fcntl.LOCK_UN)
+        finally:
+            f.close()
+
+
+def is_port_free(port: int, host: str = "127.0.0.1") -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.15)
+        try:
+            s.connect((host, port))
+            return False
+        except Exception:
+            return True
+
+
+def allocate_ports(root: Path) -> PreviewPorts:
+    lock = previews_dir(root) / ".ports.lock"
+    with file_lock(lock):
+        used = set()
+        for p in previews_dir(root).glob("*/preview.json"):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                ports = data.get("ports", {})
+                used.add(int(ports.get("app", 0)))
+                used.add(int(ports.get("site", 0)))
+            except Exception:
+                continue
+        def pick(start: int, end: int) -> int:
+            for port in range(start, end):
+                if port in used:
+                    continue
+                if is_port_free(port):
+                    used.add(port)
+                    return port
+            raise SystemExit("Unable to allocate a free port.")
+
+        return PreviewPorts(app=pick(40100, 40900), site=pick(41100, 41900))
+
+
+def ensure_caddy_import(root: Path) -> None:
+    # Ensure /etc/caddy/Caddyfile imports our preview snippets.
+    caddyfile = Path("/etc/caddy/Caddyfile")
+    marker = "import /opt/darelwasl/target/caddy/previews/*.caddy"
+    text = caddyfile.read_text(encoding="utf-8")
+    if marker in text:
+        return
+    backup = Path("/etc/caddy") / f"Caddyfile.bak.preview.{int(time.time())}"
+    subprocess.run(["sudo", "cp", str(caddyfile), str(backup)], check=True)
+    new_text = text.rstrip() + "\n\n" + marker + "\n"
+    tmp = caddyfile.with_suffix(".tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    subprocess.run(["sudo", "cp", str(tmp), str(caddyfile)], check=True)
+    tmp.unlink(missing_ok=True)
+
+
+def ensure_preview_auth(root: Path, *, username: str = "preview") -> dict[str, str]:
+    """
+    Creates a global basicauth snippet for all preview hosts, and stores the plaintext password
+    in target/previews/_auth.json (0600). Returns {"username":..., "password":...}.
+    """
+    secret = auth_secret_path(root)
+    snippet = auth_snippet_path(root)
+    caddy_snippet_dir(root).mkdir(parents=True, exist_ok=True)
+    previews_dir(root).mkdir(parents=True, exist_ok=True)
+
+    if secret.exists() and snippet.exists():
+        data = json.loads(secret.read_text(encoding="utf-8"))
+        return {"username": data.get("username", username), "password": data.get("password", "")}
+
+    password = token_urlsafe(18)
+    proc = subprocess.run(
+        ["caddy", "hash-password", "--plaintext", password],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+    hashed = proc.stdout.strip().splitlines()[-1].strip()
+
+    snippet.write_text(f"basicauth * {{\n  {username} {hashed}\n}}\n", encoding="utf-8")
+    os.chmod(snippet, 0o644)
+    secret.write_text(json.dumps({"username": username, "password": password}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.chmod(secret, 0o600)
+    return {"username": username, "password": password}
+
+
+def reload_caddy() -> None:
+    subprocess.run(["sudo", "systemctl", "reload", "caddy"], check=True)
+
+
+def worktree_path(root: Path, run_id: str) -> Path:
+    return preview_dir(root, run_id) / "worktree"
+
+
+def ensure_worktree(root: Path, run_id: str, ref: str) -> None:
+    wt = worktree_path(root, run_id)
+    wt.parent.mkdir(parents=True, exist_ok=True)
+    if (wt / ".git").exists() or wt.exists() and any(wt.iterdir()):
+        return
+    branch = f"preview/{run_id}"
+    run(["git", "worktree", "add", "-B", branch, str(wt), ref], cwd=root)
+
+
+def apply_dirty_diff(root: Path, wt: Path) -> None:
+    staged = run(["git", "diff", "--cached"], cwd=root, check=False).stdout
+    unstaged = run(["git", "diff"], cwd=root, check=False).stdout
+    patch = (staged or "") + (unstaged or "")
+    if not patch.strip():
+        return
+    # Apply in the worktree. If it fails, surface the output.
+    proc = subprocess.run(["git", "apply", "--whitespace=nowarn"], cwd=str(wt), input=patch, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if proc.returncode != 0:
+        raise SystemExit(f"Failed to apply dirty diff to worktree:\n{proc.stdout}")
+
+
+def ensure_shared_node_modules(root: Path, wt: Path) -> None:
+    shared = root / "node_modules"
+    if not shared.exists():
+        return
+    nm = wt / "node_modules"
+    if nm.is_symlink() or nm.exists():
+        return
+    nm.symlink_to(shared)
+
+
+def write_manifest(root: Path, run_id: str, data: dict) -> None:
+    path = manifest_path(root, run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def read_manifest(root: Path, run_id: str) -> dict:
+    return json.loads(manifest_path(root, run_id).read_text(encoding="utf-8"))
+
+
+def start_service(root: Path, run_id: str, ports: PreviewPorts) -> int:
+    wt = worktree_path(root, run_id)
+    logs = preview_dir(root, run_id) / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    log_path = logs / "service.log"
+    pid_path = preview_dir(root, run_id) / "service.pid"
+
+    raise RuntimeError("start_service is deprecated; use start_service_with_env")
+
+def start_service_with_env(root: Path, run_id: str, *, env: dict[str, str]) -> int:
+    wt = worktree_path(root, run_id)
+    logs = preview_dir(root, run_id) / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    log_path = logs / "service.log"
+    pid_path = preview_dir(root, run_id) / "service.pid"
+
+    cmd = ["bash", "-lc", f"nohup clojure -M:dev > {shlex.quote(str(log_path))} 2>&1 & echo $!"]
+    proc = subprocess.run(cmd, cwd=str(wt), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=True)
+    pid = int(proc.stdout.strip().splitlines()[-1])
+    pid_path.write_text(str(pid) + "\n", encoding="utf-8")
+    return pid
+
+
+def wait_http_ok(url: str, *, attempts: int = 60, sleep_s: float = 0.5) -> None:
+    for _ in range(attempts):
+        try:
+            out = subprocess.run(["curl", "-sf", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if out.returncode == 0:
+                return
+        except Exception:
+            pass
+        time.sleep(sleep_s)
+    raise SystemExit(f"Service did not become ready: {url}")
+
+
+def write_caddy_snippet(root: Path, run_id: str, ports: PreviewPorts, domain: str, mode: str) -> dict[str, str]:
+    caddy_snippet_dir(root).mkdir(parents=True, exist_ok=True)
+    snippet = caddy_snippet_path(root, run_id)
+    app_host = f"app-{run_id}.{domain}"
+    site_host = f"site-{run_id}.{domain}"
+    blocks = ["# Generated by scripts/preview. Do not edit by hand.\n"]
+    urls: dict[str, str] = {}
+    if mode in ("app", "both"):
+        blocks.append(
+            f"{app_host} {{\n"
+            f"  import {auth_snippet_path(root)}\n"
+            "  encode zstd gzip\n"
+            f"  header X-Preview-Run {run_id}\n"
+            f"  reverse_proxy 127.0.0.1:{ports.app}\n"
+            "}\n"
+        )
+        urls["app"] = f"https://{app_host}/"
+    if mode in ("site", "both"):
+        blocks.append(
+            f"{site_host} {{\n"
+            f"  import {auth_snippet_path(root)}\n"
+            "  encode zstd gzip\n"
+            f"  header X-Preview-Run {run_id}\n"
+            f"  reverse_proxy 127.0.0.1:{ports.site}\n"
+            "}\n"
+        )
+        urls["site"] = f"https://{site_host}/"
+    snippet.write_text("\n".join(blocks).strip() + "\n", encoding="utf-8")
+    os.chmod(snippet, 0o644)
+    return urls
+
+
+def stop_service(root: Path, run_id: str) -> None:
+    pid_path = preview_dir(root, run_id) / "service.pid"
+    if not pid_path.exists():
+        return
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except Exception:
+        return
+    subprocess.run(["bash", "-lc", f"kill {pid} 2>/dev/null || true"], check=False)
+    pid_path.unlink(missing_ok=True)
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def remove_worktree(root: Path, run_id: str) -> None:
+    wt = worktree_path(root, run_id)
+    if wt.exists():
+        subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=str(root), check=False)
+
+
+def verify_run(root: Path, run_id: str, mode: str) -> None:
+    m = read_manifest(root, run_id)
+    ports = m.get("ports", {})
+    app_port = int(ports.get("app"))
+    site_port = int(ports.get("site"))
+    wt = Path(m["worktree_dir"])
+    artifacts = preview_dir(root, run_id) / "artifacts"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    token = str(m.get("token", "") or "")
+
+    if mode in ("site", "both"):
+        config = {
+            # Use the live app proxy path so base-path rewriting is exercised during verification.
+            "baseUrl": f"http://127.0.0.1:3000/_preview/{run_id}/site/",
+            "fullPage": True,
+            "viewports": [
+                {"name": "desktop", "width": 1440, "height": 900},
+                {"name": "mobile", "width": 390, "height": 844},
+            ],
+            "pages": [
+                {"path": f"?t={token}", "label": "home"},
+                {"path": f"contact?t={token}", "label": "contact"},
+            ],
+        }
+        cfg_path = artifacts / "site-shots.json"
+        cfg_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        out_dir = artifacts / "site-shots"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["node", "scripts/site-screenshot.js", "--config", str(cfg_path), "--out", str(out_dir)], cwd=str(wt), check=True)
+
+    if mode in ("app", "both"):
+        env = os.environ.copy()
+        env["APP_URL"] = f"http://127.0.0.1:3000/_preview/{run_id}/app/"
+        env["APP_PREVIEW_TOKEN"] = token
+        env["TERMINAL_LOG_DIR"] = str(artifacts)
+        env["APP_SMOKE_ARTIFACT_DIR"] = str(artifacts)
+        subprocess.run(["node", "scripts/app-smoke.js"], cwd=str(wt), env=env, check=True)
+
+    if mode == "telegram":
+        wait_http_ok(f"http://127.0.0.1:{app_port}/health")
+
+
+def _parse_iso(ts: str) -> datetime:
+    t = ts.strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    return datetime.fromisoformat(t)
+
+
+def _read_prod_env() -> dict[str, str]:
+    proc = subprocess.run(
+        ["sudo", "cat", "/etc/darelwasl/app.env"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+    out: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        out[k.strip()] = v.strip()
+    return out
+
+
+def _telegram_preview_env(prod: dict[str, str]) -> dict[str, str]:
+    env: dict[str, str] = {}
+    mapping = {
+        "TELEGRAM_BOT_TOKEN": "TELEGRAM_DEV_BOT_TOKEN",
+        "TELEGRAM_WEBHOOK_SECRET": "TELEGRAM_DEV_WEBHOOK_SECRET",
+        "TELEGRAM_WEBHOOK_BASE_URL": "TELEGRAM_DEV_WEBHOOK_BASE_URL",
+        "TELEGRAM_WEBHOOK_ENABLED": "TELEGRAM_DEV_WEBHOOK_ENABLED",
+        "TELEGRAM_COMMANDS_ENABLED": "TELEGRAM_DEV_COMMANDS_ENABLED",
+        "TELEGRAM_NOTIFICATIONS_ENABLED": "TELEGRAM_DEV_NOTIFICATIONS_ENABLED",
+        "TELEGRAM_HTTP_TIMEOUT_MS": "TELEGRAM_DEV_HTTP_TIMEOUT_MS",
+    }
+    for dst, src in mapping.items():
+        if prod.get(src):
+            env[dst] = prod[src]
+    env["TELEGRAM_WEBHOOK_ENABLED"] = "false"
+    env["TELEGRAM_POLLING_ENABLED"] = "true"
+    env["TELEGRAM_POLLING_INTERVAL_MS"] = "2000"
+    env["TELEGRAM_AUTO_SET_WEBHOOK"] = "false"
+    return env
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    public_host = (args.public_host or "https://haloeddepth.com").rstrip("/")
+
+    ensure_worktree(root, args.id, args.ref)
+    wt = worktree_path(root, args.id)
+    ensure_shared_node_modules(root, wt)
+    if args.include_dirty:
+        apply_dirty_diff(root, wt)
+
+    existing = manifest_path(root, args.id)
+    existing_data: dict | None = None
+    if existing.exists():
+        try:
+            existing_data = read_manifest(root, args.id)
+        except Exception:
+            existing_data = None
+
+    if existing_data:
+        stop_service(root, args.id)
+        ports = PreviewPorts(app=int(existing_data.get("ports", {}).get("app", 0) or 0), site=int(existing_data.get("ports", {}).get("site", 0) or 0))
+        if not ports.app or not ports.site:
+            ports = allocate_ports(root)
+    else:
+        ports = allocate_ports(root)
+
+    token = (existing_data or {}).get("token") or token_urlsafe(22)
+    mode = args.mode
+    site_enabled = mode in ("site", "both")
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "APP_HOST": "127.0.0.1",
+            "SITE_HOST": "127.0.0.1",
+            "APP_PORT": str(ports.app),
+            "SITE_PORT": str(ports.site),
+            "SITE_ENABLED": "true" if site_enabled else "false",
+            "SITE_BASE_PATH": f"/_preview/{args.id}/site",
+            "SESSION_COOKIE_PATH": f"/_preview/{args.id}/app",
+            "ALLOW_FIXTURE_SEED": "true",
+            "DATOMIC_STORAGE_DIR": str((preview_dir(root, args.id) / "datomic").resolve()),
+        }
+    )
+    if mode == "telegram":
+        active = telegram_active_path(root)
+        if active.exists():
+            try:
+                cur = json.loads(active.read_text(encoding="utf-8"))
+                cur_id = cur.get("id")
+                cur_pid = int(cur.get("pid", 0) or 0)
+                if cur_id and cur_pid and _pid_alive(cur_pid):
+                    raise SystemExit(f"Telegram preview already running: {cur_id} (pid {cur_pid}). Stop it first.")
+            except Exception:
+                # Stale lock; continue and overwrite.
+                pass
+
+        site_enabled = False
+        prod_env = _read_prod_env()
+        env.update(_telegram_preview_env(prod_env))
+
+    pid = start_service_with_env(root, args.id, env=env)
+    wait_http_ok(f"http://127.0.0.1:{ports.app}/health")
+    if site_enabled:
+        wait_http_ok(f"http://127.0.0.1:{ports.site}/health")
+
+    urls: dict[str, str] = {}
+    if mode in ("app", "both"):
+        urls["app"] = f"{public_host}/_preview/{args.id}/app/?t={token}"
+    if mode in ("site", "both"):
+        urls["site"] = f"{public_host}/_preview/{args.id}/site/?t={token}"
+
+    expires_at = datetime.fromtimestamp(time.time() + int(args.review_window_hours) * 3600, tz=timezone.utc)
+
+    data = {
+        "id": args.id,
+        "created_at": utc_iso(),
+        "last_preview_updated_at": utc_iso(),
+        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        "status": "pending_user_review",
+        "ref": args.ref,
+        "mode": mode,
+        "ports": {"app": ports.app, "site": ports.site},
+        "pid": pid,
+        "worktree_dir": str(wt),
+        "datomic_dir": str((preview_dir(root, args.id) / "datomic").resolve()),
+        "urls": urls,
+        "token": token,
+        "review_window_hours": int(args.review_window_hours),
+        "notes": [],
+    }
+    write_manifest(root, args.id, data)
+    if mode == "telegram":
+        telegram_active_path(root).write_text(json.dumps({"id": args.id, "pid": pid, "at": utc_iso()}, indent=2) + "\n", encoding="utf-8")
+
+    if not args.skip_verify:
+        verify_run(root, args.id, mode)
+
+    out = {
+        "status": "ok",
+        "urls": urls,
+        "id": args.id,
+        "expires_at": data["expires_at"],
+    }
+    if mode == "telegram":
+        out["telegram"] = {"mode": "dev-bot", "notes": "Dev bot polling enabled; test in Telegram, then respond accept|revise."}
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    stop_service(root, args.id)
+    active = telegram_active_path(root)
+    if active.exists():
+        try:
+            cur = json.loads(active.read_text(encoding="utf-8"))
+            if cur.get("id") == args.id:
+                active.unlink(missing_ok=True)
+        except Exception:
+            pass
+    remove_worktree(root, args.id)
+    # Mark manifest as stopped if present.
+    mpath = manifest_path(root, args.id)
+    if mpath.exists():
+        try:
+            m = read_manifest(root, args.id)
+            m["status"] = "stopped"
+            m["stopped_at"] = utc_iso()
+            write_manifest(root, args.id, m)
+        except Exception:
+            pass
+    print(json.dumps({"status": "ok", "id": args.id}, indent=2))
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    data = read_manifest(root, args.id)
+    print(json.dumps(data, indent=2, sort_keys=True))
+    return 0
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    verify_run(root, args.id, args.mode)
+    print(json.dumps({"status": "ok", "id": args.id, "verified_at": utc_iso()}, indent=2))
+    return 0
+
+
+def cmd_respond(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    m = read_manifest(root, args.id)
+    now = datetime.now(timezone.utc)
+    expires_at = _parse_iso(m.get("expires_at", utc_iso()))
+    if now > expires_at:
+        raise SystemExit(f"Preview expired at {m.get('expires_at')}. Start a new preview run.")
+
+    m.setdefault("notes", [])
+    if args.message.strip():
+        m["notes"].append({"at": utc_iso(), "kind": args.decision, "message": args.message.strip()})
+
+    if args.decision == "revise":
+        m["status"] = "changes_requested"
+        write_manifest(root, args.id, m)
+        print(json.dumps({"status": "ok", "id": args.id, "decision": "revise", "expires_at": m.get("expires_at")}, indent=2))
+        return 0
+
+    m["status"] = "accepted"
+    m["accepted_at"] = utc_iso()
+    write_manifest(root, args.id, m)
+    # By default, acceptance triggers promotion (the "go live" gate).
+    proc = subprocess.run(
+        ["bash", "-lc", f"scripts/preview promote {shlex.quote(args.id)}"],
+        cwd=str(root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if proc.returncode != 0:
+        print(proc.stdout, end="")
+        raise SystemExit("Promotion failed after acceptance. Fix the issue and run: scripts/preview promote <id>")
+    print(proc.stdout, end="")
+    return 0
+
+
+def _worktree_clean(wt: Path) -> bool:
+    proc = subprocess.run(["git", "status", "--porcelain"], cwd=str(wt), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    return proc.stdout.strip() == ""
+
+
+def cmd_promote(args: argparse.Namespace) -> int:
+    root = repo_root()
+    validate_id(args.id)
+    m = read_manifest(root, args.id)
+    if m.get("status") != "accepted":
+        raise SystemExit("Preview must be accepted first: scripts/preview respond <id> accept")
+
+    wt = Path(m["worktree_dir"])
+    if not _worktree_clean(wt):
+        raise SystemExit("Worktree has uncommitted changes. Commit them before promoting (promote is commit-based).")
+
+    head = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
+    run(["git", "checkout", "main"], cwd=root)
+    ff = subprocess.run(["git", "merge", "--ff-only", head], cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if ff.returncode != 0:
+        raise SystemExit(f"Unable to fast-forward main to {head}:\n{ff.stdout}")
+
+    if not args.no_restart:
+        subprocess.run(["bash", "-lc", "scripts/promote-live.sh"], cwd=str(root), check=True)
+
+    subprocess.run(["bash", "-lc", f"scripts/preview stop {shlex.quote(args.id)}"], cwd=str(root), check=False)
+    m["status"] = "promoted"
+    m["promoted_at"] = utc_iso()
+    write_manifest(root, args.id, m)
+    print(json.dumps({"status": "ok", "id": args.id, "promoted_at": m["promoted_at"]}, indent=2))
+    return 0
+
+
+def cmd_gc(args: argparse.Namespace) -> int:
+    root = repo_root()
+    now = datetime.now(timezone.utc)
+    if args.now:
+        now = _parse_iso(args.now)
+
+    expired: list[str] = []
+    for p in previews_dir(root).glob("*/preview.json"):
+        run_id = p.parent.name
+        try:
+            m = json.loads(p.read_text(encoding="utf-8"))
+            status = m.get("status")
+            exp = m.get("expires_at")
+            if not exp:
+                continue
+            exp_dt = _parse_iso(exp)
+            if now > exp_dt and status in ("pending_user_review", "changes_requested"):
+                expired.append(run_id)
+        except Exception:
+            continue
+
+    for run_id in sorted(set(expired)):
+        subprocess.run(
+            ["bash", "-lc", f"scripts/preview stop {shlex.quote(run_id)}"],
+            cwd=str(root),
+            check=False,
+        )
+
+    print(json.dumps({"status": "ok", "expired_stopped": sorted(set(expired))}, indent=2))
+    return 0
+
+
+def cmd_auth_init(args: argparse.Namespace) -> int:
+    root = repo_root()
+    ensure_caddy_import(root)
+    creds = ensure_preview_auth(root, username=args.username)
+    reload_caddy()
+    print(json.dumps({"status": "ok", "username": creds["username"], "password": creds["password"]}, indent=2))
+    return 0
+
+
+def cmd_auth_show(_args: argparse.Namespace) -> int:
+    root = repo_root()
+    secret = auth_secret_path(root)
+    if not secret.exists():
+        raise SystemExit("Preview auth not initialized. Run: scripts/preview auth init")
+    data = json.loads(secret.read_text(encoding="utf-8"))
+    print(json.dumps({"status": "ok", "username": data.get("username"), "password": data.get("password")}, indent=2))
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if args.cmd == "auth":
+        if args.auth_cmd == "init":
+            return cmd_auth_init(args)
+        if args.auth_cmd == "show":
+            return cmd_auth_show(args)
+    if args.cmd == "start":
+        return cmd_start(args)
+    if args.cmd == "stop":
+        return cmd_stop(args)
+    if args.cmd == "status":
+        return cmd_status(args)
+    if args.cmd == "verify":
+        return cmd_verify(args)
+    if args.cmd == "respond":
+        return cmd_respond(args)
+    if args.cmd == "promote":
+        return cmd_promote(args)
+    if args.cmd == "gc":
+        return cmd_gc(args)
+    raise SystemExit("unreachable")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

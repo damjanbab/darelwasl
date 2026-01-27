@@ -1,6 +1,7 @@
 (ns darelwasl.http
   (:require [darelwasl.http.common :as common]
             [darelwasl.http.routes.actions :as actions-routes]
+            [darelwasl.http.routes.agent-control :as agent-control-routes]
             [darelwasl.http.routes.auth :as auth-routes]
             [darelwasl.http.routes.betting :as betting-routes]
             [darelwasl.http.routes.catalog :as catalog-routes]
@@ -10,10 +11,10 @@
             [darelwasl.http.routes.files :as files-routes]
             [darelwasl.http.routes.github :as github-routes]
             [darelwasl.http.routes.land :as land-routes]
+            [darelwasl.http.routes.preview :as preview-routes]
             [darelwasl.http.routes.registries :as registries-routes]
             [darelwasl.http.routes.system :as system-routes]
             [darelwasl.http.routes.tasks :as task-routes]
-            [darelwasl.http.routes.terminal :as terminal-routes]
             [darelwasl.http.routes.telegram :as telegram-routes]
             [darelwasl.http.routes.users :as users-routes]
             [muuntaja.core :as m]
@@ -21,11 +22,13 @@
             [reitit.ring.middleware.exception :as exception]
             [reitit.ring.middleware.muuntaja :as muuntaja]
             [reitit.ring.middleware.parameters :as parameters]
+            [ring.middleware.cookies :as cookies]
             [ring.middleware.multipart-params :as multipart]
             [ring.middleware.session :as session]))
 
 (def default-middleware
   [[common/wrap-logging]
+   cookies/wrap-cookies
    [session/wrap-session common/session-opts]
    multipart/wrap-multipart-params
    parameters/parameters-middleware
@@ -54,7 +57,7 @@
          (content-routes/routes state)
          (registries-routes/routes state)
          (system-routes/routes state)
-         (terminal-routes/routes state)
+         (agent-control-routes/routes state)
          (telegram-routes/routes state)
          (users-routes/routes state)
          (land-routes/routes state))))
@@ -67,7 +70,7 @@
      (ring/router
       (concat
        [(health-route state)]
-       (terminal-routes/public-routes state)
+       (preview-routes/routes state)
        [(api-routes state)])
       {:conflicts nil
        :data {:muuntaja muuntaja-instance

@@ -104,32 +104,10 @@
        :performance {:budget_ms 300}
        :state-model :finite
        :layout {:desktop "list + detail" :mobile "stacked"}}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
+ :compatibility {:backward true
+                 :forward true
+                 :flags []}
  :related {:schema [:cap/schema/betting-event :cap/schema/betting-bet :cap/schema/betting-quote]}}
-
- {:id :cap/view/terminal
-  :title "Terminal Sessions"
-  :version "v1"
-  :data {:sources [{:id :terminal/sessions
-                    :source :cap/integration/terminal-service
-                    :pull []}]}
-  :actions [:cap/action/terminal-sessions
-            :cap/action/terminal-session-create
-            :cap/action/terminal-session-input
-            :cap/action/terminal-session-output
-            :cap/action/terminal-session-resume
-            :cap/action/terminal-session-restart-app
-            :cap/action/terminal-session-complete]
-  :ux {:states [:loading :empty :ready :error]
-       :performance {:budget_ms 300}
-       :state-model :finite
-       :layout {:mobile "list -> chat" :desktop "single panel"}}
-  :compatibility {:backward true
-                  :forward true
-                  :flags []}
-  :related {:schema []}}
 
  {:id :cap/view/pr-overview
   :title "PR Overview"
@@ -216,6 +194,29 @@
        :toggles [:light-dark-switch]}
  :compatibility {:backward true :forward true :flags []}
   :related {:schema [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}}
+
+ {:id :cap/view/agent-control
+  :title "Agent Control"
+  :version "v1"
+  :data {:sources [{:id :agent-control/runs
+                    :source :cap/action/agent-control-run-list
+                    :pull [:runs]}
+                   {:id :agent-control/admins
+                    :source :cap/action/agent-control-admins
+                    :pull [:admins :users]}]}
+  :actions [:cap/action/agent-control-run-create
+            :cap/action/agent-control-run-detail
+            :cap/action/agent-control-run-revise
+            :cap/action/agent-control-preview-start
+            :cap/action/agent-control-accept
+            :cap/action/agent-control-trash
+            :cap/action/agent-control-job-log]
+  :ux {:states [:loading :empty :ready :error]
+       :performance {:budget_ms 500}
+       :state-model :finite
+       :layout {:desktop "runs list + detail" :mobile "stacked"}}
+  :compatibility {:backward true :forward true :flags []}
+  :related {:schema []}}
 
  {:id :cap/view/file-library
   :title "File Library"

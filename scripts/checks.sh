@@ -7,17 +7,49 @@ DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/checks.sh [all|registries|schema|actions|app-smoke|views|action-contracts|import|docs]
+Usage: scripts/checks.sh [all|governance|registries|schema|actions|app-smoke|views|action-contracts|import|docs]
 
 Commands:
+  governance       Repo housekeeping invariants (skills/policies scaffolding)
   registries       Registry presence + field checks + EDN/fixture parse
   schema           Registries + schema load into temp Datomic
   actions          Registries + schema + action contract harness
   app-smoke|views  Full stack smoke: registries + schema + actions + headless UI flow
   import           Run land-registry importer against the provided CSV in a temp DB
   docs             Regenerate system/catalog docs and fail on drift
-  all              Runs registries, schema, actions, and app smoke
+  all              Runs governance, docs, registries, schema, actions, import, and app smoke
 EOF
+}
+
+check_governance() {
+  echo "Checking repo housekeeping invariants..."
+
+  local missing=0
+  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md"; do
+    if [ ! -s "$f" ]; then
+      echo "Missing or empty: $f"
+      missing=1
+    fi
+  done
+
+  if [ -d "$ROOT/skills" ]; then
+    local d
+    for d in "$ROOT/skills"/*; do
+      if [ -d "$d" ]; then
+        if [ ! -s "$d/SKILL.md" ]; then
+          echo "Missing SKILL.md in skill directory: $d"
+          missing=1
+        fi
+      fi
+    done
+  fi
+
+  if [ "$missing" -ne 0 ]; then
+    echo "Governance checks failed."
+    exit 1
+  fi
+
+  echo "Governance checks passed."
 }
 
 check_registries() {
@@ -631,12 +663,12 @@ check_app_smoke() {
   DATOMIC_TMP="$(mktemp -d "${ROOT}/.cpcache/datomic-smoke-XXXXXX")"
 
   echo "Seeding Datomic fixtures (:mem storage) for app smoke..."
-  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" clojure -M:seed)
+  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" SITE_ENABLED=false clojure -M:seed)
 
   echo "Starting backend server for app smoke on ${base_url}..."
   mkdir -p "$ROOT/.cpcache"
   kill_port_if_listening "$port"
-  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" clojure -M:dev >"$ROOT/.cpcache/app-smoke.log" 2>&1) &
+  (cd "$ROOT" && DATOMIC_STORAGE_DIR="$DATOMIC_TMP" APP_HOST="$host" APP_PORT="$port" SITE_ENABLED=false clojure -M:dev >"$ROOT/.cpcache/app-smoke.log" 2>&1) &
   SERVER_PID=$!
   trap cleanup_server EXIT
 
@@ -664,6 +696,7 @@ check_import() {
 
 target="${1:-all}"
 case "$target" in
+  governance) check_governance ;;
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
@@ -671,6 +704,7 @@ case "$target" in
   docs) check_registries; check_registry_fields; check_edn_parse; check_docs ;;
   import) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_import ;;
   all)
+    check_governance
     check_registries
     check_registry_fields
     check_edn_parse

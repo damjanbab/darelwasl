@@ -332,46 +332,6 @@
    :bets default-betting-bets
    :form default-betting-form})
 
-(def default-terminal-state
-  {:status :idle
-   :error nil
-   :notice nil
-   :sessions []
-   :new-session-type :feature
-   :new-session-dev-bot? false
-   :selected nil
-   :output ""
-   :cursor 0
-   :input ""
-   :sending? false
-   :verifying? false
-   :resuming? false
-   :restarting? false
-   :interrupting? false
-   :auto-run-commands? true
-   :pending-commands []
-   :command-ids #{}
-   :command-status {}
-   :polling? false
-   :app-ready? false
-   :context-panel? false
-   :context-tab :catalog
-   :context-query ""
-   :context-kind ""
-   :catalog-status :idle
-   :catalog-items []
-   :catalog-error nil
-   :data-status :idle
-   :data-items []
-   :data-error nil
-   :backend-status :idle
-   :backend-active nil
-   :backend-stable-url nil
-   :backend-canary-url nil
-   :backend-error nil
-   :backend-updating? false
-   :list-polling? false})
-
 (def default-services-state
   {:status :idle
    :error nil
@@ -399,6 +359,28 @@
    :selected nil
    :detail default-user-detail})
 
+(def default-agent-control-state
+  {:runs {:items []
+          :status :idle
+          :error nil
+          :selected nil}
+   :admins {:items []
+            :admins []
+            :status :idle
+            :error nil}
+   :detail {:status :idle
+            :error nil
+            :data nil}
+   :composer {:id ""
+              :message ""
+              :mode "both"
+              :status :idle
+              :error nil}
+   :log {:job nil
+         :status :idle
+         :error nil
+         :text nil}})
+
 (def default-db
   {:route :login
    :session nil
@@ -412,10 +394,10 @@
    :prs default-prs-state
    :land default-land-state
    :betting default-betting-state
-   :terminal default-terminal-state
    :services default-services-state
    :users default-users-state
-   :control default-control-state})
+   :control default-control-state
+   :agent-control default-agent-control-state})
 
 (def base-app-options
   (cond-> [{:id :home
@@ -433,9 +415,6 @@
            {:id :betting
             :label "Betting CLV"
             :desc "Browse odds and log bets"}
-           {:id :terminal
-            :label "Terminal"
-            :desc "Codex sessions"}
            {:id :prs
             :label "PRs"
             :desc "Repo overview"}
@@ -445,6 +424,9 @@
            {:id :control-panel
             :label "Control panel"
             :desc "Website content"}
+           {:id :agent-control
+            :label "Agent control"
+            :desc "Requests → preview → accept/trash"}
            {:id :services
             :label "Services"
             :desc "Health + controls"}]
@@ -462,6 +444,20 @@
                             :else r)))
                    set)]
     (boolean (some #{:role/content-editor :role/admin} roles))))
+
+(defn agent-control-enabled?
+  [session]
+  (let [uname (get-in session [:user :username])
+        roles (->> (get-in session [:user :roles])
+                   (map (fn [r]
+                          (cond
+                            (keyword? r) r
+                            (string? r) (-> r (str/replace #"^:" "") keyword)
+                            :else r)))
+                   set)
+        allow #{"damjan" "huda"}]
+    (and (contains? roles :role/admin)
+         (contains? allow uname))))
 
 (defn betting-enabled?
   [session]
@@ -484,17 +480,6 @@
                             :else r)))
                    set)]
     (boolean (some #{:role/file-library :role/admin} roles))))
-
-(defn terminal-enabled?
-  [session]
-  (let [roles (->> (get-in session [:user :roles])
-                   (map (fn [r]
-                          (cond
-                            (keyword? r) r
-                            (string? r) (-> r (str/replace #"^:" "") keyword)
-                            :else r)))
-                   set)]
-    (contains? roles :role/codex-terminal)))
 
 (defn prs-enabled?
   [session]
@@ -537,8 +522,6 @@
     (remove #(= (:id %) :betting))
     (not (file-library-enabled? session))
     (remove #(= (:id %) :files))
-    (not (terminal-enabled? session))
-    (remove #(= (:id %) :terminal))
     (not (prs-enabled? session))
     (remove #(= (:id %) :prs))
     (not (users-enabled? session))
@@ -546,7 +529,10 @@
     (not (services-enabled? session))
     (remove #(= (:id %) :services))
     (not (control-enabled? session))
-    (remove #(= (:id %) :control-panel))))
+    (remove #(= (:id %) :control-panel))
+    (not (agent-control-enabled? session))
+    (remove #(= (:id %) :agent-control))))
+
 
 (defn allowed-routes
   "Allowed route keywords for current session."

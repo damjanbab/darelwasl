@@ -68,7 +68,7 @@
   [state]
   [["/catalog"
     {:middleware [common/require-session
-                  (common/require-roles #{:role/codex-terminal})]}
+                  (common/require-roles #{:role/admin})]}
     ["" {:get (list-handler state)}]
     ["/data" {:get (data-handler state)}]
     ["/:id" {:get (detail-handler state)}]]])

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "id": "report/policies",
+      "title": "Generate policies report",
+      "requires_primary": true,
+      "required_step_ops": ["repo-policy-discovery", "write-policy-report", "validation"]
+    },
+    {
+      "id": "repo-policy-discovery",
+      "title": "Discover policy sources",
+      "required_inputs": [],
+      "outputs": ["target/policy-scan.json"]
+    },
+    {
+      "id": "write-policy-report",
+      "title": "Write policy report",
+      "required_inputs": ["output_path"],
+      "outputs": ["docs/policies.report.md"]
+    },
+    {
+      "id": "validation",
+      "title": "Run validation/proofs",
+      "required_inputs": []
+    },
+    {
+      "id": "create-policy-procedure",
+      "title": "Create policy placeholder",
+      "required_inputs": ["creates_policy"],
+      "outputs": ["policies/<name>.md"]
+    }
+  ]
+}
+

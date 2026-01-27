@@ -50,14 +50,10 @@
   [cfg]
   (let [github (:github cfg)
         owner (:repo-owner github)
-        repo (:repo-name github)
-        terminal-url (get-in cfg [:terminal :repo-url])]
+        repo (:repo-name github)]
     (cond
       (and (seq (or owner "")) (seq (or repo "")))
       {:owner owner :repo repo}
-
-      (seq terminal-url)
-      (parse-github-repo terminal-url)
 
       :else
       (some-> (git-config-origin-url) parse-github-repo))))

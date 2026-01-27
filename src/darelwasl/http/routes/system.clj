@@ -2,7 +2,6 @@
   (:require [clj-http.client :as http]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [darelwasl.actions :as actions]
             [darelwasl.db :as db]
             [darelwasl.http.common :as common]))
 
@@ -23,63 +22,6 @@
 (defn- join-url
   [base path]
   (str (str/replace (or base "") #"/+$" "") path))
-
-(defn- terminal-admin-authorized?
-  [state request]
-  (let [token (get-in state [:config :terminal :admin-token])
-        provided (get-in request [:headers "x-terminal-admin-token"])]
-    (and (not (str/blank? (str token)))
-         (= token provided))))
-
-(defn- parse-uuid
-  [value]
-  (try
-    (when value
-      (java.util.UUID/fromString (str value)))
-    (catch Exception _
-      nil)))
-
-(def ^:private default-admin-actor
-  {:actor/type :actor.type/system
-   :actor/surface :surface/system
-   :actor/adapter :adapter/system})
-
-(defn- normalize-actor
-  [actor]
-  (if (map? actor)
-    (let [raw-id (or (:user/id actor) (get actor "user/id"))
-          user-id (cond
-                    (instance? java.util.UUID raw-id) raw-id
-                    (string? raw-id) (parse-uuid raw-id)
-                    :else nil)]
-      (cond
-        (some? user-id) (assoc actor :user/id user-id)
-        raw-id (dissoc actor :user/id)
-        :else actor))
-    actor))
-
-(defn- system-action-handler
-  [state]
-  (fn [request]
-    (if (terminal-admin-authorized? state request)
-      (let [raw-id (or (get-in request [:path-params :id])
-                       (get-in request [:path-params "id"]))
-            action-id (actions/parse-action-id (some-> raw-id str))
-            body (or (:body-params request) {})
-            input (or (:input body) (get body "input") body)
-            actor (normalize-actor (or (:actor body) (get body "actor")))
-            actor (if (map? actor) (merge default-admin-actor actor) default-admin-actor)
-            actor (assoc actor :actor/workspace (common/workspace-id request))
-            res (actions/execute! state {:action/id action-id
-                                         :actor actor
-                                         :input input})]
-        (if-let [err (:error res)]
-          (common/error-response (or (:status err) 500)
-                                 (:message err)
-                                 (:details err))
-          {:status 200
-           :body res}))
-      (common/error-response 403 "Admin token required"))))
 
 (defn- restart-handler
   [state]
@@ -150,35 +92,6 @@
   [site-url]
   (http-health site-url "/"))
 
-(defn- terminal-restart
-  [cfg base-url]
-  (let [token (get-in cfg [:terminal :admin-token])]
-    (cond
-      (str/blank? (str base-url))
-      {:error {:status 400 :message "Terminal service URL missing"}}
-
-      (str/blank? (str token))
-      {:error {:status 400 :message "Terminal admin token missing"}}
-
-      :else
-      (try
-        (let [resp (http/request {:method :post
-                                  :url (join-url base-url "/system/restart")
-                                  :throw-exceptions false
-                                  :socket-timeout 3000
-                                  :conn-timeout 3000
-                                  :headers {"X-Terminal-Admin-Token" token}
-                                  :as :text})
-              status (:status resp)]
-          (if (<= 200 status 299)
-            {:status :ok}
-            {:error {:status status
-                     :message (str "Terminal restart failed (HTTP " status ")")}}))
-        (catch Exception e
-          {:error {:status 502
-                   :message "Terminal restart failed"
-                   :details (.getMessage e)}})))))
-
 (defn- services-handler
   [state]
   (fn [_request]
@@ -187,9 +100,6 @@
           app-url (service-url (get-in cfg [:http :host]) (get-in cfg [:http :port]))
           site-url (when site-enabled?
                      (service-url (get-in cfg [:site :host]) (get-in cfg [:site :port])))
-          terminal-url (get-in cfg [:terminal :base-url])
-          canary-url (get-in cfg [:terminal :canary-base-url])
-          token (get-in cfg [:terminal :admin-token])
           checked-at (now-ms)
           services (cond-> [{:id "app"
                              :label "App API"
@@ -201,20 +111,7 @@
                             :label "Public site"
                             :url site-url
                             :restartable? (boolean (:site/restart! state))
-                            :health (assoc (site-health site-url) :checked-at checked-at)}))
-          services (into services
-                         [{:id "terminal-stable"
-                           :label "Terminal (stable)"
-                           :url terminal-url
-                           :restartable? (and (not (str/blank? (str terminal-url)))
-                                              (not (str/blank? (str token))))
-                           :health (assoc (http-health terminal-url "/health") :checked-at checked-at)}
-                          {:id "terminal-canary"
-                           :label "Terminal (canary)"
-                           :url canary-url
-                           :restartable? (and (not (str/blank? (str canary-url)))
-                                              (not (str/blank? (str token))))
-                           :health (assoc (http-health canary-url "/health") :checked-at checked-at)}])]
+                            :health (assoc (site-health site-url) :checked-at checked-at)}))]
       {:status 200
        :body {:services services}})))
 
@@ -228,23 +125,11 @@
         "site" (if (true? (get-in cfg [:site :enabled?]))
                  ((site-restart-handler state) request)
                  (common/error-response 400 "Site disabled."))
-        "terminal-stable"
-        (let [res (terminal-restart cfg (get-in cfg [:terminal :base-url]))]
-          (if-let [err (:error res)]
-            (common/error-response (:status err) (:message err) (:details err))
-            {:status 202 :body {:status "restarting"}}))
-        "terminal-canary"
-        (let [res (terminal-restart cfg (get-in cfg [:terminal :canary-base-url]))]
-          (if-let [err (:error res)]
-            (common/error-response (:status err) (:message err) (:details err))
-            {:status 202 :body {:status "restarting"}}))
         (common/error-response 404 "Unknown service")))))
 
 (defn routes
   [state]
-  [["/system/actions/:id"
-    {:post (system-action-handler state)}]
-   ["/system"
+  [["/system"
     {:middleware [common/require-session
                   (common/require-roles #{:role/admin})]}
     ["/restart" {:post (restart-handler state)}]

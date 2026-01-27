@@ -1,0 +1,1362 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+import jsonschema
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _safe_slug(text: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in text).strip("-")
+
+
+def _ensure_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def _schema_path(name: str) -> Path:
+    return _repo_root() / "scripts" / "agent_schemas" / name
+
+
+def _load_json(path: Path) -> object:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+def _operations_registry() -> dict:
+    raw = _load_json(_schema_path("operations.json"))
+    if not isinstance(raw, dict):
+        raise ValueError("operations registry must be a JSON object")
+    ops = raw.get("operations")
+    if not isinstance(ops, list):
+        raise ValueError("operations registry missing 'operations' list")
+    by_id: dict[str, dict] = {}
+    for item in ops:
+        if not isinstance(item, dict):
+            continue
+        op_id = item.get("id")
+        if isinstance(op_id, str) and op_id.strip():
+            by_id[op_id.strip()] = item
+    raw["_by_id"] = by_id
+    return raw
+
+
+def _validate_json(*, schema_path: Path, document_path: Path) -> None:
+    schema = _load_json(schema_path)
+    doc = _load_json(document_path)
+    jsonschema.validate(instance=doc, schema=schema)
+
+
+def _validate_plan_policy_gate(*, root: Path, plan_path: Path) -> None:
+    plan = _load_json(plan_path)
+    steps = plan.get("steps", [])
+    if not isinstance(steps, list):
+        raise ValueError("Plan steps must be an array.")
+
+    step_ids: list[str] = []
+    for step in steps:
+        if isinstance(step, dict) and isinstance(step.get("id"), str):
+            step_ids.append(step["id"])
+    duplicates = sorted({sid for sid in step_ids if step_ids.count(sid) > 1})
+    if duplicates:
+        raise ValueError(f"Duplicate step id(s): {', '.join(duplicates)}")
+
+    created_policy_to_step: dict[str, str] = {}
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("kind") == "policy_create":
+            policy_path = step.get("creates_policy")
+            step_id = step.get("id")
+            if isinstance(policy_path, str) and isinstance(step_id, str):
+                created_policy_to_step[policy_path] = step_id
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("kind") != "execute":
+            continue
+
+        step_id = step.get("id", "<unknown>")
+        depends_on = step.get("depends_on", [])
+        policies = step.get("policies", [])
+
+        if not isinstance(policies, list) or not policies:
+            raise ValueError(f"Step {step_id}: execute steps must include at least one policy in 'policies'.")
+
+        for policy in policies:
+            if not isinstance(policy, str):
+                raise ValueError(f"Step {step_id}: policy refs must be strings.")
+
+            policy_file = root / policy
+            if policy_file.exists():
+                continue
+
+            creator_step = created_policy_to_step.get(policy)
+            if not creator_step:
+                raise ValueError(
+                    f"Step {step_id}: policy not found: {policy}. Add a policy_create step (creates_policy={policy!r})."
+                )
+
+            if not isinstance(depends_on, list) or creator_step not in depends_on:
+                raise ValueError(
+                    f"Step {step_id}: policy {policy} will be created by step {creator_step}, "
+                    f"but {step_id} does not depend on it. Add '{creator_step}' to depends_on."
+                )
+
+def _validate_operation_semantics(*, spec_path: Path | None = None, plan_path: Path | None = None) -> None:
+    ops = _operations_registry()["_by_id"]
+
+    if spec_path is not None:
+        spec = _load_json(spec_path)
+        if not isinstance(spec, dict):
+            raise ValueError("Spec must be a JSON object.")
+
+        request_type = str(spec.get("request_type", "")).strip()
+        goal = str(spec.get("goal", "")).lower()
+        context_questions = spec.get("context_questions", [])
+        has_questions = isinstance(context_questions, list) and len(context_questions) > 0
+        primary = spec.get("primary_operation_type")
+
+        if isinstance(primary, str):
+            primary = primary.strip()
+        else:
+            primary = None
+
+        if ("report" in goal) and not primary and not has_questions:
+            raise ValueError(
+                "Spec appears to request a report but is missing primary_operation_type "
+                "(choose e.g. report/policies) and did not include context_questions."
+            )
+
+        if primary and primary not in ops:
+            known = ", ".join(sorted(k for k in ops.keys() if "/" in k))
+            raise ValueError(f"Unknown primary_operation_type: {primary}. Known: {known or '(none)'}")
+
+        # Optional: if primary is report/* enforce it has a corresponding policy-first structure later.
+        if primary:
+            meta = ops.get(primary, {})
+            if meta.get("requires_primary") is True and request_type not in ("exploration", "change"):
+                raise ValueError(f"primary_operation_type {primary} requires request_type exploration|change.")
+
+    if plan_path is not None:
+        plan = _load_json(plan_path)
+        if not isinstance(plan, dict):
+            raise ValueError("Plan must be a JSON object.")
+
+        steps = plan.get("steps", [])
+        if not isinstance(steps, list):
+            raise ValueError("Plan steps must be an array.")
+
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            sid = step.get("id", "<unknown>")
+            op_type = step.get("operation_type")
+            if not isinstance(op_type, str) or not op_type.strip():
+                raise ValueError(f"Step {sid}: missing operation_type.")
+            op_type = op_type.strip()
+            if op_type not in ops:
+                known = ", ".join(sorted(ops.keys()))
+                raise ValueError(f"Step {sid}: unknown operation_type {op_type}. Known: {known}")
+
+            meta = ops.get(op_type, {})
+            required_inputs = meta.get("required_inputs", [])
+            inputs = step.get("inputs", {})
+            if not isinstance(inputs, dict):
+                inputs = {}
+
+            # Map implicit step fields into "inputs" for validation.
+            if isinstance(step.get("creates_policy"), str):
+                inputs.setdefault("creates_policy", step["creates_policy"])
+
+            if isinstance(required_inputs, list):
+                missing = [k for k in required_inputs if k not in inputs or inputs.get(k) in ("", None)]
+                if missing:
+                    raise ValueError(f"Step {sid}: missing required inputs for {op_type}: {', '.join(missing)}")
+
+
+def _canonicalize_allowed_paths(paths: list[str], *, root: Path) -> list[str]:
+    out: list[str] = []
+    for p in paths:
+        raw = str(p).strip()
+        if not raw:
+            continue
+        try:
+            raw_path = Path(raw)
+            if raw_path.is_absolute():
+                try:
+                    raw = str(raw_path.resolve().relative_to(root.resolve()))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        if raw.startswith("./"):
+            raw = raw[2:]
+        out.append(raw)
+    if "target/" not in [x if x.endswith("/") else (x + "/") for x in out]:
+        out.append("target/")
+    return out
+
+
+def _canonicalize_spec(spec: object, *, request_text: str, root: Path) -> dict:
+    if not isinstance(spec, dict):
+        spec = {}
+
+    request_type = "change" if request_text.lstrip().lower().startswith("change:") else "exploration"
+    allowed_paths = spec.get("scope", {}).get("allowed_paths") if isinstance(spec.get("scope"), dict) else None
+    proofs = spec.get("proofs", {}).get("commands") if isinstance(spec.get("proofs"), dict) else None
+
+    canonical: dict = {
+        "format": "darelwasl/spec",
+        "version": 1,
+        "created_at": spec.get("created_at") or _utc_iso(),
+        "request_type": spec.get("request_type") or request_type,
+        "goal": spec.get("goal") or request_text.strip(),
+        "policy_requirement": {"mode": "policy-first", "notes": ""},
+        "context_questions": [],
+        "scope": {"allowed_paths": [], "notes": ""},
+        "proofs": {"commands": [], "notes": ""},
+        "constraints": {"non_goals": [], "risk_notes": ""},
+    }
+
+    if isinstance(spec.get("primary_operation_type"), str) and spec["primary_operation_type"].strip():
+        canonical["primary_operation_type"] = spec["primary_operation_type"].strip()
+
+    if isinstance(spec.get("context_questions"), list):
+        canonical["context_questions"] = [str(x) for x in spec["context_questions"] if str(x).strip()]
+
+    if isinstance(allowed_paths, list):
+        canonical["scope"]["allowed_paths"] = _canonicalize_allowed_paths(
+            [str(x) for x in allowed_paths if str(x).strip()],
+            root=root,
+        )
+
+    if isinstance(proofs, list):
+        canonical["proofs"]["commands"] = [str(x) for x in proofs if str(x).strip()]
+
+    if isinstance(spec.get("scope"), dict) and isinstance(spec["scope"].get("notes"), str):
+        canonical["scope"]["notes"] = spec["scope"]["notes"]
+
+    if isinstance(spec.get("proofs"), dict) and isinstance(spec["proofs"].get("notes"), str):
+        canonical["proofs"]["notes"] = spec["proofs"]["notes"]
+
+    if isinstance(spec.get("constraints"), dict):
+        if isinstance(spec["constraints"].get("non_goals"), list):
+            canonical["constraints"]["non_goals"] = [str(x) for x in spec["constraints"]["non_goals"] if str(x).strip()]
+        if isinstance(spec["constraints"].get("risk_notes"), str):
+            canonical["constraints"]["risk_notes"] = spec["constraints"]["risk_notes"]
+
+    if isinstance(spec.get("policy_requirement"), dict) and isinstance(spec["policy_requirement"].get("notes"), str):
+        canonical["policy_requirement"]["notes"] = spec["policy_requirement"]["notes"]
+
+    # Heuristic: if the user asked for a "report" and primary_operation_type isn't set,
+    # force a clarification question unless we can confidently infer a known report/* op.
+    goal_lower = str(canonical.get("goal", "")).lower()
+    if "report" in goal_lower and "primary_operation_type" not in canonical:
+        ops = _operations_registry()["_by_id"]
+        candidates = [k for k in sorted(ops.keys()) if k.startswith("report/")]
+        inferred = None
+        if ("policy" in goal_lower or "policies" in goal_lower) and "report/policies" in ops:
+            inferred = "report/policies"
+        if inferred:
+            canonical["primary_operation_type"] = inferred
+        else:
+            if candidates:
+                canonical["context_questions"].append(
+                    "Which report operation do you mean? Choose one of: " + ", ".join(candidates)
+                )
+            else:
+                canonical["context_questions"].append(
+                    "You asked for a report, but no report/* operations are defined yet. "
+                    "Do you want to define one (e.g. report/policies)?"
+                )
+
+    return canonical
+
+
+def _canonicalize_plan(plan: object, *, spec: dict, spec_out: Path, root: Path) -> dict:
+    if not isinstance(plan, dict):
+        plan = {}
+
+    canonical: dict = {
+        "format": "darelwasl/plan",
+        "version": 1,
+        "created_at": plan.get("created_at") or _utc_iso(),
+        "spec_path": str(spec_out),
+        "notes": plan.get("notes") if isinstance(plan.get("notes"), str) else "",
+        "steps": [],
+    }
+
+    default_allowed_paths = spec.get("scope", {}).get("allowed_paths", [])
+    default_proofs = spec.get("proofs", {}).get("commands", [])
+
+    raw_steps = plan.get("steps")
+    if not isinstance(raw_steps, list):
+        raw_steps = []
+
+    known_ops = _operations_registry()["_by_id"]
+
+    def sanitize_step(step: object) -> dict | None:
+        if not isinstance(step, dict):
+            return None
+
+        allowed_keys = {
+            "id",
+            "role",
+            "kind",
+            "title",
+            "depends_on",
+            "parallel_group",
+            "operation_type",
+            "allowed_paths",
+            "proof_commands",
+            "inputs",
+            "creates_policy",
+            "policies",
+        }
+        s = {k: step[k] for k in step.keys() if k in allowed_keys}
+
+        if not isinstance(s.get("depends_on"), list):
+            s["depends_on"] = []
+        if not isinstance(s.get("allowed_paths"), list) or not s["allowed_paths"]:
+            s["allowed_paths"] = list(default_allowed_paths) if isinstance(default_allowed_paths, list) else []
+        else:
+            s["allowed_paths"] = _canonicalize_allowed_paths([str(x) for x in s["allowed_paths"]], root=root)
+        if not isinstance(s.get("proof_commands"), list) or not s["proof_commands"]:
+            s["proof_commands"] = list(default_proofs) if isinstance(default_proofs, list) else []
+
+        kind = s.get("kind")
+        if kind not in ("policy_create", "execute"):
+            if isinstance(s.get("creates_policy"), str):
+                s["kind"] = "policy_create"
+            elif isinstance(s.get("policies"), list) and s["policies"]:
+                s["kind"] = "execute"
+            else:
+                s["kind"] = "execute"
+
+        # Normalize/seed inputs for known operation types to avoid guesswork.
+        if not isinstance(s.get("inputs"), dict):
+            s["inputs"] = {}
+
+        op_type = s.get("operation_type")
+        if isinstance(op_type, str):
+            op_type = op_type.strip()
+        else:
+            op_type = ""
+
+        # If the model invents an operation_type, map it to a known op to keep scope minimal.
+        if op_type and op_type not in known_ops:
+            title_lower = str(s.get("title") or "").lower()
+            role = str(s.get("role") or "").lower()
+            if s.get("kind") == "policy_create":
+                op_type = "create-policy-procedure"
+            elif role == "tester" or "verify" in title_lower or "validate" in title_lower or "check" in title_lower:
+                op_type = "validation"
+            elif "discover" in title_lower or "scan" in title_lower or "inventory" in title_lower:
+                op_type = "repo-policy-discovery"
+            elif "report" in title_lower or "write" in title_lower or "generate" in title_lower:
+                op_type = "write-policy-report"
+            else:
+                op_type = "validation"
+            s["operation_type"] = op_type
+
+        if s["kind"] == "policy_create":
+            if not op_type:
+                s["operation_type"] = "create-policy-procedure"
+
+        if s["kind"] == "policy_create":
+            if not isinstance(s.get("creates_policy"), str) or not s["creates_policy"].strip():
+                op = s.get("operation_type") if isinstance(s.get("operation_type"), str) else "operation"
+                slug = _safe_slug(op) or "operation"
+                s["creates_policy"] = f"policies/{slug}-policy.md"
+            if "policies" not in s:
+                s["policies"] = []
+            s["inputs"].setdefault("creates_policy", s.get("creates_policy"))
+
+        if s["kind"] == "execute":
+            if not isinstance(s.get("policies"), list):
+                s["policies"] = []
+            if op_type == "write-policy-report":
+                s["inputs"].setdefault("output_path", "docs/policies.report.md")
+
+        return s
+
+    canonical_steps: list[dict] = []
+    for step in raw_steps:
+        s = sanitize_step(step)
+        if s:
+            canonical_steps.append(s)
+
+    existing_step_ids: set[str] = {s["id"] for s in canonical_steps if isinstance(s.get("id"), str)}
+
+    created_policy_to_step: dict[str, str] = {}
+    for s in canonical_steps:
+        if s.get("kind") == "policy_create" and isinstance(s.get("creates_policy"), str) and isinstance(s.get("id"), str):
+            created_policy_to_step[s["creates_policy"]] = s["id"]
+
+    inserted_policy_steps: list[dict] = []
+
+    def unique_step_id(base: str) -> str:
+        candidate = base
+        i = 2
+        while candidate in existing_step_ids:
+            candidate = f"{base}-{i}"
+            i += 1
+        existing_step_ids.add(candidate)
+        return candidate
+
+    for s in canonical_steps:
+        if s.get("kind") != "execute":
+            continue
+
+        policies = s.get("policies", [])
+        if not isinstance(policies, list):
+            continue
+
+        for policy in list(policies):
+            if not isinstance(policy, str):
+                continue
+
+            policy_file = root / policy
+            if policy_file.exists():
+                continue
+
+            creator_step = created_policy_to_step.get(policy)
+            if not creator_step:
+                op = s.get("operation_type") if isinstance(s.get("operation_type"), str) else spec.get("primary_operation_type")
+                op = op if isinstance(op, str) and op.strip() else "operation"
+                slug = _safe_slug(Path(policy).stem) or "policy"
+                step_id = unique_step_id(f"create-{slug}")
+                proof_cmds = list(default_proofs) if isinstance(default_proofs, list) and default_proofs else ["scripts/checks.sh governance"]
+                inserted_policy_steps.append(
+                    {
+                        "id": step_id,
+                        "role": "high",
+                        "kind": "policy_create",
+                        "title": f"Create policy {policy}",
+                        "depends_on": [],
+                        "operation_type": op,
+                        "allowed_paths": ["policies/"],
+                        "proof_commands": proof_cmds,
+                        "creates_policy": policy,
+                        "policies": [],
+                    }
+                )
+                created_policy_to_step[policy] = step_id
+                creator_step = step_id
+
+            if creator_step not in s.get("depends_on", []):
+                s["depends_on"] = list(s.get("depends_on", [])) + [creator_step]
+
+    for s in canonical_steps:
+        if s.get("kind") != "execute":
+            continue
+        policies = s.get("policies", [])
+        if not policies and created_policy_to_step:
+            first_policy, creator_id = next(iter(created_policy_to_step.items()))
+            s["policies"] = [first_policy]
+            if creator_id not in s.get("depends_on", []):
+                s["depends_on"] = list(s.get("depends_on", [])) + [creator_id]
+
+    canonical["steps"] = inserted_policy_steps + canonical_steps
+    return canonical
+
+
+def _git_status_paths(*, root: Path) -> set[str]:
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=str(root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    paths: set[str] = set()
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        # porcelain: XY <path> (handle rename: "R  old -> new")
+        rest = line[3:].strip()
+        if " -> " in rest:
+            rest = rest.split(" -> ", 1)[1].strip()
+        paths.add(rest)
+    return paths
+
+
+def _is_path_allowed(path: str, allowed_prefixes: list[str]) -> bool:
+    norm = path.replace("\\", "/")
+    for prefix in allowed_prefixes:
+        p = str(prefix).strip().replace("\\", "/")
+        if not p:
+            continue
+        if p == "." or p == "./":
+            return True
+        if norm == p.rstrip("/"):
+            return True
+        if norm.startswith(p.rstrip("/") + "/"):
+            return True
+    return False
+
+
+def _rewrite_proof_command(cmd: str) -> str:
+    c = cmd.strip()
+    if c in ("bash scripts/checks.sh", "./scripts/checks.sh", "scripts/checks.sh", "bash ./scripts/checks.sh"):
+        return "scripts/checks.sh governance"
+
+    try:
+        parts = shlex.split(c)
+    except Exception:
+        return c
+
+    if not parts:
+        return c
+
+    if parts[0] == "rg":
+        if "--files" in parts:
+            paths = [p for p in parts[1:] if p != "--files"]
+            return " ".join(["find", *paths, "-type", "f"])
+
+        # rg -n "<pattern>" <paths...>
+        ignore_case = False
+        if "-i" in parts or "--ignore-case" in parts:
+            ignore_case = True
+
+        # strip flags, keep first non-flag as pattern, rest as paths
+        nonflags = []
+        for p in parts[1:]:
+            if p.startswith("-"):
+                continue
+            nonflags.append(p)
+        if not nonflags:
+            return c
+        pattern = nonflags[0]
+        paths = nonflags[1:] or ["."]
+
+        if "(?i)" in pattern:
+            ignore_case = True
+            pattern = pattern.replace("(?i)", "")
+        pattern = pattern.replace("\\b", "")
+
+        flags = ["-R", "-n", "-E"]
+        if ignore_case:
+            flags.append("-i")
+        return " ".join(["grep", *flags, shlex.quote(pattern), *paths])
+
+    return c
+
+
+def _run_shell_command(*, root: Path, command: str, log_file: Path) -> int:
+    cmd = _rewrite_proof_command(command)
+    with log_file.open("ab") as log:
+        log.write(f"$ {cmd}\n".encode("utf-8"))
+        proc = subprocess.run(
+            ["/bin/bash", "-lc", cmd],
+            cwd=str(root),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        log.write(f"[exit {proc.returncode}]\n".encode("utf-8"))
+        return int(proc.returncode)
+
+
+def _write_policy_template(*, root: Path, policy_path: str, step: dict) -> None:
+    path = (root / policy_path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        return
+
+    title = str(step.get("title") or "Policy").strip()
+    operation_type = str(step.get("operation_type") or "").strip()
+    step_id = str(step.get("id") or "").strip()
+
+    body = (
+        f"# Policy: {title}\n\n"
+        f"## Operation Type\n{operation_type}\n\n"
+        "## Rule\n"
+        "- TODO\n\n"
+        "## Enforcement\n"
+        "- TODO: wire into `scripts/checks.sh` (or CI) so it cannot drift.\n\n"
+        "## Notes\n"
+        f"- Generated by `scripts/agent run` (step `{step_id}`).\n"
+    )
+    path.write_text(body, encoding="utf-8")
+
+
+def _op_repo_policy_discovery(*, root: Path, out_path: Path, allowed_roots: list[str]) -> None:
+    # Minimal deterministic scan: enumerate markdown files under policies/.
+    policies_dir = root / "policies"
+    items = []
+    if policies_dir.exists():
+        for p in sorted(policies_dir.rglob("*.md")):
+            rel = str(p.relative_to(root)).replace("\\", "/")
+            title = ""
+            try:
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("# "):
+                        title = line[2:].strip()
+                        break
+            except Exception:
+                title = ""
+            items.append({"path": rel, "title": title})
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps({"policies": items}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _op_write_policy_report(*, root: Path, scan_path: Path, report_path: Path) -> None:
+    try:
+        scan = json.loads(scan_path.read_text(encoding="utf-8"))
+    except Exception:
+        scan = {"policies": []}
+
+    policies = scan.get("policies", [])
+    if not isinstance(policies, list):
+        policies = []
+
+    lines = ["# Policies Report (generated)", "", f"- Generated at: `{_utc_iso()}`", ""]
+    for item in policies:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path", "")).strip()
+        title = str(item.get("title", "")).strip()
+        if not path:
+            continue
+        display = f"{title} ({path})" if title else path
+        lines.append(f"- {display}")
+    lines.append("")
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _run_subagent(*, root: Path, name: str, argv: list[str], extra_args: list[str] | None = None) -> dict:
+    runs_dir = root / "target" / "agent-runs"
+    _ensure_dir(runs_dir)
+    run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{_safe_slug(name)}"
+    run_dir = runs_dir / run_id
+    _ensure_dir(run_dir)
+
+    log_path = run_dir / f"{_safe_slug(name)}.log"
+    result_path = run_dir / f"{_safe_slug(name)}.json"
+
+    cmd = [sys.executable, *argv, "--root", str(root), "--log", str(log_path), "--json", str(result_path)]
+    if extra_args:
+        cmd += extra_args
+    env = os.environ.copy()
+
+    started_at = _utc_iso()
+    start = time.time()
+    proc = subprocess.run(cmd, cwd=str(root), env=env)
+    end = time.time()
+    finished_at = _utc_iso()
+
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        result = {
+            "subagent": name,
+            "status": "error",
+            "exit_code": proc.returncode,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "duration_ms": int((end - start) * 1000),
+            "log_path": str(log_path),
+            "error": "Subagent did not write result JSON.",
+        }
+
+    result.setdefault("started_at", started_at)
+    result.setdefault("finished_at", finished_at)
+    result.setdefault("duration_ms", int((end - start) * 1000))
+    result.setdefault("log_path", str(log_path))
+    result.setdefault("run_dir", str(run_dir))
+    return result
+
+
+def cmd_test(args: argparse.Namespace) -> int:
+    root = _repo_root()
+
+    if args.target != "actions":
+        print(f"Unsupported test target: {args.target}", file=sys.stderr)
+        print("Supported: actions", file=sys.stderr)
+        return 2
+
+    subagent = root / "scripts" / "subagents" / "tester_actions.py"
+    result = _run_subagent(
+        root=root,
+        name="tester/actions",
+        argv=[str(subagent)],
+    )
+
+    status = result.get("status", "error")
+    duration_ms = result.get("duration_ms", 0)
+    log_path = result.get("log_path", "")
+    run_dir = result.get("run_dir", "")
+
+    if args.json:
+        Path(args.json).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    print(f"[agent] {result.get('subagent', 'tester/actions')}: {status.upper()} ({duration_ms}ms)")
+    if run_dir:
+        print(f"[agent] run: {run_dir}")
+    if log_path:
+        print(f"[agent] log: {log_path}")
+
+    return 0 if status == "pass" else 1
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    doc_path = (Path(args.path).resolve() if args.path else root / "target" / f"{args.kind}.json")
+    schema_name = "spec.schema.json" if args.kind == "spec" else "plan.schema.json"
+    schema_path = _schema_path(schema_name)
+
+    try:
+        _validate_json(schema_path=schema_path, document_path=doc_path)
+        if args.kind == "plan":
+            _validate_plan_policy_gate(root=root, plan_path=doc_path)
+            _validate_operation_semantics(plan_path=doc_path)
+        if args.kind == "spec":
+            _validate_operation_semantics(spec_path=doc_path)
+    except FileNotFoundError as e:
+        print(f"Missing file: {e.filename}", file=sys.stderr)
+        return 2
+    except jsonschema.ValidationError as e:
+        print(f"Invalid {args.kind}: {doc_path}", file=sys.stderr)
+        print(e.message, file=sys.stderr)
+        if e.path:
+            print(f"At: {'/'.join(map(str, e.path))}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Invalid {args.kind}: {doc_path}", file=sys.stderr)
+        print(str(e), file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"Failed to validate {args.kind}: {e}", file=sys.stderr)
+        return 2
+
+    print(f"Valid {args.kind}: {doc_path}")
+    return 0
+
+
+def cmd_spec_new(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    out_path = Path(args.path).resolve() if args.path else root / "target" / "spec.json"
+    _ensure_dir(out_path.parent)
+
+    if not args.allowed_paths:
+        print("spec new requires at least one --allowed-path", file=sys.stderr)
+        return 2
+    if not args.proofs:
+        print("spec new requires at least one --proof", file=sys.stderr)
+        return 2
+
+    spec = {
+        "format": "darelwasl/spec",
+        "version": 1,
+        "created_at": _utc_iso(),
+        "request_type": args.request_type,
+        "goal": args.goal,
+        "primary_operation_type": args.primary_operation_type or None,
+        "policy_requirement": {"mode": "policy-first", "notes": ""},
+        "context_questions": [],
+        "scope": {"allowed_paths": args.allowed_paths, "notes": ""},
+        "proofs": {"commands": args.proofs, "notes": ""},
+        "constraints": {"non_goals": [], "risk_notes": ""},
+    }
+    if spec["primary_operation_type"] is None:
+        spec.pop("primary_operation_type", None)
+
+    out_path.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _validate_json(schema_path=_schema_path("spec.schema.json"), document_path=out_path)
+    _validate_operation_semantics(spec_path=out_path)
+    print(f"Wrote spec: {out_path}")
+    return 0
+
+
+def cmd_plan_new(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    spec_path = Path(args.spec).resolve() if args.spec else root / "target" / "spec.json"
+    out_path = Path(args.path).resolve() if args.path else root / "target" / "plan.json"
+    _ensure_dir(out_path.parent)
+
+    if not spec_path.exists():
+        print(f"Spec not found: {spec_path}", file=sys.stderr)
+        return 2
+
+    plan = {
+        "format": "darelwasl/plan",
+        "version": 1,
+        "created_at": _utc_iso(),
+        "spec_path": str(spec_path),
+        "notes": "",
+        "steps": [],
+    }
+
+    out_path.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _validate_json(schema_path=_schema_path("plan.schema.json"), document_path=out_path)
+    print(f"Wrote plan: {out_path}")
+    return 0
+
+
+def cmd_intake(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    spec_out = Path(args.spec).resolve() if args.spec else root / "target" / "spec.json"
+    plan_out = Path(args.plan).resolve() if args.plan else root / "target" / "plan.json"
+    _ensure_dir(spec_out.parent)
+    _ensure_dir(plan_out.parent)
+
+    request_text = args.request
+    if not request_text.strip():
+        print("intake requires a non-empty request", file=sys.stderr)
+        return 2
+
+    subagent = root / "scripts" / "subagents" / "high_intake.py"
+    result = _run_subagent(
+        root=root,
+        name="high/intake",
+        argv=[str(subagent)],
+        extra_args=[
+            "--request",
+            request_text,
+            "--spec-path",
+            str(spec_out),
+            "--plan-path",
+            str(plan_out),
+        ],
+    )
+
+    status = result.get("status", "error")
+    duration_ms = result.get("duration_ms", 0)
+    log_path = result.get("log_path", "")
+    run_dir = result.get("run_dir", "")
+
+    print(f"[agent] high/intake: {status.upper()} ({duration_ms}ms)")
+    if run_dir:
+        print(f"[agent] run: {run_dir}")
+    if log_path:
+        print(f"[agent] log: {log_path}")
+
+    if status != "pass":
+        error = result.get("error")
+        if error:
+            print(f"[agent] error: {error}", file=sys.stderr)
+        return 1
+
+    spec = result.get("spec")
+    plan = result.get("plan")
+    if not isinstance(spec, dict) or not isinstance(plan, dict):
+        print("[agent] error: intake did not return spec/plan objects", file=sys.stderr)
+        return 1
+
+    spec = _canonicalize_spec(spec, request_text=request_text, root=root)
+    plan = _canonicalize_plan(plan, spec=spec, spec_out=spec_out, root=root)
+
+    # If we have a known primary operation, prefer a tight, deterministic template plan.
+    primary_op = spec.get("primary_operation_type")
+    if primary_op == "report/policies":
+        policy_path = "policies/policy-reporting.md"
+        plan = {
+            "format": "darelwasl/plan",
+            "version": 1,
+            "created_at": _utc_iso(),
+            "spec_path": str(spec_out),
+            "notes": "Template plan for report/policies (policy-first).",
+            "steps": [
+                {
+                    "id": "create-policy-reporting-policy",
+                    "role": "high",
+                    "kind": "policy_create",
+                    "title": "Define policy reporting procedure",
+                    "depends_on": [],
+                    "operation_type": "create-policy-procedure",
+                    "allowed_paths": ["policies/", "target/"],
+                    "proof_commands": [f"test -f {policy_path}"],
+                    "creates_policy": policy_path,
+                    "policies": [],
+                    "inputs": {"creates_policy": policy_path},
+                },
+                {
+                    "id": "discover-policies",
+                    "role": "low",
+                    "kind": "execute",
+                    "title": "Discover existing policies",
+                    "depends_on": ["create-policy-reporting-policy"],
+                    "operation_type": "repo-policy-discovery",
+                    "allowed_paths": ["policies/", "target/"],
+                    "proof_commands": ["test -s target/policy-scan.json"],
+                    "policies": [policy_path],
+                    "inputs": {},
+                },
+                {
+                    "id": "write-policies-report",
+                    "role": "medium",
+                    "kind": "execute",
+                    "title": "Write policies report",
+                    "depends_on": ["discover-policies", "create-policy-reporting-policy"],
+                    "operation_type": "write-policy-report",
+                    "allowed_paths": ["docs/", "target/", "policies/"],
+                    "proof_commands": ["test -s docs/policies.report.md"],
+                    "policies": [policy_path],
+                    "inputs": {"output_path": "docs/policies.report.md"},
+                },
+                {
+                    "id": "verify-policy-report",
+                    "role": "tester",
+                    "kind": "execute",
+                    "title": "Verify policy report + repo governance",
+                    "depends_on": ["write-policies-report", "create-policy-reporting-policy"],
+                    "operation_type": "validation",
+                    "allowed_paths": ["docs/", "policies/", "target/"],
+                    "proof_commands": ["scripts/checks.sh governance", "test -s docs/policies.report.md"],
+                    "policies": [policy_path],
+                    "inputs": {},
+                },
+            ],
+        }
+
+    # If High couldn't disambiguate semantics, we still write artifacts, but we must stop for clarification.
+    needs_clarification = isinstance(spec.get("context_questions"), list) and len(spec["context_questions"]) > 0
+    if needs_clarification:
+        plan["steps"] = []
+
+    spec_out.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    plan_out.write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    try:
+        _validate_json(schema_path=_schema_path("spec.schema.json"), document_path=spec_out)
+        _validate_operation_semantics(spec_path=spec_out)
+        _validate_json(schema_path=_schema_path("plan.schema.json"), document_path=plan_out)
+        _validate_operation_semantics(plan_path=plan_out)
+        _validate_plan_policy_gate(root=root, plan_path=plan_out)
+    except Exception as e:
+        print(f"[agent] wrote spec/plan but validation failed: {e}", file=sys.stderr)
+        return 1
+
+    print(f"[agent] wrote: {spec_out}")
+    print(f"[agent] wrote: {plan_out}")
+    if needs_clarification:
+        print("[agent] clarification required:", file=sys.stderr)
+        for q in spec.get("context_questions", []):
+            print(f"- {q}", file=sys.stderr)
+        return 3
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    plan_path = Path(args.plan).resolve() if args.plan else root / "target" / "plan.json"
+    try:
+        _validate_json(schema_path=_schema_path("plan.schema.json"), document_path=plan_path)
+        _validate_plan_policy_gate(root=root, plan_path=plan_path)
+    except Exception as e:
+        print(f"Invalid plan: {plan_path}", file=sys.stderr)
+        print(str(e), file=sys.stderr)
+        return 1
+
+    plan = _load_json(plan_path)
+    spec_path = Path(plan.get("spec_path", root / "target" / "spec.json")).resolve()
+    try:
+        _validate_json(schema_path=_schema_path("spec.schema.json"), document_path=spec_path)
+    except Exception as e:
+        print(f"Invalid spec: {spec_path}", file=sys.stderr)
+        print(str(e), file=sys.stderr)
+        return 1
+
+    spec = _load_json(spec_path)
+    steps = plan.get("steps", [])
+    if not isinstance(steps, list):
+        print("Plan steps must be an array", file=sys.stderr)
+        return 1
+
+    step_by_id: dict[str, dict] = {}
+    deps: dict[str, set[str]] = {}
+    rev: dict[str, set[str]] = {}
+    for step in steps:
+        if not isinstance(step, dict) or not isinstance(step.get("id"), str):
+            continue
+        sid = step["id"]
+        step_by_id[sid] = step
+        dep_list = step.get("depends_on", [])
+        dep_set = set(dep_list) if isinstance(dep_list, list) else set()
+        deps[sid] = dep_set
+        for d in dep_set:
+            rev.setdefault(d, set()).add(sid)
+
+    ready = [sid for sid, ds in deps.items() if not ds]
+    done: set[str] = set()
+
+    runs_dir = root / "target" / "agent-runs"
+    _ensure_dir(runs_dir)
+    run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-run"
+    run_dir = runs_dir / run_id
+    _ensure_dir(run_dir)
+
+    print(f"[agent] run: {run_dir}")
+
+    scan_out = root / "target" / "policy-scan.json"
+
+    def exec_step(step: dict) -> tuple[bool, str]:
+        sid = step.get("id", "<unknown>")
+        log = run_dir / f"{sid}.log"
+        before = _git_status_paths(root=root)
+
+        allowed_paths = step.get("allowed_paths", [])
+        if not isinstance(allowed_paths, list) or not allowed_paths:
+            allowed_paths = spec.get("scope", {}).get("allowed_paths", []) if isinstance(spec.get("scope"), dict) else []
+        allowed_paths = _canonicalize_allowed_paths([str(x) for x in allowed_paths], root=root)
+
+        try:
+            kind = step.get("kind")
+            op = str(step.get("operation_type") or "").strip()
+            if kind == "policy_create":
+                policy_path = str(step.get("creates_policy") or "").strip()
+                if not policy_path:
+                    return False, "missing creates_policy"
+                _write_policy_template(root=root, policy_path=policy_path, step=step)
+            elif kind == "execute":
+                if op == "repo-policy-discovery":
+                    if not _is_path_allowed(str(scan_out.relative_to(root)), allowed_paths):
+                        return False, f"scan output not allowed by allowed_paths: {scan_out}"
+                    _op_repo_policy_discovery(root=root, out_path=scan_out, allowed_roots=allowed_paths)
+                elif op == "write-policy-report":
+                    out = None
+                    if isinstance(step.get("inputs"), dict) and isinstance(step["inputs"].get("output_path"), str):
+                        out = Path(step["inputs"]["output_path"])
+                    report_path = (root / "docs" / "policies.report.md") if out is None else (root / out)
+                    report_rel = str(report_path.relative_to(root)).replace("\\", "/")
+                    if not _is_path_allowed(report_rel, allowed_paths):
+                        return False, f"report output not allowed by allowed_paths: {report_rel}"
+                    _op_write_policy_report(root=root, scan_path=scan_out, report_path=report_path)
+                elif op == "validation":
+                    proof_cmds = step.get("proof_commands", [])
+                    if not isinstance(proof_cmds, list) or not proof_cmds:
+                        return False, "missing proof_commands"
+                    for cmd in proof_cmds:
+                        rc = _run_shell_command(root=root, command=str(cmd), log_file=log)
+                        if rc != 0:
+                            return False, f"proof command failed: {cmd}"
+                else:
+                    return False, f"unsupported operation_type: {op}"
+        except Exception as e:
+            return False, f"exception: {e}"
+        finally:
+            log.touch(exist_ok=True)
+
+        after = _git_status_paths(root=root)
+        changed = sorted(after - before)
+        for path in changed:
+            if not _is_path_allowed(path, allowed_paths):
+                return False, f"changed file outside allowed_paths: {path}"
+
+        # Optional proof commands for non-validation steps.
+        if args.proofs and not (step.get("kind") == "execute" and str(step.get("operation_type")) == "validation"):
+            proof_cmds = step.get("proof_commands", [])
+            if isinstance(proof_cmds, list) and proof_cmds:
+                for cmd in proof_cmds:
+                    rc = _run_shell_command(root=root, command=str(cmd), log_file=log)
+                    if rc != 0:
+                        return False, f"proof command failed: {cmd}"
+
+        return True, ""
+
+    if args.dry_run:
+        order = []
+        deps_copy = {k: set(v) for k, v in deps.items()}
+        ready_copy = sorted([sid for sid, ds in deps_copy.items() if not ds])
+        while ready_copy:
+            sid = ready_copy.pop(0)
+            order.append(sid)
+            for nxt in sorted(rev.get(sid, set())):
+                deps_copy[nxt].discard(sid)
+                if not deps_copy[nxt]:
+                    ready_copy.append(nxt)
+                    ready_copy.sort()
+        print("[agent] dry-run order:")
+        for sid in order:
+            step = step_by_id.get(sid, {})
+            print(f"- {sid} ({step.get('role')}/{step.get('kind')}) op={step.get('operation_type')}")
+        return 0
+
+    ready.sort()
+    while ready:
+        sid = ready.pop(0)
+        step = step_by_id.get(sid)
+        if not step:
+            done.add(sid)
+            continue
+
+        print(f"[agent] step: {sid} ({step.get('role')}/{step.get('kind')}) op={step.get('operation_type')}")
+        ok, err = exec_step(step)
+        if not ok:
+            print(f"[agent] FAIL {sid}: {err}", file=sys.stderr)
+            if not args.continue_on_failure:
+                return 1
+        else:
+            print(f"[agent] OK {sid}")
+
+        done.add(sid)
+        for nxt in sorted(rev.get(sid, set())):
+            deps[nxt].discard(sid)
+            if not deps[nxt] and nxt not in done and nxt not in ready:
+                ready.append(nxt)
+        ready.sort()
+
+    remaining = [sid for sid in deps.keys() if sid not in done]
+    if remaining:
+        print(f"[agent] incomplete: {', '.join(sorted(remaining))}", file=sys.stderr)
+        return 1
+
+    print("[agent] run complete")
+    return 0
+
+
+def cmd_llm_smoke(_args: argparse.Namespace) -> int:
+    root = _repo_root()
+
+    subagent = root / "scripts" / "subagents" / "llm_smoke.py"
+    result = _run_subagent(
+        root=root,
+        name="tester/llm-smoke",
+        argv=[str(subagent)],
+    )
+
+    status = result.get("status", "error")
+    duration_ms = result.get("duration_ms", 0)
+    log_path = result.get("log_path", "")
+    run_dir = result.get("run_dir", "")
+
+    print(f"[agent] {result.get('subagent', 'tester/llm-smoke')}: {status.upper()} ({duration_ms}ms)")
+    if run_dir:
+        print(f"[agent] run: {run_dir}")
+    if log_path:
+        print(f"[agent] log: {log_path}")
+
+    if status != "pass":
+        error = result.get("error")
+        if error:
+            print(f"[agent] error: {error}", file=sys.stderr)
+    return 0 if status == "pass" else 1
+
+
+def _shorten(text: str, *, max_len: int = 140) -> str:
+    t = " ".join(text.split())
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 1] + "…"
+
+
+def cmd_explain(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    plan_path = Path(args.plan).resolve() if args.plan else root / "target" / "plan.json"
+    spec_path = Path(args.spec).resolve() if args.spec else root / "target" / "spec.json"
+
+    try:
+        plan = _load_json(plan_path)
+        spec = _load_json(spec_path)
+    except FileNotFoundError as e:
+        print(f"Missing file: {e.filename}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Failed to read spec/plan: {e}", file=sys.stderr)
+        return 2
+
+    goal = str(spec.get("goal", "")).strip()
+    request_type = str(spec.get("request_type", "")).strip()
+    primary_op = str(spec.get("primary_operation_type", "")).strip()
+    allowed_paths = spec.get("scope", {}).get("allowed_paths", []) if isinstance(spec.get("scope"), dict) else []
+    proof_cmds = spec.get("proofs", {}).get("commands", []) if isinstance(spec.get("proofs"), dict) else []
+
+    print("[spec]")
+    if request_type:
+        print(f"- request_type: {request_type}")
+    if primary_op:
+        print(f"- primary_operation_type: {primary_op}")
+    if goal:
+        print(f"- goal: {_shorten(goal, max_len=220)}")
+    if isinstance(allowed_paths, list) and allowed_paths:
+        print(f"- allowed_paths: {', '.join(map(str, allowed_paths))}")
+    if isinstance(proof_cmds, list) and proof_cmds:
+        print("- proofs:")
+        for cmd in proof_cmds:
+            print(f"  - {cmd}")
+
+    steps = plan.get("steps", [])
+    if not isinstance(steps, list):
+        print("\n[plan]\n- steps: <invalid>", file=sys.stderr)
+        return 2
+
+    step_by_id: dict[str, dict] = {}
+    for step in steps:
+        if isinstance(step, dict) and isinstance(step.get("id"), str):
+            step_by_id[step["id"]] = step
+
+    created_policy_to_step: dict[str, str] = {}
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if step.get("kind") == "policy_create" and isinstance(step.get("creates_policy"), str) and isinstance(step.get("id"), str):
+            created_policy_to_step[step["creates_policy"]] = step["id"]
+
+    roots: list[dict] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        deps = step.get("depends_on", [])
+        if not isinstance(deps, list) or not deps:
+            roots.append(step)
+
+    print("\n[plan]")
+    print(f"- steps: {len(steps)}")
+    if roots:
+        root_ids = [s.get("id") for s in roots if isinstance(s.get("id"), str)]
+        if root_ids:
+            print(f"- roots: {', '.join(root_ids)}")
+
+    def policy_status(policy: str) -> str:
+        policy_file = root / policy
+        if policy_file.exists():
+            return "exists"
+        creator = created_policy_to_step.get(policy)
+        if creator:
+            return f"created-by:{creator}"
+        return "missing"
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        sid = step.get("id", "<no-id>")
+        title = step.get("title", "")
+        role = step.get("role", "")
+        kind = step.get("kind", "")
+        op = step.get("operation_type", "")
+        deps = step.get("depends_on", [])
+        pg = step.get("parallel_group")
+
+        header = f"- {sid} [{role}/{kind}]"
+        if op:
+            header += f" op={op}"
+        if pg:
+            header += f" group={pg}"
+        print(header)
+        if title:
+            print(f"  title: {_shorten(str(title))}")
+        if isinstance(deps, list) and deps:
+            print(f"  depends_on: {', '.join(map(str, deps))}")
+
+        if kind == "policy_create" and isinstance(step.get("creates_policy"), str):
+            print(f"  creates_policy: {step['creates_policy']}")
+
+        if kind == "execute":
+            policies = step.get("policies", [])
+            if isinstance(policies, list) and policies:
+                statuses = [f"{p} ({policy_status(str(p))})" for p in policies]
+                print(f"  policies: {', '.join(statuses)}")
+
+        if args.show_scope:
+            ap = step.get("allowed_paths", [])
+            if isinstance(ap, list) and ap:
+                print(f"  allowed_paths: {', '.join(map(str, ap))}")
+        if args.show_proofs:
+            pc = step.get("proof_commands", [])
+            if isinstance(pc, list) and pc:
+                print("  proof_commands:")
+                for cmd in pc:
+                    print(f"    - {cmd}")
+
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="scripts/agent", add_help=True)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_test = sub.add_parser("test", help="Run POC test subagents")
+    p_test.add_argument("target", choices=["actions"], help="Which test to run")
+    p_test.add_argument("--json", help="Optional path to write aggregated JSON result")
+    p_test.set_defaults(fn=cmd_test)
+
+    p_llm = sub.add_parser("llm-smoke", help="Verify Codex LLM access (no repo changes)")
+    p_llm.set_defaults(fn=cmd_llm_smoke)
+
+    p_validate = sub.add_parser("validate", help="Validate spec/plan JSON against schemas")
+    p_validate.add_argument("kind", choices=["spec", "plan"])
+    p_validate.add_argument("--path", help="Path to JSON file (defaults to target/<kind>.json)")
+    p_validate.set_defaults(fn=cmd_validate)
+
+    p_spec = sub.add_parser("spec", help="Manage the spec artifact")
+    spec_sub = p_spec.add_subparsers(dest="spec_cmd", required=True)
+    p_spec_new = spec_sub.add_parser("new", help="Create a new target/spec.json")
+    p_spec_new.add_argument("--goal", required=True, help="1-sentence goal")
+    p_spec_new.add_argument("--request-type", choices=["exploration", "change"], default="exploration")
+    p_spec_new.add_argument("--primary-operation-type", help="Optional operation category (e.g. report, service-control)")
+    p_spec_new.add_argument(
+        "--allowed-path",
+        dest="allowed_paths",
+        action="append",
+        default=[],
+        help="Repeatable allowed path prefix (required, e.g. scripts/, registries/)",
+    )
+    p_spec_new.add_argument(
+        "--proof",
+        dest="proofs",
+        action="append",
+        default=[],
+        help="Repeatable proof command (required, e.g. scripts/checks.sh governance)",
+    )
+    p_spec_new.add_argument("--path", help="Output path (defaults to target/spec.json)")
+    p_spec_new.set_defaults(fn=cmd_spec_new)
+
+    p_plan = sub.add_parser("plan", help="Manage the plan artifact")
+    plan_sub = p_plan.add_subparsers(dest="plan_cmd", required=True)
+    p_plan_new = plan_sub.add_parser("new", help="Create a new target/plan.json")
+    p_plan_new.add_argument("--spec", help="Spec path (defaults to target/spec.json)")
+    p_plan_new.add_argument("--path", help="Output path (defaults to target/plan.json)")
+    p_plan_new.set_defaults(fn=cmd_plan_new)
+
+    p_intake = sub.add_parser("intake", help="Create spec/plan from a request (High planner, read-only)")
+    p_intake.add_argument("request", help="Request text (start with exploration: or change:)")
+    p_intake.add_argument("--spec", help="Output spec path (defaults to target/spec.json)")
+    p_intake.add_argument("--plan", help="Output plan path (defaults to target/plan.json)")
+    p_intake.set_defaults(fn=cmd_intake)
+
+    p_explain = sub.add_parser("explain", help="Summarize spec/plan artifacts for humans")
+    p_explain.add_argument("--spec", help="Spec path (defaults to target/spec.json)")
+    p_explain.add_argument("--plan", help="Plan path (defaults to target/plan.json)")
+    p_explain.add_argument("--show-scope", action="store_true", help="Include allowed_paths per step")
+    p_explain.add_argument("--show-proofs", action="store_true", help="Include proof_commands per step")
+    p_explain.set_defaults(fn=cmd_explain)
+
+    p_run = sub.add_parser("run", help="Execute a plan (v0: limited operation types)")
+    p_run.add_argument("--plan", help="Plan path (defaults to target/plan.json)")
+    p_run.add_argument("--dry-run", action="store_true", help="Print execution order only")
+    p_run.add_argument("--continue-on-failure", action="store_true", help="Continue executing steps after a failure")
+    p_run.add_argument("--proofs", action="store_true", help="Run proof_commands on non-validation steps too")
+    p_run.set_defaults(fn=cmd_run)
+
+    return p
+
+
+def main(argv: list[str]) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return int(args.fn(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

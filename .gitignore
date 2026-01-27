@@ -20,3 +20,5 @@ node_modules/
 .cljs_node_repl/
 .secrets/*
 !.secrets/README.md
+__pycache__/
+*.pyc

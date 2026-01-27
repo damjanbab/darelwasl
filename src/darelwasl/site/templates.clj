@@ -1,6 +1,31 @@
 (ns darelwasl.site.templates
   (:require [clojure.string :as str]))
 
+(defn- normalize-base-path
+  [base-path]
+  (let [b (str/trim (str (or base-path "")))]
+    (cond
+      (or (str/blank? b) (= b "/")) ""
+      (str/starts-with? b "/") (str/replace b #"/+$" "")
+      :else (str "/" (str/replace b #"/+$" "")))))
+
+(defn- with-base
+  [base-path href]
+  (let [base (normalize-base-path base-path)
+        h (str (or href ""))]
+    (cond
+      (str/blank? base) h
+      (str/blank? h) h
+      (or (str/starts-with? h "http://")
+          (str/starts-with? h "https://")
+          (str/starts-with? h "mailto:")
+          (str/starts-with? h "tel:")
+          (str/starts-with? h "javascript:")
+          (str/starts-with? h "#")) h
+      (str/starts-with? h base) h
+      (str/starts-with? h "/") (str base h)
+      :else (str base "/" h))))
+
 (defn- escape-html [s]
   (let [text (str (or s ""))]
     (str/escape text {\& "&amp;"
@@ -20,31 +45,36 @@
     :else entry))
 
 (defn nav-links
-  [links current-path]
-  (->> links
-       (map (fn [{:keys [path label cta?]}]
-              (let [active (= path current-path)]
-                (format "<a href=\"%s\" class=\"nav-link %s %s\" aria-current=\"%s\">%s</a>"
-                        (escape-html path)
-                        (if active "active" "")
-                        (when cta? "primary-cta")
-                        (if active "page" "false")
-                        (escape-html label)))))
-       (apply str)))
+  ([links current-path]
+   (nav-links links current-path ""))
+  ([links current-path base-path]
+   (->> links
+        (map (fn [{:keys [path label cta?]}]
+               (let [active (= path current-path)
+                     href (with-base base-path path)]
+                 (format "<a href=\"%s\" class=\"nav-link %s %s\" aria-current=\"%s\">%s</a>"
+                         (escape-html href)
+                         (if active "active" "")
+                         (when cta? "primary-cta")
+                         (if active "page" "false")
+                         (escape-html label)))))
+        (apply str))))
 
 (defn layout
-  [title nav body footer-cta]
+  ([title nav body footer-cta]
+   (layout title nav body footer-cta ""))
+  ([title nav body footer-cta base-path]
   (str "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
        "<title>" (escape-html title) "</title>"
-       "<link rel=\"stylesheet\" href=\"/css/theme.css\">"
-       "<link rel=\"stylesheet\" href=\"/css/main.css\">"
-       "<link rel=\"stylesheet\" href=\"/css/site.css\">"
+       "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/theme.css")) "\">"
+       "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/main.css")) "\">"
+       "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/site.css")) "\">"
        "<script>function toggleMenu(){document.body.classList.toggle('mobile-open');var btn=document.getElementById('mobile-toggle');if(btn){var open=document.body.classList.contains('mobile-open');btn.setAttribute('aria-expanded',open);if(!open){btn.focus();}}}</script>"
        "</head>"
        "<body data-theme=\"site-premium\">"
        "<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
-       "<div class=\"brand\" aria-label=\"Dar Alwasl\"><img src=\"/logo.jpg\" alt=\"Dar Alwasl logo\" loading=\"lazy\"></div>"
+       "<div class=\"brand\" aria-label=\"Dar Alwasl\"><img src=\"" (escape-html (with-base base-path "/logo.jpg")) "\" alt=\"Dar Alwasl logo\" loading=\"lazy\"></div>"
        "<nav class=\"nav-links\" aria-label=\"Primary\">" nav "</nav>"
        "<button id=\"mobile-toggle\" class=\"mobile-toggle\" type=\"button\" aria-expanded=\"false\" aria-controls=\"mobile-menu\" onclick=\"toggleMenu()\">Menu</button>"
        "</div>"
@@ -52,8 +82,11 @@
        "</div></header>"
        "<main>" body "</main>"
        (or footer-cta "")
-       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Dar Alwasl - Public site</div><div><a class=\"nav-link\" href=\"/contact\">Contact</a><a class=\"nav-link\" href=\"/about\">About</a></div></div></footer>"
-       "</body></html>"))
+       "<footer class=\"site-footer\"><div class=\"footer-content\"><div>(c) Dar Alwasl - Public site</div><div>"
+       "<a class=\"nav-link\" href=\"" (escape-html (with-base base-path "/contact")) "\">Contact</a>"
+       "<a class=\"nav-link\" href=\"" (escape-html (with-base base-path "/about")) "\">About</a>"
+       "</div></div></footer>"
+       "</body></html>")))
 
 (defn- render-list
   [items]
@@ -194,32 +227,34 @@
               (apply str cards)))))
 
 (defn render-license-tabs
-  [licenses selected-type]
-  (let [ordered (sort-by #(or (:license/order %) Long/MAX_VALUE) licenses)
-        selected (or (some #(when (= (:license/type %) selected-type) %) ordered)
-                     (first ordered))
-        tab-links (apply str
-                         (map (fn [lic]
-                                (let [active (= (:license/id lic) (:license/id selected))
-                                      t (some-> lic :license/type name (str/replace "license.type/" ""))
-                                      href (str "/services?type=" t)]
-                                  (format "<a href=\"%s\" class=\"tab %s\">%s</a>"
-                                          (escape-html href)
-                                          (if active "active" "")
-                                          (escape-html (:license/label lic)))))
-                              ordered))
-        details (when selected
-                  (format "<div class=\"card\"><h3>%s</h3><div class=\"meta\">%s</div>%s%s%s</div>"
-                          (escape-html (:license/label selected))
-                          (escape-html (:license/processing-time selected))
-                          (render-list (:license/pricing-lines selected))
-                          (render-list (:license/document-checklist selected))
-                          (render-list (:license/who selected))))]
-    (when (seq ordered)
-      (format "<section><div class=\"section-title\"><h2>License selector</h2>%s</div><div class=\"tabs\">%s</div>%s</section>"
-              (evidence-pill "Compare")
-              tab-links
-              (or details "")))))
+  ([licenses selected-type]
+   (render-license-tabs licenses selected-type ""))
+  ([licenses selected-type base-path]
+   (let [ordered (sort-by #(or (:license/order %) Long/MAX_VALUE) licenses)
+         selected (or (some #(when (= (:license/type %) selected-type) %) ordered)
+                      (first ordered))
+         tab-links (apply str
+                          (map (fn [lic]
+                                 (let [active (= (:license/id lic) (:license/id selected))
+                                       t (some-> lic :license/type name (str/replace "license.type/" ""))
+                                       href (with-base base-path (str "/services?type=" t))]
+                                   (format "<a href=\"%s\" class=\"tab %s\">%s</a>"
+                                           (escape-html href)
+                                           (if active "active" "")
+                                           (escape-html (:license/label lic)))))
+                               ordered))
+         details (when selected
+                   (format "<div class=\"card\"><h3>%s</h3><div class=\"meta\">%s</div>%s%s%s</div>"
+                           (escape-html (:license/label selected))
+                           (escape-html (:license/processing-time selected))
+                           (render-list (:license/pricing-lines selected))
+                           (render-list (:license/document-checklist selected))
+                           (render-list (:license/who selected))))]
+     (when (seq ordered)
+       (format "<section><div class=\"section-title\"><h2>License selector</h2>%s</div><div class=\"tabs\">%s</div>%s</section>"
+               (evidence-pill "Compare")
+               tab-links
+               (or details ""))))))
 
 (defn render-proof
   [comparison-rows]
@@ -308,15 +343,17 @@
     (str (or values-view "") (or team-view ""))))
 
 (defn render-contact
-  [business contact]
+  ([business contact]
+   (render-contact business contact ""))
+  ([business contact base-path]
   (let [summary (or (:business/summary business)
                     "Share your structure, activities, and timing to get a plotted roadmap.")
         email (:contact/email contact)
         phone (:contact/phone contact)
         primary-label (:contact/primary-cta-label contact)
-        primary-url (:contact/primary-cta-url contact)
+        primary-url (some-> (:contact/primary-cta-url contact) (with-base base-path))
         secondary-label (:contact/secondary-cta-label contact)
-        secondary-url (:contact/secondary-cta-url contact)
+        secondary-url (some-> (:contact/secondary-cta-url contact) (with-base base-path))
         inputs "<ul><li>Activities (1-3 lines)</li><li>Ownership (individual / parent company / GCC)</li><li>Timing target (weeks or month)</li><li>Documents status (ready / in progress)</li></ul>"]
     (format "<section class=\"contact\"><div><div class=\"section-title\"><h2>Schedule a meeting</h2><span class=\"pill\">REQUIREMENTS</span></div><p>%s</p><div class=\"meta\"><strong>Include:</strong>%s</div></div><div class=\"stack\"><div class=\"meta\">Email: %s</div><div class=\"meta\">Phone: %s</div><div class=\"ctas\">%s%s</div><div class=\"meta\">Gate review: leave with your next step + required inputs.</div></div></section>"
             (escape-html summary)
@@ -332,16 +369,19 @@
               (format "<a class=\"cta secondary\" href=\"%s\">%s</a>"
                       (escape-html secondary-url)
                       (escape-html secondary-label))
-              ""))))
+              "")))))
 
 (defn render-footer-cta
-  [business contact]
+  ([business contact]
+   (render-footer-cta business contact ""))
+  ([business contact base-path]
   (let [headline (or (:business/hero-headline business) "Ready to start your Saudi setup?")
         strapline (or (:business/tagline business) "Schedule a meeting to map your path.")
         primary-label (or (:contact/primary-cta-label contact) "Schedule a meeting")
-        primary-url (or (:contact/primary-cta-url contact) "/contact")
+        primary-url (with-base base-path (or (:contact/primary-cta-url contact) "/contact"))
         secondary-label (:contact/secondary-cta-label contact)
-        secondary-url (:contact/secondary-cta-url contact)]
+        secondary-url (when-let [u (:contact/secondary-cta-url contact)]
+                        (with-base base-path u))]
     (format "<div class=\"footer-cta\"><div class=\"inner\"><div><h3>%s</h3><p>%s</p></div><div class=\"actions\"><a class=\"cta primary\" href=\"%s\">%s</a>%s</div></div></div>"
             (escape-html headline)
             (escape-html strapline)
@@ -351,20 +391,25 @@
               (format "<a class=\"cta secondary\" href=\"%s\">%s</a>"
                       (escape-html secondary-url)
                       (escape-html secondary-label))
-              ""))))
+              "")))))
 
 (defn render-not-found
-  [path nav]
+  ([path nav]
+   (render-not-found path nav ""))
+  ([path nav base-path]
   {:status 404
    :headers {"Content-Type" "text/html; charset=utf-8"}
    :body (layout "Not found"
                  nav
                  (format "<h1>Page not found</h1><p>No content found at <strong>%s</strong>.</p>"
                          (escape-html path))
-                 "")})
+                 ""
+                 base-path)}))
 
 (defn html-response
-  [title nav body footer-cta]
+  ([title nav body footer-cta]
+   (html-response title nav body footer-cta ""))
+  ([title nav body footer-cta base-path]
   {:status 200
    :headers {"Content-Type" "text/html; charset=utf-8"}
-   :body (layout title nav body footer-cta)})
+   :body (layout title nav body footer-cta base-path)}))

@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [clojure.tools.logging :as log]
             [darelwasl.auth :as auth]
+            [darelwasl.agent-control.gc :as agent-control-gc]
             [darelwasl.bootstrap :as bootstrap]
             [darelwasl.config :as config]
             [darelwasl.server :as server]
@@ -69,10 +70,12 @@
          telegram-future (when (and telegram-polling? (not (:error db-state)))
                            (telegram-poller/start! {:config cfg
                                                     :db db-state}))
+         agent-control-gc-handle (agent-control-gc/start-loop! {:interval-ms 60000})
          started (cond-> started
                    worker-future (assoc :outbox/worker worker-future)
                    betting-future (assoc :betting/scheduler betting-future)
-                   telegram-future (assoc :telegram/poller telegram-future))]
+                   telegram-future (assoc :telegram/poller telegram-future)
+                   agent-control-gc-handle (assoc :agent-control/gc agent-control-gc-handle))]
      (telegram/auto-set-webhook! (:telegram cfg))
      (reset! system-state started)
      started)))
@@ -81,6 +84,8 @@
   "Stop the running application."
   []
   (when-let [state @system-state]
+    (when-let [handle (:agent-control/gc state)]
+      (agent-control-gc/stop-loop! handle))
     (when-let [worker (:outbox/worker state)]
       (future-cancel worker))
     (when-let [worker (:betting/scheduler state)]
