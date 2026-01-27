@@ -250,9 +250,13 @@ def worktree_path(root: Path, run_id: str) -> Path:
 def ensure_worktree(root: Path, run_id: str, ref: str) -> None:
     wt = worktree_path(root, run_id)
     wt.parent.mkdir(parents=True, exist_ok=True)
-    if (wt / ".git").exists() or wt.exists() and any(wt.iterdir()):
-        return
     branch = f"preview/{run_id}"
+    if (wt / ".git").exists() or (wt.exists() and any(wt.iterdir())):
+        # Worktree already exists; fast-forward it to the requested ref.
+        # We intentionally do NOT `git clean -fdx` because we keep shared node_modules as a symlink.
+        run(["git", "checkout", "-B", branch, ref], cwd=wt)
+        run(["git", "reset", "--hard", ref], cwd=wt)
+        return
     run(["git", "worktree", "add", "-B", branch, str(wt), ref], cwd=root)
 
 
