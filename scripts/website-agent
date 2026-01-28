@@ -100,6 +100,8 @@ def _build_prompt(*, agent_md: str, request: str) -> str:
     return (
         "You are the website agent.\n"
         "You MUST follow the contract below.\n\n"
+        "IMPORTANT: This run is non-interactive and has already been approved by the operator.\n"
+        "Do NOT ask for confirmation. Proceed to implement the request now.\n\n"
         "=== AGENT CONTRACT ===\n"
         f"{agent_md.strip()}\n"
         "=== END CONTRACT ===\n\n"
@@ -107,7 +109,8 @@ def _build_prompt(*, agent_md: str, request: str) -> str:
         "- Implement the user request by editing files in the repo.\n"
         "- Do not modify anything outside the allowed paths.\n"
         "- Keep changes minimal and correct.\n"
-        "- If you cannot safely complete the request within the allowed paths, explain why and make no changes.\n\n"
+        "- If you cannot safely complete the request within the allowed paths, explain why and make no changes.\n"
+        "- Do not output an approval/oversight checklist; this has already been done.\n\n"
         "User request:\n"
         f"{request.strip()}\n"
     )
