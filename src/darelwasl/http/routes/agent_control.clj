@@ -50,17 +50,6 @@
 (defn- kebab-id? [s]
   (boolean (re-matches #"[a-z0-9][a-z0-9-]{2,48}" (str s))))
 
-(defn- parse-website-replace
-  [message]
-  (let [lines (-> (or message "") (str/split-lines))
-        find-line (some #(when (str/starts-with? (str/lower-case (str/trim %)) "find:") %) lines)
-        replace-line (some #(when (str/starts-with? (str/lower-case (str/trim %)) "replace:") %) lines)
-        find0 (some-> find-line (str/replace-first #"(?i)^\s*find:\s*" "") str/trim)
-        replace0 (some-> replace-line (str/replace-first #"(?i)^\s*replace:\s*" "") str/trim)]
-    (when (and (not (str/blank? find0))
-               (not (str/blank? replace0)))
-      {:find find0 :replace replace0})))
-
 (defn- new-run-id []
   (let [suffix (subs (str (UUID/randomUUID)) 0 8)
         ts (.format (.withZone (java.time.format.DateTimeFormatter/ofPattern "yyyyMMdd-HHmmss") ZoneOffset/UTC) (Instant/now))]
@@ -137,8 +126,6 @@
     (let [body (or (:body-params request) {})
           requested-id (some-> (or (:id body) (get body "id")) str/trim not-empty)
           message (some-> (or (:message body) (get body "message")) str)
-          website-find (some-> (or (:website_find body) (get body "website_find")) str/trim not-empty)
-          website-replace (some-> (or (:website_replace body) (get body "website_replace")) str/trim not-empty)
           mode (keyword (or (:mode body) (get body "mode") "both"))
           run-id (or requested-id (new-run-id))]
       (cond
@@ -155,9 +142,6 @@
                    :status "draft"
                    :mode (name mode)
                    :message message
-                   :website_change (cond-> {}
-                                     website-find (assoc :find website-find)
-                                     website-replace (assoc :replace website-replace))
                    :revisions []
                    :preview {:status "none"}
                    :jobs []}]
@@ -203,45 +187,23 @@
           run0 (read-json (run-path run-id))
           run (if (and (not (nil? run0)) (not (str/blank? (str/trim (or new-message "")))))
                 (upsert-run! run-id (fn [r] (assoc r :message new-message)))
-                run0)
-          raw-find (some-> (or (:website_find body) (get body "website_find")) str)
-          raw-replace (some-> (or (:website_replace body) (get body "website_replace")) str)
-          parsed (parse-website-replace (:message run))
-          stored-find (some-> (get-in run [:website_change :find]) str)
-          stored-replace (some-> (get-in run [:website_change :replace]) str)
-          website-find (or (not-empty (str/trim (or raw-find "")))
-                           (not-empty (str/trim (or stored-find "")))
-                           (:find parsed))
-          website-replace (or (not-empty (str/trim (or raw-replace "")))
-                              (not-empty (str/trim (or stored-replace "")))
-                              (:replace parsed))]
+                run0)]
       (cond
         (nil? run)
         (common/error-response 404 "Run not found")
-
-        (and (or (= mode "site") (= mode "both"))
-             (or (some? website-find) (some? website-replace))
-             (or (str/blank? (or website-find "")) (str/blank? (or website-replace ""))))
-        (common/error-response 400 "Website change requires both find: and replace: (either in fields or in the request text).")
 
         :else
         (let [request-text (or (some-> new-message str/trim not-empty)
                                (some-> (:message run) str/trim not-empty)
                                "")
               website-request (when (and (or (= mode "site") (= mode "both"))
-                                         (str/blank? (or website-find ""))
-                                         (str/blank? (or website-replace ""))
                                          (not (str/blank? request-text)))
                                 request-text)
               preview-manifest (io/file "target/previews" run-id "preview.json")
               reset-to-ref? (not (.exists ^File preview-manifest))
               _ (when (and (or (= mode "site") (= mode "both"))
-                           (not (str/blank? (or website-find "")))
-                           (not (str/blank? (or website-replace ""))))
-                  (upsert-run! run-id (fn [r] (assoc r :website_change {:find website-find :replace website-replace}))))
-          _ (when (and (or (= mode "site") (= mode "both"))
-                       (not (str/blank? (or website-request ""))))
-              (upsert-run! run-id (fn [r] (assoc r :message request-text))))
+                           (not (str/blank? (or website-request ""))))
+                  (upsert-run! run-id (fn [r] (assoc r :message request-text))))
           job-id (str (UUID/randomUUID))
           log-file (job-log-path run-id job-id)
           job {:id job-id
@@ -260,10 +222,6 @@
                              (when reset-to-ref?
                                " --reset-to-ref")
                              " --mode " (pr-str mode)
-                             (when (and (or (= mode "site") (= mode "both"))
-                                        (not (str/blank? (or website-find ""))))
-                               (str " --website-find " (pr-str website-find)
-                                    " --website-replace " (pr-str website-replace)))
                              (when (and (or (= mode "site") (= mode "both"))
                                         (not (str/blank? (or website-request ""))))
                                (str " --website-request " (pr-str website-request)

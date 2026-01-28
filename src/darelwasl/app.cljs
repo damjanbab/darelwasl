@@ -2017,12 +2017,10 @@
 (rf/reg-event-fx
  ::create-agent-run
  (fn [{:keys [db]} _]
-   (let [{:keys [id message mode website_find website_replace]} (get-in db [:agent-control :composer])
+   (let [{:keys [id message mode]} (get-in db [:agent-control :composer])
          payload (cond-> {:message message
                           :mode (or mode "both")}
-                   (not (str/blank? (or id ""))) (assoc :id id)
-                   (not (str/blank? (or website_find ""))) (assoc :website_find website_find)
-                   (not (str/blank? (or website_replace ""))) (assoc :website_replace website_replace))]
+                   (not (str/blank? (or id ""))) (assoc :id id))]
      {:db (-> db
               (assoc-in [:agent-control :composer :status] :loading)
               (assoc-in [:agent-control :composer :error] nil))
@@ -2040,9 +2038,7 @@
             (assoc-in [:agent-control :composer :error] nil)
             (assoc-in [:agent-control :runs :selected] (:id payload))
             (assoc-in [:agent-control :composer :id] "")
-            (assoc-in [:agent-control :composer :message] "")
-            (assoc-in [:agent-control :composer :website_find] "")
-            (assoc-in [:agent-control :composer :website_replace] ""))
+            (assoc-in [:agent-control :composer :message] ""))
     :dispatch-n [[::fetch-agent-runs]
                  [::fetch-agent-run (:id payload)]]}))
 
@@ -2062,16 +2058,12 @@
    (let [mode (or (get-in db [:agent-control :detail :data :mode])
                   (get-in db [:agent-control :composer :mode])
                   "both")
-          message (get-in db [:agent-control :composer :message])
-          website_find (get-in db [:agent-control :composer :website_find])
-          website_replace (get-in db [:agent-control :composer :website_replace])]
+          message (get-in db [:agent-control :composer :message])]
      {:db db
       ::fx/http {:url (str "/api/agent-control/runs/" run-id "/preview/start")
                  :method "POST"
                  :body (cond-> {:mode mode}
-                         (not (str/blank? (or message ""))) (assoc :message message)
-                         (not (str/blank? (or website_find ""))) (assoc :website_find website_find)
-                         (not (str/blank? (or website_replace ""))) (assoc :website_replace website_replace))
+                         (not (str/blank? (or message ""))) (assoc :message message))
                  :on-success [::agent-action-success run-id]
                  :on-error [::agent-action-failure]}})))
 

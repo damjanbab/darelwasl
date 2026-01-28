@@ -74,26 +74,14 @@
        [:option {:value "both"} "Site + App"]
        [:option {:value "site"} "Site only"]
        [:option {:value "app"} "App only"]]]
-     (when (#{ "both" "site"} (or (:mode composer) "both"))
-       [:<>
-        [:div.field-group
-         [:label "Website find (exact text)"]
-         [ui/form-input {:value (or (:website_find composer) "")
-                         :placeholder "Paste the exact current text from the website"
-                         :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :website_find (.. % -target -value)])}]]
-        [:div.field-group
-         [:label "Website replace (new text)"]
-         [ui/form-input {:value (or (:website_replace composer) "")
-                         :placeholder "Paste the new text you want"
-                         :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :website_replace (.. % -target -value)])}]]
-        [:div.meta "Option A (strict): fill Website find/replace. Rule: find text must match exactly once."]
-        [:div.meta "Option B (agent): leave Website find/replace empty and describe the change in Request; the website agent will edit templates/CSS/assets within allowed paths."]])
      [:div.field-group
       [:label "Request"]
       [:textarea.form-input {:rows 4
                              :placeholder "e.g. change: Update the homepage hero and CTA"
                              :value (or (:message composer) "")
                              :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :message (.. % -target -value)])}]]
+     (when (#{ "both" "site"} (or (:mode composer) "both"))
+       [:div.meta "Website edits are executed by the website agent and enforced by contract (allowed paths + proofs), then published to a preview link for review."])
      [:div.button-row
       [ui/button {:variant :primary
                   :disabled creating?
