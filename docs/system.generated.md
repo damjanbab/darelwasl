@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `a137e7f20d92b51b4b95a08ef947a1b81925943b5c76c6f7a765563413eb6bab`
+- Catalog version: `e8cf4b1c3c3a911aab948c703ef58bfcff4f6bbd0bb8ae55d5584d75c4e010bb`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -312,6 +312,7 @@ This file is auto-generated. Do not edit by hand.
 - tg-spinup.sh
 - tg-watch-webhook.sh
 - theme-css-vars.sh
+- website-agent
 
 ## Namespaces
 
