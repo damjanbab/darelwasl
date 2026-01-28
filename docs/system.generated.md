@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `366ef44db1d481b791c78adddfc1e39c33b52cc7ac0fa88b342bae2daabe4d06`
+- Catalog version: `a137e7f20d92b51b4b95a08ef947a1b81925943b5c76c6f7a765563413eb6bab`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -294,25 +294,20 @@ This file is auto-generated. Do not edit by hand.
 ## Scripts
 
 - agent
-- agentcpython-313.pyc
 - app-smoke.js
 - checks.sh
 - deploy.sh
 - generate-docs.sh
-- high_intake.cpython-313.pyc
 - high_intake.py
-- llm_smoke.cpython-313.pyc
 - llm_smoke.py
 - load_github_token.sh
 - operations.json
 - plan.schema.json
 - preview
-- previewcpython-313.pyc
 - promote-live.sh
 - run-service.sh
 - site-screenshot.js
 - spec.schema.json
-- tester_actions.cpython-313.pyc
 - tester_actions.py
 - tg-spinup.sh
 - tg-watch-webhook.sh

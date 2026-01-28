@@ -2062,12 +2062,14 @@
    (let [mode (or (get-in db [:agent-control :detail :data :mode])
                   (get-in db [:agent-control :composer :mode])
                   "both")
+          message (get-in db [:agent-control :composer :message])
           website_find (get-in db [:agent-control :composer :website_find])
           website_replace (get-in db [:agent-control :composer :website_replace])]
      {:db db
       ::fx/http {:url (str "/api/agent-control/runs/" run-id "/preview/start")
                  :method "POST"
                  :body (cond-> {:mode mode}
+                         (not (str/blank? (or message ""))) (assoc :message message)
                          (not (str/blank? (or website_find ""))) (assoc :website_find website_find)
                          (not (str/blank? (or website_replace ""))) (assoc :website_replace website_replace))
                  :on-success [::agent-action-success run-id]

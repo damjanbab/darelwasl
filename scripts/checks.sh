@@ -25,7 +25,7 @@ check_governance() {
   echo "Checking repo housekeeping invariants..."
 
   local missing=0
-  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md"; do
+  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md" "$ROOT/agents/README.md" "$ROOT/agents/website/AGENT.md" "$ROOT/agents/website/AGENT.json"; do
     if [ ! -s "$f" ]; then
       echo "Missing or empty: $f"
       missing=1

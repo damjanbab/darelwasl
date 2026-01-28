@@ -86,7 +86,8 @@
          [ui/form-input {:value (or (:website_replace composer) "")
                          :placeholder "Paste the new text you want"
                          :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :website_replace (.. % -target -value)])}]]
-        [:div.meta "Rule: find text must match exactly once across the public site (otherwise preview start fails)."]])
+        [:div.meta "Option A (strict): fill Website find/replace. Rule: find text must match exactly once."]
+        [:div.meta "Option B (agent): leave Website find/replace empty and describe the change in Request; the website agent will edit templates/CSS/assets within allowed paths."]])
      [:div.field-group
       [:label "Request"]
       [:textarea.form-input {:rows 4

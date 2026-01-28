@@ -1,0 +1,19 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "website",
+  "title": "Public website agent",
+  "allowed_paths": [
+    "src/darelwasl/site/",
+    "public/"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "clojure -M -e \"(require 'darelwasl.site.templates) (println :ok)\""
+    ]
+  }
+}
+

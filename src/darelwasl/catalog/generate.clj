@@ -1,6 +1,7 @@
 (ns darelwasl.catalog.generate
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.java.shell :as shell]
             [clojure.string :as str])
   (:import (java.math BigInteger)
            (java.security MessageDigest)))
@@ -102,8 +103,14 @@
 
 (defn- script-entries
   []
-  (let [root (io/file "scripts")]
-    (->> (file-seq root)
+  ;; Use tracked files so generated docs don't drift based on local untracked/ignored artifacts
+  ;; (e.g. __pycache__, *.pyc, local secrets).
+  (let [{:keys [exit out err]} (shell/sh "git" "ls-files" "scripts")]
+    (when-not (zero? exit)
+      (throw (ex-info "git ls-files scripts failed" {:exit exit :err err})))
+    (->> (str/split-lines (or out ""))
+         (remove str/blank?)
+         (map io/file)
          (filter #(.isFile ^java.io.File %))
          (map (fn [file]
                 (let [name (.getName ^java.io.File file)]

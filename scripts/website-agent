@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _load_json(path: Path) -> dict:
+    raw = json.loads(_read_text(path))
+    if not isinstance(raw, dict):
+        raise ValueError("agent json must be an object")
+    return raw
+
+
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+    log_file: Path | None = None,
+    input: str | None = None,
+) -> subprocess.CompletedProcess:
+    if log_file is None:
+        return subprocess.run(cmd, cwd=str(cwd), env=env, check=check, text=True, input=input)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(f"\n[{_utc_iso()}] $ {shlex.join(cmd)}\n")
+        proc = subprocess.run(cmd, cwd=str(cwd), env=env, text=True, input=input, stdout=f, stderr=subprocess.STDOUT)
+    if check and proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+    return proc
+
+
+def _git_changed_paths(wt: Path) -> list[str]:
+    proc = subprocess.run(["git", "status", "--porcelain"], cwd=str(wt), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    out: list[str] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        # Porcelain: XY <path> (or R  old -> new)
+        path = line[3:].strip()
+        if "->" in path:
+            path = path.split("->", 1)[1].strip()
+        out.append(path.replace("\\", "/"))
+    return sorted(set(out))
+
+
+def _is_allowed(path: str, allowed: list[str]) -> bool:
+    p = path.replace("\\", "/")
+    for prefix in allowed:
+        pref = str(prefix).replace("\\", "/")
+        if not pref:
+            continue
+        if not pref.endswith("/"):
+            pref += "/"
+        if p == pref[:-1] or p.startswith(pref):
+            return True
+    return False
+
+
+def _ensure_clean(wt: Path, *, log: Path) -> None:
+    _run(["git", "reset", "--hard"], cwd=wt, check=False, log_file=log)
+    _run(["git", "clean", "-fd"], cwd=wt, check=False, log_file=log)
+
+
+def _commit_all(wt: Path, *, message: str, log: Path) -> None:
+    env = os.environ.copy()
+    env.setdefault("GIT_AUTHOR_NAME", "website-agent")
+    env.setdefault("GIT_AUTHOR_EMAIL", "website-agent@haloeddepth.com")
+    env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
+    env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+
+    _run(["git", "add", "-A"], cwd=wt, env=env, log_file=log)
+    proc = _run(["git", "commit", "-m", message], cwd=wt, env=env, check=False, log_file=log)
+    if proc.returncode != 0:
+        raise SystemExit("No changes to commit (website agent produced no diff).")
+
+
+def _build_prompt(*, agent_md: str, request: str) -> str:
+    return (
+        "You are the website agent.\n"
+        "You MUST follow the contract below.\n\n"
+        "=== AGENT CONTRACT ===\n"
+        f"{agent_md.strip()}\n"
+        "=== END CONTRACT ===\n\n"
+        "Task:\n"
+        "- Implement the user request by editing files in the repo.\n"
+        "- Do not modify anything outside the allowed paths.\n"
+        "- Keep changes minimal and correct.\n"
+        "- If you cannot safely complete the request within the allowed paths, explain why and make no changes.\n\n"
+        "User request:\n"
+        f"{request.strip()}\n"
+    )
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    wt = Path(args.worktree).resolve()
+    agent_json_path = (root / args.agent_json).resolve()
+    agent_md_path = agent_json_path.with_suffix(".md") if args.agent_md is None else (root / args.agent_md).resolve()
+
+    agent = _load_json(agent_json_path)
+    allowed_paths = agent.get("allowed_paths", [])
+    if not isinstance(allowed_paths, list) or not allowed_paths:
+        raise SystemExit("agent json missing allowed_paths")
+    allowed_paths = [str(p) for p in allowed_paths]
+
+    proofs = agent.get("proofs", {})
+    proof_cmds = proofs.get("commands", []) if isinstance(proofs, dict) else []
+    if not isinstance(proof_cmds, list):
+        proof_cmds = []
+
+    sandbox = agent.get("sandbox", {})
+    codex_sandbox = "workspace-write"
+    if isinstance(sandbox, dict) and isinstance(sandbox.get("codex_exec_sandbox"), str):
+        codex_sandbox = sandbox["codex_exec_sandbox"].strip() or codex_sandbox
+
+    run_id = args.run_id.strip()
+    request = args.request.strip()
+    if not request:
+        raise SystemExit("website-agent run requires a non-empty --request")
+
+    log_dir = (root / "target" / "previews" / run_id / "artifacts").resolve()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "website-agent.log"
+    last_message_path = log_dir / "website-agent.last-message.txt"
+    prompt_path = log_dir / "website-agent.prompt.txt"
+    report_path = log_dir / "website-agent.report.json"
+
+    started_at = _utc_iso()
+
+    # Run the LLM in the worktree, then enforce the contract ourselves.
+    agent_md = _read_text(agent_md_path)
+    prompt = _build_prompt(agent_md=agent_md, request=request)
+    prompt_path.write_text(prompt, encoding="utf-8")
+
+    before = set(_git_changed_paths(wt))
+    if before:
+        # Keep the worktree clean (we want the diff to be attributable to the agent).
+        _ensure_clean(wt, log=log_path)
+
+    cmd = [
+        "codex",
+        "exec",
+        "--color",
+        "never",
+        "-s",
+        codex_sandbox,
+        "--output-last-message",
+        str(last_message_path),
+        "-C",
+        str(wt),
+        "-",
+    ]
+
+    _run(["codex", "login", "status"], cwd=wt, log_file=log_path)
+    t0 = time.time()
+    proc = _run(cmd, cwd=wt, check=False, log_file=log_path, input=prompt)
+    duration_ms = int((time.time() - t0) * 1000)
+
+    changed = _git_changed_paths(wt)
+    disallowed = [p for p in changed if not _is_allowed(p, allowed_paths)]
+    if disallowed:
+        # Hard rollback.
+        _ensure_clean(wt, log=log_path)
+        msg = "website-agent changed disallowed files:\n" + "\n".join(f"- {p}" for p in disallowed)
+        report_path.write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "disallowed_paths",
+                    "disallowed": disallowed,
+                    "allowed_paths": allowed_paths,
+                    "started_at": started_at,
+                    "finished_at": _utc_iso(),
+                    "duration_ms": duration_ms,
+                    "last_message_path": str(last_message_path),
+                    "prompt_path": str(prompt_path),
+                    "log_path": str(log_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(msg, file=sys.stderr)
+        return 1
+
+    if not changed:
+        report_path.write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "no_changes",
+                    "started_at": started_at,
+                    "finished_at": _utc_iso(),
+                    "duration_ms": duration_ms,
+                    "last_message_path": str(last_message_path),
+                    "prompt_path": str(prompt_path),
+                    "log_path": str(log_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print("website-agent produced no changes", file=sys.stderr)
+        return 1
+
+    # Lightweight proofs (preview start will run its own verification too).
+    for cmd_str in proof_cmds:
+        _run(["bash", "-lc", str(cmd_str)], cwd=wt, log_file=log_path)
+
+    _commit_all(wt, message=f"website-agent({run_id}): {request.splitlines()[0][:72]}", log=log_path)
+
+    report_path.write_text(
+        json.dumps(
+            {
+                "status": "ok" if proc.returncode == 0 else "warn",
+                "run_id": run_id,
+                "changed_paths": changed,
+                "allowed_paths": allowed_paths,
+                "codex_exit": proc.returncode,
+                "started_at": started_at,
+                "finished_at": _utc_iso(),
+                "duration_ms": duration_ms,
+                "last_message_path": str(last_message_path),
+                "prompt_path": str(prompt_path),
+                "log_path": str(log_path),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return 0 if proc.returncode == 0 else 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="scripts/website-agent")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_run = sub.add_parser("run", help="Run the website agent in a preview worktree")
+    p_run.add_argument("--run-id", required=True, help="Run id (used for logs + commit message)")
+    p_run.add_argument("--worktree", required=True, help="Path to the preview worktree")
+    p_run.add_argument("--request", required=True, help="Natural language website change request")
+    p_run.add_argument("--agent-json", default="agents/website/AGENT.json", help="Agent JSON contract (repo-relative)")
+    p_run.add_argument("--agent-md", default=None, help="Agent Markdown contract (repo-relative); default: alongside JSON")
+    p_run.set_defaults(fn=cmd_run)
+
+    return p
+
+
+def main(argv: list[str]) -> int:
+    args = build_parser().parse_args(argv)
+    return int(args.fn(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

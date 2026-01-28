@@ -11,6 +11,14 @@ Optimize for:
 - `scripts/` (automation + checks; CI entrypoint is `scripts/checks.sh`)
 - Generated inventory only: `docs/system.generated.md` + `docs/catalog.edn` (via `scripts/generate-docs.sh`)
 
+## Agents (capability contracts)
+Agent contracts live under `agents/` (one folder per agent type). Each contract defines:
+- Allowed paths (what the agent may change)
+- Required proofs (what must pass)
+- Intended use (what requests it should handle)
+
+Agent Control uses these contracts to safely run automated changes behind previews.
+
 ## Request types (first word)
 You (the user) start every initial message with one of:
 - `question:` Explain or compare. No repo changes unless you explicitly switch types.
