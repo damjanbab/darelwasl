@@ -2017,10 +2017,11 @@
 (rf/reg-event-fx
  ::create-agent-run
  (fn [{:keys [db]} _]
-   (let [{:keys [id message mode]} (get-in db [:agent-control :composer])
-         payload (cond-> {:message message
+   (let [{:keys [id title mode]} (get-in db [:agent-control :composer])
+         payload (cond-> {:message ""
                           :mode (or mode "both")}
-                   (not (str/blank? (or id ""))) (assoc :id id))]
+                   (not (str/blank? (or id ""))) (assoc :id id)
+                   (not (str/blank? (or title ""))) (assoc :title title))]
      {:db (-> db
               (assoc-in [:agent-control :composer :status] :loading)
               (assoc-in [:agent-control :composer :error] nil))
@@ -2038,7 +2039,7 @@
             (assoc-in [:agent-control :composer :error] nil)
             (assoc-in [:agent-control :runs :selected] (:id payload))
             (assoc-in [:agent-control :composer :id] "")
-            (assoc-in [:agent-control :composer :message] ""))
+            (assoc-in [:agent-control :composer :title] ""))
     :dispatch-n [[::fetch-agent-runs]
                  [::fetch-agent-run (:id payload)]
                  [::start-agent-preview (:id payload) false]]}))
@@ -2059,14 +2060,14 @@
    (let [mode (or (get-in db [:agent-control :detail :data :mode])
                   (get-in db [:agent-control :composer :mode])
                   "both")
-          message (get-in db [:agent-control :composer :message])]
+          request (get-in db [:agent-control :composer :request])]
      {:db db
       ::fx/http {:url (str "/api/agent-control/runs/" run-id "/preview/start")
                  :method "POST"
                  :body (cond-> {:mode mode
                                 :apply (boolean apply?)}
-                         (and apply? (not (str/blank? (or message ""))))
-                         (assoc :message message))
+                         (and apply? (not (str/blank? (or request ""))))
+                         (assoc :message request))
                  :on-success [::agent-action-success run-id]
                  :on-error [::agent-action-failure]}})))
 

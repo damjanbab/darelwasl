@@ -8,7 +8,7 @@
   [run selected?]
   (let [rid (:id run)
         status (or (:status run) "unknown")
-        title (or (:message run) rid)
+        title (or (:title run) (:message run) rid)
         meta (str status)]
     [ui/list-row {:title (if (str/blank? title) rid title)
                   :meta meta
@@ -62,73 +62,84 @@
        [:div.meta "Create → preview → verify → 6h review → accept/trash."]]]
      (when err
        [:div.form-error err])
-     [:div.field-group
-      [:label "Run id (optional)"]
-      [ui/form-input {:value (:id composer)
-                      :placeholder "kebab-case, e.g. content-home-hero"
-                      :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :id (.. % -target -value)])}]]
-     [:div.field-group
-      [:label "Mode"]
-      [ui/select-field {:value (or (:mode composer) "both")
-                        :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :mode (.. % -target -value)])}
-       [:option {:value "both"} "Site + App"]
-       [:option {:value "site"} "Site only"]
-       [:option {:value "app"} "App only"]]]
-     [:div.field-group
-      [:label "Request"]
-      [:textarea.form-input {:rows 4
-                             :placeholder "e.g. change: Update the homepage hero and CTA"
-                             :value (or (:message composer) "")
-                             :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :message (.. % -target -value)])}]]
-     (when (#{ "both" "site"} (or (:mode composer) "both"))
-       [:div.meta "Website edits are executed by the website agent and enforced by contract (allowed paths + proofs), then published to a preview link for review."])
-     [:div.button-row
-      [ui/button {:variant :primary
-                  :disabled creating?
-                  :on-click #(rf/dispatch [:darelwasl.app/create-agent-run])}
-       (if creating? "Creating..." "Create run")]
-      (when selected
-        [ui/button {:variant :secondary
-                    :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected false])}
-         "Start preview"])
-      (when selected
+     [:div.agent-control-detail-grid
+      [:div
+       [:div.field-group
+        [:label "Run id (optional)"]
+        [ui/form-input {:value (:id composer)
+                        :placeholder "kebab-case, e.g. site-hero-copy"
+                        :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :id (.. % -target -value)])}]]
+       [:div.field-group
+        [:label "Title (shows in list)"]
+        [ui/form-input {:value (or (:title composer) "")
+                        :placeholder "e.g. Homepage hero copy tweak"
+                        :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :title (.. % -target -value)])}]]
+       [:div.field-group
+        [:label "Mode"]
+        [ui/select-field {:value (or (:mode composer) "both")
+                          :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :mode (.. % -target -value)])}
+         [:option {:value "both"} "Site + App"]
+         [:option {:value "site"} "Site only"]
+         [:option {:value "app"} "App only"]]]
+       [:div.agent-control-actions
         [ui/button {:variant :primary
-                    :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected true])}
-         "Apply changes"])
-      (when selected
-        [ui/button {:variant :danger
-                    :on-click #(rf/dispatch [:darelwasl.app/trash-agent-run selected])}
-         "Trash"])
-      (when selected
-        [ui/button {:variant :primary
-                    :on-click #(rf/dispatch [:darelwasl.app/accept-agent-run selected])}
-         "Accept + go live"])]
-     (when run
+                    :disabled creating?
+                    :on-click #(rf/dispatch [:darelwasl.app/create-agent-run])}
+         (if creating? "Creating..." "Create run")]
+        (when selected
+          [ui/button {:variant :secondary
+                      :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected false])}
+           "Refresh preview"])
+        (when selected
+          [ui/button {:variant :danger
+                      :on-click #(rf/dispatch [:darelwasl.app/trash-agent-run selected])}
+           "Trash"])
+        (when selected
+          [ui/button {:variant :primary
+                      :on-click #(rf/dispatch [:darelwasl.app/accept-agent-run selected])}
+           "Accept + go live"])]
        [:div.field-group
-        [:div.meta (str "Selected run: " (:id run) " · status: " (:status run))]])
-     (when last-updated
-       [:div.meta (str "Last preview update: " last-updated)])
-     (when expires
-       [:div.meta (str "Review window ends: " expires " (resets on preview update)")])
-     [preview-links urls]
-     (when (seq (:site_refs run))
-       [:div.field-group
-        [:div.meta (str "Reference points: " (count (:site_refs run)))]
-        (for [r (:site_refs run)]
-          ^{:key (:id r)}
-          [:div {:style {:padding "8px 0" :borderBottom "1px solid rgba(0,0,0,0.06)"}}
-           [:div.meta (or (:url r) "")]
-           [:div (or (:text r) "")]
-           (when-not (str/blank? (or (:note r) ""))
-             [:div.meta (str "Note: " (:note r))])])])
-     (when (and (seq urls) (#{ "both" "site"} (or (:mode composer) "both")))
-       [:div.meta "Tip: open the site preview → use the “Agent refs” panel (bottom-right) → Select on → click elements → add notes → Save, then press “Apply changes”."])
-     (when (= :ready (:status admins))
-       [:div.field-group
-        [:div.meta "Access"]
-        [:div.meta (str "Allowlist: " (str/join ", " (or (:admins admins) [])))]
-        (when (seq (:items admins))
-          [:div.meta (str "Users visible here: " (str/join ", " (map :user/username (:items admins))))])])]))
+        [:label "Request (optional)"]
+        [:textarea.form-input {:rows 5
+                               :placeholder "Leave empty if you only want to use reference-point notes from the preview."
+                               :value (or (:request composer) "")
+                               :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :request (.. % -target -value)])}]]
+       (when selected
+         [:div.agent-control-actions
+          [ui/button {:variant :primary
+                      :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected true])}
+           "Apply changes"]])
+       (when (#{ "both" "site"} (or (:mode composer) "both"))
+         [:div.meta "Website edits run in a sandbox preview. Use the site preview “Agent refs” panel to click sections, add notes, then Apply changes."])]
+      [:div
+       (when run
+         [:div.field-group
+          [:div.meta (str "Selected run: " (:id run) " · status: " (:status run))]])
+       (when last-updated
+         [:div.meta (str "Last preview update: " last-updated)])
+       (when expires
+         [:div.meta (str "Review window ends: " expires " (resets on preview update)")])
+       [preview-links urls]
+       (when (seq (:site_refs run))
+         [:div.field-group
+          [:div.meta (str "Reference points: " (count (:site_refs run)))]
+          (for [r (:site_refs run)]
+            ^{:key (:id r)}
+            [:div.agent-control-ref
+             [:div.meta (or (:url r) "")]
+             [:div (or (:text r) "")]
+             (when-not (str/blank? (or (:note r) ""))
+               [:div.meta (str "Note: " (:note r))])])])
+       (when (and (seq urls) (#{ "both" "site"} (or (:mode composer) "both")))
+         [:div.meta "Tip: open the site preview → Select on → click elements → add notes → Save."])
+       (when (= :ready (:status admins))
+         [:div.field-group
+          [:div.meta "Access"]
+          [:div.meta (str "Allowlist: " (str/join ", " (or (:admins admins) [])))]
+          (when (seq (:items admins))
+            [:div.meta (str "Users visible here: " (str/join ", " (map :user/username (:items admins))))])])]]
+      ]
+     ])))
 
 (defn agent-control-shell
   []
@@ -142,10 +153,9 @@
                (get-in runs [:selected]))
       (rf/dispatch [:darelwasl.app/fetch-agent-run (get-in runs [:selected])]))
     [shell/app-shell
-     [:main {:style {:display "grid"
-                     :gridTemplateColumns "360px 1fr"
-                     :gap "16px"
-                     :padding "16px"}}
-      [runs-list (get-in runs [:items]) (get-in runs [:selected])]
-      [detail-panel {:runs runs :detail detail :composer composer :admins (:admins ac)}]]
+     [:main.agent-control-layout
+      [:aside.agent-control-sidebar
+       [runs-list (get-in runs [:items]) (get-in runs [:selected])]]
+      [:section.agent-control-main
+       [detail-panel {:runs runs :detail detail :composer composer :admins (:admins ac)}]]]
      [:span "Agent control · Run-based preview and promotion gate."]]))

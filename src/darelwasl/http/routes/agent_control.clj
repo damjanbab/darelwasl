@@ -125,6 +125,7 @@
   (fn [request]
     (let [body (or (:body-params request) {})
           requested-id (some-> (or (:id body) (get body "id")) str/trim not-empty)
+          title (some-> (or (:title body) (get body "title")) str)
           message (some-> (or (:message body) (get body "message")) str)
           mode (keyword (or (:mode body) (get body "mode") "both"))
           run-id (or requested-id (new-run-id))]
@@ -141,7 +142,8 @@
                    :updated_at (now-iso)
                    :status "draft"
                    :mode (name mode)
-                   :message message
+                   :title title
+                   :message (or message "")
                    :revisions []
                    :preview {:status "none"}
                    :jobs []}]

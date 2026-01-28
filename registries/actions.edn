@@ -1281,14 +1281,15 @@
 
  {:id :cap/action/agent-control-run-create
   :title "Agent Control: Create Run"
-  :version "v1"
-  :inputs {:id :string?
-           :mode :string?
-           :message :string}
-  :outputs {:id :string
-            :status :string}
-  :side-effects ["Create run record on disk"]
-  :adapter {:integration :local/app}
+ :version "v1"
+ :inputs {:id :string?
+          :title :string?
+          :mode :string?
+          :message :string}
+ :outputs {:id :string
+           :status :string}
+ :side-effects ["Create run record on disk"]
+ :adapter {:integration :local/app}
   :audit {:records [:agent-control/change]
           :fields [:id]}
   :idempotency {:strategy :dedupe-on

@@ -372,7 +372,8 @@
             :error nil
             :data nil}
    :composer {:id ""
-              :message ""
+              :title ""
+              :request ""
               :mode "both"
               :status :idle
               :error nil}

@@ -120,6 +120,58 @@
   background: var(--colors-surface-muted);
 }
 
+/* Agent Control */
+.agent-control-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: var(--spacing-scale-5);
+  padding: var(--spacing-scale-5);
+  align-items: start;
+}
+
+.agent-control-sidebar {
+  position: sticky;
+  top: var(--spacing-scale-5);
+  align-self: start;
+}
+
+.agent-control-main {
+  min-width: 0;
+}
+
+.agent-control-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--spacing-scale-4);
+}
+
+.agent-control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-scale-2);
+  align-items: center;
+}
+
+.agent-control-ref {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--colors-border);
+}
+
+@media (max-width: 900px) {
+  .agent-control-layout {
+    grid-template-columns: 1fr;
+    padding: var(--spacing-scale-4);
+  }
+
+  .agent-control-sidebar {
+    position: static;
+  }
+
+  .agent-control-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .betting-score-label {
   color: var(--colors-text-secondary);
   font-size: var(--typography-font-sizes-meta);
