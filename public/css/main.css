@@ -123,10 +123,12 @@
 /* Agent Control */
 .agent-control-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
-  gap: var(--spacing-scale-5);
-  padding: var(--spacing-scale-5);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: var(--spacing-scale-4);
+  padding: var(--spacing-scale-4);
   align-items: start;
+  max-width: 1280px;
+  margin: 0 auto;
 }
 
 .agent-control-sidebar {
@@ -141,7 +143,7 @@
 
 .agent-control-detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
   gap: var(--spacing-scale-4);
 }
 
@@ -169,6 +171,22 @@
 
   .agent-control-detail-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .agent-control-layout {
+    padding: var(--spacing-scale-3);
+    gap: var(--spacing-scale-3);
+  }
+
+  .agent-control-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .agent-control-actions .button {
+    width: 100%;
   }
 }
 

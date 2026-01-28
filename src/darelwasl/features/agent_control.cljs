@@ -64,6 +64,9 @@
        [:div.form-error err])
      [:div.agent-control-detail-grid
       [:div
+       [:div.section-header
+        [:h3 "Create run"]
+        [:div.meta "Starts a preview immediately. You can add reference points from the preview before applying changes."]]
        [:div.field-group
         [:label "Run id (optional)"]
         [ui/form-input {:value (:id composer)
@@ -89,57 +92,61 @@
         (when selected
           [ui/button {:variant :secondary
                       :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected false])}
-           "Refresh preview"])
-        (when selected
-          [ui/button {:variant :danger
-                      :on-click #(rf/dispatch [:darelwasl.app/trash-agent-run selected])}
-           "Trash"])
-        (when selected
-          [ui/button {:variant :primary
-                      :on-click #(rf/dispatch [:darelwasl.app/accept-agent-run selected])}
-           "Accept + go live"])]
-       [:div.field-group
-        [:label "Request (optional)"]
-        [:textarea.form-input {:rows 5
-                               :placeholder "Leave empty if you only want to use reference-point notes from the preview."
-                               :value (or (:request composer) "")
-                               :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :request (.. % -target -value)])}]]
+           "Refresh preview"])]
        (when selected
-         [:div.agent-control-actions
-          [ui/button {:variant :primary
-                      :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected true])}
-           "Apply changes"]])
-       (when (#{ "both" "site"} (or (:mode composer) "both"))
-         [:div.meta "Website edits run in a sandbox preview. Use the site preview “Agent refs” panel to click sections, add notes, then Apply changes."])]
+         [:<>
+          [:div.section-header
+           [:h3 "Apply changes"]
+           [:div.meta "Write a request and/or use reference-point notes collected in the preview."]]
+          [:div.field-group
+           [:label "Request (optional)"]
+           [:textarea.form-input {:rows 6
+                                  :placeholder "Example: “Change the hero headline to … and update the CTA button text.”"
+                                  :value (or (:request composer) "")
+                                  :on-change #(rf/dispatch [:darelwasl.app/set-agent-composer-field :request (.. % -target -value)])}]]
+          [:div.agent-control-actions
+           [ui/button {:variant :primary
+                       :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected true])}
+            "Apply changes"]
+           [ui/button {:variant :danger
+                       :on-click #(rf/dispatch [:darelwasl.app/trash-agent-run selected])}
+            "Trash"]
+           [ui/button {:variant :primary
+                       :on-click #(rf/dispatch [:darelwasl.app/accept-agent-run selected])}
+            "Accept + go live"]]
+          (when (#{ "both" "site"} (or (:mode composer) "both"))
+            [:div.meta "Tip: open the site preview → Select on → click elements → add notes → Save → Apply changes."])])
+       (when-not selected
+         [:div.meta "Tip: Create a run first. The preview starts immediately, then you can add reference points and apply changes when ready."])]
       [:div
-       (when run
-         [:div.field-group
-          [:div.meta (str "Selected run: " (:id run) " · status: " (:status run))]])
-       (when last-updated
-         [:div.meta (str "Last preview update: " last-updated)])
-       (when expires
-         [:div.meta (str "Review window ends: " expires " (resets on preview update)")])
-       [preview-links urls]
-       (when (seq (:site_refs run))
-         [:div.field-group
-          [:div.meta (str "Reference points: " (count (:site_refs run)))]
-          (for [r (:site_refs run)]
-            ^{:key (:id r)}
-            [:div.agent-control-ref
-             [:div.meta (or (:url r) "")]
-             [:div (or (:text r) "")]
-             (when-not (str/blank? (or (:note r) ""))
-               [:div.meta (str "Note: " (:note r))])])])
-       (when (and (seq urls) (#{ "both" "site"} (or (:mode composer) "both")))
-         [:div.meta "Tip: open the site preview → Select on → click elements → add notes → Save."])
-       (when (= :ready (:status admins))
-         [:div.field-group
-          [:div.meta "Access"]
-          [:div.meta (str "Allowlist: " (str/join ", " (or (:admins admins) [])))]
-          (when (seq (:items admins))
-            [:div.meta (str "Users visible here: " (str/join ", " (map :user/username (:items admins))))])])]]
+       (if run
+         [:<>
+          [:div.field-group
+           [:div.meta (str "Selected run: " (:id run) " · status: " (:status run))]]
+          (when last-updated
+            [:div.meta (str "Last preview update: " last-updated)])
+          (when expires
+            [:div.meta (str "Review window ends: " expires " (resets on preview update)")])
+          [preview-links urls]
+          (when (seq (:site_refs run))
+            [:div.field-group
+             [:div.meta (str "Reference points: " (count (:site_refs run)))]
+             (for [r (:site_refs run)]
+               ^{:key (:id r)}
+               [:div.agent-control-ref
+                [:div.meta (or (:url r) "")]
+                [:div (or (:text r) "")]
+                (when-not (str/blank? (or (:note r) ""))
+                  [:div.meta (str "Note: " (:note r))])])])
+          (when (= :ready (:status admins))
+            [:div.field-group
+             [:div.meta "Access"]
+             [:div.meta (str "Allowlist: " (str/join ", " (or (:admins admins) [])))]
+             (when (seq (:items admins))
+               [:div.meta (str "Users visible here: " (str/join ", " (map :user/username (:items admins))))])])]
+         [:div.meta "No run selected yet. Create a run to start a preview."])
       ]
-     ])))
+     ]]))
 
 (defn agent-control-shell
   []
