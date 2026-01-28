@@ -187,7 +187,10 @@
         method (:request-method request)]
     (cond
       (and (= method :get) (or (= path "/") (= path "/refs")))
-      (json-response 200 {:status "ok" :refs (read-refs run-id)})
+      (let [refs (read-refs run-id)]
+        (if (nil? refs)
+          (json-response 404 {:error "run_not_found"})
+          (json-response 200 {:status "ok" :refs refs})))
 
       (and (= method :post) (= path "/refs"))
       (let [body (parse-json-body request)]
