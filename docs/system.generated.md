@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `e8cf4b1c3c3a911aab948c703ef58bfcff4f6bbd0bb8ae55d5584d75c4e010bb`
+- Catalog version: `51265ad029acd38d4fe5bd8c7175be765ef0e7e0f5ae1f8d5333504545b6245b`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -217,6 +217,8 @@ This file is auto-generated. Do not edit by hand.
 - /pulls/:number/close
 - /recent
 - /recognize
+- /refs
+- /refs/clear
 - /registries
 - /restart
 - /rezultati/daily

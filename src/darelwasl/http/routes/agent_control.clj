@@ -183,6 +183,7 @@
     (let [run-id (get-in request [:path-params :id])
           body (or (:body-params request) {})
           mode (str/lower-case (str (or (:mode body) (get body "mode") "both")))
+          apply? (boolean (or (:apply body) (get body "apply")))
           new-message (some-> (or (:message body) (get body "message")) str)
           run0 (read-json (run-path run-id))
           run (if (and (not (nil? run0)) (not (str/blank? (str/trim (or new-message "")))))
@@ -196,73 +197,94 @@
         (let [request-text (or (some-> new-message str/trim not-empty)
                                (some-> (:message run) str/trim not-empty)
                                "")
-              website-request (when (and (or (= mode "site") (= mode "both"))
-                                         (not (str/blank? request-text)))
-                                request-text)
+              refs (vec (or (:site_refs run) []))
+              refs-with-notes (->> refs (filter (fn [r] (not (str/blank? (some-> (:note r) str/trim))))) vec)
+              base-request (cond
+                             (not (str/blank? request-text)) request-text
+                             (seq refs-with-notes) "Apply the changes described in the reference points below."
+                             :else "")
+              refs-block (when (seq refs)
+                           (str "\n\nReference points (selected on preview):\n"
+                                (apply str
+                                       (for [r refs]
+                                         (str "- url: " (or (:url r) "") "\n"
+                                              "  text: " (or (:text r) "") "\n"
+                                              (when-not (str/blank? (or (:selector r) ""))
+                                                (str "  selector: " (:selector r) "\n"))
+                                              (when-not (str/blank? (or (:note r) ""))
+                                                (str "  note: " (:note r) "\n")))))))
+              website-request (when (and apply?
+                                         (or (= mode "site") (= mode "both"))
+                                         (not (str/blank? base-request)))
+                                (str base-request (or refs-block "")))
               preview-manifest (io/file "target/previews" run-id "preview.json")
-              reset-to-ref? (not (.exists ^File preview-manifest))
-              _ (when (and (or (= mode "site") (= mode "both"))
-                           (not (str/blank? (or website-request ""))))
-                  (upsert-run! run-id (fn [r] (assoc r :message request-text))))
-          job-id (str (UUID/randomUUID))
-          log-file (job-log-path run-id job-id)
-          job {:id job-id
-               :kind "preview_start"
-               :status "running"
-               :started_at (now-iso)
-               :log_path (.getPath ^File log-file)}
-          _ (append-job! run-id job)
-          _ (upsert-run! run-id (fn [r] (assoc r :status "previewing")))]
-      (future
-        (try
-          (ensure-parent! log-file)
-          (spit log-file (str "[agent-control] starting preview " run-id " mode=" mode "\n") :append true)
-          (let [cmd-str (str "scripts/preview start " (pr-str run-id)
-                             " --ref " (pr-str "main")
-                             (when reset-to-ref?
-                               " --reset-to-ref")
-                             " --mode " (pr-str mode)
-                             (when (and (or (= mode "site") (= mode "both"))
-                                        (not (str/blank? (or website-request ""))))
-                               (str " --website-request " (pr-str website-request)
-                                    " --website-agent-json " (pr-str "agents/website/AGENT.json")))
-                             " --public-host https://haloeddepth.com")
-                cmd ["bash" "-lc" cmd-str]
-                pb (ProcessBuilder. ^java.util.List cmd)]
-            (.directory pb (io/file (System/getProperty "user.dir")))
-            (.redirectErrorStream pb true)
-            (.redirectOutput pb log-file)
-            (let [p (.start pb)
-                  code (.waitFor p)]
-              (if (zero? code)
-                (let [out (read-json (io/file "target/previews" run-id "preview.json"))
-                      expires-at (:expires_at out)
-                      urls (:urls out)
-                      last-updated (:last_preview_updated_at out)]
-                  (upsert-run! run-id
-                               (fn [r]
-                                 (-> r
-                                     (assoc :status "waiting_review")
-                                     (assoc :preview {:status "ready"
-                                                      :urls urls
-                                                      :expires_at expires-at
-                                                      :last_updated_at last-updated})))))
-                (upsert-run! run-id (fn [r] (assoc r :status "error" :error "Preview start failed"))))
-              (update-job! run-id job-id
-                           (fn [j]
-                             (assoc j
-                                    :status (if (zero? code) "done" "error")
-                                    :finished_at (now-iso)
-                                    :exit code)))))
-          (catch Exception e
-            (log/error e "preview start job failed")
-            (update-job! run-id job-id
-                         (fn [j]
-                           (assoc j :status "error"
-                                    :finished_at (now-iso)
-                                    :error (.getMessage e))))
-            (upsert-run! run-id (fn [r] (assoc r :status "error" :error (.getMessage e)))))))
-      {:status 202 :body {:status "accepted" :job job-id :run_id run-id}})))))
+              reset-to-ref? (not (.exists ^File preview-manifest))]
+          (if (and apply?
+                   (or (= mode "site") (= mode "both"))
+                   (str/blank? (or website-request "")))
+            (common/error-response 400 "Nothing to apply yet. Add a Request or add notes to reference points, then click Apply changes.")
+            (let [_ (when (and (or (= mode "site") (= mode "both"))
+                               (not (str/blank? (or website-request ""))))
+                      (upsert-run! run-id (fn [r] (assoc r :message request-text))))
+                  job-id (str (UUID/randomUUID))
+                  log-file (job-log-path run-id job-id)
+                  job {:id job-id
+                       :kind "preview_start"
+                       :status "running"
+                       :started_at (now-iso)
+                       :log_path (.getPath ^File log-file)}
+                  _ (append-job! run-id job)
+                  _ (upsert-run! run-id (fn [r] (assoc r :status "previewing")))]
+              (future
+                (try
+                  (ensure-parent! log-file)
+                  (spit log-file (str "[agent-control] starting preview " run-id " mode=" mode "\n") :append true)
+                  (let [cmd-str (str "scripts/preview start " (pr-str run-id)
+                                     " --ref " (pr-str "main")
+                                     (when reset-to-ref?
+                                       " --reset-to-ref")
+                                     " --mode " (pr-str mode)
+                                     (when (and (or (= mode "site") (= mode "both"))
+                                                (not (str/blank? (or website-request ""))))
+                                       (str " --website-request " (pr-str website-request)
+                                            " --website-agent-json " (pr-str "agents/website/AGENT.json")))
+                                     " --public-host https://haloeddepth.com")
+                        cmd ["bash" "-lc" cmd-str]
+                        pb (ProcessBuilder. ^java.util.List cmd)]
+                    (.directory pb (io/file (System/getProperty "user.dir")))
+                    (.redirectErrorStream pb true)
+                    (.redirectOutput pb log-file)
+                    (let [p (.start pb)
+                          code (.waitFor p)]
+                      (if (zero? code)
+                        (let [out (read-json (io/file "target/previews" run-id "preview.json"))
+                              expires-at (:expires_at out)
+                              urls (:urls out)
+                              last-updated (:last_preview_updated_at out)]
+                          (upsert-run! run-id
+                                       (fn [r]
+                                         (-> r
+                                             (assoc :status "waiting_review")
+                                             (assoc :preview {:status "ready"
+                                                              :urls urls
+                                                              :expires_at expires-at
+                                                              :last_updated_at last-updated})))))
+                        (upsert-run! run-id (fn [r] (assoc r :status "error" :error "Preview start failed"))))
+                      (update-job! run-id job-id
+                                   (fn [j]
+                                     (assoc j
+                                            :status (if (zero? code) "done" "error")
+                                            :finished_at (now-iso)
+                                            :exit code)))))
+                  (catch Exception e
+                    (log/error e "preview start job failed")
+                    (update-job! run-id job-id
+                                 (fn [j]
+                                   (assoc j :status "error"
+                                            :finished_at (now-iso)
+                                            :error (.getMessage e))))
+                    (upsert-run! run-id (fn [r] (assoc r :status "error" :error (.getMessage e)))))))
+              {:status 202 :body {:status "accepted" :job job-id :run_id run-id}})))))))
 
 (defn- trash-run-handler
   [_state]

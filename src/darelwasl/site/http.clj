@@ -16,17 +16,20 @@
         clean-path (if (and (not= raw-path "/") (str/ends-with? raw-path "/"))
                      (subs raw-path 0 (dec (count raw-path)))
                      raw-path)]
-    (if (= clean-path "/health")
+      (if (= clean-path "/health")
       {:status 200
        :headers {"Content-Type" "text/plain; charset=utf-8"}
        :body "ok"}
       (if (or (str/starts-with? clean-path "/css/")
+              (= clean-path "/preview-annotate.js")
               (= clean-path "/logo.jpg"))
       (let [static-resp (resp/file-response (subs clean-path 1) {:root "public"})]
         (if static-resp
           (if (str/starts-with? clean-path "/css/")
             (resp/content-type static-resp "text/css")
-            static-resp)
+            (if (= clean-path "/preview-annotate.js")
+              (resp/content-type static-resp "application/javascript")
+              static-resp))
           (templates/render-not-found clean-path "" base-path)))
       (let [data (content/list-content-v2 conn)
         {:keys [error licenses comparison-rows journey-phases activation-steps personas support-entries hero-stats hero-flows faqs values team-members businesses contacts]} data

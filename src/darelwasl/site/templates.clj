@@ -64,13 +64,18 @@
   ([title nav body footer-cta]
    (layout title nav body footer-cta ""))
   ([title nav body footer-cta base-path]
+  (let [preview-mode? (str/starts-with? (normalize-base-path base-path) "/_preview/")]
   (str "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
        "<title>" (escape-html title) "</title>"
        "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/theme.css")) "\">"
        "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/main.css")) "\">"
        "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/site.css")) "\">"
+       (when preview-mode?
+         (str "<link rel=\"stylesheet\" href=\"" (escape-html (with-base base-path "/css/preview-annotate.css")) "\">"))
        "<script>function toggleMenu(){document.body.classList.toggle('mobile-open');var btn=document.getElementById('mobile-toggle');if(btn){var open=document.body.classList.contains('mobile-open');btn.setAttribute('aria-expanded',open);if(!open){btn.focus();}}}</script>"
+       (when preview-mode?
+         (str "<script src=\"" (escape-html (with-base base-path "/preview-annotate.js")) "\"></script>"))
        "</head>"
        "<body data-theme=\"site-premium\">"
        "<header class=\"site-header\"><div class=\"shell\"><div class=\"nav-bar\">"
@@ -86,7 +91,7 @@
        "<a class=\"nav-link\" href=\"" (escape-html (with-base base-path "/contact")) "\">Contact</a>"
        "<a class=\"nav-link\" href=\"" (escape-html (with-base base-path "/about")) "\">About</a>"
        "</div></div></footer>"
-       "</body></html>")))
+       "</body></html>"))))
 
 (defn- render-list
   [items]

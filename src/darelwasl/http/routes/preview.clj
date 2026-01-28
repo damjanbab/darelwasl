@@ -13,6 +13,8 @@
 
 (defn- now [] (Instant/now))
 
+(def ^:private refs-lock (Object.))
+
 (defn- parse-instant
   [s]
   (try
@@ -38,6 +40,91 @@
     (and (string? expected)
          (not (str/blank? expected))
          (= expected token))))
+
+(defn- agent-control-data-dir []
+  (or (some-> (System/getenv "AGENT_CONTROL_DATA_DIR") str/trim not-empty)
+      "data/agent-control"))
+
+(defn- agent-control-run-path
+  [run-id]
+  (io/file (agent-control-data-dir) "runs" run-id "run.json"))
+
+(defn- read-json-file
+  [^java.io.File f]
+  (try
+    (when (.exists f)
+      (json/read-str (slurp f) :key-fn keyword))
+    (catch Exception e
+      (log/warn e "Failed to read json" {:path (.getPath f)})
+      nil)))
+
+(defn- write-json-file!
+  [^java.io.File f data]
+  (let [tmp (io/file (str (.getPath f) ".tmp"))
+        parent (.getParentFile f)]
+    (when (and parent (not (.exists parent)))
+      (.mkdirs parent))
+    (spit tmp (json/write-str data :escape-slash false))
+    (.renameTo tmp f)))
+
+(defn- clamp
+  [s max-len]
+  (let [t (str (or s ""))]
+    (if (<= (count t) max-len) t (subs t 0 max-len))))
+
+(defn- normalize-ref
+  [r]
+  (when (map? r)
+    (let [id (some-> (or (:id r) (get r "id")) str/trim not-empty)
+          at (some-> (or (:at r) (get r "at")) str/trim not-empty)
+          url (some-> (or (:url r) (get r "url")) str)
+          selector (some-> (or (:selector r) (get r "selector")) str)
+          text (some-> (or (:text r) (get r "text")) str)
+          note (some-> (or (:note r) (get r "note")) str)]
+      (when id
+        {:id (clamp id 120)
+         :at (clamp at 64)
+         :url (clamp url 800)
+         :selector (clamp selector 800)
+         :text (clamp text 240)
+         :note (clamp note 800)}))))
+
+(defn- upsert-refs!
+  [run-id refs]
+  (locking refs-lock
+    (let [path (agent-control-run-path run-id)
+          existing (or (read-json-file path) {:id run-id})
+          safe (->> (or refs [])
+                    (map normalize-ref)
+                    (remove nil?)
+                    (take 30)
+                    vec)]
+      (if-not (.exists ^java.io.File path)
+        nil
+        (let [next (assoc existing
+                          :site_refs safe
+                          :updated_at (.toString (Instant/now)))]
+          (write-json-file! path next)
+          next)))))
+
+(defn- clear-refs!
+  [run-id]
+  (locking refs-lock
+    (let [path (agent-control-run-path run-id)
+          existing (read-json-file path)]
+      (when existing
+        (let [next (-> existing
+                       (assoc :site_refs [])
+                       (assoc :updated_at (.toString (Instant/now))))]
+          (write-json-file! path next)
+          next)))))
+
+(defn- read-refs
+  [run-id]
+  (let [path (agent-control-run-path run-id)
+        existing (read-json-file path)]
+    (when existing
+      (vec (or (:site_refs existing) [])))))
 
 (defn- expired?
   [manifest]
@@ -76,12 +163,58 @@
       (str/starts-with? uri (str prefix "/")) (subs uri (count prefix))
       :else "/")))
 
+(defn- json-response
+  [status body]
+  {:status status
+   :headers {"Content-Type" "application/json; charset=utf-8"}
+   :body (json/write-str body)})
+
+(defn- parse-json-body
+  [request]
+  (try
+    (let [raw (slurp (:body request))
+          trimmed (str/trim (or raw ""))]
+      (if (str/blank? trimmed)
+        {}
+        (json/read-str trimmed :key-fn keyword)))
+    (catch Exception _
+      ::invalid-json)))
+
+(defn- handle-agent-api
+  [request run-id]
+  (let [uri (:uri request)
+        path (strip-preview-prefix uri run-id "agent")
+        method (:request-method request)]
+    (cond
+      (and (= method :get) (or (= path "/") (= path "/refs")))
+      (json-response 200 {:status "ok" :refs (read-refs run-id)})
+
+      (and (= method :post) (= path "/refs"))
+      (let [body (parse-json-body request)]
+        (if (= body ::invalid-json)
+          (json-response 400 {:error "invalid_json"})
+          (let [refs (:refs body)
+                updated (upsert-refs! run-id refs)]
+            (if-not updated
+              (json-response 404 {:error "run_not_found"})
+              (json-response 200 {:status "ok" :count (count (or (:site_refs updated) []))})))))
+
+      (and (= method :delete) (or (= path "/refs") (= path "/refs/clear")))
+      (let [updated (clear-refs! run-id)]
+        (if-not updated
+          (json-response 404 {:error "run_not_found"})
+          (json-response 200 {:status "ok"})))
+
+      :else
+      (json-response 404 {:error "not_found" :path path}))))
+
 (defn- upstream-port
   [manifest module]
   (let [ports (:ports manifest)]
     (case module
       "app" (some-> ports :app int)
       "site" (some-> ports :site int)
+      "agent" 0
       nil)))
 
 (defn- hop-by-hop-header?
@@ -154,27 +287,29 @@
               expires-at (parse-instant (:expires_at manifest))]
           (if-not (token-valid? manifest token)
             (common/error-response 403 "Forbidden")
-            (let [port (upstream-port manifest module)]
-              (if-not port
-                (common/error-response 400 "Preview module not available")
-                (let [up-path (strip-preview-prefix uri run-id module)
-                      up-url (str "http://127.0.0.1:" port up-path (when-let [qs (:query-string request)]
-                                                                     (when-not (str/blank? qs)
-                                                                       (str "?" qs))))
-                      method (:request-method request)
-                      set-cookie? (and query-token (token-valid? manifest query-token))
-                      resp0 (if (and set-cookie? (#{:get :head} method))
-                              (redirect-without-token request)
-                              nil)
-                      proxied (or resp0
-                                  (let [up (proxy-request request up-url)]
-                                    {:status (:status up)
-                                     :headers (sanitize-headers (:headers up))
-                                     :body (:body up)}))
-                      out (if set-cookie?
-                            (set-token-cookie request proxied run-id query-token expires-at)
-                            proxied)]
-                  out)))))))))
+            (if (= module "agent")
+              (handle-agent-api request run-id)
+              (let [port (upstream-port manifest module)]
+                (if-not port
+                  (common/error-response 400 "Preview module not available")
+                  (let [up-path (strip-preview-prefix uri run-id module)
+                        up-url (str "http://127.0.0.1:" port up-path (when-let [qs (:query-string request)]
+                                                                       (when-not (str/blank? qs)
+                                                                         (str "?" qs))))
+                        method (:request-method request)
+                        set-cookie? (and query-token (token-valid? manifest query-token))
+                        resp0 (if (and set-cookie? (#{:get :head} method))
+                                (redirect-without-token request)
+                                nil)
+                        proxied (or resp0
+                                    (let [up (proxy-request request up-url)]
+                                      {:status (:status up)
+                                       :headers (sanitize-headers (:headers up))
+                                       :body (:body up)}))
+                        out (if set-cookie?
+                              (set-token-cookie request proxied run-id query-token expires-at)
+                              proxied)]
+                    out))))))))))
 
 (defn routes
   [state]

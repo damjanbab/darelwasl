@@ -89,8 +89,12 @@
        (if creating? "Creating..." "Create run")]
       (when selected
         [ui/button {:variant :secondary
-                    :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected])}
-         "Start / update preview"])
+                    :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected false])}
+         "Start preview"])
+      (when selected
+        [ui/button {:variant :primary
+                    :on-click #(rf/dispatch [:darelwasl.app/start-agent-preview selected true])}
+         "Apply changes"])
       (when selected
         [ui/button {:variant :danger
                     :on-click #(rf/dispatch [:darelwasl.app/trash-agent-run selected])}
@@ -107,6 +111,18 @@
      (when expires
        [:div.meta (str "Review window ends: " expires " (resets on preview update)")])
      [preview-links urls]
+     (when (seq (:site_refs run))
+       [:div.field-group
+        [:div.meta (str "Reference points: " (count (:site_refs run)))]
+        (for [r (:site_refs run)]
+          ^{:key (:id r)}
+          [:div {:style {:padding "8px 0" :borderBottom "1px solid rgba(0,0,0,0.06)"}}
+           [:div.meta (or (:url r) "")]
+           [:div (or (:text r) "")]
+           (when-not (str/blank? (or (:note r) ""))
+             [:div.meta (str "Note: " (:note r))])])])
+     (when (and (seq urls) (#{ "both" "site"} (or (:mode composer) "both")))
+       [:div.meta "Tip: open the site preview → use the “Agent refs” panel (bottom-right) → Select on → click elements → add notes → Save, then press “Apply changes”."])
      (when (= :ready (:status admins))
        [:div.field-group
         [:div.meta "Access"]

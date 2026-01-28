@@ -2040,7 +2040,8 @@
             (assoc-in [:agent-control :composer :id] "")
             (assoc-in [:agent-control :composer :message] ""))
     :dispatch-n [[::fetch-agent-runs]
-                 [::fetch-agent-run (:id payload)]]}))
+                 [::fetch-agent-run (:id payload)]
+                 [::start-agent-preview (:id payload) false]]}))
 
 (rf/reg-event-db
  ::create-agent-run-failure
@@ -2054,7 +2055,7 @@
 
 (rf/reg-event-fx
  ::start-agent-preview
- (fn [{:keys [db]} [_ run-id]]
+ (fn [{:keys [db]} [_ run-id apply?]]
    (let [mode (or (get-in db [:agent-control :detail :data :mode])
                   (get-in db [:agent-control :composer :mode])
                   "both")
@@ -2062,8 +2063,10 @@
      {:db db
       ::fx/http {:url (str "/api/agent-control/runs/" run-id "/preview/start")
                  :method "POST"
-                 :body (cond-> {:mode mode}
-                         (not (str/blank? (or message ""))) (assoc :message message))
+                 :body (cond-> {:mode mode
+                                :apply (boolean apply?)}
+                         (and apply? (not (str/blank? (or message ""))))
+                         (assoc :message message))
                  :on-success [::agent-action-success run-id]
                  :on-error [::agent-action-failure]}})))
 
