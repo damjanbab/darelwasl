@@ -1,5 +1,6 @@
 (ns darelwasl.http
-  (:require [darelwasl.http.common :as common]
+  (:require [clojure.string :as str]
+            [darelwasl.http.common :as common]
             [darelwasl.http.routes.actions :as actions-routes]
             [darelwasl.http.routes.agent-control :as agent-control-routes]
             [darelwasl.http.routes.auth :as auth-routes]
@@ -37,6 +38,15 @@
    muuntaja/format-request-middleware
    exception/exception-middleware])
 
+(def preview-middleware
+  "Preview proxy routes must preserve raw request bodies for upstream apps.
+  Do not include body-parsing middleware (e.g. muuntaja/format-request)."
+  [[common/wrap-logging]
+   cookies/wrap-cookies
+   muuntaja/format-negotiate-middleware
+   muuntaja/format-response-middleware
+   exception/exception-middleware])
+
 (defn health-route
   [state]
   ["/health" {:get (fn [_request] (common/health-response state))}])
@@ -66,16 +76,28 @@
   "Build the Ring handler with shared middleware and domain routers."
   [state]
   (let [muuntaja-instance (m/create m/default-options)]
-    (ring/ring-handler
-     (ring/router
-      (concat
-       [(health-route state)]
-       (preview-routes/routes state)
-       [(api-routes state)])
-      {:conflicts nil
-       :data {:muuntaja muuntaja-instance
-              :middleware default-middleware}})
-     (ring/routes
-      (ring/create-file-handler {:path "/"
-                                 :root "public"})
-      (ring/create-default-handler)))))
+    (let [preview-router (ring/router
+                          (preview-routes/routes state)
+                          {:conflicts nil
+                           :data {:muuntaja muuntaja-instance
+                                  :middleware preview-middleware}})
+          preview-handler (ring/ring-handler preview-router)
+          app-router (ring/router
+                      (concat
+                       [(health-route state)]
+                       [(api-routes state)])
+                      {:conflicts nil
+                       :data {:muuntaja muuntaja-instance
+                              :middleware default-middleware}})
+          app-handler (ring/ring-handler
+                       app-router
+                       (ring/routes
+                        (ring/create-file-handler {:path "/"
+                                                   :root "public"})
+                        (ring/create-default-handler)))]
+      (fn [request]
+        ;; Avoid running preview requests through body-parsing middleware.
+        ;; Match by URI prefix instead of reitit internals to keep this fast and robust.
+        (if (some-> (:uri request) (str/starts-with? "/_preview"))
+          (preview-handler request)
+          (app-handler request))))))

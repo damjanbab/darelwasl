@@ -377,6 +377,11 @@
               :mode "both"
               :status :idle
               :error nil}
+   :asset-upload {:file nil
+                  :slug ""
+                  :note ""
+                  :status :idle
+                  :error nil}
    :log {:job nil
          :status :idle
          :error nil

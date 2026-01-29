@@ -6,6 +6,86 @@
             [ring.util.codec :as codec]
             [ring.util.response :as resp]))
 
+(def ^:private supported-lang-prefixes
+  {"ar" :ar
+   "ur" :ur})
+
+(defn- strip-trailing-slash
+  [raw-path]
+  (if (and raw-path (not= raw-path "/") (str/ends-with? raw-path "/"))
+    (subs raw-path 0 (dec (count raw-path)))
+    raw-path))
+
+(defn- parse-lang-prefix
+  "Returns {:lang <kw|nil> :prefix <string> :path <string>}."
+  [clean-path]
+  (let [parts (->> (str/split (or clean-path "/") #"/")
+                   (remove str/blank?))
+        [first-seg & more] parts
+        lang (get supported-lang-prefixes first-seg)]
+    (if lang
+      {:lang lang
+       :prefix (str "/" first-seg)
+       :path (str "/" (str/join "/" more))}
+      {:lang nil
+       :prefix ""
+       :path clean-path})))
+
+(defn- static-path?
+  [path]
+  (or (str/starts-with? path "/css/")
+      (str/starts-with? path "/images/")
+      (str/starts-with? path "/js/")
+      (= path "/robots.txt")
+      (= path "/sitemap.xml")
+      (= path "/logo.svg")
+      (= path "/logo.jpg")
+      (= path "/preview-annotate.js")))
+
+(defn- content-type-for-path
+  [path]
+  (let [p (str (or path ""))]
+    (cond
+      (str/ends-with? p ".css") "text/css; charset=utf-8"
+      (str/ends-with? p ".js") "application/javascript; charset=utf-8"
+      (str/ends-with? p ".svg") "image/svg+xml"
+      (str/ends-with? p ".png") "image/png"
+      (or (str/ends-with? p ".jpg") (str/ends-with? p ".jpeg")) "image/jpeg"
+      (str/ends-with? p ".webp") "image/webp"
+      (str/ends-with? p ".xml") "application/xml; charset=utf-8"
+      (str/ends-with? p ".txt") "text/plain; charset=utf-8"
+      :else nil)))
+
+(defn- maybe-no-cache
+  "Avoid clients getting stuck on stale CSS/JS/logo during rapid iterations."
+  [path response]
+  (if (or (str/starts-with? path "/css/")
+          (str/starts-with? path "/js/")
+          (str/ends-with? path ".svg"))
+    (resp/header response "Cache-Control" "no-cache")
+    response))
+
+(defn- request-public-base-url
+  "Derives the public base URL from reverse-proxy headers."
+  [request]
+  (let [headers (into {} (for [[k v] (:headers request)] [(str/lower-case (name k)) v]))
+        proto (or (get headers "x-forwarded-proto")
+                  (some-> (:scheme request) name)
+                  "http")
+        host (or (get headers "x-forwarded-host")
+                 (get headers "host")
+                 (:server-name request)
+                 "localhost")]
+    (str proto "://" host)))
+
+(defn- content-context
+  [conn]
+  (let [data (content/list-content-v2 conn)
+        {:keys [error businesses contacts]} data]
+    (if error
+      {:error error}
+      {:contact (templates/select-contact businesses contacts)})))
+
 (defn handle-request
   [{:keys [db config]} request]
   (let [start (System/nanoTime)
@@ -13,151 +93,56 @@
         base-path (or (get-in config [:site :base-path]) "")
         raw-path (:uri request)
         query (codec/form-decode (or (:query-string request) ""))
-        clean-path (if (and (not= raw-path "/") (str/ends-with? raw-path "/"))
-                     (subs raw-path 0 (dec (count raw-path)))
-                     raw-path)]
-      (if (= clean-path "/health")
-      {:status 200
-       :headers {"Content-Type" "text/plain; charset=utf-8"}
-       :body "ok"}
-      (if (or (str/starts-with? clean-path "/css/")
-              (= clean-path "/preview-annotate.js")
-              (= clean-path "/logo.jpg"))
-      (let [static-resp (resp/file-response (subs clean-path 1) {:root "public"})]
-        (if static-resp
-          (if (str/starts-with? clean-path "/css/")
-            (resp/content-type static-resp "text/css")
-            (if (= clean-path "/preview-annotate.js")
-              (resp/content-type static-resp "application/javascript")
-              static-resp))
-          (templates/render-not-found clean-path "" base-path)))
-      (let [data (content/list-content-v2 conn)
-        {:keys [error licenses comparison-rows journey-phases activation-steps personas support-entries hero-stats hero-flows faqs values team-members businesses contacts]} data
-       nav-items [{:path "/" :label "Home"}
-                   {:path "/services" :label "Services"}
-                   {:path "/comparison" :label "Comparison"}
-                   {:path "/process" :label "Process"}
-                   {:path "/about" :label "About"}
-                   {:path "/contact" :label "Contact"}
-                   {:path "/contact" :label "Schedule a meeting" :cta? true}]
-        nav (templates/nav-links nav-items clean-path base-path)
-        response (cond
-                   error
-                   {:status 500
-                    :headers {"Content-Type" "text/plain; charset=utf-8"}
-                    :body (str "Content unavailable: " (:message error "unexpected error"))}
+        clean-path (strip-trailing-slash raw-path)
+        {:keys [lang prefix path]} (parse-lang-prefix clean-path)
+        public-base-url (request-public-base-url request)]
+    (try
+      (let [response (cond
+                       (= path "/health")
+                       {:status 200
+                        :headers {"Content-Type" "text/plain; charset=utf-8"}
+                        :body "ok"}
 
-                   :else
-                   (let [visible-licenses (->> licenses (filter #(not= false (:license/visible? %))) (sort-by #(or (:license/order %) Long/MAX_VALUE)))
-                         visible-personas (->> personas (filter #(not= false (:persona/visible? %))) (sort-by #(or (:persona/order %) Long/MAX_VALUE)))
-                         visible-faqs (->> faqs (filter #(not= false (:faq/visible? %))) (sort-by #(or (:faq/order %) Long/MAX_VALUE)))
-                         sorted-comparison (sort-by #(or (:comparison.row/order %) Long/MAX_VALUE) comparison-rows)
-                         sorted-phases (sort-by #(or (:journey.phase/order %) Long/MAX_VALUE) journey-phases)
-                         sorted-activation (sort-by #(or (:activation.step/order %) Long/MAX_VALUE) activation-steps)
-                         sorted-support (sort-by #(or (:support.entry/order %) Long/MAX_VALUE) support-entries)
-                         sorted-values (sort-by #(or (:value/order %) Long/MAX_VALUE) values)
-                         sorted-team (sort-by #(or (:team.member/order %) Long/MAX_VALUE) team-members)
-                         stat-index (into {} (map (fn [s] [(:hero.stat/id s) s]) hero-stats))
-                         flow-index (into {} (map (fn [f] [(:hero.flow/id f) f]) hero-flows))
-                         contact-index (into {} (map (fn [c] [(:contact/id c) c]) contacts))
-                         business (or (first (filter #(not= false (:business/visible? %)) businesses))
-                                      (first businesses)
-                                      {})
-                         selected-contact (or (some-> business :business/contact (templates/ref-id :contact/id) contact-index)
-                                              (first contacts)
-                                              {})
-                         linked-stats (->> (:business/hero-stats business)
-                                           (map #(get stat-index (templates/ref-id % :hero.stat/id)))
-                                           (remove nil?)
-                                           (sort-by #(or (:hero.stat/order %) Long/MAX_VALUE)))
-                         linked-flows (->> (:business/hero-flows business)
-                                           (map #(get flow-index (templates/ref-id % :hero.flow/id)))
-                                           (remove nil?)
-                                           (sort-by #(or (:hero.flow/order %) Long/MAX_VALUE)))
-                       nav (templates/nav-links nav-items clean-path base-path)
-                       footer-cta (templates/render-footer-cta business selected-contact base-path)]
-                     (case clean-path
-                       "/"
-                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Home")
-                                      nav
-                                      (apply str (remove nil?
-                                                         [(templates/render-hero business linked-stats linked-flows)
-                                                          (templates/render-funnel :select)
-                                                          (templates/render-trust-strip linked-stats sorted-comparison)
-                                                          (templates/render-offer-overview visible-licenses)
-                                                          (templates/render-how-it-works linked-flows)
-                                                          (templates/render-path-selector-teaser visible-licenses)
-                                                          (templates/render-faqs (take 3 visible-faqs))]))
-                                      footer-cta
-                                      base-path)
+                       (static-path? path)
+                       (let [static-resp (resp/file-response (subs path 1) {:root "public"})]
+                         (if static-resp
+                           (let [ctype (content-type-for-path path)
+                                 typed (if ctype
+                                         (resp/content-type static-resp ctype)
+                                         static-resp)]
+                             (maybe-no-cache path typed))
+                           (templates/public-not-found {:public-base-url public-base-url
+                                                        :base-path base-path
+                                                        :lang lang
+                                                        :path path})))
 
-                       "/services"
-                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Services")
-                                      nav
-                                      (apply str (remove nil?
-                                                         [(templates/render-hero-light "Licensing and activation services" "Select the license that fits, compare requirements, and book a call.")
-                                                          (templates/render-funnel :select)
-                                                          (templates/render-license-tabs visible-licenses
-                                                                               (case (get query "type")
-                                                                                 "entrepreneur" :license.type/entrepreneur
-                                                                                 "gcc" :license.type/gcc
-                                                                                 "general" :license.type/general
-                                                                                 nil)
-                                                                               base-path)
-                                                          (templates/render-outcomes sorted-values)
-                                                          (templates/render-faqs visible-faqs)]))
-                                      footer-cta
-                                      base-path)
+                       :else
+                       (let [{:keys [error contact]} (content-context conn)]
+                         (cond
+                           error
+                           {:status 500
+                            :headers {"Content-Type" "text/plain; charset=utf-8"}
+                            :body (str "Content unavailable: " (:message error "unexpected error"))}
 
-                       "/comparison"
-                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Comparison")
-                                      nav
-                                      (apply str (remove nil?
-                                                         [(templates/render-hero-light "Compare license paths" "Side-by-side details across processing, cost, ownership, and required documents.")
-                                                          (templates/render-funnel :compare)
-                                                          (templates/render-comparison sorted-comparison)]))
-                                      footer-cta
-                                      base-path)
-
-                       "/process"
-                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Process")
-                                      nav
-                                      (apply str (remove nil?
-                                                         [(templates/render-hero-light "Process and activation" "Understand the phases, inputs, and outputs for going live in KSA.")
-                                                          (templates/render-journey sorted-phases sorted-activation)]))
-                                      footer-cta
-                                      base-path)
-
-                       "/about"
-                       (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - About")
-                                      nav
-                                      (apply str (remove nil?
-                                                         [(templates/render-hero-light "About Dar Alwasl" "Principles and operating model for calm, evidence-led execution.")
-                                                          (templates/render-about-overview business)
-                                                          (templates/render-values-team sorted-values sorted-team)]))
-                                      footer-cta
-                                      base-path)
-
-                      "/contact"
-                      (templates/html-response (str (or (:business/name business) "Dar Alwasl") " - Contact")
-                                      nav
-                                      (apply str [(templates/render-hero-light "Talk to the team" "Schedule a meeting or email us with your activities and timing.")
-                                                  (templates/render-funnel :schedule)
-                                                  (templates/render-contact business selected-contact base-path)])
-                                      footer-cta
-                                      base-path)
-
-                       (templates/render-not-found clean-path nav base-path))))
-        dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
-    (log/infof "site request path=%s status=%s dur=%.1fms content={licenses %s, journey %s, personas %s, faqs %s}"
-               clean-path
-               (:status response)
-               dur-ms
-               (count licenses)
-               (count journey-phases)
-               (count personas)
-               (count faqs))
-    response)))))
+                           :else
+                           (templates/public-route {:public-base-url public-base-url
+                                                    :base-path base-path
+                                                    :lang lang
+                                                    :path path
+                                                    :query query
+                                                    :contact contact}))))
+            dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
+        (log/infof "site request path=%s status=%s dur=%.1fms"
+                   clean-path
+                   (:status response)
+                   dur-ms)
+        response)
+      (catch Exception e
+        (let [dur-ms (/ (double (- (System/nanoTime) start)) 1e6)]
+          (log/error e (format "site request path=%s crashed after %.1fms" clean-path dur-ms))
+          {:status 500
+           :headers {"Content-Type" "text/plain; charset=utf-8"}
+           :body "Site error"})))))
 
 (defn app
   "Ring handler for the public site process."

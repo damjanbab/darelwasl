@@ -65,18 +65,28 @@
 (defn status
   "Return {:status :ok} when a connection can produce a db value; otherwise
   {:status :error :message ...}."
-  [{:keys [conn error]}]
-  (cond
-    error {:status :error
-           :message (.getMessage ^Exception error)}
-    conn (try
-           (d/db conn)
-           {:status :ok}
-           (catch Exception e
-             {:status :error
-              :message (.getMessage e)}))
-    :else {:status :error
-           :message "No Datomic connection"}))
+  [db-state]
+  (let [{:keys [conn error db-name system storage-dir]} (or db-state {})
+        base {:db-name db-name
+              :system system
+              :storage-kind (cond
+                              (= :mem storage-dir) "mem"
+                              (= ":mem" storage-dir) "mem"
+                              (nil? storage-dir) "unknown"
+                              :else "dir")}
+        err-msg (cond
+                  (nil? error) nil
+                  (instance? Exception error) (.getMessage ^Exception error)
+                  :else (str error))]
+    (cond
+      error (assoc base :status :error :message err-msg)
+      conn (try
+             (let [db (d/db conn)]
+               (assoc base
+                      :status :ok))
+             (catch Exception e
+               (assoc base :status :error :message (.getMessage e))))
+      :else (assoc base :status :error :message "No Datomic connection"))))
 
 (defn transact!
   "Wrapper around datomic transact."

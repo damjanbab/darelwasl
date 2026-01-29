@@ -54,6 +54,10 @@
   background: rgba(255, 255, 255, 0.10);
 }
 
+.agent-refs-upload-input {
+  display: none;
+}
+
 .agent-refs-btn-primary {
   border-color: rgba(96, 165, 250, 0.40);
   background: rgba(96, 165, 250, 0.16);
@@ -73,6 +77,53 @@
 .agent-refs-list {
   padding: 0 12px 12px 12px;
   overflow: auto;
+}
+
+.agent-refs-section-title {
+  margin: 10px 0 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.agent-refs-asset-note-row {
+  margin-bottom: 10px;
+}
+
+.agent-refs-asset-note {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.agent-refs-asset-item {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  margin-bottom: 10px;
+}
+
+.agent-refs-asset-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-refs-asset-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agent-refs-empty {
@@ -179,4 +230,3 @@
 .agent-refs-status-error {
   color: rgba(248, 113, 113, 0.95);
 }
-

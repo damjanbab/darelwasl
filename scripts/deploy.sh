@@ -19,6 +19,17 @@ Steps:
 EOF
 }
 
+if [[ "${DEPLOY_APPROVED:-}" != "1" ]]; then
+  cat <<'EOF'
+Refusing to deploy: DEPLOY_APPROVED is not set.
+
+This repo is configured to avoid accidental redeploys.
+To deploy intentionally, run:
+  DEPLOY_APPROVED=1 scripts/deploy.sh
+EOF
+  exit 1
+fi
+
 BUILD=1
 if [[ "${1:-}" == "--no-build" ]]; then
   BUILD=0

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `4e4e88dbe79695cb4c7819e07ff11ae4c3ab94f8795d18829639d176bd338b53`
+- Catalog version: `5a0e9bd86d348801d6f500d66b28a983845ff4be9875a6ccaac21853ff1297bd`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -171,6 +171,7 @@ This file is auto-generated. Do not edit by hand.
 - /+$
 - /:id
 - /:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}
+- /_preview
 - /_preview/
 - /_preview/([^/]+)/([^/]+)(?:/.*)?$
 - /_preview/*
@@ -180,6 +181,8 @@ This file is auto-generated. Do not edit by hand.
 - /agent-control
 - /api
 - /archive
+- /assets
+- /assets/
 - /assignee
 - /bets
 - /bets/:id/settle
@@ -229,6 +232,11 @@ This file is auto-generated. Do not edit by hand.
 - /runs/:id/jobs/:job/log
 - /runs/:id/preview/start
 - /runs/:id/revise
+- /runs/:id/site-assets
+- /runs/:id/site-assets/:asset
+- /runs/:id/site-assets/clear
+- /runs/:id/site-refs/:ref
+- /runs/:id/site-refs/clear
 - /runs/:id/trash
 - /services
 - /services/:id/restart

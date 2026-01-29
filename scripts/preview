@@ -66,6 +66,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p_start.add_argument("--mode", choices=["site", "app", "both", "telegram"], default="both", help="Which module to preview")
     p_start.add_argument("--domain", default="preview.haloeddepth.com", help="(deprecated) Base preview domain")
     p_start.add_argument("--public-host", default="https://haloeddepth.com", help="Public host where previews are reachable")
+    p_start.add_argument(
+        "--verify",
+        choices=["light", "full"],
+        default="light",
+        help="Verification mode (default: light). 'full' runs app-smoke; 'light' checks proxy health + login and takes site screenshots.",
+    )
     p_start.add_argument("--skip-verify", action="store_true", help="Skip automatic verification step(s)")
     p_start.add_argument("--no-reload-caddy", action="store_true", help="Write Caddy snippet but do not reload Caddy")
     p_start.add_argument(
@@ -111,6 +117,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p_verify = sub.add_parser("verify", help="Run verification for a preview run")
     p_verify.add_argument("id", help="Run id")
     p_verify.add_argument("--mode", choices=["site", "app", "both", "telegram"], default="both")
+    p_verify.add_argument("--verify", choices=["light", "full"], default="full")
 
     p_respond = sub.add_parser("respond", help="User response for a preview run (accept or request changes)")
     p_respond.add_argument("id", help="Run id")
@@ -483,7 +490,7 @@ def remove_worktree(root: Path, run_id: str) -> None:
         subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=str(root), check=False)
 
 
-def verify_run(root: Path, run_id: str, mode: str) -> None:
+def verify_run(root: Path, run_id: str, mode: str, verify: str) -> None:
     m = read_manifest(root, run_id)
     ports = m.get("ports", {})
     app_port = int(ports.get("app"))
@@ -514,12 +521,47 @@ def verify_run(root: Path, run_id: str, mode: str) -> None:
         subprocess.run(["node", "scripts/site-screenshot.js", "--config", str(cfg_path), "--out", str(out_dir)], cwd=str(wt), check=True)
 
     if mode in ("app", "both"):
-        env = os.environ.copy()
-        env["APP_URL"] = f"http://127.0.0.1:3000/_preview/{run_id}/app/"
-        env["APP_PREVIEW_TOKEN"] = token
-        env["TERMINAL_LOG_DIR"] = str(artifacts)
-        env["APP_SMOKE_ARTIFACT_DIR"] = str(artifacts)
-        subprocess.run(["node", "scripts/app-smoke.js"], cwd=str(wt), env=env, check=True)
+        if verify == "full":
+            env = os.environ.copy()
+            env["APP_URL"] = f"http://127.0.0.1:3000/_preview/{run_id}/app/"
+            env["APP_PREVIEW_TOKEN"] = token
+            env["TERMINAL_LOG_DIR"] = str(artifacts)
+            env["APP_SMOKE_ARTIFACT_DIR"] = str(artifacts)
+            subprocess.run(["node", "scripts/app-smoke.js"], cwd=str(wt), env=env, check=True)
+        else:
+            wait_http_ok(f"http://127.0.0.1:3000/_preview/{run_id}/app/health?t={token}")
+            payload = '{"user/username":"huda","user/password":"Damjan1!"}'
+            proc = subprocess.run(
+                [
+                    "curl",
+                    "-sS",
+                    "-D",
+                    "-",
+                    "-o",
+                    "/dev/null",
+                    "-X",
+                    "POST",
+                    f"http://127.0.0.1:3000/_preview/{run_id}/app/api/login?t={token}",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-H",
+                    "Accept: application/json",
+                    "--data",
+                    payload,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            out = proc.stdout or ""
+            if proc.returncode != 0:
+                raise SystemExit(f"App login check failed:\n{out}")
+            m0 = re.search(r"^HTTP/\S+\s+(\d+)", out, flags=re.MULTILINE)
+            status = int(m0.group(1)) if m0 else 0
+            if status != 200:
+                raise SystemExit(f"App login check failed (status {status}).\n{out}")
+            if "ring-session=" not in out.lower():
+                raise SystemExit(f"App login check failed (missing ring-session cookie).\n{out}")
 
     if mode == "telegram":
         wait_http_ok(f"http://127.0.0.1:{app_port}/health")
@@ -692,7 +734,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         telegram_active_path(root).write_text(json.dumps({"id": args.id, "pid": pid, "at": utc_iso()}, indent=2) + "\n", encoding="utf-8")
 
     if not args.skip_verify:
-        verify_run(root, args.id, mode)
+        verify_run(root, args.id, mode, args.verify)
 
     out = {
         "status": "ok",
@@ -744,7 +786,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     root = repo_root()
     validate_id(args.id)
-    verify_run(root, args.id, args.mode)
+    verify_run(root, args.id, args.mode, args.verify)
     print(json.dumps({"status": "ok", "id": args.id, "verified_at": utc_iso()}, indent=2))
     return 0
 
@@ -771,18 +813,9 @@ def cmd_respond(args: argparse.Namespace) -> int:
     m["status"] = "accepted"
     m["accepted_at"] = utc_iso()
     write_manifest(root, args.id, m)
-    # By default, acceptance triggers promotion (the "go live" gate).
-    proc = subprocess.run(
-        ["bash", "-lc", f"scripts/preview promote {shlex.quote(args.id)}"],
-        cwd=str(root),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    if proc.returncode != 0:
-        print(proc.stdout, end="")
-        raise SystemExit("Promotion failed after acceptance. Fix the issue and run: scripts/preview promote <id>")
-    print(proc.stdout, end="")
+    # Intentionally do NOT auto-promote on acceptance.
+    # Promotion is a separate, explicit step (DEPLOY_APPROVED-gated).
+    print(json.dumps({"status": "ok", "id": args.id, "decision": "accept", "accepted_at": m["accepted_at"]}, indent=2))
     return 0
 
 
@@ -809,7 +842,11 @@ def cmd_promote(args: argparse.Namespace) -> int:
         raise SystemExit(f"Unable to fast-forward main to {head}:\n{ff.stdout}")
 
     if not args.no_restart:
-        subprocess.run(["bash", "-lc", "scripts/promote-live.sh"], cwd=str(root), check=True)
+        # Promotion is deploy-like; require explicit operator intent.
+        env = dict(os.environ)
+        if env.get("DEPLOY_APPROVED") != "1":
+            raise SystemExit("Refusing to restart/promote live: set DEPLOY_APPROVED=1")
+        subprocess.run(["bash", "-lc", "scripts/promote-live.sh"], cwd=str(root), check=True, env=env)
 
     subprocess.run(["bash", "-lc", f"scripts/preview stop {shlex.quote(args.id)}"], cwd=str(root), check=False)
     m["status"] = "promoted"

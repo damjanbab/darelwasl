@@ -133,6 +133,22 @@ async function ensureLogin(page) {
   }
 }
 
+async function ensureSessionOnly(page) {
+  const onLogin = await page.$("form.login-form");
+  if (!onLogin) return;
+  await page.waitForSelector("#username", { timeout: 5000 });
+  await page.waitForSelector("#password", { timeout: 5000 });
+  await page.fill("#username", "huda");
+  await page.fill("#password", "Damjan1!");
+  const loginResp = page.waitForResponse(
+    (resp) => resp.url().includes("/api/login") && resp.ok(),
+    { timeout: 20000 }
+  );
+  await page.click('button[type="submit"]');
+  await loginResp;
+  await page.waitForSelector(".app-shell", { timeout: 20000, state: "visible" });
+}
+
 async function run() {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
   fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -295,9 +311,12 @@ async function run() {
     // Navigate to Land app and verify people/parcels/stats render
     const openApp = async (label) => {
       const normalized = label.toLowerCase();
+      const appKey = normalized === "agent control" ? "agent-control" : normalized;
       const waitForLayout = async () => {
-        if (normalized === "land") {
+        if (appKey === "land") {
           await page.waitForSelector(".land-layout", { timeout: 20000, state: "visible" });
+        } else if (appKey === "agent-control") {
+          await page.waitForSelector(".agent-control-layout", { timeout: 20000, state: "visible" });
         } else {
           await page.waitForSelector(".tasks-layout", { timeout: 12000, state: "visible" });
         }
@@ -313,15 +332,14 @@ async function run() {
         } else if (await mobileBtn.isVisible()) {
           await mobileBtn.click({ force: true });
         }
-        const visible = await target.isVisible().catch(() => false);
-        if (visible) {
-          try {
-            await target.click({ force: true });
-            await waitForLayout();
-            return;
-          } catch (_) {
-            // try again
-          }
+        try {
+          await target.waitFor({ timeout: 6000, state: "attached" });
+          await target.scrollIntoViewIfNeeded().catch(() => null);
+          await target.click({ force: true });
+          await waitForLayout();
+          return;
+        } catch (_) {
+          // try again
         }
         await page.waitForTimeout(400);
       }
@@ -333,9 +351,9 @@ async function run() {
         } catch (_) {
           /* ignore */
         }
-      }, normalized);
+      }, appKey);
       await page.reload({ waitUntil: "networkidle" });
-      await ensureLogin(page);
+      await ensureSessionOnly(page);
       // One more attempt via UI after reload.
       for (let i = 0; i < 2; i++) {
         const appsBtn = page.locator(".app-switcher-trigger");
@@ -345,26 +363,38 @@ async function run() {
         } else if (await mobileBtn.isVisible()) {
           await mobileBtn.click({ force: true });
         }
-        if (await target.isVisible().catch(() => false)) {
+        try {
+          await target.waitFor({ timeout: 6000, state: "attached" });
+          await target.scrollIntoViewIfNeeded().catch(() => null);
           await target.click({ force: true });
           await waitForLayout();
           return;
+        } catch (_) {
+          // try again
         }
         await page.waitForTimeout(400);
       }
 
       // Final attempt: direct dispatch if available.
-      await page.evaluate(() => {
+      await page.evaluate((app) => {
         try {
-          if (window.re_frame && window.re_frame.core && window.re_frame.core.dispatch && window.cljs && window.cljs.core && window.cljs.core.keyword) {
+          if (
+            window.re_frame &&
+            window.re_frame.core &&
+            window.re_frame.core.dispatch &&
+            window.cljs &&
+            window.cljs.core &&
+            window.cljs.core.keyword &&
+            window.cljs.core.vector
+          ) {
             const navEvt = window.cljs.core.keyword("darelwasl.app", "navigate");
-            const land = window.cljs.core.keyword("land");
-            window.re_frame.core.dispatch([navEvt, land]);
+            const target = window.cljs.core.keyword(app);
+            window.re_frame.core.dispatch(window.cljs.core.vector(navEvt, target));
           }
         } catch (_) {
           /* ignore */
         }
-      });
+      }, appKey);
       await waitForLayout();
     };
 
@@ -389,6 +419,51 @@ async function run() {
       }
     } catch (landErr) {
       console.warn("Land navigation step skipped due to error:", landErr?.message || landErr);
+    }
+
+    try {
+      await openApp("Agent control");
+      await page.waitForSelector(".agent-control-layout", { timeout: 15000, state: "visible" });
+      await page.waitForSelector('.panel:has-text("Runs")', { timeout: 10000 });
+      // Ensure the create run form exists.
+      await page.waitForSelector('input[placeholder*="kebab-case"]', { timeout: 10000 });
+
+      // Create a run and upload an asset (ensures run-asset attachment works).
+      const runId = `smoke-run-${Date.now()}`;
+      await page.fill('input[placeholder*="kebab-case"]', runId);
+      await Promise.all([
+        page.waitForResponse(
+          (resp) => resp.request().method() === "POST" && resp.url().endsWith("/api/agent-control/runs") && resp.ok(),
+          { timeout: 15000 }
+        ),
+        page.getByRole("button", { name: "Create run" }).click(),
+      ]);
+      await page.waitForSelector(`text=Selected run: ${runId}`, { timeout: 15000 });
+
+      const uploadPath = path.join(ARTIFACT_DIR, `agent-control-upload-${Date.now()}.md`);
+      fs.writeFileSync(uploadPath, "# Smoke upload\n\nThis file verifies agent-control asset upload.\n");
+      const fileInput = page.getByTestId("agent-asset-upload-input");
+      await fileInput.setInputFiles(uploadPath);
+      const uploadBtn = page.getByTestId("agent-asset-upload-btn");
+      await uploadBtn.waitFor({ timeout: 10000 });
+      await page.waitForFunction(() => {
+        const btn = document.querySelector('[data-testid="agent-asset-upload-btn"]');
+        return btn && !btn.disabled;
+      });
+
+      await Promise.all([
+        page.waitForResponse(
+          (resp) =>
+            resp.request().method() === "POST" &&
+            resp.url().includes(`/api/agent-control/runs/${runId}/site-assets`) &&
+            resp.ok(),
+          { timeout: 20000 }
+        ),
+        uploadBtn.click(),
+      ]);
+      await page.waitForSelector(`text=${path.basename(uploadPath)}`, { timeout: 15000 });
+    } catch (agentErr) {
+      console.warn("Agent control navigation step skipped due to error:", agentErr?.message || agentErr);
     }
 
     // Return to tasks for the remainder of the flow

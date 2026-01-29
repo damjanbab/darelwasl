@@ -50,6 +50,20 @@
          (rf/dispatch (conj on-error {:status (.-status resp)
                                       :body {:error "Invalid response from server"}}))))))
 
+(defn- handle-response-text [resp on-success on-error]
+  (-> (.text resp)
+      (.then
+       (fn [text]
+         (let [status (.-status resp)]
+           (if (<= 200 status 299)
+             (rf/dispatch (conj on-success {:text text :status status}))
+             (rf/dispatch (conj on-error {:status status
+                                          :body {:error text}}))))))
+      (.catch
+       (fn [_]
+         (rf/dispatch (conj on-error {:status (.-status resp)
+                                      :body {:error "Invalid response from server"}}))))))
+
 (rf/reg-fx
  ::http
  (fn [{:keys [url method body headers credentials on-success on-error]}]
@@ -76,6 +90,22 @@
                          form-data (assoc :body form-data)))]
      (-> (js/fetch url opts)
          (.then #(handle-response % on-success on-error))
+         (.catch
+          (fn [_]
+            (rf/dispatch (conj on-error {:status nil
+                                         :body {:error "Network error. Please try again."}}))))))))
+
+(rf/reg-fx
+ ::http-text
+ (fn [{:keys [url method body headers credentials on-success on-error]}]
+   (let [url (maybe-prefix-preview url)
+         has-body? (some? body)
+         opts (clj->js (cond-> {:method (or method "GET")
+                                :headers (ensure-headers headers has-body? nil)
+                                :credentials (or credentials "same-origin")}
+                         has-body? (assoc :body (json-body body))))]
+     (-> (js/fetch url opts)
+         (.then #(handle-response-text % on-success on-error))
          (.catch
           (fn [_]
             (rf/dispatch (conj on-error {:status nil

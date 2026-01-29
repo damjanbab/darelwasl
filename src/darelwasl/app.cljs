@@ -1968,7 +1968,17 @@
  (fn [{:keys [db]} [_ run-id]]
    (let [items (get-in db [:agent-control :runs :items])
          exists? (some #(= (:id %) run-id) items)]
-     (cond-> {:db (assoc-in db [:agent-control :runs :selected] run-id)}
+     (cond-> {:db (-> db
+                      (assoc-in [:agent-control :runs :selected] run-id)
+                      (assoc-in [:agent-control :asset-upload :file] nil)
+                      (assoc-in [:agent-control :asset-upload :slug] "")
+                      (assoc-in [:agent-control :asset-upload :note] "")
+                      (assoc-in [:agent-control :asset-upload :status] :idle)
+                      (assoc-in [:agent-control :asset-upload :error] nil)
+                      (assoc-in [:agent-control :log :job] nil)
+                      (assoc-in [:agent-control :log :status] :idle)
+                      (assoc-in [:agent-control :log :error] nil)
+                      (assoc-in [:agent-control :log :text] nil))}
        exists? (assoc :dispatch [::fetch-agent-run run-id])))))
 
 (rf/reg-event-fx
@@ -1987,13 +1997,15 @@
  (fn [{:keys [db]} [_ payload]]
    (let [run payload
          status (:status run)
-         poll? (contains? #{"previewing" "accepted"} status)]
+         poll? (or (contains? #{"previewing" "accepted"} status)
+                   (some #(= "running" (:status %)) (or (:jobs run) [])))]
      {:db (-> db
               (assoc-in [:agent-control :detail :data] run)
               (assoc-in [:agent-control :detail :status] :ready)
               (assoc-in [:agent-control :detail :error] nil))
-      :fx (when poll?
-            [[::fx/dispatch-later {:ms 2000 :dispatch [::fetch-agent-run (:id run)]}]])})))
+      :fx (cond-> []
+            poll?
+            (conj [::fx/dispatch-later {:ms 2000 :dispatch [::fetch-agent-run (:id run)]}]))})))
 
 (rf/reg-event-db
  ::fetch-agent-run-failure
@@ -2013,6 +2025,92 @@
  ::set-agent-composer-field
  (fn [db [_ field value]]
    (assoc-in db [:agent-control :composer field] value)))
+
+(rf/reg-event-db
+ ::set-agent-asset-upload-file
+ (fn [db [_ file]]
+   (-> db
+       (assoc-in [:agent-control :asset-upload :file] file)
+       (assoc-in [:agent-control :asset-upload :error] nil))))
+
+(rf/reg-event-db
+ ::set-agent-asset-upload-slug
+ (fn [db [_ value]]
+   (-> db
+       (assoc-in [:agent-control :asset-upload :slug] (or value ""))
+       (assoc-in [:agent-control :asset-upload :error] nil))))
+
+(rf/reg-event-db
+ ::set-agent-asset-upload-note
+ (fn [db [_ value]]
+   (-> db
+       (assoc-in [:agent-control :asset-upload :note] (or value ""))
+       (assoc-in [:agent-control :asset-upload :error] nil))))
+
+(rf/reg-event-db
+ ::clear-agent-asset-upload
+ (fn [db _]
+   (-> db
+       (assoc-in [:agent-control :asset-upload :file] nil)
+       (assoc-in [:agent-control :asset-upload :slug] "")
+       (assoc-in [:agent-control :asset-upload :note] "")
+       (assoc-in [:agent-control :asset-upload :status] :idle)
+       (assoc-in [:agent-control :asset-upload :error] nil))))
+
+(rf/reg-event-fx
+ ::upload-agent-site-asset
+ (fn [{:keys [db]} [_ run-id]]
+   (let [{:keys [file slug note]} (get-in db [:agent-control :asset-upload])]
+     (cond
+       (nil? run-id)
+       {:db (assoc-in db [:agent-control :asset-upload :error] "Select a run first")}
+
+       (nil? file)
+       {:db (assoc-in db [:agent-control :asset-upload :error] "Choose a file to upload")}
+
+       :else
+       (let [form (js/FormData.)]
+         (.append form "file" file)
+         (when (present-str slug)
+           (.append form "slug" slug))
+         (when (present-str note)
+           (.append form "note" note))
+         {:db (-> db
+                  (assoc-in [:agent-control :asset-upload :status] :uploading)
+                  (assoc-in [:agent-control :asset-upload :error] nil))
+          ::fx/http-form {:url (str "/api/agent-control/runs/" run-id "/site-assets")
+                          :method "POST"
+                          :form-data form
+                          :on-success [::upload-agent-site-asset-success]
+                          :on-error [::upload-agent-site-asset-failure]}})))))
+
+(rf/reg-event-fx
+ ::upload-agent-site-asset-success
+ (fn [{:keys [db]} [_ run]]
+   {:db (-> db
+            (assoc-in [:agent-control :detail :data] run)
+            (assoc-in [:agent-control :detail :status] :ready)
+            (assoc-in [:agent-control :detail :error] nil)
+            (assoc-in [:agent-control :asset-upload :status] :success)
+            (assoc-in [:agent-control :asset-upload :error] nil)
+            (assoc-in [:agent-control :asset-upload :file] nil)
+            (assoc-in [:agent-control :asset-upload :slug] "")
+            (assoc-in [:agent-control :asset-upload :note] ""))
+    :dispatch [::fetch-agent-runs]
+    ::fx/dispatch-later {:ms 1500 :dispatch [::clear-agent-asset-upload]}}))
+
+(rf/reg-event-db
+ ::upload-agent-site-asset-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to upload asset.")]
+     (-> db
+         (assoc-in [:agent-control :asset-upload :status] :error)
+         (assoc-in [:agent-control :asset-upload :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
 
 (rf/reg-event-fx
  ::create-agent-run
@@ -2039,10 +2137,10 @@
             (assoc-in [:agent-control :composer :error] nil)
             (assoc-in [:agent-control :runs :selected] (:id payload))
             (assoc-in [:agent-control :composer :id] "")
-            (assoc-in [:agent-control :composer :title] ""))
+            (assoc-in [:agent-control :composer :title] "")
+            (assoc-in [:agent-control :composer :request] ""))
     :dispatch-n [[::fetch-agent-runs]
-                 [::fetch-agent-run (:id payload)]
-                 [::start-agent-preview (:id payload) false]]}))
+                 [::fetch-agent-run (:id payload)]]}))
 
 (rf/reg-event-db
  ::create-agent-run-failure
@@ -2086,6 +2184,91 @@
    {:db db
     ::fx/http {:url (str "/api/agent-control/runs/" run-id "/accept")
                :method "POST"
+               :on-success [::agent-action-success run-id]
+               :on-error [::agent-action-failure]}}))
+
+(rf/reg-event-db
+ ::select-agent-job-log
+ (fn [db [_ job-id]]
+   (-> db
+       (assoc-in [:agent-control :log :job] job-id)
+       (assoc-in [:agent-control :log :status] :idle)
+       (assoc-in [:agent-control :log :error] nil)
+       (assoc-in [:agent-control :log :text] nil))))
+
+(rf/reg-event-fx
+ ::fetch-agent-job-log
+ (fn [{:keys [db]} [_ run-id job-id]]
+   {:db (-> db
+            (assoc-in [:agent-control :log :job] job-id)
+            (assoc-in [:agent-control :log :status] :loading)
+            (assoc-in [:agent-control :log :error] nil))
+    ::fx/http-text {:url (str "/api/agent-control/runs/" run-id "/jobs/" job-id "/log")
+                    :method "GET"
+                    :on-success [::fetch-agent-job-log-success]
+                    :on-error [::fetch-agent-job-log-failure]}}))
+
+(rf/reg-event-db
+ ::fetch-agent-job-log-success
+ (fn [db [_ {:keys [text]}]]
+   (-> db
+       (assoc-in [:agent-control :log :status] :ready)
+       (assoc-in [:agent-control :log :error] nil)
+       (assoc-in [:agent-control :log :text] text))))
+
+(rf/reg-event-db
+ ::fetch-agent-job-log-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 404) "Job log not found.")
+                     "Unable to load job log.")]
+     (-> db
+         (assoc-in [:agent-control :log :status] :error)
+         (assoc-in [:agent-control :log :error] message)))))
+
+(rf/reg-event-fx
+ ::revise-agent-run
+ (fn [{:keys [db]} [_ run-id message]]
+   {:db db
+    ::fx/http {:url (str "/api/agent-control/runs/" run-id "/revise")
+               :method "POST"
+               :body {:message message}
+               :on-success [::agent-action-success run-id]
+               :on-error [::agent-action-failure]}}))
+
+(rf/reg-event-fx
+ ::clear-agent-site-refs
+ (fn [{:keys [db]} [_ run-id]]
+   {:db db
+    ::fx/http {:url (str "/api/agent-control/runs/" run-id "/site-refs/clear")
+               :method "POST"
+               :on-success [::agent-action-success run-id]
+               :on-error [::agent-action-failure]}}))
+
+(rf/reg-event-fx
+ ::delete-agent-site-ref
+ (fn [{:keys [db]} [_ run-id ref-id]]
+   {:db db
+    ::fx/http {:url (str "/api/agent-control/runs/" run-id "/site-refs/" ref-id)
+               :method "DELETE"
+               :on-success [::agent-action-success run-id]
+               :on-error [::agent-action-failure]}}))
+
+(rf/reg-event-fx
+ ::clear-agent-site-assets
+ (fn [{:keys [db]} [_ run-id]]
+   {:db db
+    ::fx/http {:url (str "/api/agent-control/runs/" run-id "/site-assets/clear")
+               :method "POST"
+               :on-success [::agent-action-success run-id]
+               :on-error [::agent-action-failure]}}))
+
+(rf/reg-event-fx
+ ::delete-agent-site-asset
+ (fn [{:keys [db]} [_ run-id asset-id]]
+   {:db db
+    ::fx/http {:url (str "/api/agent-control/runs/" run-id "/site-assets/" asset-id)
+               :method "DELETE"
                :on-success [::agent-action-success run-id]
                :on-error [::agent-action-failure]}}))
 

@@ -102,6 +102,27 @@
     return data;
   }
 
+  async function apiUpload(runId, file, note, slug) {
+    const url = `/_preview/${encodeURIComponent(runId)}/agent/assets`;
+    const form = new FormData();
+    form.append('file', file);
+    if (note) form.append('note', note);
+    if (slug) form.append('slug', slug);
+    const res = await fetch(url, { method: 'POST', body: form, credentials: 'include' });
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch (_e) {
+      data = { raw: text };
+    }
+    if (!res.ok) {
+      const msg = (data && (data.error || data.message)) || `HTTP ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
   function mount() {
     if (!isPreviewPage()) return;
     const runId = parseRunIdFromPath(window.location.pathname);
@@ -111,6 +132,8 @@
     const state = {
       selecting: false,
       refs: [],
+      assets: [],
+      assetNote: '',
       status: 'idle',
       error: null,
     };
@@ -174,11 +197,46 @@
       },
     });
 
+    const uploadInput = el('input', {
+      type: 'file',
+      accept: '.svg,.png,.jpg,.jpeg,.webp',
+      class: 'agent-refs-upload-input',
+    });
+
+    const uploadBtn = el('button', {
+      class: 'agent-refs-btn',
+      text: 'Upload asset',
+      onclick: () => uploadInput.click(),
+    });
+
+    uploadInput.addEventListener('change', async (e) => {
+      const file = e.target && e.target.files && e.target.files[0] ? e.target.files[0] : null;
+      e.target.value = '';
+      if (!file) return;
+      state.status = 'uploading';
+      state.error = null;
+      render();
+      try {
+        await apiUpload(runId, file, state.assetNote || '', '');
+        const data = await apiRequest(runId, 'GET', '/assets', null);
+        state.assets = data && Array.isArray(data.assets) ? data.assets : [];
+        state.assetNote = '';
+        state.status = 'idle';
+        render();
+      } catch (err) {
+        state.status = 'idle';
+        state.error = err && err.message ? err.message : 'Upload failed';
+        render();
+      }
+    });
+
     header.appendChild(title);
     header.appendChild(badge);
     header.appendChild(toggle);
     header.appendChild(save);
     header.appendChild(clear);
+    header.appendChild(uploadBtn);
+    header.appendChild(uploadInput);
 
     const hint = el('div', { class: 'agent-refs-hint' });
     const list = el('div', { class: 'agent-refs-list' });
@@ -196,7 +254,7 @@
       toggle.classList.toggle('agent-refs-btn-primary', state.selecting);
       hint.textContent = state.selecting
         ? 'Click elements on the page to capture reference points. Add notes, then Save.'
-        : 'Turn Select on to capture reference points.';
+        : 'Turn Select on to capture reference points. Use Upload asset to add images/SVGs for this run.';
 
       status.textContent = state.error
         ? `Error: ${state.error}`
@@ -204,13 +262,69 @@
           ? 'Saving…'
           : state.status === 'clearing'
             ? 'Clearing…'
+            : state.status === 'uploading'
+              ? 'Uploading…'
             : state.status === 'saved'
               ? 'Saved.'
-              : `${state.refs.length} reference point(s)`;
+              : `${state.refs.length} ref(s) · ${state.assets.length} asset(s)`;
 
       status.classList.toggle('agent-refs-status-error', !!state.error);
 
       list.innerHTML = '';
+      const assetsTitle = el('div', { class: 'agent-refs-section-title', text: `Assets (${state.assets.length})` });
+      list.appendChild(assetsTitle);
+      const noteRow = el('div', { class: 'agent-refs-asset-note-row' });
+      const note = el('input', { class: 'agent-refs-asset-note', placeholder: 'Optional asset note (e.g. “use as homepage hero”)' });
+      note.value = state.assetNote || '';
+      note.addEventListener('input', (e) => {
+        state.assetNote = e.target.value;
+      });
+      noteRow.appendChild(note);
+      list.appendChild(noteRow);
+
+      if (!state.assets.length) {
+        list.appendChild(el('div', { class: 'agent-refs-empty', text: 'No assets uploaded yet.' }));
+      } else {
+        state.assets.forEach((a) => {
+          const item = el('div', { class: 'agent-refs-asset-item' });
+          item.appendChild(el('div', { class: 'agent-refs-asset-name', text: a.name || a.ref || a.id || '' }));
+          if (a.ref) item.appendChild(el('div', { class: 'agent-refs-asset-meta', text: `ref: ${a.ref}` }));
+          if (a.local_path) item.appendChild(el('div', { class: 'agent-refs-asset-meta', text: `path: ${a.local_path}` }));
+          if (a.note) item.appendChild(el('div', { class: 'agent-refs-asset-meta', text: `note: ${a.note}` }));
+
+          const actions = el('div', { class: 'agent-refs-item-actions' });
+          const copy = el('button', {
+            class: 'agent-refs-link',
+            text: 'copy',
+            onclick: async () => {
+              const payload = JSON.stringify(a, null, 2);
+              try {
+                await navigator.clipboard.writeText(payload);
+              } catch (_e) {}
+            },
+          });
+          const del = el('button', {
+            class: 'agent-refs-link',
+            text: 'remove',
+            onclick: async () => {
+              try {
+                await apiRequest(runId, 'DELETE', `/assets/${encodeURIComponent(a.id)}`, {});
+                const data = await apiRequest(runId, 'GET', '/assets', null);
+                state.assets = data && Array.isArray(data.assets) ? data.assets : [];
+                render();
+              } catch (_e) {}
+            },
+          });
+          actions.appendChild(copy);
+          actions.appendChild(del);
+          item.appendChild(actions);
+          list.appendChild(item);
+        });
+      }
+
+      const refsTitle = el('div', { class: 'agent-refs-section-title', text: `Reference points (${state.refs.length})` });
+      list.appendChild(refsTitle);
+
       if (!state.refs.length) {
         list.appendChild(el('div', { class: 'agent-refs-empty', text: 'No reference points yet.' }));
         return;
@@ -300,6 +414,15 @@
       })
       .catch(() => {});
 
+    apiRequest(runId, 'GET', '/assets', null)
+      .then((data) => {
+        if (data && Array.isArray(data.assets)) {
+          state.assets = data.assets;
+          render();
+        }
+      })
+      .catch(() => {});
+
     render();
   }
 
@@ -309,4 +432,3 @@
     mount();
   }
 })();
-
