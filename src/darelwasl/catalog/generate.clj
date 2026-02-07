@@ -11,6 +11,10 @@
    :actions "registries/actions.edn"
    :views "registries/views.edn"
    :integrations "registries/integrations.edn"
+   :agents "registries/agents.edn"
+   :policies "registries/policies.edn"
+   :internal "registries/internal.edn"
+   :recipes "registries/recipes.edn"
    :tooling "registries/tooling.edn"
    :theme "registries/theme.edn"
    :automations "registries/automations.edn"})
@@ -61,6 +65,10 @@
     :actions :action
     :views :view
     :integrations :integration
+    :agents :agent
+    :policies :policy
+    :internal :internal
+    :recipes :recipe
     :tooling :tooling
     :theme :theme
     :automations :automation

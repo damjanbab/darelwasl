@@ -121,12 +121,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     p_respond = sub.add_parser("respond", help="User response for a preview run (accept or request changes)")
     p_respond.add_argument("id", help="Run id")
-    p_respond.add_argument("decision", choices=["accept", "revise"], help="accept promotes; revise records notes and extends window")
+    p_respond.add_argument("decision", choices=["accept", "revise"], help="accept records approval; revise records notes and extends window")
     p_respond.add_argument("--message", default="", help="Optional message / further instructions")
-
-    p_promote = sub.add_parser("promote", help="Promote an accepted preview to live")
-    p_promote.add_argument("id", help="Run id")
-    p_promote.add_argument("--no-restart", action="store_true", help="Do not restart systemd service (build/merge only)")
 
     p_gc = sub.add_parser("gc", help="Garbage-collect expired previews (stops and unpublishes)")
     p_gc.add_argument("--no-reload-caddy", action="store_true")
@@ -819,41 +815,6 @@ def cmd_respond(args: argparse.Namespace) -> int:
     return 0
 
 
-def _worktree_clean(wt: Path) -> bool:
-    proc = subprocess.run(["git", "status", "--porcelain"], cwd=str(wt), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    return proc.stdout.strip() == ""
-
-
-def cmd_promote(args: argparse.Namespace) -> int:
-    root = repo_root()
-    validate_id(args.id)
-    m = read_manifest(root, args.id)
-    if m.get("status") != "accepted":
-        raise SystemExit("Preview must be accepted first: scripts/preview respond <id> accept")
-
-    wt = Path(m["worktree_dir"])
-    if not _worktree_clean(wt):
-        raise SystemExit("Worktree has uncommitted changes. Commit them before promoting (promote is commit-based).")
-
-    head = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
-    run(["git", "checkout", "main"], cwd=root)
-    ff = subprocess.run(["git", "merge", "--ff-only", head], cwd=str(root), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    if ff.returncode != 0:
-        raise SystemExit(f"Unable to fast-forward main to {head}:\n{ff.stdout}")
-
-    if not args.no_restart:
-        # Promotion is deploy-like; require explicit operator intent.
-        env = dict(os.environ)
-        if env.get("DEPLOY_APPROVED") != "1":
-            raise SystemExit("Refusing to restart/promote live: set DEPLOY_APPROVED=1")
-        subprocess.run(["bash", "-lc", "scripts/promote-live.sh"], cwd=str(root), check=True, env=env)
-
-    subprocess.run(["bash", "-lc", f"scripts/preview stop {shlex.quote(args.id)}"], cwd=str(root), check=False)
-    m["status"] = "promoted"
-    m["promoted_at"] = utc_iso()
-    write_manifest(root, args.id, m)
-    print(json.dumps({"status": "ok", "id": args.id, "promoted_at": m["promoted_at"]}, indent=2))
-    return 0
 
 
 def cmd_gc(args: argparse.Namespace) -> int:
@@ -924,8 +885,6 @@ def main(argv: list[str]) -> int:
         return cmd_verify(args)
     if args.cmd == "respond":
         return cmd_respond(args)
-    if args.cmd == "promote":
-        return cmd_promote(args)
     if args.cmd == "gc":
         return cmd_gc(args)
     raise SystemExit("unreachable")

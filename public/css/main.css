@@ -2688,6 +2688,22 @@ button.list-row .meta {
   gap: var(--spacing-scale-3);
 }
 
+.statement-generator {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.statement-payments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-scale-3);
+}
+
+.statement-payment h3 {
+  margin: 0;
+}
+
 .files-search {
   display: flex;
   align-items: flex-end;

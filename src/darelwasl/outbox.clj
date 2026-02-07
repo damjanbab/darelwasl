@@ -127,22 +127,20 @@
                                      [?e :outbox/integration ?integration]]
                             db now integration)
             sorted (sort-by #(nth % 2) candidates)]
-        (loop [cands sorted]
-          (when-let [[eid oid _] (first cands)]
-            (let [result (try
-                           (let [tx {:tx-data [[:db.fn/cas eid :outbox/status :pending :processing]
-                                               [:db/add eid :outbox/locked-at now]
-                                               [:db/add eid :outbox/worker worker-id]
-                                               [:db/add eid :outbox/updated-at now]]}
-                                 tx-res (db/transact! conn tx)
-                                 db-after (:db-after tx-res)]
-                             (d/pull db-after [:outbox/id :outbox/integration :outbox/payload
-                                               :outbox/status :outbox/attempts :outbox/dedupe-key
-                                               :outbox/available-at :outbox/locked-at :outbox/worker]
-                                     eid))
-                           (catch Exception e
-                             (log/debug e "CAS failed when claiming outbox entry" {:outbox/id oid})
-                             ::conflict))]
-              (if (= result ::conflict)
-                (recur (rest cands))
-                result)))))))
+        (when-let [[eid oid _] (first sorted)]
+          (try
+            ;; Datomic dev-local doesn't support :db.fn/cas, so we do a best-effort claim.
+            ;; With a single worker process this is sufficient and unblocks delivery.
+            (let [tx {:tx-data [[:db/add eid :outbox/status :processing]
+                                [:db/add eid :outbox/locked-at now]
+                                [:db/add eid :outbox/worker worker-id]
+                                [:db/add eid :outbox/updated-at now]]}
+                  tx-res (db/transact! conn tx)
+                  db-after (:db-after tx-res)]
+              (d/pull db-after [:outbox/id :outbox/integration :outbox/payload
+                                :outbox/status :outbox/attempts :outbox/dedupe-key
+                                :outbox/available-at :outbox/locked-at :outbox/worker]
+                      eid))
+            (catch Exception e
+              (log/warn e "Failed to claim outbox entry" {:outbox/id oid :integration integration})
+              nil))))))

@@ -358,9 +358,190 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/ownership]
+ :related {:schema [:cap/schema/ownership]
             :actions [:cap/action/parcel-import :cap/action/person-list :cap/action/person-detail]
             :views [:cap/view/land-registry]}}
+
+ {:id :cap/schema/doc-pack
+  :title "Client Document Pack"
+  :version "v1"
+  :attributes
+  [{:ident :doc.pack/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Document pack identity"}
+   {:ident :doc.pack/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Workspace-scoped unique key (workspace::client-id)"}
+   {:ident :doc.pack/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :doc.pack/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :doc.pack/company-name
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Company name used on documents"}
+   {:ident :doc.pack/company-address
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Company address (optional)"}
+   {:ident :doc.pack/company-email
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Company email (optional)"}
+   {:ident :doc.pack/company-phone
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Company phone (optional)"}
+   {:ident :doc.pack/currency
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Default currency (e.g. SAR)"}
+   {:ident :doc.pack/services-included
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Services included / scope (text or markdown)"}
+   {:ident :doc.pack/payment-plan
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Payment plan notes (text or markdown)"}
+   {:ident :doc.pack/status-notes
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Status report narrative (progress/next steps/risks)"}
+   {:ident :doc.pack/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update timestamp"}]
+  :enums []
+  :invariants ["doc.pack/key unique" "Client required" "Workspace required" "Entity type set to :entity.type/doc-pack"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/entity]}}
+
+ {:id :cap/schema/invoice
+  :title "Invoice"
+  :version "v1"
+  :attributes
+  [{:ident :invoice/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Invoice identity"}
+   {:ident :invoice/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Workspace-scoped unique key (workspace::invoice-number)"}
+   {:ident :invoice/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :invoice/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :invoice/number
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Human invoice number"}
+   {:ident :invoice/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Invoice title (optional)"}
+   {:ident :invoice/description
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Invoice description / line items (optional)"}
+   {:ident :invoice/issued-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Issued date"}
+   {:ident :invoice/due-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Due date (optional)"}
+   {:ident :invoice/currency
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Currency"}
+   {:ident :invoice/total-amount
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Total invoice amount"}
+   {:ident :invoice/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Invoice status"}]
+  :enums {:invoice/status [:draft :sent :paid :void]}
+  :invariants ["Client required" "Invoice number required" "Entity type set to :entity.type/invoice"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/entity]}}
+
+ {:id :cap/schema/payment
+  :title "Payment"
+  :version "v1"
+  :attributes
+  [{:ident :payment/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Payment identity"}
+   {:ident :payment/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :payment/invoice
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked invoice (ref to :invoice/id) (optional)"}
+   {:ident :payment/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :payment/paid-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Payment timestamp"}
+   {:ident :payment/currency
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Currency"}
+   {:ident :payment/amount
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Paid amount"}
+   {:ident :payment/method
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Payment method"}
+   {:ident :payment/reference
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Bank ref / transaction id (optional)"}
+   {:ident :payment/note
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Payment notes (optional)"}]
+  :enums {:payment/method [:cash :transfer :card :other]}
+  :invariants ["Client required" "Amount required" "Entity type set to :entity.type/payment"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/invoice :cap/schema/entity]}}
 
  {:id :cap/schema/parcel
   :title "Parcel"

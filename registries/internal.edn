@@ -1,0 +1,15 @@
+[
+ {:id :cap/internal/catalog-read
+  :title "Catalog read API"
+  :version "v1"
+  :var darelwasl.catalog/list-catalog
+  :stability :stable
+  :tags [:capability :catalog]}
+
+ {:id :cap/internal/catalog-entry
+  :title "Catalog entry lookup"
+  :version "v1"
+  :var darelwasl.catalog/find-entry
+  :stability :stable
+  :tags [:capability :catalog]}
+]

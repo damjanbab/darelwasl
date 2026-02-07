@@ -107,7 +107,7 @@
    (some #(= "running" (:status %))
          (or (:jobs run) []))))
 
-(defn- can-promote?
+(defn- can-accept?
   [run]
   (let [status (or (:status run) "")
         preview-status (get-in run [:preview :status])
@@ -124,7 +124,10 @@
   (when (map? run)
     (let [job (latest-job run)]
       (assoc run
-             :can_promote (boolean (can-promote? run))
+             ;; Backward-compat: UI historically used :can_promote for enabling the primary CTA.
+             ;; This no longer implies "promotion to live"—it only means "accept is allowed".
+             :can_promote (boolean (can-accept? run))
+             :can_accept (boolean (can-accept? run))
              :latest_job (when (map? job)
                            (select-keys job [:id :kind :status :started_at :finished_at :exit :error :log_path]))))))
 
@@ -462,19 +465,19 @@
         (nil? run)
         (common/error-response 404 "Run not found")
 
-        (not (can-promote? run))
-        (common/error-response 400 "Run is not ready to promote. Wait for a ready preview and completed jobs, then accept.")
+        (not (can-accept? run))
+        (common/error-response 400 "Run is not ready to accept. Wait for a ready preview and completed jobs, then accept.")
 
         :else
         (let [job-id (str (UUID/randomUUID))
               log-file (job-log-path run-id job-id)
-              job {:id job-id :kind "promote" :status "running" :started_at (now-iso) :log_path (.getPath ^File log-file)}]
+              job {:id job-id :kind "accept" :status "running" :started_at (now-iso) :log_path (.getPath ^File log-file)}]
           (append-job! run-id job)
           (upsert-run! run-id (fn [r] (assoc r :status "accepted" :accepted_at (now-iso))))
           (future
             (try
               (ensure-parent! log-file)
-              (spit log-file (str "[agent-control] accept+promote " run-id "\n") :append true)
+              (spit log-file (str "[agent-control] accept " run-id "\n") :append true)
               (let [cmd-str (str "scripts/preview respond " (pr-str run-id) " accept")
                     cmd ["bash" "-lc" cmd-str]
                     pb (ProcessBuilder. ^java.util.List cmd)]
@@ -483,10 +486,11 @@
                 (.redirectOutput pb log-file)
                 (let [p (.start pb)
                       code (.waitFor p)]
-                  (upsert-run! run-id (fn [r] (assoc r :status (if (zero? code) "promoted" "error"))))
+                  (when-not (zero? code)
+                    (upsert-run! run-id (fn [r] (assoc r :status "error" :error (str "accept failed: exit " code)))))
                   (update-job! run-id job-id (fn [j] (assoc j :status (if (zero? code) "done" "error") :finished_at (now-iso) :exit code)))))
               (catch Exception e
-                (log/error e "promote job failed")
+                (log/error e "accept job failed")
                 (update-job! run-id job-id (fn [j] (assoc j :status "error" :finished_at (now-iso) :error (.getMessage e))))
                 (upsert-run! run-id (fn [r] (assoc r :status "error" :error (.getMessage e)))))))
           {:status 202 :body {:status "accepted" :job job-id :run_id run-id}})))))

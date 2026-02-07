@@ -147,6 +147,31 @@
    :status :idle
    :error nil})
 
+(def default-statement-payment
+  {:date ""
+   :description ""
+   :amount ""
+   :mode ""
+   :status ""})
+
+(def default-statement-form
+  {:company-name ""
+   :client-name ""
+   :date ""
+   :currency "SAR"
+   :total-contract-amount ""
+   :total-amount-received ""
+   :outstanding-balance ""
+   :remarks ""
+   :slug ""
+   :payments []})
+
+(def default-statement-state
+  {:form default-statement-form
+   :status :idle
+   :error nil
+   :last-file nil})
+
 (def default-file-form
   {:id nil
    :slug ""
@@ -168,6 +193,7 @@
              :error nil
              :selected nil}
    :upload default-files-upload
+   :statement default-statement-state
    :detail default-file-detail})
 (def default-prs-state
   {:items []

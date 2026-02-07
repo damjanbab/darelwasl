@@ -1826,6 +1826,114 @@
            (assoc :session nil
                   :route :login))))))
 
+;; Account statement (receipt) generator (web form; stored in file library)
+(rf/reg-event-db
+ ::set-statement-field
+ (fn [db [_ field value]]
+   (-> db
+       (assoc-in [:files :statement :form field] value)
+       (assoc-in [:files :statement :error] nil))))
+
+(rf/reg-event-db
+ ::clear-statement
+ (fn [db _]
+   (assoc-in db [:files :statement] state/default-statement-state)))
+
+(rf/reg-event-db
+ ::add-statement-payment
+ (fn [db _]
+   (update-in db [:files :statement :form :payments] (fnil conj []) state/default-statement-payment)))
+
+(rf/reg-event-db
+ ::remove-statement-payment
+ (fn [db [_ idx]]
+   (update-in db [:files :statement :form :payments]
+              (fn [payments]
+                (let [payments (vec (or payments []))]
+                  (if (and (int? idx) (<= 0 idx) (< idx (count payments)))
+                    (vec (concat (subvec payments 0 idx) (subvec payments (inc idx))))
+                    payments))))))
+
+(rf/reg-event-db
+ ::set-statement-payment-field
+ (fn [db [_ idx field value]]
+   (assoc-in db [:files :statement :form :payments idx field] value)))
+
+(rf/reg-event-fx
+ ::generate-account-statement
+ (fn [{:keys [db]} _]
+   (let [form (get-in db [:files :statement :form])
+         company (some-> (:company-name form) str str/trim)
+         client (some-> (:client-name form) str str/trim)
+         payments (vec (or (:payments form) []))
+         keep-payment? (fn [p]
+                         (some (fn [k]
+                                 (present-str (get p k)))
+                               [:date :description :amount :mode :status]))
+         payments (->> payments
+                       (map (fn [p]
+                              {:date (some-> (:date p) str str/trim)
+                               :description (some-> (:description p) str str/trim)
+                               :amount (some-> (:amount p) str str/trim)
+                               :mode (some-> (:mode p) str str/trim)
+                               :status (some-> (:status p) str str/trim)}))
+                       (filter keep-payment?)
+                       vec)
+         body {:statement/company-name company
+               :statement/client-name client
+               :statement/date (present-str (:date form))
+               :statement/currency (present-str (:currency form))
+               :statement/total-contract-amount (present-str (:total-contract-amount form))
+               :statement/total-amount-received (present-str (:total-amount-received form))
+               :statement/outstanding-balance (present-str (:outstanding-balance form))
+               :statement/payments payments
+               :statement/remarks (present-str (:remarks form))
+               :statement/slug (present-str (:slug form))}]
+     (cond
+       (not (present-str company))
+       {:db (-> db
+                (assoc-in [:files :statement :status] :error)
+                (assoc-in [:files :statement :error] "Company name is required"))}
+
+       (not (present-str client))
+       {:db (-> db
+                (assoc-in [:files :statement :status] :error)
+                (assoc-in [:files :statement :error] "Client name is required"))}
+
+       :else
+       {:db (-> db
+                (assoc-in [:files :statement :status] :loading)
+                (assoc-in [:files :statement :error] nil)
+                (assoc-in [:files :statement :last-file] nil))
+        ::fx/http {:url "/api/actions/cap.action.account-statement-generate"
+                   :method "POST"
+                   :body body
+                   :on-success [::generate-account-statement-success]
+                   :on-error [::generate-account-statement-failure]}}))))
+
+(rf/reg-event-fx
+ ::generate-account-statement-success
+ (fn [{:keys [db]} [_ payload]]
+   (let [file (some-> (get-in payload [:result :file]) normalize-file)]
+     {:db (-> db
+              (assoc-in [:files :statement :status] :success)
+              (assoc-in [:files :statement :error] nil)
+              (assoc-in [:files :statement :last-file] file))
+      :dispatch [::fetch-files]})))
+
+(rf/reg-event-db
+ ::generate-account-statement-failure
+ (fn [db [_ {:keys [status body]}]]
+   (let [message (or (:error body)
+                     (when (= status 401) "Session expired. Please sign in again.")
+                     "Unable to generate statement PDF.")]
+     (-> db
+         (assoc-in [:files :statement :status] :error)
+         (assoc-in [:files :statement :error] message)
+         (cond-> (= status 401)
+           (assoc :session nil
+                  :route :login))))))
+
 (rf/reg-event-db
  ::select-pr
  (fn [db [_ pr-number]]

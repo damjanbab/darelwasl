@@ -1147,9 +1147,299 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/file]
+ :related {:schema [:cap/schema/file]
             :views [:cap/view/file-library]}
   :tooling []}
+
+ {:id :cap/action/account-statement-generate
+  :title "Generate Account Statement"
+  :version "v1"
+  :purpose "Render a professional Account Statement PDF and store it in the file library."
+  :inputs {:statement/company-name :string
+           :statement/date :string?
+           :statement/client-name :string
+           :statement/currency :string?
+           :statement/total-contract-amount :number?
+           :statement/total-amount-received :number?
+           :statement/outstanding-balance :number?
+           :statement/payments :vector?
+           :statement/remarks :string?
+           :statement/slug :string?}
+  :outputs {:file/id :uuid
+            :file/slug :string?
+            :file/url :string}
+  :side-effects ["Render PDF via Playwright"
+                 "Store PDF in file library"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/account-statement-pdf}
+  :audit {:records [:statement/generate]
+          :fields [:statement/client-name :statement/date :file/slug]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+ :related {:schema [:cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/account-statement-pdf]}
+
+ {:id :cap/action/doc-pack-upsert
+  :title "Doc Pack Upsert"
+  :version "v1"
+  :purpose "Create/update a client document pack (company info, services, payment plan, status notes)."
+  :inputs {:client/id :uuid
+           :doc.pack/company-name :string?
+           :doc.pack/company-address :string?
+           :doc.pack/company-email :string?
+           :doc.pack/company-phone :string?
+           :doc.pack/currency :string?
+           :doc.pack/services-included :string?
+           :doc.pack/payment-plan :string?
+           :doc.pack/status-notes :string?}
+  :outputs {:doc-pack :map}
+  :side-effects ["Persist doc pack"]
+  :adapter {:integration :local/db}
+  :audit {:records [:doc-pack/change]
+          :fields [:client/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/doc-pack :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/doc-pack-read
+  :title "Doc Pack Read"
+  :version "v1"
+  :purpose "Read a client doc pack and its invoices/payments."
+  :inputs {:client/id :uuid}
+  :outputs {:doc-pack :map
+            :invoices :vector
+            :payments :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:doc-pack/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/doc-pack :cap/schema/invoice :cap/schema/payment]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/invoice-create
+  :title "Invoice Create"
+  :version "v1"
+  :purpose "Create an invoice for a client."
+  :inputs {:client/id :uuid
+           :invoice/number :string
+           :invoice/title :string?
+           :invoice/description :string?
+           :invoice/issued-at :instant?
+           :invoice/due-at :instant?
+           :invoice/currency :string?
+           :invoice/total-amount :number
+           :invoice/status :keyword?}
+  :outputs {:invoice :map}
+  :side-effects ["Persist invoice"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:client/id :invoice/number]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/invoice :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/invoice-update
+  :title "Invoice Update"
+  :version "v1"
+  :purpose "Update an invoice (status/title/description/due date)."
+  :inputs {:invoice/id :uuid
+           :invoice/title :string?
+           :invoice/description :string?
+           :invoice/due-at :instant?
+           :invoice/status :keyword?}
+  :outputs {:invoice :map}
+  :side-effects ["Persist invoice updates"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:invoice/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:invoice/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/invoice]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/invoice-list
+  :title "Invoice List"
+  :version "v1"
+  :purpose "List invoices for a client."
+  :inputs {:client/id :uuid}
+  :outputs {:invoices :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/invoice :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/payment-create
+  :title "Payment Create"
+  :version "v1"
+  :purpose "Create a payment record (optionally against an invoice)."
+  :inputs {:client/id :uuid
+           :invoice/id :uuid?
+           :payment/paid-at :instant?
+           :payment/currency :string?
+           :payment/amount :number
+           :payment/method :keyword?
+           :payment/reference :string?
+           :payment/note :string?}
+  :outputs {:payment :map}
+  :side-effects ["Persist payment"]
+  :adapter {:integration :local/db}
+  :audit {:records [:payment/change]
+          :fields [:client/id :invoice/id :payment/amount]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment :cap/schema/invoice :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/payment-list
+  :title "Payment List"
+  :version "v1"
+  :purpose "List payments for a client."
+  :inputs {:client/id :uuid}
+  :outputs {:payments :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:payment/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/proposal-generate
+  :title "Proposal Generate"
+  :version "v1"
+  :purpose "Generate a proposal PDF from stored doc-pack data."
+  :inputs {:client/id :uuid
+           :file/slug :string?}
+  :outputs {:file/id :uuid
+            :file/url :string
+            :file/slug :string?}
+  :side-effects ["Render PDF via Playwright" "Store PDF in file library"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/documents-pdf}
+  :audit {:records [:document/generate]
+          :fields [:client/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/doc-pack :cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/documents-pdf]}
+
+ {:id :cap/action/invoice-pdf-generate
+  :title "Invoice PDF Generate"
+  :version "v1"
+  :purpose "Generate an invoice PDF from stored invoice data."
+  :inputs {:client/id :uuid
+           :invoice/id :uuid
+           :file/slug :string?}
+  :outputs {:file/id :uuid
+            :file/url :string
+            :file/slug :string?}
+  :side-effects ["Render PDF via Playwright" "Store PDF in file library"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/documents-pdf}
+  :audit {:records [:document/generate]
+          :fields [:client/id :invoice/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/invoice :cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/documents-pdf]}
+
+ {:id :cap/action/receipt-generate
+  :title "Receipt Generate"
+  :version "v1"
+  :purpose "Generate a receipt PDF for a payment."
+  :inputs {:client/id :uuid
+           :payment/id :uuid
+           :file/slug :string?}
+  :outputs {:file/id :uuid
+            :file/url :string
+            :file/slug :string?}
+  :side-effects ["Render PDF via Playwright" "Store PDF in file library"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/documents-pdf}
+  :audit {:records [:document/generate]
+          :fields [:client/id :payment/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment :cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/documents-pdf]}
+
+ {:id :cap/action/status-report-generate
+  :title "Status Report Generate"
+  :version "v1"
+  :purpose "Generate a status report PDF for a client (paid vs done vs remaining)."
+  :inputs {:client/id :uuid
+           :file/slug :string?}
+  :outputs {:file/id :uuid
+            :file/url :string
+            :file/slug :string?}
+  :side-effects ["Render PDF via Playwright" "Store PDF in file library"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/documents-pdf}
+  :audit {:records [:document/generate]
+          :fields [:client/id]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/doc-pack :cap/schema/invoice :cap/schema/payment :cap/schema/file]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/documents-pdf]}
 
  {:id :cap/action/workspace-promote
   :title "Workspace Promote"
@@ -1361,12 +1651,12 @@
   :tooling []}
 
  {:id :cap/action/agent-control-accept
-  :title "Agent Control: Accept + Promote"
+  :title "Agent Control: Accept"
   :version "v1"
   :inputs {:id :string}
   :outputs {:job :string
             :run_id :string}
-  :side-effects ["Promotes preview to live via scripts/promote-live.sh"]
+  :side-effects ["Marks the run as accepted (no promotion)"]
   :adapter {:integration :local/scripts}
   :audit {:records [:agent-control/execute]
           :fields [:id]}

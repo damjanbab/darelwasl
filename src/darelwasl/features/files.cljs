@@ -96,6 +96,165 @@
                   :on-click #(rf/dispatch [:darelwasl.app/clear-upload])}
        "Clear"]]]))
 
+(defn- statement-payment-panel
+  [idx payment loading?]
+  [:div.panel.statement-payment
+   [:div.section-header
+    [:div
+     [:h3 (str "Payment " (inc idx))]
+     [:span.meta "Optional; include if you want a payment breakdown."]]
+    [:div.controls
+     [ui/button {:variant :danger
+                 :disabled loading?
+                 :on-click #(rf/dispatch [:darelwasl.app/remove-statement-payment idx])}
+      "Remove"]]]
+   [:div.detail-grid
+    [:div.field-group
+     [:label "Date"]
+     [ui/form-input {:type "date"
+                     :value (or (:date payment) "")
+                     :disabled loading?
+                     :on-change #(rf/dispatch [:darelwasl.app/set-statement-payment-field idx :date (.. % -target -value)])}]]
+    [:div.field-group
+     [:label "Amount"]
+     [ui/form-input {:type "number"
+                     :step "0.01"
+                     :value (or (:amount payment) "")
+                     :disabled loading?
+                     :on-change #(rf/dispatch [:darelwasl.app/set-statement-payment-field idx :amount (.. % -target -value)])}]]
+    [:div.field-group
+     [:label "Mode"]
+     [ui/form-input {:placeholder "Cash / Transfer / Card"
+                     :value (or (:mode payment) "")
+                     :disabled loading?
+                     :on-change #(rf/dispatch [:darelwasl.app/set-statement-payment-field idx :mode (.. % -target -value)])}]]
+    [:div.field-group
+     [:label "Status"]
+     [ui/form-input {:placeholder "Completed / Pending"
+                     :value (or (:status payment) "")
+                     :disabled loading?
+                     :on-change #(rf/dispatch [:darelwasl.app/set-statement-payment-field idx :status (.. % -target -value)])}]]
+    [:div.field-group {:style {:grid-column "1 / -1"}}
+     [:label "Description"]
+     [ui/form-input {:placeholder "Payment description"
+                     :value (or (:description payment) "")
+                     :disabled loading?
+                     :on-change #(rf/dispatch [:darelwasl.app/set-statement-payment-field idx :description (.. % -target -value)])}]]]])
+
+(defn- statement-panel
+  []
+  (let [{:keys [statement]} @(rf/subscribe [:darelwasl.app/files])
+        {:keys [form status error last-file]} statement
+        loading? (= status :loading)
+        success? (= status :success)
+        payments (vec (or (:payments form) []))]
+    [:div.panel.statement-generator
+     [:div.section-header
+      [:div
+       [:h2 "Account statement"]
+       [:span.meta "Fill in the fields and generate a branded PDF stored in the library."]]
+      [:div.controls
+       [ui/button {:variant :secondary
+                   :disabled loading?
+                   :on-click #(rf/dispatch [:darelwasl.app/clear-statement])}
+        "Clear"]]]
+
+     [:div.detail-grid
+      [:div.field-group
+       [:label "Company name"]
+       [ui/form-input {:placeholder "Required"
+                       :value (or (:company-name form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :company-name (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Client name"]
+       [ui/form-input {:placeholder "Required"
+                       :value (or (:client-name form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :client-name (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Date"]
+       [ui/form-input {:type "date"
+                       :value (or (:date form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :date (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Currency"]
+       [ui/form-input {:placeholder "SAR"
+                       :value (or (:currency form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :currency (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Total contract amount"]
+       [ui/form-input {:type "number"
+                       :step "0.01"
+                       :value (or (:total-contract-amount form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :total-contract-amount (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Total received"]
+       [ui/form-input {:type "number"
+                       :step "0.01"
+                       :value (or (:total-amount-received form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :total-amount-received (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "Outstanding balance"]
+       [ui/form-input {:type "number"
+                       :step "0.01"
+                       :placeholder "Optional (auto-computed when possible)"
+                       :value (or (:outstanding-balance form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :outstanding-balance (.. % -target -value)])}]]
+      [:div.field-group
+       [:label "File slug"]
+       [ui/form-input {:placeholder "Optional (stored in library)"
+                       :value (or (:slug form) "")
+                       :disabled loading?
+                       :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :slug (.. % -target -value)])}]]
+      [:div.field-group {:style {:grid-column "1 / -1"}}
+       [:label "Remarks"]
+       [:textarea.form-input {:rows 3
+                              :placeholder "Optional remarks"
+                              :value (or (:remarks form) "")
+                              :disabled loading?
+                              :on-change #(rf/dispatch [:darelwasl.app/set-statement-field :remarks (.. % -target -value)])}]]]
+
+     [:div.section-header
+      [:div
+       [:h3 "Payments"]
+       [:span.meta "Optional; add zero or more payment rows."]]
+      [:div.controls
+       [ui/button {:variant :secondary
+                   :disabled loading?
+                   :on-click #(rf/dispatch [:darelwasl.app/add-statement-payment])}
+        "Add payment"]]]
+
+     (if (seq payments)
+       [:div.statement-payments
+        (for [[idx payment] (map-indexed vector payments)]
+          ^{:key (str "statement-payment-" idx)}
+          [statement-payment-panel idx payment loading?])]
+       [:div.meta "No payments added."])
+
+     (when error
+       [:div.form-error {:role "alert"} error])
+     (when (and success? last-file)
+       [:div.form-success {:aria-live "polite"}
+        [:div "PDF generated and saved to the library."]
+        (when-let [ref (:file/ref last-file)]
+          [:div.meta (str "Reference: " ref)])])
+
+     [:div.button-row
+      [ui/button {:disabled loading?
+                  :on-click #(rf/dispatch [:darelwasl.app/generate-account-statement])}
+       (if loading? "Generating..." "Generate PDF")]
+      (when (and last-file (:file/url last-file))
+        [:a.button.secondary {:href (:file/url last-file)
+                              :target "_blank"
+                              :rel "noreferrer"}
+         "Open PDF"])]]))
+
 (defn- search-panel
   []
   (let [{:keys [filters status]} @(rf/subscribe [:darelwasl.app/files])
@@ -276,6 +435,7 @@
   [shell/app-shell
    [:main.files-layout
     [upload-panel]
+    [statement-panel]
     [:div.files-grid
      [list-panel]
      [preview-panel]]]

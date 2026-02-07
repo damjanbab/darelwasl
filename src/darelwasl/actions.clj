@@ -3,6 +3,8 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [darelwasl.account-statement :as account-statement]
+            [darelwasl.documents :as documents]
             [darelwasl.automations :as automations]
             [darelwasl.betting :as betting]
             [darelwasl.clients :as clients]
@@ -352,6 +354,56 @@
   [state {:keys [input actor]}]
   (site-screenshots/capture-site-bundle! state {:input (or input {}) :actor actor}))
 
+(defn- account-statement-generate
+  [state {:keys [input actor]}]
+  (account-statement/generate! state {:input (or input {}) :actor actor}))
+
+(defn- doc-pack-upsert
+  [state {:keys [input actor]}]
+  (documents/upsert-doc-pack! (conn state) (or input {}) actor))
+
+(defn- doc-pack-read
+  [state {:keys [input actor]}]
+  (documents/read-doc-pack (conn state) {:client-id (:client/id (or input {}))} actor))
+
+(defn- invoice-create
+  [state {:keys [input actor]}]
+  (documents/create-invoice! (conn state) (or input {}) actor))
+
+(defn- invoice-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        invoice-id (or (:invoice/id body) (:id body))]
+    (documents/update-invoice! (conn state) invoice-id body actor)))
+
+(defn- invoice-list
+  [state {:keys [input actor]}]
+  (documents/list-invoices (conn state) {:client-id (:client/id (or input {}))} actor))
+
+(defn- payment-create
+  [state {:keys [input actor]}]
+  (documents/create-payment! (conn state) (or input {}) actor))
+
+(defn- payment-list
+  [state {:keys [input actor]}]
+  (documents/list-payments (conn state) {:client-id (:client/id (or input {}))} actor))
+
+(defn- proposal-generate
+  [state {:keys [input actor]}]
+  (documents/generate-document! state {:type :proposal :input (or input {}) :actor actor}))
+
+(defn- invoice-pdf-generate
+  [state {:keys [input actor]}]
+  (documents/generate-document! state {:type :invoice :input (or input {}) :actor actor}))
+
+(defn- receipt-generate
+  [state {:keys [input actor]}]
+  (documents/generate-document! state {:type :receipt :input (or input {}) :actor actor}))
+
+(defn- status-report-generate
+  [state {:keys [input actor]}]
+  (documents/generate-document! state {:type :status-report :input (or input {}) :actor actor}))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -382,6 +434,18 @@
    :cap/action/github-pulls github-pulls
    :cap/action/github-close-pr github-close-pr
    :cap/action/site-screenshot-bundle site-screenshot-bundle
+   :cap/action/account-statement-generate account-statement-generate
+   :cap/action/doc-pack-upsert doc-pack-upsert
+   :cap/action/doc-pack-read doc-pack-read
+   :cap/action/invoice-create invoice-create
+   :cap/action/invoice-update invoice-update
+   :cap/action/invoice-list invoice-list
+   :cap/action/payment-create payment-create
+   :cap/action/payment-list payment-list
+   :cap/action/proposal-generate proposal-generate
+   :cap/action/invoice-pdf-generate invoice-pdf-generate
+   :cap/action/receipt-generate receipt-generate
+   :cap/action/status-report-generate status-report-generate
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update

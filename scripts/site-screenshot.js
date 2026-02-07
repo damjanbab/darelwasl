@@ -27,6 +27,16 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+async function isNotFound(page) {
+  // Site uses an explicit "Page not found" template.
+  const title = await page.title().catch(() => "");
+  if (String(title || "").toLowerCase().includes("not found")) return true;
+  const h1 = await page.locator("h1").first().innerText().catch(() => "");
+  if (String(h1 || "").trim().toLowerCase() === "page not found") return true;
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  return String(bodyText || "").includes("No content found at");
+}
+
 async function run() {
   const args = parseArgs(process.argv.slice(2));
   const configPath = args.config;
@@ -39,6 +49,8 @@ async function run() {
   const pages = Array.isArray(config.pages) ? config.pages : [];
   const viewports = Array.isArray(config.viewports) ? config.viewports : [];
   const fullPage = config.fullPage !== false;
+  const failOnNotFound = config.failOnNotFound !== false;
+  const waitMs = Number.isFinite(config.waitMs) ? config.waitMs : 0;
   ensureDir(outDir);
 
   const browser = await chromium.launch({ headless: true });
@@ -51,7 +63,19 @@ async function run() {
       const page = await context.newPage();
       for (const entry of pages) {
         const url = new URL(entry.path || "/", baseUrl).toString();
-        await page.goto(url, { waitUntil: "networkidle" });
+        const response = await page.goto(url, { waitUntil: "networkidle" });
+        if (response && typeof response.status === "function") {
+          const status = response.status();
+          if (status >= 400) {
+            throw new Error(`Screenshot failed: HTTP ${status} at ${entry.path}`);
+          }
+        }
+        if (waitMs > 0) {
+          await page.waitForTimeout(waitMs);
+        }
+        if (failOnNotFound && (await isNotFound(page))) {
+          throw new Error(`Screenshot failed: page not found at ${entry.path}`);
+        }
         const label = slugify(entry.label || entry.path || "page");
         const vp = slugify(viewport.name || `${viewport.width}x${viewport.height}`);
         const filename = `site-${label}-${vp}.png`;

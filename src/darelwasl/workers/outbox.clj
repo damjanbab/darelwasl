@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [darelwasl.bootstrap :as bootstrap]
             [darelwasl.config :as config]
+            [darelwasl.email :as email]
             [darelwasl.outbox :as outbox]
             [darelwasl.telegram :as telegram])
   (:import (java.util UUID)))
@@ -22,17 +23,27 @@
       {:error (:error res)}
       {:ok true})))
 
+(defn- deliver-email
+  [state _entry payload]
+  (let [site-cfg (get-in state [:config :site])
+        res (email/send-smtp! site-cfg payload)]
+    (if (:error res)
+      {:error (:error res)}
+      {:ok true})))
+
 (defn- deliver
   [state entry]
   (let [payload (outbox/decode-payload (:outbox/payload entry))]
     (case (:outbox/integration entry)
       :integration/telegram (deliver-telegram state entry payload)
+      :integration/email (deliver-email state entry payload)
       {:error "Unsupported integration"})))
 
 (defn- process-once!
   [state worker-id]
   (let [conn (get-in state [:db :conn])]
-    (when-let [entry (outbox/claim-one! conn worker-id :integration/telegram)]
+    (when-let [entry (or (outbox/claim-one! conn worker-id :integration/email)
+                         (outbox/claim-one! conn worker-id :integration/telegram))]
       (let [res (deliver state entry)]
         (if (:error res)
           (do
@@ -41,7 +52,7 @@
           (do
             (log/info "Outbox delivered" {:outbox/id (:outbox/id entry) :integration (:outbox/integration entry)})
             (outbox/mark-success! conn (:outbox/id entry)))))
-      :none)))
+      :processed)))
 
 (defn run-loop!
   "Poll outbox and deliver messages. Blocks forever."
@@ -50,10 +61,21 @@
         interval (or poll-ms default-poll-ms)]
     (log/info "Outbox worker started" {:worker worker :interval-ms interval})
     (loop []
-      (let [res (process-once! state worker)]
-        (when (= res :none)
-          (Thread/sleep interval)))
-      (recur))))
+      (when-not (.isInterrupted (Thread/currentThread))
+        (let [res (try
+                    (process-once! state worker)
+                    (catch InterruptedException _
+                      ::stop)
+                    (catch Exception e
+                      (log/error e "Outbox loop error")
+                      nil))]
+          (when (nil? res)
+            (try
+              (Thread/sleep interval)
+              (catch InterruptedException _
+                nil)))
+          (when-not (= res ::stop)
+            (recur)))))))
 
 (defn -main
   [& _args]
@@ -65,4 +87,3 @@
       (System/exit 1))
     (run-loop! {:config cfg
                 :db db-state})))
-

@@ -1,0 +1,64 @@
+[
+ {:id :cap/agent/website
+  :title "Website agent"
+  :version "v1"
+  :allowed-paths ["src/darelwasl/site/" "public/"]
+  :proofs {:commands ["clojure -M -e \"(require 'darelwasl.site.templates) (println :ok)\""]}
+  :policies [:cap/policy/website-agent
+             :cap/policy/preview-before-promote
+             :cap/policy/review-window-required
+             :cap/policy/preview-auth-required
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["website" "public site" "landing" "copy" "hero" "css" "html" "seo"]
+                      :paths ["src/darelwasl/site/" "public/"]}}}
+
+ {:id :cap/agent/app-ui
+  :title "App UI agent"
+  :version "v1"
+  :allowed-paths ["src/darelwasl/ui/" "src/darelwasl/features/" "public/css/"]
+  :proofs {:commands ["npm run check"]}
+  :policies [:cap/policy/app-ui-changes
+             :cap/policy/preview-before-promote
+             :cap/policy/review-window-required
+             :cap/policy/preview-auth-required
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["ui" "layout" "component" "re-frame" "reagent" "css" "theme" "accessibility"]
+                      :paths ["src/darelwasl/ui/" "src/darelwasl/features/" "public/css/"]}}}
+
+ {:id :cap/agent/backend
+  :title "Backend/API agent"
+  :version "v1"
+  :allowed-paths ["src/darelwasl/http/" "src/darelwasl/actions.clj" "src/darelwasl/entity.clj" "src/darelwasl/events.clj" "src/darelwasl/config.clj"]
+  :proofs {:commands ["scripts/checks.sh actions"]}
+  :policies [:cap/policy/backend-changes
+             :cap/policy/registries-are-contract
+             :cap/policy/preview-before-promote
+             :cap/policy/review-window-required
+             :cap/policy/preview-auth-required
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["api" "route" "http" "auth" "db" "datomic" "action" "integration"]
+                      :paths ["src/darelwasl/http/" "src/darelwasl/actions.clj" "src/darelwasl/config.clj"]}}}
+
+ {:id :cap/agent/registries
+  :title "Registry agent"
+  :version "v1"
+  :allowed-paths ["registries/" "fixtures/"]
+  :proofs {:commands ["scripts/checks.sh registries"]}
+  :policies [:cap/policy/registry-changes
+             :cap/policy/registries-are-contract
+             :cap/policy/docs-are-output
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["registry" "capability" "schema" "actions.edn" "views.edn" "tooling.edn" "fixtures"]
+                      :paths ["registries/" "fixtures/"]}}}
+
+ {:id :cap/agent/ops-governance
+  :title "Ops/governance agent"
+  :version "v1"
+  :allowed-paths ["scripts/" "agents/" "policies/" ".github/workflows/" "docs/"]
+  :proofs {:commands ["scripts/checks.sh governance"]}
+  :policies [:cap/policy/ops-governance-changes
+             :cap/policy/docs-are-output
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["ci" "checks" "script" "policy" "governance" "docs generation" "agent"]
+                      :paths ["scripts/" "agents/" "policies/" ".github/workflows/"]}}}
+]

@@ -37,13 +37,13 @@
  {:id :cap/integration/telegram-bot
   :title "Telegram Bot"
   :version "v1"
-  :external-system "Telegram Bot API"
+ :external-system "Telegram Bot API"
   :contracts {:timeout_ms 3000
               :rate_limit "429 from Telegram; backoff with jitter"
               :webhook {:path "/api/telegram/webhook"
                         :secret-header "X-Telegram-Bot-Api-Secret-Token"
                         :enabled-flag "TELEGRAM_WEBHOOK_ENABLED"}
-              :commands [:start :help :tasks :task :stop]}
+              :commands [:start :help :tasks :task :docs :proposal :invoice :receipt :status :statement :stop]}
   :auth {:strategy :env-vars
          :vars ["TELEGRAM_BOT_TOKEN" "TELEGRAM_WEBHOOK_SECRET" "TELEGRAM_WEBHOOK_BASE_URL"]}
   :failure-modes ["429 rate limits" "Network timeouts/5xx" "Invalid/missing webhook secret" "Invalid/expired chat link token"]

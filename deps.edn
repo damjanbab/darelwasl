@@ -9,6 +9,7 @@
         org.clojure/data.csv {:mvn/version "1.0.1"}
         org.clojure/data.json {:mvn/version "2.5.0"}
         clj-http/clj-http {:mvn/version "3.12.3"}
+        com.sun.mail/jakarta.mail {:mvn/version "2.0.1"}
         ch.qos.logback/logback-classic {:mvn/version "1.4.14"}}
  :aliases {:dev {:main-opts ["-m" "darelwasl.main"]
                  :jvm-opts ["-Dclojure.main.report=stderr"]

@@ -3,6 +3,7 @@
   :title "Registry EDN validation"
   :version "v1"
   :invocation "scripts/checks.sh registries"
+  :files ["scripts/checks.sh"]
   :scope :shared
   :determinism {:fixtures [:fixtures/users :fixtures/tasks]}
   :enforces [:registry-shape :fixtures-consistency]
@@ -13,6 +14,7 @@
   :title "Schema load check"
   :version "v1"
   :invocation "scripts/checks.sh schema"
+  :files ["scripts/checks.sh"]
  :scope :shared
  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
  :enforces [:schema]
@@ -23,6 +25,7 @@
   :title "Schema migration/backfill check"
   :version "v1"
   :invocation "scripts/checks.sh schema"
+  :files ["scripts/checks.sh"]
   :scope :shared
   :determinism {:fixtures [:fixtures/tasks :fixtures/users :fixtures/tags]}
   :enforces [:schema :migration]
@@ -33,6 +36,7 @@
   :title "Action contract harness"
   :version "v1"
   :invocation "scripts/checks.sh actions"
+  :files ["scripts/checks.sh"]
   :scope :shared
   :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
   :enforces [:contracts :compatibility]
@@ -60,6 +64,7 @@
   :title "Headless app smoke"
   :version "v1"
   :invocation "scripts/checks.sh app-smoke"
+  :files ["scripts/checks.sh" "scripts/app-smoke.js"]
  :scope :shared
  :determinism {:fixtures [:fixtures/tasks :fixtures/users]}
  :enforces [:ui-boot]
@@ -71,6 +76,7 @@
   :title "Theme CSS variable generator"
   :version "v1"
   :invocation "npm run theme:css-vars (scripts/theme-css-vars.sh :theme/default public/css/theme.css)"
+  :files ["scripts/theme-css-vars.sh"]
   :scope :shared
   :determinism {:fixtures []}
   :enforces [:theme-vars]
@@ -81,6 +87,7 @@
   :title "Land registry import check"
   :version "v1"
   :invocation "scripts/checks.sh import"
+  :files ["scripts/checks.sh"]
   :scope :shared
   :determinism {:fixtures [:fixtures/land-registry-sample]}
   :enforces [:import :schema]
@@ -94,7 +101,7 @@
  {:id :cap/tooling/registry-dump
   :title "Registry dump endpoint"
   :version "v1"
-  :invocation "GET /api/registries[?name=schema|actions|views|integrations|tooling|theme|automations]"
+  :invocation "GET /api/registries[?name=schema|actions|views|integrations|agents|policies|internal|tooling|theme|automations]"
   :scope {:writes? false :reads [:registries]}
   :determinism :high
   :enforces [:registry-readonly]
@@ -106,8 +113,124 @@
   :version "v0"
   :invocation {:dev "scripts/run-service.sh (SITE_ENABLED=true SITE_PORT=3200)"
                :prod "darelwasl.service with SITE_ENABLED=true"}
+  :files ["scripts/run-service.sh"]
   :scope {:writes? false :reads [:datomic]}
   :determinism :high
   :enforces {:capabilities [:cap/schema/content-page :cap/schema/content-block :cap/schema/content-tag]}
   :compatibility {:backward true :forward true :flags []}}
+
+ {:id :cap/tooling/preview-runner
+  :title "Preview runner"
+  :version "v1"
+  :invocation "scripts/preview start|stop|status|urls"
+  :files ["scripts/preview"]
+  :scope :shared
+  :determinism :high
+  :enforces [:preview :worktree]
+  :related {:capabilities [:cap/agent/website :cap/tooling/website-agent-runner]}
+  :gotchas ["Creates a git worktree under target/previews/<run-id> and may share node_modules from the repo."]}
+
+ {:id :cap/tooling/website-agent-runner
+  :title "Website agent runner"
+  :version "v1"
+  :invocation "scripts/website-agent run --run-id <id> --worktree <path> --request <text> --agent-json agents/website/AGENT.json"
+  :files ["scripts/website-agent"]
+  :scope :shared
+  :determinism :high
+  :enforces [:agent-control :website]
+  :related {:capabilities [:cap/agent/website]}
+  :gotchas []}
+
+ {:id :cap/tooling/generate-docs
+  :title "Generate system/catalog docs"
+  :version "v1"
+  :invocation "scripts/generate-docs.sh"
+  :files ["scripts/generate-docs.sh"]
+  :scope :shared
+  :determinism :high
+  :enforces [:docs-generated]
+  :related {:capabilities [:cap/policy/docs-are-output]}
+  :gotchas []}
+
+ {:id :cap/tooling/site-screenshot
+  :title "Site screenshot capture"
+  :version "v1"
+  :invocation "node scripts/site-screenshot.js"
+  :files ["scripts/site-screenshot.js"]
+  :scope :shared
+  :determinism :medium
+  :enforces [:visual-regression]
+  :related {:capabilities []}
+  :gotchas ["Requires Playwright browsers installed; see scripts/checks.sh app-smoke for installer behavior."]}
+
+ {:id :cap/tooling/account-statement-pdf
+  :title "Account Statement PDF renderer"
+  :version "v1"
+  :invocation "node scripts/account-statement-pdf.js --input <input.json> --out <out.pdf>"
+  :files ["scripts/account-statement-pdf.js"]
+  :scope :shared
+  :determinism :high
+  :enforces [:pdf-render]
+  :related {:capabilities [:cap/action/account-statement-generate]}
+  :gotchas ["Uses Playwright Chromium. Ensure Playwright browsers are installed (scripts/checks.sh app-smoke handles installer behavior)."]}
+
+ {:id :cap/tooling/documents-pdf
+  :title "Documents PDF renderer (proposal/invoice/receipt/status-report)"
+  :version "v1"
+  :invocation "node scripts/documents-pdf.js --type <proposal|invoice|receipt|status-report> --input <input.json> --out <out.pdf>"
+  :files ["scripts/documents-pdf.js"]
+  :scope :shared
+  :determinism :high
+  :enforces [:pdf-render]
+  :related {:capabilities [:cap/action/proposal-generate
+                           :cap/action/invoice-pdf-generate
+                           :cap/action/receipt-generate
+                           :cap/action/status-report-generate]}
+  :gotchas ["Uses Playwright Chromium. Ensure Playwright browsers are installed (scripts/checks.sh app-smoke handles installer behavior)."
+            "No remote assets; logo loaded from public/logo.svg."]}
+
+ {:id :cap/tooling/github-token-loader
+  :title "GitHub token loader"
+  :version "v1"
+  :invocation "source scripts/load_github_token.sh"
+  :files ["scripts/load_github_token.sh"]
+  :scope :local
+  :determinism :high
+  :enforces [:secrets]
+  :related {:capabilities []}
+  :gotchas ["Shell helper; intended for interactive use, not CI."]}
+
+ {:id :cap/tooling/telegram-spinup
+  :title "Telegram bot spinup"
+  :version "v1"
+  :invocation "scripts/tg-spinup.sh"
+  :files ["scripts/tg-spinup.sh"]
+  :scope :shared
+  :determinism :medium
+  :enforces [:telegram :ops]
+  :related {:capabilities [:cap/automation/telegram-onboarding-task]}
+  :gotchas []}
+
+ {:id :cap/tooling/telegram-watch-webhook
+  :title "Telegram webhook watcher"
+  :version "v1"
+  :invocation "scripts/tg-watch-webhook.sh"
+  :files ["scripts/tg-watch-webhook.sh"]
+  :scope :shared
+  :determinism :medium
+  :enforces [:telegram :ops]
+  :related {:capabilities []}
+  :gotchas []}
+
+ {:id :cap/tooling/system-test
+  :title "System capability smoke"
+  :version "v1"
+  :invocation "scripts/test-system.sh"
+  :files ["scripts/test-system.sh"]
+  :scope :local
+  :determinism :high
+  :enforces [:registries :catalog :policy-index]
+  :related {:capabilities [:cap/tooling/edn-validate]}
+  :gotchas ["Starts a local server on APP_HOST/APP_PORT (defaults 127.0.0.1:3111) and seeds fixtures into a temp Datomic dir under .cpcache/."
+            "Set RUN_LLM=1 to also invoke scripts/website-agent (requires codex login + network). Optionally override the prompt via LLM_REQUEST."]} 
 ]

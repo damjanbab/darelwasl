@@ -8,6 +8,14 @@
    :site {:port 3200
           :host "0.0.0.0"
           :base-path ""
+          :logo-file-id "2b643ed0-c402-43d5-b3f9-cdd1ee15ea4b"
+          :smtp {:host nil
+                 :port 587
+                 :starttls? true
+                 :user nil
+                 :pass nil}
+          :mail-from "admin@darelwasl.com"
+          :lead-email-to "admin@darelwasl.com"
           :enabled? true}
    :telegram {:webhook-enabled? false
               :commands-enabled? true
@@ -115,6 +123,30 @@
         (assoc-in [:site :base-path]
                   (env-str (get env "SITE_BASE_PATH")
                            (get-in default-config [:site :base-path])))
+        (assoc-in [:site :logo-file-id]
+                  (env-str (get env "SITE_LOGO_FILE_ID")
+                           (get-in default-config [:site :logo-file-id])))
+        (assoc-in [:site :smtp :host]
+                  (env-str (get env "SITE_SMTP_HOST")
+                           (get-in default-config [:site :smtp :host])))
+        (assoc-in [:site :smtp :port]
+                  (parse-int (get env "SITE_SMTP_PORT")
+                             (get-in default-config [:site :smtp :port])))
+        (assoc-in [:site :smtp :starttls?]
+                  (env-bool (get env "SITE_SMTP_STARTTLS")
+                            (get-in default-config [:site :smtp :starttls?])))
+        (assoc-in [:site :smtp :user]
+                  (env-str (get env "SITE_SMTP_USER")
+                           (get-in default-config [:site :smtp :user])))
+        (assoc-in [:site :smtp :pass]
+                  (env-str (get env "SITE_SMTP_PASS")
+                           (get-in default-config [:site :smtp :pass])))
+        (assoc-in [:site :mail-from]
+                  (env-str (get env "SITE_MAIL_FROM")
+                           (get-in default-config [:site :mail-from])))
+        (assoc-in [:site :lead-email-to]
+                  (env-str (get env "SITE_LEAD_EMAIL_TO")
+                           (get-in default-config [:site :lead-email-to])))
         (assoc-in [:site :enabled?]
                   (env-bool (get env "SITE_ENABLED")
                             (get-in default-config [:site :enabled?])))

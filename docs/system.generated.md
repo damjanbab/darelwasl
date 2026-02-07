@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `5a0e9bd86d348801d6f500d66b28a983845ff4be9875a6ccaac21853ff1297bd`
+- Catalog version: `541abbb7848af6972772eb5f7ade123f9cd1eb7bfe3136a28d12e82560c93677`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (37)
+### Schema (40)
 - schema/activation-step
 - schema/betting-bet
 - schema/betting-bookmaker
@@ -22,11 +22,13 @@ This file is auto-generated. Do not edit by hand.
 - schema/content-block
 - schema/content-page
 - schema/content-tag
+- schema/doc-pack
 - schema/entity
 - schema/faq
 - schema/file
 - schema/hero-flow
 - schema/hero-stat
+- schema/invoice
 - schema/journey-phase
 - schema/library-bundle
 - schema/license
@@ -34,6 +36,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/outbox
 - schema/ownership
 - schema/parcel
+- schema/payment
 - schema/person
 - schema/persona
 - schema/provenance
@@ -46,7 +49,8 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (69)
+### Actions (81)
+- action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
 - action/agent-control-accept
@@ -74,11 +78,17 @@ This file is auto-generated. Do not edit by hand.
 - action/content-pages
 - action/content-tags
 - action/content-v2
+- action/doc-pack-read
+- action/doc-pack-upsert
 - action/file-delete
 - action/file-read
 - action/file-upload
 - action/github-close-pr
 - action/github-pulls
+- action/invoice-create
+- action/invoice-list
+- action/invoice-pdf-generate
+- action/invoice-update
 - action/journey-phase-delete
 - action/journey-phase-upsert
 - action/license-delete
@@ -87,9 +97,14 @@ This file is auto-generated. Do not edit by hand.
 - action/parcel-import
 - action/parcel-list
 - action/parcel-stats
+- action/payment-create
+- action/payment-list
 - action/person-detail
 - action/person-list
+- action/proposal-generate
+- action/receipt-generate
 - action/site-screenshot-bundle
+- action/status-report-generate
 - action/system-service-restart
 - action/system-services
 - action/tag-create
@@ -146,17 +161,55 @@ This file is auto-generated. Do not edit by hand.
 - integration/rezultati
 - integration/telegram-bot
 
-### Tooling (10)
+### Agents (5)
+- agent/app-ui
+- agent/backend
+- agent/ops-governance
+- agent/registries
+- agent/website
+
+### Policies (13)
+- policy/app-ui-changes
+- policy/backend-changes
+- policy/docs-are-output
+- policy/ops-governance-changes
+- policy/preview-auth-required
+- policy/preview-before-promote
+- policy/registries-are-contract
+- policy/registry-changes
+- policy/review-window-required
+- policy/telegram-dev-bot-only
+- policy/telegram-single-flight
+- policy/verification-required
+- policy/website-agent
+
+### Internal capabilities (2)
+- internal/catalog-entry
+- internal/catalog-read
+
+### Recipes (0)
+
+### Tooling (20)
+- tooling/account-statement-pdf
 - tooling/action-contract
 - tooling/app-smoke
+- tooling/documents-pdf
 - tooling/edn-validate
 - tooling/fixtures-loader
+- tooling/generate-docs
+- tooling/github-token-loader
 - tooling/import-check
 - tooling/migration-backfill
+- tooling/preview-runner
 - tooling/registry-dump
 - tooling/schema-load
 - tooling/site-process
+- tooling/site-screenshot
+- tooling/system-test
+- tooling/telegram-spinup
+- tooling/telegram-watch-webhook
 - tooling/theme-css-vars
+- tooling/website-agent-runner
 
 ### Theme (3)
 - dark
@@ -285,6 +338,7 @@ This file is auto-generated. Do not edit by hand.
 - SITE_BASE_PATH
 - SITE_ENABLED
 - SITE_HOST
+- SITE_LOGO_FILE_ID
 - SITE_PORT
 - SUPERSPORT_BASE_URL
 - SUPERSPORT_TIMEOUT_MS
@@ -303,10 +357,11 @@ This file is auto-generated. Do not edit by hand.
 
 ## Scripts
 
+- account-statement-pdf.js
 - agent
 - app-smoke.js
 - checks.sh
-- deploy.sh
+- documents-pdf.js
 - generate-docs.sh
 - high_intake.py
 - llm_smoke.py
@@ -314,10 +369,10 @@ This file is auto-generated. Do not edit by hand.
 - operations.json
 - plan.schema.json
 - preview
-- promote-live.sh
 - run-service.sh
 - site-screenshot.js
 - spec.schema.json
+- test-system.sh
 - tester_actions.py
 - tg-spinup.sh
 - tg-watch-webhook.sh
@@ -326,6 +381,7 @@ This file is auto-generated. Do not edit by hand.
 
 ## Namespaces
 
+- darelwasl.account-statement
 - darelwasl.actions
 - darelwasl.agent-control.gc
 - darelwasl.app
@@ -345,6 +401,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.content
 - darelwasl.db
 - darelwasl.docs.generate
+- darelwasl.documents
 - darelwasl.entity
 - darelwasl.events
 - darelwasl.features.agent-control

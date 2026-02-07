@@ -1,0 +1,85 @@
+[
+ {:id :cap/policy/docs-are-output
+  :title "Docs are output (unless generated)"
+  :version "v1"
+  :policy-path "policies/docs-are-output.md"
+  :enforces [:docs :docs-generated]
+  :proofs {:commands ["scripts/checks.sh docs"]}}
+
+ {:id :cap/policy/registries-are-contract
+  :title "Registries are the contract"
+  :version "v1"
+  :policy-path "policies/registries-are-contract.md"
+  :enforces [:registries :capabilities]
+  :proofs {:commands ["scripts/checks.sh registries"]}}
+
+ {:id :cap/policy/registry-changes
+  :title "Registry changes"
+  :version "v1"
+  :policy-path "policies/registry-changes.md"
+  :enforces [:registries :fixtures]
+  :proofs {:commands ["scripts/checks.sh registries"]}}
+
+ {:id :cap/policy/verification-required
+  :title "Verification required"
+  :version "v1"
+  :policy-path "policies/verification-required.md"
+  :enforces [:proofs]
+  :proofs {:commands ["scripts/checks.sh all"]}}
+
+ {:id :cap/policy/preview-before-promote
+  :title "Preview before promote"
+  :version "v1"
+  :policy-path "policies/preview-before-promote.md"
+  :enforces [:preview :promotion]}
+
+ {:id :cap/policy/preview-auth-required
+  :title "Preview access token required"
+  :version "v1"
+  :policy-path "policies/preview-auth-required.md"
+  :enforces [:preview :auth]}
+
+ {:id :cap/policy/review-window-required
+  :title "Review window required"
+  :version "v1"
+  :policy-path "policies/review-window-required.md"
+  :enforces [:preview :review-window]}
+
+ {:id :cap/policy/telegram-single-flight
+  :title "Telegram preview is single-flight"
+  :version "v1"
+  :policy-path "policies/telegram-single-flight.md"
+  :enforces [:preview :telegram]}
+
+ {:id :cap/policy/telegram-dev-bot-only
+  :title "Telegram proofs must use dev bot"
+  :version "v1"
+  :policy-path "policies/telegram-dev-bot-only.md"
+  :enforces [:telegram :proofs]}
+
+ {:id :cap/policy/website-agent
+  :title "Website changes via Agent Control"
+  :version "v1"
+  :policy-path "policies/website-agent.md"
+  :enforces [:agent-control :website]}
+
+ {:id :cap/policy/app-ui-changes
+  :title "App UI changes"
+  :version "v1"
+  :policy-path "policies/app-ui-changes.md"
+  :enforces [:ui]}
+
+ {:id :cap/policy/backend-changes
+  :title "Backend/API changes"
+  :version "v1"
+  :policy-path "policies/backend-changes.md"
+  :enforces [:backend :api]}
+
+ {:id :cap/policy/ops-governance-changes
+  :title "Ops/governance changes"
+  :version "v1"
+  :policy-path "policies/ops-governance-changes.md"
+  :enforces [:ops :governance]}
+
+ ;; Intentionally no policy-first placeholder procedures here.
+]

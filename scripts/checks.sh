@@ -55,7 +55,7 @@ check_governance() {
 check_registries() {
   echo "Checking registry files exist and are non-empty..."
   local missing=0
-  for f in schema actions views tooling theme automations; do
+  for f in schema actions views integrations agents policies internal recipes tooling theme automations; do
     local path="$ROOT/registries/$f.edn"
     if [ ! -s "$path" ]; then
       echo "Missing or empty registry: $path"
@@ -121,6 +121,10 @@ check_registry_fields() {
   require_keys "$ROOT/registries/schema.edn" ":id" ":version" ":attributes" ":invariants" ":history" ":compatibility"
   require_keys "$ROOT/registries/actions.edn" ":id" ":version" ":inputs" ":outputs" ":side-effects" ":adapter" ":audit" ":idempotency" ":contracts" ":compatibility"
   require_keys "$ROOT/registries/views.edn" ":id" ":version" ":data" ":actions" ":ux" ":compatibility"
+  require_keys "$ROOT/registries/integrations.edn" ":id" ":version" ":external-system" ":contracts" ":auth" ":failure-modes" ":compatibility" ":adapter" ":related"
+  require_keys "$ROOT/registries/agents.edn" ":id" ":version" ":allowed-paths" ":proofs" ":policies" ":routing"
+  require_keys "$ROOT/registries/policies.edn" ":id" ":version" ":policy-path" ":enforces"
+  require_keys "$ROOT/registries/internal.edn" ":id" ":version" ":var" ":stability" ":tags"
   require_keys "$ROOT/registries/tooling.edn" ":id" ":version" ":invocation" ":scope" ":determinism" ":enforces"
   require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius" ":shadows" ":motion" ":compatibility"
   require_keys "$ROOT/registries/automations.edn" ":id" ":version" ":enabled" ":triggers" ":handler"
@@ -182,6 +186,11 @@ check_edn_parse() {
       registry-paths [(str root "/registries/schema.edn")
                       (str root "/registries/actions.edn")
                       (str root "/registries/views.edn")
+                      (str root "/registries/integrations.edn")
+                      (str root "/registries/agents.edn")
+                      (str root "/registries/policies.edn")
+                      (str root "/registries/internal.edn")
+                      (str root "/registries/recipes.edn")
                       (str root "/registries/tooling.edn")
                       (str root "/registries/theme.edn")
                       (str root "/registries/automations.edn")]
@@ -191,7 +200,7 @@ check_edn_parse() {
                      :tags (str root "/fixtures/tags.edn")
                      :content (str root "/fixtures/content.edn")
                      :betting (str root "/fixtures/betting.edn")}
-      _ (doseq [f registry-paths] (read-single-edn! f))
+      registries (into {} (map (fn [p] [p (read-single-edn! p)]) registry-paths))
       fixtures (into {} (for [[k path] fixture-paths] [k (read-single-edn! path)]))
       users (:users fixtures)
       clients (:clients fixtures)
@@ -207,6 +216,9 @@ check_edn_parse() {
       betting-quotes (or (:quotes betting) [])
       betting-bets (or (:bets betting) [])
       betting-facts (or (:facts betting) [])
+      policies (get registries (str root "/registries/policies.edn"))
+      agents (get registries (str root "/registries/agents.edn"))
+      policy-ids (set (map :id (or policies [])))
       required-user-keys #{:user/id :user/username :user/name :user/password}
       missing-keys (seq (for [u users
                               :let [missing (set/difference required-user-keys (set (keys u)))]
@@ -220,6 +232,18 @@ check_edn_parse() {
       duplicate-usernames (seq (for [[uname freq] (frequencies (map :user/username users))
                                      :when (> freq 1)]
                                  uname))
+      missing-policy-files (seq (for [p (or policies [])
+                                      :let [policy-path (:policy-path p)
+                                            f (when policy-path (io/file root policy-path))]
+                                      :when (or (not (string? policy-path))
+                                                (str/blank? policy-path)
+                                                (not (.exists ^java.io.File f))
+                                                (not (pos? (.length ^java.io.File f))))]
+                                  {:id (:id p) :policy-path policy-path}))
+      missing-policy-refs (seq (for [a (or agents [])
+                                    pref (or (:policies a) [])
+                                    :when (and pref (not (contains? policy-ids pref)))]
+                                {:agent (:id a) :missing-policy pref}))
       invalid-users (seq (for [u users
                                :let [id (:user/id u)
                                      uname (:user/username u)
@@ -573,6 +597,12 @@ check_edn_parse() {
   (when invalid-betting-facts
     (doseq [err invalid-betting-facts]
       (println "Invalid betting fact fixture" err))
+    (System/exit 1))
+  (when missing-policy-files
+    (println "Policy registry references missing/empty files:" missing-policy-files)
+    (System/exit 1))
+  (when missing-policy-refs
+    (println "Agent registry references unknown policy ids:" missing-policy-refs)
     (System/exit 1))
   (println "User fixtures validated (count" (count users) ") and referenced by tasks.")
   (println "Client fixtures validated (count" (count clients) ") and referenced by tasks.")

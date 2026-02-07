@@ -227,7 +227,10 @@
                    {:id :files/bundles
                     :source :cap/schema/library-bundle
                     :pull [:bundle/id :bundle/title :bundle/slug :bundle/type :bundle/created-at :bundle/files]}]}
-  :actions [:cap/action/file-upload :cap/action/file-delete :cap/action/site-screenshot-bundle]
+  :actions [:cap/action/file-upload
+            :cap/action/file-delete
+            :cap/action/site-screenshot-bundle
+            :cap/action/account-statement-generate]
   :ux {:states [:loading :empty :ready :error]
        :performance {:budget_ms 250
                      :pagination {:default-limit 25 :max-limit 200}}
