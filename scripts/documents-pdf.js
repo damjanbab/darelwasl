@@ -94,7 +94,7 @@ function baseStyles() {
       --bg: #ffffff;
       --panel: #f8fafc;
       --accent: #1F2147;
-      --logo-width: 260px;
+      --logo-width: 320px;
     }
 
     * { box-sizing: border-box; }
@@ -113,7 +113,7 @@ function baseStyles() {
 
     .brand { display: flex; align-items: center; }
     .logo svg { width: var(--logo-width); height: auto; display: block; }
-    .logo-fallback { width: var(--logo-width); height: 56px; border: 2px solid var(--accent); border-radius: 10px; }
+    .logo-fallback { width: var(--logo-width); height: 68px; border: 2px solid var(--accent); border-radius: 10px; }
 
     .title-block { text-align: center; }
     .title { margin: 0; font-size: 22px; letter-spacing: 1.8px; font-weight: 800; color: var(--ink); }

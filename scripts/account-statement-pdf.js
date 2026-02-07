@@ -131,7 +131,7 @@ function buildHtml(input, { logoSvg }) {
         --success: #15803d;
         --warning: #b45309;
         --danger: #b91c1c;
-        --logo-width: 260px;
+        --logo-width: 320px;
       }
 
       * { box-sizing: border-box; }
@@ -152,7 +152,7 @@ function buildHtml(input, { logoSvg }) {
 
       .brand { display: flex; align-items: center; }
       .logo svg { width: var(--logo-width); height: auto; display: block; }
-      .logo-fallback { width: var(--logo-width); height: 56px; border: 2px solid var(--accent); border-radius: 10px; }
+      .logo-fallback { width: var(--logo-width); height: 68px; border: 2px solid var(--accent); border-radius: 10px; }
 
       .title-block { text-align: center; }
       .title { margin: 0; font-size: 20px; letter-spacing: 1px; font-weight: 800; color: var(--ink); }
