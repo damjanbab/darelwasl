@@ -1713,14 +1713,31 @@
                                         :reply-markup (docs-menu-inline-keyboard)}))))))
 
           :docs/payment-date
-          (send-message! cfg {:chat-id chat-id
-                              :text "Use the calendar buttons to choose a payment date."
-                              :message-key (str "docs-payment-date-click-" (System/currentTimeMillis))})
+          (let [month (LocalDate/now (ZoneId/systemDefault))
+                quicks (or (get-in session [:picker :quicks])
+                           [{:id :today :label "Today"}
+                            {:id :yesterday :label "Yesterday"}])]
+            (send-message! cfg {:chat-id chat-id
+                                :text "Use the calendar buttons to choose a payment date."
+                                :message-key (str "docs-payment-date-click-" (System/currentTimeMillis))
+                                :reply-markup (date-picker-inline-keyboard {:month month
+                                                                            :quicks quicks
+                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
 
           :docs/inv-due-date
-          (send-message! cfg {:chat-id chat-id
-                              :text "Use the calendar buttons to choose a due date."
-                              :message-key (str "docs-inv-due-click-" (System/currentTimeMillis))})
+          (let [month (LocalDate/now (ZoneId/systemDefault))
+                quicks (or (get-in session [:picker :quicks])
+                           [{:id :plus-7 :label "+7 days"}
+                            {:id :plus-14 :label "+14 days"}
+                            {:id :plus-30 :label "+30 days"}])]
+            (send-message! cfg {:chat-id chat-id
+                                :text "Use the calendar buttons to choose a due date."
+                                :message-key (str "docs-inv-due-click-" (System/currentTimeMillis))
+                                :reply-markup (date-picker-inline-keyboard {:month month
+                                                                            :quicks quicks
+                                                                            :allow-skip? true
+                                                                            :skip-label "No due date"
+                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
 
           :docs/payment-invoice-attach
           (send-message! cfg {:chat-id chat-id
@@ -1746,9 +1763,9 @@
                               :message-key (str "docs-menu-click-" (System/currentTimeMillis))
                               :reply-markup (docs-menu-inline-keyboard)})
 
-	          (send-message! cfg {:chat-id chat-id
-	                              :text "Use /docs to start."
-	                              :message-key (str "docs-unknown-" (System/currentTimeMillis))})))))
+		          (send-message! cfg {:chat-id chat-id
+		                              :text "Use /docs to start."
+		                              :message-key (str "docs-unknown-" (System/currentTimeMillis))}))))))
 
 (defn- edit-prompt-text
   [edit-type title]
@@ -2465,14 +2482,14 @@
                                                         :message-id message-id
                                                         :text "No due date set."
                                                         :reply-markup {:inline_keyboard []}})
-                                    (send-message! cfg {:chat-id chat-id
-                                                        :text "Invoice added."
-                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
-                                                        :reply-markup (docs-menu-inline-keyboard)})))))))
-      :pending/reason (let [tid (:task-id parsed)
-                            task-id (try (UUID/fromString tid) (catch Exception _ nil))
-                            reason-id (:value parsed)
-                            current (get-pending-reason! chat-id)]
+	                                    (send-message! cfg {:chat-id chat-id
+	                                                        :text "Invoice added."
+	                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
+	                                                        :reply-markup (docs-menu-inline-keyboard)}))))))
+	      :pending/reason (let [tid (:task-id parsed)
+	                            task-id (try (UUID/fromString tid) (catch Exception _ nil))
+	                            reason-id (:value parsed)
+	                            current (get-pending-reason! chat-id)]
                         (if (and chat-user task-id (or (nil? current) (= (:task-id current) task-id)))
                           (if (= "custom" reason-id)
                             (let [task (find-user-task conn (:user/id chat-user) task-id)
@@ -2801,9 +2818,9 @@
                          (send-message! cfg {:chat-id chat-id
                                              :text "Invalid client action."
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
-	      (do
-	        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-	        nil))))
+		      (do
+		        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+		        nil))))
 (defn- parse-callback
   [data]
   (when (present-string? data)
