@@ -1,12 +1,14 @@
 (ns darelwasl.telegram
   (:require [clj-http.client :as http]
             [clojure.data.json :as json]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.actions :as actions]
             [darelwasl.clients :as clients]
             [darelwasl.db :as db]
+            [darelwasl.files :as files]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
             [darelwasl.users :as users]
@@ -57,6 +59,7 @@
 (def ^:private tasks-list-limit 200)
 (declare ensure-conn)
 (declare bind-chat-for-user!)
+(declare send-document-file!)
 
 (defn- prune-captures!
   []
@@ -400,6 +403,29 @@
     (swap! docs-sessions dissoc k)
     value))
 
+(defn- docs-send-file!
+  [state chat-id actor file & {:keys [caption]}]
+  (let [cfg (get-in state [:config :telegram])
+        conn (ensure-conn state)
+        storage-dir (get-in state [:config :files :storage-dir])
+        file-id (:file/id file)
+        workspace (:actor/workspace actor)]
+    (cond
+      (nil? file-id) {:error "Missing file id"}
+      (str/blank? (str storage-dir)) {:error "File storage not configured"}
+      :else
+      (let [res (files/fetch-file conn file-id workspace)]
+        (if-let [err (:error res)]
+          {:error (:message err)}
+          (let [{:file/keys [storage-path name]} (:file res)
+                path (when storage-path (.getPath (io/file storage-dir storage-path)))]
+            (if (and path (.exists (io/file path)))
+              (send-document-file! cfg {:chat-id (str chat-id)
+                                        :file (io/file path)
+                                        :filename name
+                                        :caption caption})
+              {:error "Stored file not found"})))))))
+
 (defn- date-picker-inline-keyboard
   [{:keys [month quicks allow-skip? skip-label extra-rows]}]
   (let [month (or month (LocalDate/now (ZoneId/systemDefault)))
@@ -540,12 +566,84 @@
     {:inline_keyboard
      (conj rows [(inline-button "Cancel" "docs:cancel")])}))
 
+(defn- docs-invoice-pick-inline-keyboard
+  [invoices on-pick-data & {:keys [cancel-data skip-data]}]
+  (let [buttons (map (fn [inv]
+                       (let [iid (:invoice/id inv)
+                             num (or (:invoice/number inv) (subs (str iid) 0 8))
+                             status (some-> (:invoice/status inv) name)
+                             label (truncate-text (str num (when status (str " · " status))) 28)]
+                         (inline-button label (format on-pick-data iid))))
+                     (or invoices []))
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))
+        tail (cond-> []
+               skip-data (conj (inline-button "Skip" skip-data))
+               cancel-data (conj (inline-button "Cancel" cancel-data)))]
+    {:inline_keyboard
+     (cond
+       (empty? tail) rows
+       (empty? rows) [(vec tail)]
+       :else (conj rows (vec tail)))}))
+
+(defn- docs-payment-pick-inline-keyboard
+  [payments on-pick-data & {:keys [cancel-data]}]
+  (let [buttons (map (fn [p]
+                       (let [pid (:payment/id p)
+                             amt (or (:payment/amount p) "")
+                             paid-at (or (:payment/paid-at p) "")
+                             label (truncate-text (str amt " " paid-at) 28)]
+                         (inline-button label (format on-pick-data pid))))
+                     (or payments []))
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))
+        rows (if cancel-data
+               (conj rows [(inline-button "Cancel" cancel-data)])
+               rows)]
+    {:inline_keyboard (vec rows)}))
+
 (defn- docs-menu-inline-keyboard
   []
   {:inline_keyboard
-   [[(inline-button "Add payment" "docs:payment:add")
-     (inline-button "Change client" "docs:client:pick")]
-    [(inline-button "Close" "docs:cancel")]]})
+   [[(inline-button "Company name" "docs:field:company-name")
+     (inline-button "Currency" "docs:field:currency")]
+    [(inline-button "Services included" "docs:field:services")
+     (inline-button "Payment plan" "docs:field:payment-plan")]
+    [(inline-button "Status notes" "docs:field:status-notes")]
+    [(inline-button "Add invoice" "docs:invoice:add")
+     (inline-button "Add payment" "docs:payment:add")]
+    [(inline-button "Proposal PDF" "docs:generate:proposal")
+     (inline-button "Status report PDF" "docs:generate:status-report")]
+    [(inline-button "Invoice PDF" "docs:generate:invoice:pick")
+     (inline-button "Receipt PDF" "docs:generate:receipt:pick")]
+    [(inline-button "Change client" "docs:client:pick")
+     (inline-button "Close" "docs:cancel")]]})
+
+(defn- docs-currency-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "SAR" "docs:currency:SAR")
+     (inline-button "USD" "docs:currency:USD")
+     (inline-button "EUR" "docs:currency:EUR")]
+    [(inline-button "Other..." "docs:currency:other")
+     (inline-button "Cancel" "docs:menu")]]})
+
+(defn- docs-skip-cancel-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Skip" "docs:skip")
+     (inline-button "Cancel" "docs:menu")]]})
+
+(defn- docs-invoice-status-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Draft" "docs:invoice:status:draft")
+     (inline-button "Sent" "docs:invoice:status:sent")]
+    [(inline-button "Paid" "docs:invoice:status:paid")
+     (inline-button "Void" "docs:invoice:status:void")]
+    [(inline-button "Cancel" "docs:menu")]]})
 
 (defn- docs-payment-method-inline-keyboard
   []
@@ -554,6 +652,13 @@
      (inline-button "Transfer" "docs:payment:method:transfer")]
     [(inline-button "Card" "docs:payment:method:card")
      (inline-button "Other" "docs:payment:method:other")]
+    [(inline-button "Cancel" "docs:menu")]]})
+
+(defn- docs-payment-invoice-attach-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Attach to invoice" "docs:payment:invoice:pick")
+     (inline-button "No invoice" "docs:payment:invoice:skip")]
     [(inline-button "Cancel" "docs:menu")]]})
 
 (defn- docs-payment-reference-inline-keyboard
@@ -810,6 +915,39 @@
       (if-let [err (:error resp)]
         resp
         {:telegram/message-id (get-in resp [:result :message_id])}))))
+
+(defn send-document-file!
+  "Send a local file (document) to chat-id via Telegram. Best-effort. Returns {:telegram/message-id ...} or {:error ...}."
+  [cfg {:keys [chat-id file filename caption]}]
+  (cond
+    (str/blank? chat-id) {:error "Missing chat id"}
+    (nil? file) {:error "Missing file"}
+    :else
+    (let [url (bot-url cfg "sendDocument")
+          timeout (:http-timeout-ms cfg default-timeout-ms)
+          payload {:multipart (cond-> [{:name "chat_id" :content chat-id}
+                                       {:name "document" :content file :filename (or filename (.getName ^java.io.File file))}]
+                                (present-string? caption)
+                                (conj {:name "caption" :content caption}))}
+          resp (try
+                 (http/post url (merge payload
+                                       {:socket-timeout timeout
+                                        :conn-timeout timeout
+                                        :throw-exceptions false
+                                        :as :text}))
+                 (catch Exception e
+                   (log/warn e "Telegram sendDocument failed")
+                   {:error "Telegram sendDocument failed"}))]
+      (if (:error resp)
+        resp
+        (let [body (try
+                     (json/read-str (or (:body resp) "") :key-fn keyword)
+                     (catch Exception _ nil))]
+          (if (and (map? body) (true? (:ok body)))
+            {:telegram/message-id (get-in body [:result :message_id])}
+            {:error (or (:description body) "Telegram sendDocument error")
+             :details (select-keys body [:description :error_code])
+             :status (:status resp)}))))))
 
 (defn answer-callback!
   [cfg {:keys [callback-id text show-alert?]}]
@@ -1391,79 +1529,226 @@
         session (get-docs-session! chat-id)
         trimmed (some-> text str/trim)]
     (when session
-      (case (:stage session)
-        :docs/payment-amount
-        (if (str/blank? trimmed)
-          (send-message! cfg {:chat-id chat-id
-                              :text "Send the payment amount."
-                              :message-key (str "docs-payment-amount-empty-" (System/currentTimeMillis))})
-          (do
-            (save-docs-session! chat-id (-> session
-                                            (assoc :stage :docs/payment-method)
-                                            (assoc-in [:draft :payment/amount] trimmed)))
+      (let [stage (:stage session)
+            client-id (:client-id session)
+            actor (actions/actor-from-telegram chat-user)]
+        (case stage
+          :docs/field-company-name
+          (if (str/blank? trimmed)
             (send-message! cfg {:chat-id chat-id
-                                :text "Choose payment method:"
-                                :message-key (str "docs-payment-method-" (System/currentTimeMillis))
-                                :reply-markup (docs-payment-method-inline-keyboard)})))
-
-        :docs/payment-reference
-        (if (str/blank? trimmed)
-          (send-message! cfg {:chat-id chat-id
-                              :text "Send the payment reference, or tap Skip."
-                              :message-key (str "docs-payment-ref-empty-" (System/currentTimeMillis))
-                              :reply-markup (docs-payment-reference-inline-keyboard)})
-          (let [draft (:draft session)
-                client-id (:client-id session)
-                paid-at (:payment/paid-at draft)]
-            (if-not paid-at
-              (do
-                (save-docs-session! chat-id (assoc session :stage :docs/payment-date))
+                                :text "Send company name, or tap Skip."
+                                :message-key (str "docs-company-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-skip-cancel-inline-keyboard)})
+            (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                               :actor actor
+                                               :input {:client/id client-id
+                                                       :doc.pack/company-name trimmed}})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu))
+              (if-let [err (:error res)]
                 (send-message! cfg {:chat-id chat-id
-                                    :text "Pick payment date:"
-                                    :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))
-                                    :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
-                                                                                :quicks [{:id :today :label "Today"}
-                                                                                         {:id :yesterday :label "Yesterday"}]
-                                                                                :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
-              (let [input (cond-> {:client/id client-id
-                                   :payment/amount (:payment/amount draft)
-                                   :payment/method (:payment/method draft)
-                                   :payment/paid-at paid-at}
-                            (present-string? trimmed) (assoc :payment/reference trimmed))
-                    res (actions/execute! state {:action/id :cap/action/payment-create
-                                                 :actor (actions/actor-from-telegram chat-user)
-                                                 :input input})]
-                (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
-                (if-let [err (:error res)]
-                  (send-message! cfg {:chat-id chat-id
-                                      :text (str "Unable to add payment: " (:message err))
-                                      :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
-                                      :reply-markup (docs-menu-inline-keyboard)})
-                  (send-message! cfg {:chat-id chat-id
-                                      :text "Payment added."
-                                      :message-key (str "docs-payment-added-" (System/currentTimeMillis))
-                                      :reply-markup (docs-menu-inline-keyboard)}))))))
+                                    :text (str "Unable to save: " (:message err))
+                                    :message-key (str "docs-company-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Saved."
+                                    :message-key (str "docs-company-ok-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)}))))
 
-        :docs/payment-date
-        (send-message! cfg {:chat-id chat-id
-                            :text "Use the calendar buttons to choose a payment date."
-                            :message-key (str "docs-payment-date-click-" (System/currentTimeMillis))})
+          :docs/field-services
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send services included text, or tap Skip."
+                                :message-key (str "docs-services-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-skip-cancel-inline-keyboard)})
+            (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                               :actor actor
+                                               :input {:client/id client-id
+                                                       :doc.pack/services-included trimmed}})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to save: " (:message err))
+                                    :message-key (str "docs-services-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Saved."
+                                    :message-key (str "docs-services-ok-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)}))))
 
-        :docs/payment-method
-        (send-message! cfg {:chat-id chat-id
-                            :text "Use the buttons to choose a payment method."
-                            :message-key (str "docs-payment-method-click-" (System/currentTimeMillis))
-                            :reply-markup (docs-payment-method-inline-keyboard)})
+          :docs/field-payment-plan
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send payment plan text, or tap Skip."
+                                :message-key (str "docs-plan-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-skip-cancel-inline-keyboard)})
+            (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                               :actor actor
+                                               :input {:client/id client-id
+                                                       :doc.pack/payment-plan trimmed}})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to save: " (:message err))
+                                    :message-key (str "docs-plan-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Saved."
+                                    :message-key (str "docs-plan-ok-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)}))))
 
-        :docs/menu
-        (send-message! cfg {:chat-id chat-id
-                            :text "Use the buttons."
-                            :message-key (str "docs-menu-click-" (System/currentTimeMillis))
-                            :reply-markup (docs-menu-inline-keyboard)})
+          :docs/field-status-notes
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send status notes text, or tap Skip."
+                                :message-key (str "docs-status-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-skip-cancel-inline-keyboard)})
+            (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                               :actor actor
+                                               :input {:client/id client-id
+                                                       :doc.pack/status-notes trimmed}})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to save: " (:message err))
+                                    :message-key (str "docs-status-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Saved."
+                                    :message-key (str "docs-status-ok-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)}))))
 
-        (send-message! cfg {:chat-id chat-id
-                            :text "Use /docs to start."
-                            :message-key (str "docs-unknown-" (System/currentTimeMillis))})))))
+          :docs/field-currency-other
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send currency code (e.g. SAR), or tap Skip."
+                                :message-key (str "docs-currency-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-skip-cancel-inline-keyboard)})
+            (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                               :actor actor
+                                               :input {:client/id client-id
+                                                       :doc.pack/currency trimmed}})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to save: " (:message err))
+                                    :message-key (str "docs-currency-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Saved."
+                                    :message-key (str "docs-currency-ok-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)}))))
+
+          :docs/inv-number
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send invoice number."
+                                :message-key (str "docs-inv-num-empty-" (System/currentTimeMillis))})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/inv-total)
+                                              (assoc :draft {:invoice/number trimmed})))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Send invoice total amount:"
+                                  :message-key (str "docs-inv-total-" (System/currentTimeMillis))
+                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:menu")]]}})))
+
+          :docs/inv-total
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send invoice total amount."
+                                :message-key (str "docs-inv-total-empty-" (System/currentTimeMillis))})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/inv-status)
+                                              (assoc-in [:draft :invoice/total-amount] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Choose invoice status:"
+                                  :message-key (str "docs-inv-status-" (System/currentTimeMillis))
+                                  :reply-markup (docs-invoice-status-inline-keyboard)})))
+
+          :docs/payment-amount
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send the payment amount."
+                                :message-key (str "docs-payment-amount-empty-" (System/currentTimeMillis))})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/payment-method)
+                                              (assoc-in [:draft :payment/amount] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Choose payment method:"
+                                  :message-key (str "docs-payment-method-" (System/currentTimeMillis))
+                                  :reply-markup (docs-payment-method-inline-keyboard)})))
+
+          :docs/payment-reference
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send the payment reference, or tap Skip."
+                                :message-key (str "docs-payment-ref-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-payment-reference-inline-keyboard)})
+            (let [draft (:draft session)
+                  paid-at (:payment/paid-at draft)]
+              (if-not paid-at
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Pick payment date first (buttons)."
+                                    :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
+                (let [input (cond-> {:client/id client-id
+                                     :payment/amount (:payment/amount draft)
+                                     :payment/method (:payment/method draft)
+                                     :payment/paid-at paid-at}
+                              (:invoice/id draft) (assoc :invoice/id (:invoice/id draft))
+                              (present-string? trimmed) (assoc :payment/reference trimmed))
+                      res (actions/execute! state {:action/id :cap/action/payment-create
+                                                   :actor actor
+                                                   :input input})]
+                  (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+                  (if-let [err (:error res)]
+                    (send-message! cfg {:chat-id chat-id
+                                        :text (str "Unable to add payment: " (:message err))
+                                        :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
+                                        :reply-markup (docs-menu-inline-keyboard)})
+                    (send-message! cfg {:chat-id chat-id
+                                        :text "Payment added."
+                                        :message-key (str "docs-payment-added-" (System/currentTimeMillis))
+                                        :reply-markup (docs-menu-inline-keyboard)}))))))
+
+          :docs/payment-date
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the calendar buttons to choose a payment date."
+                              :message-key (str "docs-payment-date-click-" (System/currentTimeMillis))})
+
+          :docs/inv-due-date
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the calendar buttons to choose a due date."
+                              :message-key (str "docs-inv-due-click-" (System/currentTimeMillis))})
+
+          :docs/payment-invoice-attach
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons to choose invoice attachment."
+                              :message-key (str "docs-payment-inv-attach-click-" (System/currentTimeMillis))
+                              :reply-markup (docs-payment-invoice-attach-inline-keyboard)})
+
+          :docs/payment-method
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons to choose a payment method."
+                              :message-key (str "docs-payment-method-click-" (System/currentTimeMillis))
+                              :reply-markup (docs-payment-method-inline-keyboard)})
+
+          :docs/inv-status
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons to choose invoice status."
+                              :message-key (str "docs-inv-status-click-" (System/currentTimeMillis))
+                              :reply-markup (docs-invoice-status-inline-keyboard)})
+
+          :docs/menu
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons."
+                              :message-key (str "docs-menu-click-" (System/currentTimeMillis))
+                              :reply-markup (docs-menu-inline-keyboard)})
+
+	          (send-message! cfg {:chat-id chat-id
+	                              :text "Use /docs to start."
+	                              :message-key (str "docs-unknown-" (System/currentTimeMillis))})))))
 
 (defn- edit-prompt-text
   [edit-type title]
@@ -1567,8 +1852,7 @@
         cfg (get-in state [:config :telegram])]
     (when callback-id
       (answer-callback! cfg {:callback-id callback-id}))
-    (try
-      (condp = (:type parsed)
+    (condp = (:type parsed)
       :capture/task (let [capture (take-capture! chat-id message-id)
                           actor (actions/actor-from-telegram (:user capture))]
                       (if (and capture actor)
@@ -1655,6 +1939,114 @@
                            (send-message! cfg {:chat-id chat-id
                                                :text "Invalid client."
                                                :message-key (str "docs-client-invalid-" (System/currentTimeMillis))})))
+      :docs/skip (let [session (get-docs-session! chat-id)]
+                   (when session
+                     (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                     (edit-message! cfg {:chat-id chat-id
+                                         :message-id message-id
+                                         :text "Skipped."
+                                         :reply-markup (docs-menu-inline-keyboard)})))
+      :docs/field (let [session (get-docs-session! chat-id)
+                        field (:value parsed)]
+                    (if (and chat-user session (:client-id session))
+                      (case field
+                        "company-name" (do
+                                         (save-docs-session! chat-id (assoc session :stage :docs/field-company-name))
+                                         (edit-message! cfg {:chat-id chat-id
+                                                             :message-id message-id
+                                                             :text "Send company name:"
+                                                             :reply-markup (docs-skip-cancel-inline-keyboard)}))
+                        "currency" (do
+                                     (save-docs-session! chat-id (assoc session :stage :docs/field-currency))
+                                     (edit-message! cfg {:chat-id chat-id
+                                                         :message-id message-id
+                                                         :text "Choose currency:"
+                                                         :reply-markup (docs-currency-inline-keyboard)}))
+                        "services" (do
+                                     (save-docs-session! chat-id (assoc session :stage :docs/field-services))
+                                     (edit-message! cfg {:chat-id chat-id
+                                                         :message-id message-id
+                                                         :text "Send services included text:"
+                                                         :reply-markup (docs-skip-cancel-inline-keyboard)}))
+                        "payment-plan" (do
+                                         (save-docs-session! chat-id (assoc session :stage :docs/field-payment-plan))
+                                         (edit-message! cfg {:chat-id chat-id
+                                                             :message-id message-id
+                                                             :text "Send payment plan text:"
+                                                             :reply-markup (docs-skip-cancel-inline-keyboard)}))
+                        "status-notes" (do
+                                         (save-docs-session! chat-id (assoc session :stage :docs/field-status-notes))
+                                         (edit-message! cfg {:chat-id chat-id
+                                                             :message-id message-id
+                                                             :text "Send status notes text:"
+                                                             :reply-markup (docs-skip-cancel-inline-keyboard)}))
+                        (send-message! cfg {:chat-id chat-id
+                                            :text "Unknown field."
+                                            :message-key (str "docs-field-unknown-" (System/currentTimeMillis))}))
+                      (prompt-docs-client-pick! state chat-id)))
+      :docs/currency (let [session (get-docs-session! chat-id)
+                           v (:value parsed)
+                           actor (actions/actor-from-telegram chat-user)]
+                       (if (and chat-user session (:client-id session) (present-string? v))
+                         (if (= v "other")
+                           (do
+                             (save-docs-session! chat-id (assoc session :stage :docs/field-currency-other))
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text "Send currency code (e.g. SAR):"
+                                                 :reply-markup (docs-skip-cancel-inline-keyboard)}))
+                           (let [res (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+                                                              :actor actor
+                                                              :input {:client/id (:client-id session)
+                                                                      :doc.pack/currency v}})]
+                             (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                             (if-let [err (:error res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Unable to save: " (:message err))
+                                                   :message-key (str "docs-currency-error-" (System/currentTimeMillis))
+                                                   :reply-markup (docs-menu-inline-keyboard)})
+                               (edit-message! cfg {:chat-id chat-id
+                                                   :message-id message-id
+                                                   :text "Saved."
+                                                   :reply-markup (docs-menu-inline-keyboard)}))))
+                         (send-message! cfg {:chat-id chat-id
+                                             :text "Invalid currency."
+                                             :message-key (str "docs-currency-invalid-" (System/currentTimeMillis))})))
+      :docs/invoice-add (let [session (get-docs-session! chat-id)]
+                          (if (and chat-user session (:client-id session))
+                            (do
+                              (save-docs-session! chat-id (assoc session :stage :docs/inv-number :draft {}))
+                              (edit-message! cfg {:chat-id chat-id
+                                                  :message-id message-id
+                                                  :text "Send invoice number:"
+                                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:menu")]]}}))
+                            (prompt-docs-client-pick! state chat-id)))
+      :docs/invoice-status (let [session (get-docs-session! chat-id)
+                                 status-raw (:value parsed)
+                                 status (when status-raw (keyword status-raw))
+                                 quicks [{:id :in-7-days :label "+7 days"}
+                                         {:id :in-14-days :label "+14 days"}
+                                         {:id :in-30-days :label "+30 days"}]
+                                 month (LocalDate/now (ZoneId/systemDefault))]
+                             (if (and chat-user session (:client-id session) status (= (:stage session) :docs/inv-status))
+                               (do
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/inv-due-date)
+                                                                 (assoc :picker {:kind :docs/invoice-due
+                                                                                 :text "Pick invoice due date (or No due date):"
+                                                                                 :quicks quicks})
+                                                                 (assoc-in [:draft :invoice/status] status)))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text "Pick invoice due date (or No due date):"
+                                                     :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                 :quicks quicks
+                                                                                                 :allow-skip? true
+                                                                                                 :skip-label "No due date"
+                                                                                                 :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "Invalid invoice status."
+                                                   :message-key (str "docs-inv-status-invalid-" (System/currentTimeMillis))})))
       :docs/payment-add (let [session (get-docs-session! chat-id)]
                           (if (and chat-user session (:client-id session))
                             (do
@@ -1667,34 +2059,85 @@
       :docs/payment-method (let [session (get-docs-session! chat-id)
                                  method-raw (:value parsed)
                                  method (when method-raw (keyword method-raw))
-                                 quicks [{:id :today :label "Today"}
-                                         {:id :yesterday :label "Yesterday"}]
-                                 month (LocalDate/now (ZoneId/systemDefault))]
+                                 ]
                              (if (and chat-user session (:client-id session) method)
                                (do
                                  (save-docs-session! chat-id (-> session
-                                                                 (assoc :stage :docs/payment-date)
-                                                                 (assoc :picker {:kind :docs/payment
-                                                                                 :text "Pick payment date:"
-                                                                                 :quicks quicks})
+                                                                 (assoc :stage :docs/payment-invoice-attach)
                                                                  (assoc-in [:draft :payment/method] method)))
                                  (edit-message! cfg {:chat-id chat-id
                                                      :message-id message-id
-                                                     :text "Pick payment date:"
-                                                     :reply-markup (date-picker-inline-keyboard {:month month
-                                                                                                 :quicks quicks
-                                                                                                 :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                                                     :text "Attach this payment to an invoice?"
+                                                     :reply-markup (docs-payment-invoice-attach-inline-keyboard)}))
                                (send-message! cfg {:chat-id chat-id
                                                    :text "Invalid payment method."
                                                    :message-key (str "docs-payment-method-invalid-" (System/currentTimeMillis))})))
+      :docs/payment-invoice-skip (let [session (get-docs-session! chat-id)
+                                       quicks [{:id :today :label "Today"}
+                                               {:id :yesterday :label "Yesterday"}]
+                                       month (LocalDate/now (ZoneId/systemDefault))]
+                                   (if (and chat-user session (:client-id session))
+                                     (do
+                                       (save-docs-session! chat-id (-> session
+                                                                       (assoc :stage :docs/payment-date)
+                                                                       (assoc :picker {:kind :docs/payment
+                                                                                       :text "Pick payment date:"
+                                                                                       :quicks quicks})))
+                                       (edit-message! cfg {:chat-id chat-id
+                                                           :message-id message-id
+                                                           :text "Pick payment date:"
+                                                           :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                       :quicks quicks
+                                                                                                       :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                                     (prompt-docs-client-pick! state chat-id)))
+      :docs/payment-invoice-pick (let [session (get-docs-session! chat-id)
+                                       actor (actions/actor-from-telegram chat-user)]
+                                   (if (and chat-user session (:client-id session))
+                                     (let [res (actions/execute! state {:action/id :cap/action/invoice-list
+                                                                        :actor actor
+                                                                        :input {:client/id (:client-id session)}})
+                                           invoices (get-in res [:result :invoices] [])
+                                           kb (docs-invoice-pick-inline-keyboard invoices "docs:payment:invoice:set:%s"
+                                                                                 :cancel-data "docs:menu"
+                                                                                 :skip-data "docs:payment:invoice:skip")]
+                                       (save-docs-session! chat-id (assoc session :stage :docs/payment-invoice-pick))
+                                       (edit-message! cfg {:chat-id chat-id
+                                                           :message-id message-id
+                                                           :text "Pick invoice to attach:"
+                                                           :reply-markup kb}))
+                                     (prompt-docs-client-pick! state chat-id)))
+      :docs/payment-invoice-set (let [session (get-docs-session! chat-id)
+                                      raw (:invoice-id parsed)
+                                      invoice-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                      quicks [{:id :today :label "Today"}
+                                              {:id :yesterday :label "Yesterday"}]
+                                      month (LocalDate/now (ZoneId/systemDefault))]
+                                  (if (and chat-user session (:client-id session) invoice-id)
+                                    (do
+                                      (save-docs-session! chat-id (-> session
+                                                                      (assoc :stage :docs/payment-date)
+                                                                      (assoc :picker {:kind :docs/payment
+                                                                                      :text "Pick payment date:"
+                                                                                      :quicks quicks})
+                                                                      (assoc-in [:draft :invoice/id] invoice-id)))
+                                      (edit-message! cfg {:chat-id chat-id
+                                                          :message-id message-id
+                                                          :text "Pick payment date:"
+                                                          :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                      :quicks quicks
+                                                                                                      :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text "Invalid invoice."
+                                                        :message-key (str "docs-payment-invoice-invalid-" (System/currentTimeMillis))})))
       :docs/payment-ref-skip (let [session (get-docs-session! chat-id)
                                    draft (:draft session)
                                    client-id (:client-id session)
                                    paid-at (:payment/paid-at draft)
-                                   input {:client/id client-id
-                                          :payment/amount (:payment/amount draft)
-                                          :payment/method (:payment/method draft)
-                                          :payment/paid-at paid-at}
+                                   input (cond-> {:client/id client-id
+                                                  :payment/amount (:payment/amount draft)
+                                                  :payment/method (:payment/method draft)
+                                                  :payment/paid-at paid-at}
+                                           (:invoice/id draft) (assoc :invoice/id (:invoice/id draft)))
                                    res (when (and chat-user session (:client-id session))
                                          (actions/execute! state {:action/id :cap/action/payment-create
                                                                   :actor (actions/actor-from-telegram chat-user)
@@ -1716,6 +2159,130 @@
                                                          :message-key (str "docs-payment-added-" (System/currentTimeMillis))
                                                          :reply-markup (docs-menu-inline-keyboard)}))))
                                  (prompt-docs-client-pick! state chat-id)))
+      :docs/generate (let [session (get-docs-session! chat-id)
+                           client-id (:client-id session)
+                           actor (actions/actor-from-telegram chat-user)
+                           type (:value parsed)
+                           action-id (case type
+                                       :proposal :cap/action/proposal-generate
+                                       :status-report :cap/action/status-report-generate
+                                       nil)]
+                       (if (and chat-user session client-id action-id)
+                         (let [res (actions/execute! state {:action/id action-id
+                                                            :actor actor
+                                                            :input {:client/id client-id}})
+                               file (get-in res [:result :file])
+                               send-res (when (and file (not (:error res)))
+                                          (docs-send-file! state chat-id actor file :caption (case type
+                                                                                               :proposal "Proposal"
+                                                                                               :status-report "Status report"
+                                                                                               "Document")))]
+                           (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                           (if-let [err (:error res)]
+                             (send-message! cfg {:chat-id chat-id
+                                                 :text (str "Unable to generate: " (:message err))
+                                                 :message-key (str "docs-generate-error-" (System/currentTimeMillis))
+                                                 :reply-markup (docs-menu-inline-keyboard)})
+                             (if-let [send-err (:error send-res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Generated, but could not send PDF: " send-err)
+                                                   :message-key (str "docs-generate-send-error-" (System/currentTimeMillis))
+                                                   :reply-markup (docs-menu-inline-keyboard)})
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "PDF sent."
+                                                   :message-key (str "docs-generate-ok-" (System/currentTimeMillis))
+                                                   :reply-markup (docs-menu-inline-keyboard)}))))
+                         (prompt-docs-client-pick! state chat-id)))
+      :docs/generate-invoice-pick (let [session (get-docs-session! chat-id)
+                                        actor (actions/actor-from-telegram chat-user)]
+                                    (if (and chat-user session (:client-id session))
+                                      (let [res (actions/execute! state {:action/id :cap/action/invoice-list
+                                                                         :actor actor
+                                                                         :input {:client/id (:client-id session)}})
+                                            invoices (get-in res [:result :invoices] [])
+                                            kb (docs-invoice-pick-inline-keyboard invoices "docs:generate:invoice:set:%s"
+                                                                                  :cancel-data "docs:menu")]
+                                        (save-docs-session! chat-id (assoc session :stage :docs/generate-invoice-pick))
+                                        (edit-message! cfg {:chat-id chat-id
+                                                            :message-id message-id
+                                                            :text "Pick invoice:"
+                                                            :reply-markup kb}))
+                                      (prompt-docs-client-pick! state chat-id)))
+      :docs/generate-invoice-set (let [session (get-docs-session! chat-id)
+                                       raw (:invoice-id parsed)
+                                       invoice-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                       actor (actions/actor-from-telegram chat-user)]
+                                   (if (and chat-user session (:client-id session) invoice-id)
+                                     (let [res (actions/execute! state {:action/id :cap/action/invoice-pdf-generate
+                                                                        :actor actor
+                                                                        :input {:client/id (:client-id session)
+                                                                                :invoice/id invoice-id}})
+                                           file (get-in res [:result :file])
+                                           send-res (when (and file (not (:error res)))
+                                                      (docs-send-file! state chat-id actor file :caption "Invoice"))]
+                                       (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                                       (if-let [err (:error res)]
+                                         (send-message! cfg {:chat-id chat-id
+                                                             :text (str "Unable to generate invoice PDF: " (:message err))
+                                                             :message-key (str "docs-invoice-pdf-error-" (System/currentTimeMillis))
+                                                             :reply-markup (docs-menu-inline-keyboard)})
+                                         (if-let [send-err (:error send-res)]
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text (str "Generated, but could not send PDF: " send-err)
+                                                               :message-key (str "docs-invoice-pdf-send-error-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-menu-inline-keyboard)})
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text "PDF sent."
+                                                               :message-key (str "docs-invoice-pdf-ok-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-menu-inline-keyboard)}))))
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text "Invalid invoice."
+                                                         :message-key (str "docs-invoice-invalid-" (System/currentTimeMillis))})))
+      :docs/generate-receipt-pick (let [session (get-docs-session! chat-id)
+                                        actor (actions/actor-from-telegram chat-user)]
+                                    (if (and chat-user session (:client-id session))
+                                      (let [res (actions/execute! state {:action/id :cap/action/payment-list
+                                                                         :actor actor
+                                                                         :input {:client/id (:client-id session)}})
+                                            payments (get-in res [:result :payments] [])
+                                            kb (docs-payment-pick-inline-keyboard payments "docs:generate:receipt:set:%s"
+                                                                                  :cancel-data "docs:menu")]
+                                        (save-docs-session! chat-id (assoc session :stage :docs/generate-receipt-pick))
+                                        (edit-message! cfg {:chat-id chat-id
+                                                            :message-id message-id
+                                                            :text "Pick payment:"
+                                                            :reply-markup kb}))
+                                      (prompt-docs-client-pick! state chat-id)))
+      :docs/generate-receipt-set (let [session (get-docs-session! chat-id)
+                                       raw (:payment-id parsed)
+                                       payment-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                       actor (actions/actor-from-telegram chat-user)]
+                                   (if (and chat-user session (:client-id session) payment-id)
+                                     (let [res (actions/execute! state {:action/id :cap/action/receipt-generate
+                                                                        :actor actor
+                                                                        :input {:client/id (:client-id session)
+                                                                                :payment/id payment-id}})
+                                           file (get-in res [:result :file])
+                                           send-res (when (and file (not (:error res)))
+                                                      (docs-send-file! state chat-id actor file :caption "Receipt"))]
+                                       (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                                       (if-let [err (:error res)]
+                                         (send-message! cfg {:chat-id chat-id
+                                                             :text (str "Unable to generate receipt PDF: " (:message err))
+                                                             :message-key (str "docs-receipt-error-" (System/currentTimeMillis))
+                                                             :reply-markup (docs-menu-inline-keyboard)})
+                                         (if-let [send-err (:error send-res)]
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text (str "Generated, but could not send PDF: " send-err)
+                                                               :message-key (str "docs-receipt-send-error-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-menu-inline-keyboard)})
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text "PDF sent."
+                                                               :message-key (str "docs-receipt-ok-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-menu-inline-keyboard)}))))
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text "Invalid payment."
+                                                         :message-key (str "docs-payment-invalid-" (System/currentTimeMillis))})))
       :date-picker/noop nil
       :date-picker/nav (let [ym (:value parsed)
                              month (or (parse-ym ym) (LocalDate/now (ZoneId/systemDefault)))
@@ -1745,6 +2312,20 @@
                                                  :text text
                                                  :reply-markup (date-picker-inline-keyboard {:month month
                                                                                              :quicks quicks
+                                                                                             :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                           (and session (= (:stage session) :docs/inv-due-date))
+                           (let [text (get-in session [:picker :text] "Pick invoice due date:")
+                                 quicks (or (get-in session [:picker :quicks])
+                                            [{:id :in-7-days :label "+7 days"}
+                                             {:id :in-14-days :label "+14 days"}
+                                             {:id :in-30-days :label "+30 days"}])]
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text text
+                                                 :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                             :quicks quicks
+                                                                                             :allow-skip? true
+                                                                                             :skip-label "No due date"
                                                                                              :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
                            :else nil))
       :date-picker/day (let [ymd (:value parsed)
@@ -1785,6 +2366,33 @@
                                                  :text "Send the payment reference (optional):"
                                                  :message-key (str "docs-payment-ref-" (System/currentTimeMillis))
                                                  :reply-markup (docs-payment-reference-inline-keyboard)}))
+                           (and picked session (= (:stage session) :docs/inv-due-date))
+                           (let [draft (:draft session)
+                                 actor (actions/actor-from-telegram chat-user)
+                                 input (cond-> {:client/id (:client-id session)
+                                                :invoice/number (:invoice/number draft)
+                                                :invoice/total-amount (:invoice/total-amount draft)
+                                                :invoice/status (:invoice/status draft)
+                                                :invoice/due-at picked}
+                                         (nil? (:invoice/status draft)) (dissoc :invoice/status))
+                                 res (actions/execute! state {:action/id :cap/action/invoice-create
+                                                              :actor actor
+                                                              :input input})]
+                             (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+                             (if-let [err (:error res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Unable to add invoice: " (:message err))
+                                                   :message-key (str "docs-inv-create-error-" (System/currentTimeMillis))
+                                                   :reply-markup (docs-menu-inline-keyboard)})
+                               (do
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text (str "Invoice due date set: " ymd)
+                                                     :reply-markup {:inline_keyboard []}})
+                                 (send-message! cfg {:chat-id chat-id
+                                                     :text "Invoice added."
+                                                     :message-key (str "docs-inv-added-" (System/currentTimeMillis))
+                                                     :reply-markup (docs-menu-inline-keyboard)}))))
                            :else nil))
       :date-picker/quick (let [quick-id (some-> (:value parsed) keyword)
                                today (LocalDate/now (ZoneId/systemDefault))
@@ -1801,6 +2409,12 @@
                                             (case quick-id
                                               :today today
                                               :yesterday (.minusDays today 1)
+                                              nil)
+                                            (and session (= (:stage session) :docs/inv-due-date))
+                                            (case quick-id
+                                              :in-7-days (.plusDays today 7)
+                                              :in-14-days (.plusDays today 14)
+                                              :in-30-days (.plusDays today 30)
                                               nil)
                                             :else nil)
                                ymd (when picked-day (yyyy-mm-dd picked-day))]
@@ -1828,6 +2442,33 @@
                                                       :text "Follow-up set without a date."
                                                       :reply-markup {:inline_keyboard []}})
                                   (send-task-card! state chat-id (get-in res [:result :task]) {}))))))
+                          (let [session (get-docs-session! chat-id)]
+                            (when (and session (= (:stage session) :docs/inv-due-date))
+                              (let [draft (:draft session)
+                                    actor (actions/actor-from-telegram chat-user)
+                                    input (cond-> {:client/id (:client-id session)
+                                                   :invoice/number (:invoice/number draft)
+                                                   :invoice/total-amount (:invoice/total-amount draft)
+                                                   :invoice/status (:invoice/status draft)}
+                                            (nil? (:invoice/status draft)) (dissoc :invoice/status))
+                                    res (actions/execute! state {:action/id :cap/action/invoice-create
+                                                                 :actor actor
+                                                                 :input input})]
+                                (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+                                (if-let [err (:error res)]
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text (str "Unable to add invoice: " (:message err))
+                                                      :message-key (str "docs-inv-create-error-" (System/currentTimeMillis))
+                                                      :reply-markup (docs-menu-inline-keyboard)})
+                                  (do
+                                    (edit-message! cfg {:chat-id chat-id
+                                                        :message-id message-id
+                                                        :text "No due date set."
+                                                        :reply-markup {:inline_keyboard []}})
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text "Invoice added."
+                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
+                                                        :reply-markup (docs-menu-inline-keyboard)})))))))
       :pending/reason (let [tid (:task-id parsed)
                             task-id (try (UUID/fromString tid) (catch Exception _ nil))
                             reason-id (:value parsed)
@@ -2160,12 +2801,9 @@
                          (send-message! cfg {:chat-id chat-id
                                              :text "Invalid client action."
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
-      (do
-        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-        nil))
-      (catch IllegalArgumentException e
-        (log/warn e "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-        nil))))
+	      (do
+	        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+	        nil))))
 (defn- parse-callback
   [data]
   (when (present-string? data)
@@ -2186,19 +2824,51 @@
         (case (second parts)
           "cancel" {:type :docs/cancel}
           "menu" {:type :docs/menu}
+          "skip" {:type :docs/skip}
           "client" (case (nth parts 2 nil)
                      "set" {:type :docs/client-set
                             :client-id (nth parts 3 nil)}
                      "pick" {:type :docs/client-pick}
                      nil)
+          "field" {:type :docs/field
+                   :value (nth parts 2 nil)}
+          "currency" {:type :docs/currency
+                      :value (nth parts 2 nil)}
+          "invoice" (case (nth parts 2 nil)
+                      "add" {:type :docs/invoice-add}
+                      "status" {:type :docs/invoice-status
+                                :value (nth parts 3 nil)}
+                      nil)
           "payment" (case (nth parts 2 nil)
                       "add" {:type :docs/payment-add}
                       "method" {:type :docs/payment-method
                                 :value (nth parts 3 nil)}
+                      "invoice" (case (nth parts 3 nil)
+                                  "pick" {:type :docs/payment-invoice-pick}
+                                  "set" {:type :docs/payment-invoice-set
+                                         :invoice-id (nth parts 4 nil)}
+                                  "skip" {:type :docs/payment-invoice-skip}
+                                  nil)
                       "ref" (case (nth parts 3 nil)
                               "skip" {:type :docs/payment-ref-skip}
                               nil)
                       nil)
+          "generate" (case (nth parts 2 nil)
+                       "proposal" {:type :docs/generate
+                                   :value :proposal}
+                       "status-report" {:type :docs/generate
+                                        :value :status-report}
+                       "invoice" (case (nth parts 3 nil)
+                                   "pick" {:type :docs/generate-invoice-pick}
+                                   "set" {:type :docs/generate-invoice-set
+                                          :invoice-id (nth parts 4 nil)}
+                                   nil)
+                       "receipt" (case (nth parts 3 nil)
+                                   "pick" {:type :docs/generate-receipt-pick}
+                                   "set" {:type :docs/generate-receipt-set
+                                          :payment-id (nth parts 4 nil)}
+                                   nil)
+                       nil)
           nil)
         "filter"
         (case (second parts)
@@ -2336,19 +3006,21 @@
                    {:task-list {:tasks (:tasks resp)
                                 :filters filters
                                    :pending-reasons pending-reasons}})))
-      :docs (if-not chat-user
-              {:text "Chat not linked. Use /start <token> from the app to link."}
-              (let [session (get-docs-session! chat-id)]
-                (if (and session (:client-id session))
-                  {:text "Documents:"
-                   :reply-markup (docs-menu-inline-keyboard)}
-                  (let [workspace nil
-                        res (clients/list-clients conn {:limit 6} workspace)
-                        client-list (or (:clients res) [])
-                        prompt (if (seq client-list) "Pick a client:" "No clients available yet.")
-                        keyboard (docs-client-pick-inline-keyboard client-list)]
-                    {:text prompt
-                     :reply-markup keyboard}))))
+	      :docs (if-not chat-user
+	              {:text "Chat not linked. Use /start <token> from the app to link."}
+	              (let [session (get-docs-session! chat-id)]
+	                (if (and session (:client-id session))
+	                  {:text "Documents:"
+	                   :reply-markup (docs-menu-inline-keyboard)}
+	                  (let [workspace nil
+	                        res (clients/list-clients conn {:limit 6} workspace)
+	                        client-list (or (:clients res) [])
+	                        prompt (if (seq client-list) "Pick a client:" "No clients available yet.")
+	                        keyboard (docs-client-pick-inline-keyboard client-list)]
+	                    (save-docs-session! chat-id {:stage :docs/client-pick
+	                                                 :user chat-user})
+	                    {:text prompt
+	                     :reply-markup keyboard}))))
       :task (if-not chat-user
               {:text "Chat not linked. Use /start <token> from the app to link."}
               (let [raw (some-> rest (str/split #"\s+" 2) first)
