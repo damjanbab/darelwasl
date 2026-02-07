@@ -33,6 +33,60 @@ function present(v) {
   return s.length ? s : null;
 }
 
+const DEFAULT_TZ = process.env.DARELWASL_TZ || "Asia/Riyadh";
+
+function formatDateOnly(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatDateTime(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function isMidnightInTz(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((p) => p.type === "hour")?.value;
+  const minute = parts.find((p) => p.type === "minute")?.value;
+  return hour === "00" && minute === "00";
+}
+
+function formatDateValue(v) {
+  const raw = present(v);
+  if (!raw) return "—";
+  if (raw === "—") return raw;
+
+  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? raw : formatDateOnly(date);
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+
+  const hasTime = /T\\d{2}:\\d{2}/.test(raw) || /\\d{2}:\\d{2}/.test(raw);
+  if (!hasTime) return formatDateOnly(date);
+  if (isMidnightInTz(date)) return formatDateOnly(date);
+  return formatDateTime(date);
+}
+
 function safeNumber(v) {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   const s = present(v);
@@ -65,7 +119,7 @@ function escapeHtml(s) {
 function buildHtml(input, { logoSvg }) {
   const title = present(input.title) || "ACCOUNT STATEMENT";
   const companyName = present(input.companyName) || "—";
-  const date = present(input.date) || "—";
+  const date = formatDateValue(input.date);
   const clientName = present(input.clientName) || "—";
   const currency = present(input.currency) || "SAR";
 
@@ -82,7 +136,7 @@ function buildHtml(input, { logoSvg }) {
   const paymentRows = payments.length
     ? payments
         .map((p) => {
-          const rowDate = present(p.date) || "—";
+          const rowDate = formatDateValue(p.date);
           const desc = present(p.description) || "—";
           const amount = safeNumber(p.amount);
           const mode = present(p.mode) || "—";
@@ -341,8 +395,8 @@ function buildHtml(input, { logoSvg }) {
       ${remarks ? `<div class="section"><p class="section-title">Remarks</p><div class="remarks">${escapeHtml(remarks)}</div></div>` : ``}
 
       <div class="footer">
-        <div>System-generated document.</div>
-        <div class="right">Generated ${escapeHtml(new Date().toISOString())}</div>
+        <div>Official Dar El Wasl document.</div>
+        <div class="right">Generated ${escapeHtml(formatDateValue(new Date().toISOString()))}</div>
       </div>
     </div>
   </body>

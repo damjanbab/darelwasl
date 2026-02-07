@@ -33,6 +33,61 @@ function present(v) {
   return s.length ? s : null;
 }
 
+const DEFAULT_TZ = process.env.DARELWASL_TZ || "Asia/Riyadh";
+
+function formatDateOnly(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatDateTime(date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function isMidnightInTz(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: DEFAULT_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((p) => p.type === "hour")?.value;
+  const minute = parts.find((p) => p.type === "minute")?.value;
+  return hour === "00" && minute === "00";
+}
+
+function formatDateValue(v) {
+  const raw = present(v);
+  if (!raw) return "—";
+  if (raw === "—") return raw;
+
+  // Accept plain dates like 2026-02-07
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) ? raw : formatDateOnly(date);
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+
+  const hasTime = /T\d{2}:\d{2}/.test(raw) || /\d{2}:\d{2}/.test(raw);
+  if (!hasTime) return formatDateOnly(date);
+  if (isMidnightInTz(date)) return formatDateOnly(date);
+  return formatDateTime(date);
+}
+
 function escapeHtml(s) {
   return String(s || "")
     .replace(/&/g, "&amp;")
@@ -280,7 +335,7 @@ function proposalBody(input) {
                     return `
                       <tr>
                         <td class="mono">${escapeHtml(pick(inv, ["invoice/number", "number", "invoiceNumber", "invoice_number"]) ?? "—")}</td>
-                        <td>${escapeHtml(pick(inv, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"]) ?? "—")}</td>
+                        <td>${escapeHtml(formatDateValue(pick(inv, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"])))}</td>
                         <td>${escapeHtml(String(pick(inv, ["invoice/status", "status"]) ?? "—"))}</td>
                         <td class="cell-amt">${escapeHtml(total)}</td>
                       </tr>
@@ -316,8 +371,8 @@ function invoiceBody(input) {
       <div class="panel">
         <div class="kv">
           ${renderBlock("Invoice #", pick(invoice, ["invoice/number", "number"]) ?? "—")}
-          ${renderBlock("Issued", pick(invoice, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"]) ?? "—")}
-          ${pick(invoice, ["invoice/due-at", "due-at", "dueAt", "due_at"]) ? renderBlock("Due", pick(invoice, ["invoice/due-at", "due-at", "dueAt", "due_at"])) : ""}
+          ${renderBlock("Issued", formatDateValue(pick(invoice, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"])))}
+          ${pick(invoice, ["invoice/due-at", "due-at", "dueAt", "due_at"]) ? renderBlock("Due", formatDateValue(pick(invoice, ["invoice/due-at", "due-at", "dueAt", "due_at"]))) : ""}
           ${renderBlock("Status", String(pick(invoice, ["invoice/status", "status"]) ?? "—"))}
         </div>
       </div>
@@ -377,7 +432,7 @@ function invoiceBody(input) {
                     const amt = safeNumber(pick(p, ["payment/amount", "amount", "paymentAmount", "payment_amount"]));
                     return `
                       <tr>
-                        <td>${escapeHtml(pick(p, ["payment/paid-at", "paid-at", "paidAt", "paid_at"]) ?? "—")}</td>
+                        <td>${escapeHtml(formatDateValue(pick(p, ["payment/paid-at", "paid-at", "paidAt", "paid_at"])))}</td>
                         <td>${escapeHtml(String(pick(p, ["payment/method", "method"]) ?? "—"))}</td>
                         <td class="mono">${escapeHtml(present(pick(p, ["payment/reference", "reference"])) || "—")}</td>
                         <td class="cell-amt">${escapeHtml(formatMoney(amt, invCurrency))}</td>
@@ -418,7 +473,7 @@ function receiptBody(input) {
       <p class="section-title">Payment</p>
       <div class="panel">
         <div class="kv">
-          ${renderBlock("Paid At", pick(payment, ["payment/paid-at", "paid-at", "paidAt", "paid_at"]) ?? "—")}
+          ${renderBlock("Paid At", formatDateValue(pick(payment, ["payment/paid-at", "paid-at", "paidAt", "paid_at"])))}
           ${renderBlock("Method", String(pick(payment, ["payment/method", "method"]) ?? "—"))}
           ${renderBlock("Amount", formatMoney(amount, payCurrency))}
           ${renderBlock("Reference", present(pick(payment, ["payment/reference", "reference"])) || "—")}
@@ -429,12 +484,12 @@ function receiptBody(input) {
     ${
 	      invoice
 	        ? `
-	          <div class="section">
+	      <div class="section">
 	            <p class="section-title">Related Invoice (optional)</p>
 	            <div class="panel">
 	              <div class="kv">
 	                ${renderBlock("Invoice #", pick(invoice, ["invoice/number", "number"]) ?? "—")}
-	                ${renderBlock("Issued", pick(invoice, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"]) ?? "—")}
+	                ${renderBlock("Issued", formatDateValue(pick(invoice, ["invoice/issued-at", "issued-at", "issuedAt", "issued_at"])))}
 	                ${renderBlock("Total", formatMoney(pick(invoice, ["invoice/total-amount", "total-amount", "totalAmount", "total_amount"]), present(pick(invoice, ["invoice/currency", "currency"])) || payCurrency))}
 	              </div>
 	            </div>
@@ -535,7 +590,7 @@ function statusReportBody(input) {
                     const amt = safeNumber(pick(p, ["payment/amount", "amount", "paymentAmount", "payment_amount"]));
                     return `
                       <tr>
-                        <td>${escapeHtml(pick(p, ["payment/paid-at", "paid-at", "paidAt", "paid_at"]) ?? "—")}</td>
+                        <td>${escapeHtml(formatDateValue(pick(p, ["payment/paid-at", "paid-at", "paidAt", "paid_at"])))}</td>
                         <td>${escapeHtml(String(pick(p, ["payment/method", "method"]) ?? "—"))}</td>
                         <td class="mono">${escapeHtml(present(pick(p, ["payment/reference", "reference"])) || "—")}</td>
                         <td class="cell-amt">${escapeHtml(formatMoney(amt, currency))}</td>
@@ -552,7 +607,7 @@ function statusReportBody(input) {
 }
 
 function buildHtml(type, input, { logoSvg }) {
-  const gen = present(input.generatedAt) || new Date().toISOString();
+  const gen = formatDateValue(present(input.generatedAt) || new Date().toISOString());
 
   let title = "";
   let metaLines = [];
@@ -582,7 +637,10 @@ function buildHtml(type, input, { logoSvg }) {
     throw new Error(`Unknown type: ${type}`);
   }
 
-  const contactLines = ["Phone: +966 57 937 3003", "Address: Sari St, Ar Rawdah, Jeddah 23435", "www.darelwasl.com"];
+  const company = input.company || {};
+  const phone = present(pick(company, ["phone", "companyPhone", "company_phone"])) || "+966 57 937 3003";
+  const address = present(pick(company, ["address", "companyAddress", "company_address"])) || "Sari St, Ar Rawdah, Jeddah 23435";
+  const contactLines = [`Phone: ${phone}`, `Address: ${address}`, "www.darelwasl.com"];
 
   return `<!doctype html>
 <html>
@@ -600,8 +658,8 @@ function buildHtml(type, input, { logoSvg }) {
       ${titleBlockHtml({ title, metaLines })}
       ${body}
       <div class="footer">
-        <div></div>
-        <div class="right">Generated ${escapeHtml(new Date().toISOString())}</div>
+        <div>Official Dar El Wasl document.</div>
+        <div class="right">Generated ${escapeHtml(gen)}</div>
       </div>
     </div>
   </body>

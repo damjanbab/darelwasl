@@ -190,12 +190,70 @@
                                                :from {:id 7 :username "smoke"}
                                                :data "dp:day:2026-02-07"
                                                :message {:message_id 21 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (= path "editMessageText") "payment date pick edits message to time picker")
+        (assert! (any-callback-prefix? rm "tp:hour:") "payment time picker has hour buttons")
+        (assert! (has-callback? rm "tp:skip") "payment time picker has Skip time button"))
+
+      ;; typing a time should be rejected (no fallback typing)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 13
+                              :message {:message_id 22 :chat {:id 42} :from {:id 7 :username "smoke"} :text "14:30"}})
       (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "buttons") "typed time is rejected with instruction")
+        (assert! (any-callback-prefix? (:reply_markup payload) "tp:hour:") "re-sends time picker"))
+
+      ;; pick hour -> minute picker shown
+      (reset! calls [])
+      (tg/handle-update state {:update_id 14
+                              :callback_query {:id "cb8"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "tp:hour:14"
+                                               :message {:message_id 21 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (= path "editMessageText") "hour pick edits message to minute picker")
+        (assert! (has-callback? rm "tp:set:1430") "minute picker includes 14:30 option")
+        (assert! (has-callback? rm "tp:back") "minute picker includes Back button"))
+
+      ;; pick minute -> reference step has Skip button
+      (reset! calls [])
+      (tg/handle-update state {:update_id 15
+                              :callback_query {:id "cb9"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "tp:set:1430"
+                                               :message {:message_id 21 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)]
+        (assert! (= path "sendMessage") "time pick prompts for reference")
         (assert! (has-callback? (:reply_markup payload) "docs:payment:ref:skip")
                  "payment reference step has Skip button"))
 
+      ;; skip reference -> note step has Skip button
+      (reset! calls [])
+      (tg/handle-update state {:update_id 16
+                              :callback_query {:id "cb10"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:payment:ref:skip"
+                                               :message {:message_id 23 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)]
+        (assert! (= path "sendMessage") "reference skip prompts for note")
+        (assert! (has-callback? (:reply_markup payload) "docs:payment:note:skip")
+                 "payment note step has Skip button"))
+
+      ;; skip note -> payment is created
+      (reset! calls [])
+      (tg/handle-update state {:update_id 17
+                              :callback_query {:id "cb11"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:payment:note:skip"
+                                               :message {:message_id 24 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)]
+        (assert! (= path "sendMessage") "note skip sends confirmation")
+        (assert! (str/includes? (str (:text payload)) "Payment") "payment added confirmation"))
+
       (println "OK: docs invoice due-date uses inline calendar + No-due-date button")
       (println "OK: docs payment paid-at date requires inline calendar (no skip, no typing fallback)")
-      (println "OK: skip paths are buttons (payment reference skip present)"))))
+      (println "OK: time picker + note step are click-first (no typing fallback)"))))
 
 (run!)

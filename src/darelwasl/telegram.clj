@@ -60,6 +60,11 @@
 (declare ensure-conn)
 (declare bind-chat-for-user!)
 (declare send-document-file!)
+(declare inline-button)
+(declare send-message!)
+(declare edit-message!)
+(declare docs-menu-inline-keyboard)
+(declare docs-payment-reference-inline-keyboard)
 
 (defn- prune-captures!
   []
@@ -374,6 +379,23 @@
     (local-date->date (LocalDate/parse (str/trim (or s ""))))
     (catch Exception _ nil)))
 
+(defn- hhmm->local-time
+  "Parse a callback time token like \"0930\" into a LocalTime."
+  [s]
+  (let [raw (str/trim (or s ""))]
+    (when (re-matches #"\d{4}" raw)
+      (let [h (Integer/parseInt (subs raw 0 2))
+            m (Integer/parseInt (subs raw 2 4))]
+        (when (and (<= 0 h 23) (<= 0 m 59))
+          (java.time.LocalTime/of h m))))))
+
+(defn- local-date-time->date
+  [^LocalDate d ^java.time.LocalTime t]
+  (when (and d t)
+    (let [ldt (.atTime d t)
+          zoned (.atZone ldt (ZoneId/systemDefault))]
+      (Date/from (.toInstant zoned)))))
+
 (defn- prune-docs-sessions!
   []
   (let [cutoff (- (System/currentTimeMillis) docs-ttl-ms)]
@@ -472,6 +494,99 @@
                           (or skip-row [])
                           (or extra-rows [])))]
     {:inline_keyboard rows}))
+
+(defn- time-picker-inline-keyboard
+  "Inline keyboard for picking a time-of-day (hour first). Uses callback data:
+  - tp:hour:<HH>
+  - tp:now
+  - tp:skip"
+  [{:keys [allow-skip? skip-label extra-rows]}]
+  (let [hours (mapv (fn [h]
+                      (let [hh (format "%02d" (int h))]
+                        (inline-button hh (str "tp:hour:" hh))))
+                    (range 0 24))
+        hour-rows (mapv vec (partition-all 4 hours))
+        util-row (cond-> [(inline-button "Now" "tp:now")]
+                   allow-skip? (conj (inline-button (or skip-label "Skip time") "tp:skip")))
+        rows (vec (concat hour-rows
+                          [util-row]
+                          (or extra-rows [])))]
+    {:inline_keyboard rows}))
+
+(defn- time-picker-minutes-inline-keyboard
+  [{:keys [hour allow-skip? skip-label extra-rows]}]
+  (let [hh (format "%02d" (int hour))
+        minute-row (mapv (fn [mm]
+                           (inline-button mm (str "tp:set:" hh mm)))
+                         ["00" "15" "30" "45"])
+        nav-row [(inline-button "Back" "tp:back")
+                 (inline-button "Now" "tp:now")]
+        skip-row (when allow-skip?
+                   [[(inline-button (or skip-label "Skip time") "tp:skip")]])
+        rows (vec (concat [minute-row nav-row]
+                          (or skip-row [])
+                          (or extra-rows [])))]
+    {:inline_keyboard rows}))
+
+(defn- apply-docs-time-picker-set!
+  [state {:keys [chat-id chat-user message-id raw]}]
+  (let [cfg (get-in state [:config :telegram])
+        session (get-docs-session! chat-id)
+        t (hhmm->local-time raw)
+        fmt (java.time.format.DateTimeFormatter/ofPattern "HH:mm")]
+    (when (and session t)
+      (cond
+        (= (:stage session) :docs/payment-time)
+        (let [ymd (get-in session [:draft :payment/paid-date])
+              d (when ymd (try (LocalDate/parse (str ymd)) (catch Exception _ nil)))
+              picked (when d (local-date-time->date d t))]
+          (when picked
+            (save-docs-session! chat-id (-> session
+                                            (assoc :stage :docs/payment-reference)
+                                            (update :draft dissoc :payment/paid-date)
+                                            (assoc-in [:draft :payment/paid-at] picked)))
+            (edit-message! cfg {:chat-id chat-id
+                                :message-id message-id
+                                :text (str "Payment time set: " (.format t fmt))
+                                :reply-markup {:inline_keyboard []}})
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send the payment reference (optional):"
+                                :message-key (str "docs-payment-ref-" (System/currentTimeMillis))
+                                :reply-markup (docs-payment-reference-inline-keyboard)})))
+
+        (= (:stage session) :docs/inv-due-time)
+        (let [ymd (get-in session [:draft :invoice/due-date])
+              d (when ymd (try (LocalDate/parse (str ymd)) (catch Exception _ nil)))
+              picked (when d (local-date-time->date d t))]
+          (when picked
+            (let [draft (:draft session)
+                  actor (actions/actor-from-telegram chat-user)
+                  input (cond-> {:client/id (:client-id session)
+                                 :invoice/number (:invoice/number draft)
+                                 :invoice/total-amount (:invoice/total-amount draft)
+                                 :invoice/status (:invoice/status draft)
+                                 :invoice/due-at picked}
+                          (nil? (:invoice/status draft)) (dissoc :invoice/status))
+                  res (actions/execute! state {:action/id :cap/action/invoice-create
+                                               :actor actor
+                                               :input input})]
+              (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to add invoice: " (:message err))
+                                    :message-key (str "docs-inv-create-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-menu-inline-keyboard)})
+                (do
+                  (edit-message! cfg {:chat-id chat-id
+                                      :message-id message-id
+                                      :text (str "Invoice due time set: " (.format t fmt))
+                                      :reply-markup {:inline_keyboard []}})
+                  (send-message! cfg {:chat-id chat-id
+                                      :text "Invoice added."
+                                      :message-key (str "docs-inv-added-" (System/currentTimeMillis))
+                                      :reply-markup (docs-menu-inline-keyboard)}))))))
+
+        :else nil))))
 
 (defn- latest-pending-reason
   [db task-id]
@@ -665,6 +780,12 @@
   []
   {:inline_keyboard
    [[(inline-button "Skip" "docs:payment:ref:skip")
+     (inline-button "Cancel" "docs:menu")]]})
+
+(defn- docs-payment-note-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Skip" "docs:payment:note:skip")
      (inline-button "Cancel" "docs:menu")]]})
 
 (defn- client-cancel-inline-keyboard
@@ -1692,12 +1813,34 @@
                 (send-message! cfg {:chat-id chat-id
                                     :text "Pick payment date first (buttons)."
                                     :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
+                (do
+                  (save-docs-session! chat-id (-> session
+                                                  (assoc :stage :docs/payment-note)
+                                                  (assoc-in [:draft :payment/reference] (when (present-string? trimmed) trimmed))))
+                  (send-message! cfg {:chat-id chat-id
+                                      :text "Payment note (optional). You can include who sent/received the money, bank details, anything:"
+                                      :message-key (str "docs-payment-note-" (System/currentTimeMillis))
+                                      :reply-markup (docs-payment-note-inline-keyboard)})))))
+
+          :docs/payment-note
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send the payment note, or tap Skip."
+                                :message-key (str "docs-payment-note-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-payment-note-inline-keyboard)})
+            (let [draft (:draft session)
+                  paid-at (:payment/paid-at draft)]
+              (if-not paid-at
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Pick payment date first (buttons)."
+                                    :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
                 (let [input (cond-> {:client/id client-id
                                      :payment/amount (:payment/amount draft)
                                      :payment/method (:payment/method draft)
                                      :payment/paid-at paid-at}
                               (:invoice/id draft) (assoc :invoice/id (:invoice/id draft))
-                              (present-string? trimmed) (assoc :payment/reference trimmed))
+                              (present-string? (:payment/reference draft)) (assoc :payment/reference (:payment/reference draft))
+                              (present-string? trimmed) (assoc :payment/note trimmed))
                       res (actions/execute! state {:action/id :cap/action/payment-create
                                                    :actor actor
                                                    :input input})]
@@ -1711,6 +1854,14 @@
                                         :text "Payment added."
                                         :message-key (str "docs-payment-added-" (System/currentTimeMillis))
                                         :reply-markup (docs-menu-inline-keyboard)}))))))
+
+          :docs/payment-time
+          (send-message! cfg {:chat-id chat-id
+                              :text "Pick payment time using the buttons (optional)."
+                              :message-key (str "docs-payment-time-click-" (System/currentTimeMillis))
+                              :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                          :skip-label "Skip time"
+                                                                          :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})
 
           :docs/payment-date
           (let [month (LocalDate/now (ZoneId/systemDefault))
@@ -1727,9 +1878,9 @@
           :docs/inv-due-date
           (let [month (LocalDate/now (ZoneId/systemDefault))
                 quicks (or (get-in session [:picker :quicks])
-                           [{:id :plus-7 :label "+7 days"}
-                            {:id :plus-14 :label "+14 days"}
-                            {:id :plus-30 :label "+30 days"}])]
+                           [{:id :in-7-days :label "+7 days"}
+                            {:id :in-14-days :label "+14 days"}
+                            {:id :in-30-days :label "+30 days"}])]
             (send-message! cfg {:chat-id chat-id
                                 :text "Use the calendar buttons to choose a due date."
                                 :message-key (str "docs-inv-due-click-" (System/currentTimeMillis))
@@ -1738,6 +1889,14 @@
                                                                             :allow-skip? true
                                                                             :skip-label "No due date"
                                                                             :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+
+          :docs/inv-due-time
+          (send-message! cfg {:chat-id chat-id
+                              :text "Pick invoice due time using the buttons (optional)."
+                              :message-key (str "docs-inv-time-click-" (System/currentTimeMillis))
+                              :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                          :skip-label "Skip time"
+                                                                          :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})
 
           :docs/payment-invoice-attach
           (send-message! cfg {:chat-id chat-id
@@ -2146,36 +2305,50 @@
                                     (send-message! cfg {:chat-id chat-id
                                                         :text "Invalid invoice."
                                                         :message-key (str "docs-payment-invoice-invalid-" (System/currentTimeMillis))})))
-      :docs/payment-ref-skip (let [session (get-docs-session! chat-id)
-                                   draft (:draft session)
-                                   client-id (:client-id session)
-                                   paid-at (:payment/paid-at draft)
-                                   input (cond-> {:client/id client-id
-                                                  :payment/amount (:payment/amount draft)
-                                                  :payment/method (:payment/method draft)
-                                                  :payment/paid-at paid-at}
-                                           (:invoice/id draft) (assoc :invoice/id (:invoice/id draft)))
-                                   res (when (and chat-user session (:client-id session))
-                                         (actions/execute! state {:action/id :cap/action/payment-create
-                                                                  :actor (actions/actor-from-telegram chat-user)
-                                                                  :input input}))]
-                               (if (and chat-user session (:client-id session))
-                                 (if-not paid-at
-                                   (send-message! cfg {:chat-id chat-id
-                                                       :text "Pick payment date first."
-                                                       :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
-                                   (do
-                                   (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
-                                   (if-let [err (:error res)]
-                                     (send-message! cfg {:chat-id chat-id
-                                                         :text (str "Unable to add payment: " (:message err))
-                                                         :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
-                                                         :reply-markup (docs-menu-inline-keyboard)})
-                                     (send-message! cfg {:chat-id chat-id
-                                                         :text "Payment added."
-                                                         :message-key (str "docs-payment-added-" (System/currentTimeMillis))
-                                                         :reply-markup (docs-menu-inline-keyboard)}))))
-                                 (prompt-docs-client-pick! state chat-id)))
+	      :docs/payment-ref-skip (let [session (get-docs-session! chat-id)]
+	                               (if (and chat-user session (:client-id session))
+	                                 (if-not (get-in session [:draft :payment/paid-at])
+	                                   (send-message! cfg {:chat-id chat-id
+	                                                       :text "Pick payment date first."
+	                                                       :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
+	                                   (do
+	                                     (save-docs-session! chat-id (assoc session :stage :docs/payment-note))
+	                                     (send-message! cfg {:chat-id chat-id
+	                                                         :text "Payment note (optional). You can include who sent/received the money, bank details, anything:"
+	                                                         :message-key (str "docs-payment-note-" (System/currentTimeMillis))
+	                                                         :reply-markup (docs-payment-note-inline-keyboard)})))
+	                                 (prompt-docs-client-pick! state chat-id)))
+	      :docs/payment-note-skip (let [session (get-docs-session! chat-id)
+	                                    draft (:draft session)
+	                                    client-id (:client-id session)
+	                                    paid-at (:payment/paid-at draft)
+	                                    input (cond-> {:client/id client-id
+	                                                   :payment/amount (:payment/amount draft)
+	                                                   :payment/method (:payment/method draft)
+	                                                   :payment/paid-at paid-at}
+	                                            (:invoice/id draft) (assoc :invoice/id (:invoice/id draft))
+	                                            (present-string? (:payment/reference draft)) (assoc :payment/reference (:payment/reference draft)))
+	                                    res (when (and chat-user session (:client-id session) paid-at)
+	                                          (actions/execute! state {:action/id :cap/action/payment-create
+	                                                                   :actor (actions/actor-from-telegram chat-user)
+	                                                                   :input input}))]
+	                                (if (and chat-user session (:client-id session))
+	                                  (if-not paid-at
+	                                    (send-message! cfg {:chat-id chat-id
+	                                                        :text "Pick payment date first."
+	                                                        :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
+	                                    (do
+	                                      (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+	                                      (if-let [err (:error res)]
+	                                        (send-message! cfg {:chat-id chat-id
+	                                                            :text (str "Unable to add payment: " (:message err))
+	                                                            :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
+	                                                            :reply-markup (docs-menu-inline-keyboard)})
+	                                        (send-message! cfg {:chat-id chat-id
+	                                                            :text "Payment added."
+	                                                            :message-key (str "docs-payment-added-" (System/currentTimeMillis))
+	                                                            :reply-markup (docs-menu-inline-keyboard)}))))
+	                                  (prompt-docs-client-pick! state chat-id)))
       :docs/generate (let [session (get-docs-session! chat-id)
                            client-id (:client-id session)
                            actor (actions/actor-from-telegram chat-user)
@@ -2370,47 +2543,31 @@
                                                      :text (str "Follow-up date set: " ymd)
                                                      :reply-markup {:inline_keyboard []}})
                                  (send-task-card! state chat-id (get-in res [:result :task]) {}))))
-                           (and picked session (= (:stage session) :docs/payment-date))
-                           (do
-                             (save-docs-session! chat-id (-> session
-                                                             (assoc :stage :docs/payment-reference)
-                                                             (assoc-in [:draft :payment/paid-at] picked)))
-                             (edit-message! cfg {:chat-id chat-id
-                                                 :message-id message-id
-                                                 :text (str "Payment date set: " ymd)
-                                                 :reply-markup {:inline_keyboard []}})
-                             (send-message! cfg {:chat-id chat-id
-                                                 :text "Send the payment reference (optional):"
-                                                 :message-key (str "docs-payment-ref-" (System/currentTimeMillis))
-                                                 :reply-markup (docs-payment-reference-inline-keyboard)}))
-                           (and picked session (= (:stage session) :docs/inv-due-date))
-                           (let [draft (:draft session)
-                                 actor (actions/actor-from-telegram chat-user)
-                                 input (cond-> {:client/id (:client-id session)
-                                                :invoice/number (:invoice/number draft)
-                                                :invoice/total-amount (:invoice/total-amount draft)
-                                                :invoice/status (:invoice/status draft)
-                                                :invoice/due-at picked}
-                                         (nil? (:invoice/status draft)) (dissoc :invoice/status))
-                                 res (actions/execute! state {:action/id :cap/action/invoice-create
-                                                              :actor actor
-                                                              :input input})]
-                             (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
-                             (if-let [err (:error res)]
-                               (send-message! cfg {:chat-id chat-id
-                                                   :text (str "Unable to add invoice: " (:message err))
-                                                   :message-key (str "docs-inv-create-error-" (System/currentTimeMillis))
-                                                   :reply-markup (docs-menu-inline-keyboard)})
-                               (do
-                                 (edit-message! cfg {:chat-id chat-id
-                                                     :message-id message-id
-                                                     :text (str "Invoice due date set: " ymd)
-                                                     :reply-markup {:inline_keyboard []}})
-                                 (send-message! cfg {:chat-id chat-id
-                                                     :text "Invoice added."
-                                                     :message-key (str "docs-inv-added-" (System/currentTimeMillis))
-                                                     :reply-markup (docs-menu-inline-keyboard)}))))
-                           :else nil))
+	                           (and picked session (= (:stage session) :docs/payment-date))
+	                           (do
+	                             (save-docs-session! chat-id (-> session
+	                                                             (assoc :stage :docs/payment-time)
+	                                                             (update :draft dissoc :payment/paid-at :payment/paid-date)
+	                                                             (assoc-in [:draft :payment/paid-date] ymd)))
+	                             (edit-message! cfg {:chat-id chat-id
+	                                                 :message-id message-id
+	                                                 :text "Pick payment time (optional):"
+	                                                 :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+	                                                                                            :skip-label "Skip time"
+	                                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+	                           (and picked session (= (:stage session) :docs/inv-due-date))
+	                           (do
+	                             (save-docs-session! chat-id (-> session
+	                                                             (assoc :stage :docs/inv-due-time)
+	                                                             (update :draft dissoc :invoice/due-at :invoice/due-date)
+	                                                             (assoc-in [:draft :invoice/due-date] ymd)))
+	                             (edit-message! cfg {:chat-id chat-id
+	                                                 :message-id message-id
+	                                                 :text "Pick invoice due time (optional):"
+	                                                 :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+	                                                                                            :skip-label "Skip time"
+	                                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+	                           :else nil))
       :date-picker/quick (let [quick-id (some-> (:value parsed) keyword)
                                today (LocalDate/now (ZoneId/systemDefault))
                                pending (get-pending-reason! chat-id)
@@ -2458,7 +2615,7 @@
                                                       :message-id message-id
                                                       :text "Follow-up set without a date."
                                                       :reply-markup {:inline_keyboard []}})
-                                  (send-task-card! state chat-id (get-in res [:result :task]) {}))))))
+                                  (send-task-card! state chat-id (get-in res [:result :task]) {})))))
                           (let [session (get-docs-session! chat-id)]
                             (when (and session (= (:stage session) :docs/inv-due-date))
                               (let [draft (:draft session)
@@ -2482,14 +2639,50 @@
                                                         :message-id message-id
                                                         :text "No due date set."
                                                         :reply-markup {:inline_keyboard []}})
-	                                    (send-message! cfg {:chat-id chat-id
-	                                                        :text "Invoice added."
-	                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
-	                                                        :reply-markup (docs-menu-inline-keyboard)}))))))
-	      :pending/reason (let [tid (:task-id parsed)
-	                            task-id (try (UUID/fromString tid) (catch Exception _ nil))
-	                            reason-id (:value parsed)
-	                            current (get-pending-reason! chat-id)]
+		                                    (send-message! cfg {:chat-id chat-id
+		                                                        :text "Invoice added."
+		                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
+		                                                        :reply-markup (docs-menu-inline-keyboard)}))))))
+                          )
+      :time-picker/now (let [now-time (.toLocalTime (java.time.ZonedDateTime/now (ZoneId/systemDefault)))
+                             raw (.format now-time (java.time.format.DateTimeFormatter/ofPattern "HHmm"))]
+                         (apply-docs-time-picker-set! state {:chat-id chat-id
+                                                             :chat-user chat-user
+                                                             :message-id message-id
+                                                             :raw raw}))
+      :time-picker/hour (let [session (get-docs-session! chat-id)
+                              raw (:value parsed)
+                              hour (when (re-matches #"\d{2}" (str raw))
+                                     (try (Integer/parseInt (str raw)) (catch Exception _ nil)))]
+                          (when (and session (number? hour) (<= 0 hour 23)
+                                     (#{:docs/payment-time :docs/inv-due-time} (:stage session)))
+                            (edit-message! cfg {:chat-id chat-id
+                                                :message-id message-id
+                                                :text (str "Pick minutes for " (format "%02d" (int hour)) ":")
+                                                :reply-markup (time-picker-minutes-inline-keyboard {:hour hour
+                                                                                                    :allow-skip? true
+                                                                                                    :skip-label "Skip time"
+                                                                                                    :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})))
+      :time-picker/back (let [session (get-docs-session! chat-id)]
+                          (when (and session (#{:docs/payment-time :docs/inv-due-time} (:stage session)))
+                            (edit-message! cfg {:chat-id chat-id
+                                                :message-id message-id
+                                                :text "Pick time (optional):"
+                                                :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                                            :skip-label "Skip time"
+                                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})))
+      :time-picker/set (apply-docs-time-picker-set! state {:chat-id chat-id
+                                                           :chat-user chat-user
+                                                           :message-id message-id
+                                                           :raw (:value parsed)})
+      :time-picker/skip (apply-docs-time-picker-set! state {:chat-id chat-id
+                                                            :chat-user chat-user
+                                                            :message-id message-id
+                                                            :raw "0000"})
+		      :pending/reason (let [tid (:task-id parsed)
+		                            task-id (try (UUID/fromString tid) (catch Exception _ nil))
+		                            reason-id (:value parsed)
+		                            current (get-pending-reason! chat-id)]
                         (if (and chat-user task-id (or (nil? current) (= (:task-id current) task-id)))
                           (if (= "custom" reason-id)
                             (let [task (find-user-task conn (:user/id chat-user) task-id)
@@ -2837,6 +3030,16 @@
                    :value (nth parts 2 nil)}
           "skip" {:type :date-picker/skip}
           nil)
+        "tp"
+        (case (second parts)
+          "now" {:type :time-picker/now}
+          "hour" {:type :time-picker/hour
+                  :value (nth parts 2 nil)}
+          "back" {:type :time-picker/back}
+          "set" {:type :time-picker/set
+                 :value (nth parts 2 nil)}
+          "skip" {:type :time-picker/skip}
+          nil)
         "docs"
         (case (second parts)
           "cancel" {:type :docs/cancel}
@@ -2856,20 +3059,23 @@
                       "status" {:type :docs/invoice-status
                                 :value (nth parts 3 nil)}
                       nil)
-          "payment" (case (nth parts 2 nil)
-                      "add" {:type :docs/payment-add}
-                      "method" {:type :docs/payment-method
-                                :value (nth parts 3 nil)}
-                      "invoice" (case (nth parts 3 nil)
-                                  "pick" {:type :docs/payment-invoice-pick}
-                                  "set" {:type :docs/payment-invoice-set
-                                         :invoice-id (nth parts 4 nil)}
-                                  "skip" {:type :docs/payment-invoice-skip}
-                                  nil)
-                      "ref" (case (nth parts 3 nil)
-                              "skip" {:type :docs/payment-ref-skip}
-                              nil)
-                      nil)
+	          "payment" (case (nth parts 2 nil)
+	                      "add" {:type :docs/payment-add}
+	                      "method" {:type :docs/payment-method
+	                                :value (nth parts 3 nil)}
+	                      "note" (case (nth parts 3 nil)
+	                               "skip" {:type :docs/payment-note-skip}
+	                               nil)
+	                      "invoice" (case (nth parts 3 nil)
+	                                  "pick" {:type :docs/payment-invoice-pick}
+	                                  "set" {:type :docs/payment-invoice-set
+	                                         :invoice-id (nth parts 4 nil)}
+	                                  "skip" {:type :docs/payment-invoice-skip}
+	                                  nil)
+	                      "ref" (case (nth parts 3 nil)
+	                              "skip" {:type :docs/payment-ref-skip}
+	                              nil)
+	                      nil)
           "generate" (case (nth parts 2 nil)
                        "proposal" {:type :docs/generate
                                    :value :proposal}
