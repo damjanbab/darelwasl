@@ -103,8 +103,8 @@ function baseStyles() {
     .page { padding: 42px 44px; }
 
     .header {
-      display: grid;
-      grid-template-columns: auto 1fr auto;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
       gap: 16px;
       padding-bottom: 18px;
@@ -115,7 +115,7 @@ function baseStyles() {
     .logo svg { width: var(--logo-width); height: auto; display: block; }
     .logo-fallback { width: var(--logo-width); height: 68px; border: 2px solid var(--accent); border-radius: 10px; }
 
-    .title-block { text-align: center; }
+    .doc-title-block { text-align: center; margin-top: 18px; }
     .title { margin: 0; font-size: 22px; letter-spacing: 1.8px; font-weight: 800; color: var(--ink); }
     .meta-line { margin: 6px 0 0; color: var(--muted); font-size: 11px; font-weight: 400; }
 
@@ -208,21 +208,26 @@ function baseStyles() {
   `;
 }
 
-function headerHtml({ title, metaLines, logoSvg, contactLines }) {
+function headerHtml({ logoSvg, contactLines }) {
   const logoMarkup = logoSvg
     ? `<div class="logo" aria-hidden="true">${logoSvg}</div>`
     : `<div class="logo-fallback" aria-hidden="true"></div>`;
-  const meta = Array.isArray(metaLines) ? metaLines : [];
   const contact = Array.isArray(contactLines) ? contactLines.filter((l) => present(l)) : [];
 
   return `
     <div class="header">
       <div class="brand">${logoMarkup}</div>
-      <div class="title-block">
-        <h1 class="title">${escapeHtml(title)}</h1>
-        ${meta.map((l) => `<p class="meta-line">${l}</p>`).join("\n")}
-      </div>
       <div class="contact">${escapeHtml(contact.join("\n"))}</div>
+    </div>
+  `;
+}
+
+function titleBlockHtml({ title, metaLines }) {
+  const meta = Array.isArray(metaLines) ? metaLines : [];
+  return `
+    <div class="doc-title-block">
+      <h1 class="title">${escapeHtml(title)}</h1>
+      ${meta.map((l) => `<p class="meta-line">${l}</p>`).join("\n")}
     </div>
   `;
 }
@@ -591,7 +596,8 @@ function buildHtml(type, input, { logoSvg }) {
   </head>
   <body>
     <div class="page">
-      ${headerHtml({ title, metaLines, logoSvg, contactLines })}
+      ${headerHtml({ logoSvg, contactLines })}
+      ${titleBlockHtml({ title, metaLines })}
       ${body}
       <div class="footer">
         <div></div>

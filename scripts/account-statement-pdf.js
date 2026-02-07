@@ -142,8 +142,8 @@ function buildHtml(input, { logoSvg }) {
       }
 
       .header {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
+        display: flex;
+        justify-content: space-between;
         align-items: center;
         gap: 16px;
         padding-bottom: 18px;
@@ -154,7 +154,7 @@ function buildHtml(input, { logoSvg }) {
       .logo svg { width: var(--logo-width); height: auto; display: block; }
       .logo-fallback { width: var(--logo-width); height: 68px; border: 2px solid var(--accent); border-radius: 10px; }
 
-      .title-block { text-align: center; }
+      .doc-title-block { text-align: center; margin-top: 18px; }
       .title { margin: 0; font-size: 20px; letter-spacing: 1px; font-weight: 800; color: var(--ink); }
       .meta-line { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 
@@ -277,12 +277,13 @@ function buildHtml(input, { logoSvg }) {
     <div class="page">
       <div class="header">
         <div class="brand">${logoMarkup}</div>
-        <div class="title-block">
-          <h1 class="title">${escapeHtml(title)}</h1>
-          <p class="meta-line"><strong>Date:</strong> ${escapeHtml(date)}</p>
-          ${statementId ? `<p class="meta-line"><strong>Statement ID:</strong> ${escapeHtml(statementId)}</p>` : ``}
-        </div>
         <div class="contact">${escapeHtml(contactLines.join("\n"))}</div>
+      </div>
+
+      <div class="doc-title-block">
+        <h1 class="title">${escapeHtml(title)}</h1>
+        <p class="meta-line"><strong>Date:</strong> ${escapeHtml(date)}</p>
+        ${statementId ? `<p class="meta-line"><strong>Statement ID:</strong> ${escapeHtml(statementId)}</p>` : ``}
       </div>
 
       <div class="section">
