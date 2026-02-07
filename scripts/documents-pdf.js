@@ -15,6 +15,8 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
+const TEMPLATE_VERSION = "pdf-v3-2026-02-07";
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -607,7 +609,11 @@ function statusReportBody(input) {
 }
 
 function buildHtml(type, input, { logoSvg }) {
-  const gen = formatDateValue(present(input.generatedAt) || new Date().toISOString());
+  const templateVersion = present(input.templateVersion) || TEMPLATE_VERSION;
+  const issuedAtRaw = present(input.issuedAt) || present(input.generatedAt) || new Date().toISOString();
+  const issuedAt = formatDateValue(issuedAtRaw);
+  const docRef = present(input.documentRef);
+  const verificationCode = present(input.verificationCode);
 
   let title = "";
   let metaLines = [];
@@ -615,23 +621,23 @@ function buildHtml(type, input, { logoSvg }) {
 
   if (type === "proposal") {
     title = "PROPOSAL";
-    metaLines = [`<strong>Date:</strong> ${escapeHtml(gen)}`];
+    metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
     body = proposalBody(input);
   } else if (type === "invoice") {
     title = "INVOICE";
     const inv = input.invoice || {};
     metaLines = [
-      `<strong>Date:</strong> ${escapeHtml(gen)}`,
+      `<strong>Date:</strong> ${escapeHtml(issuedAt)}`,
       `<strong>Invoice:</strong> ${escapeHtml(present(pick(inv, ["invoice/number", "number"])) || "—")}`,
     ];
     body = invoiceBody(input);
   } else if (type === "receipt") {
     title = "RECEIPT";
-    metaLines = [`<strong>Date:</strong> ${escapeHtml(gen)}`];
+    metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
     body = receiptBody(input);
   } else if (type === "status-report") {
     title = "STATUS REPORT";
-    metaLines = [`<strong>Date:</strong> ${escapeHtml(gen)}`];
+    metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
     body = statusReportBody(input);
   } else {
     throw new Error(`Unknown type: ${type}`);
@@ -659,7 +665,11 @@ function buildHtml(type, input, { logoSvg }) {
       ${body}
       <div class="footer">
         <div>Official Dar El Wasl document.</div>
-        <div class="right">Generated ${escapeHtml(gen)}</div>
+        <div class="right">
+          ${docRef ? `Document: <span class="mono">${escapeHtml(docRef)}</span><br/>` : ""}
+          ${verificationCode ? `Verify: <span class="mono">${escapeHtml(verificationCode)}</span><br/>` : ""}
+          Issued ${escapeHtml(issuedAt)} · ${escapeHtml(templateVersion)}
+        </div>
       </div>
     </div>
   </body>

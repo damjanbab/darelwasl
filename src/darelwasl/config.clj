@@ -46,6 +46,9 @@
             :prs-per-page 20
             :commits-per-pr 10}
    :files {:storage-dir "data/files"}
+   :documents {:verify-secret nil
+               :renderer :node-playwright
+               :template-version "pdf-v3-2026-02-07"}
    :outbox {:worker-enabled? false
             :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -150,6 +153,13 @@
         (assoc-in [:site :enabled?]
                   (env-bool (get env "SITE_ENABLED")
                             (get-in default-config [:site :enabled?])))
+        (assoc :documents
+               {:verify-secret (env-str (get env "DOCUMENT_VERIFY_SECRET")
+                                        (get-in default-config [:documents :verify-secret]))
+                :renderer (keyword (str/lower-case (env-str (get env "DOCUMENT_RENDERER")
+                                                          (name (get-in default-config [:documents :renderer])))))
+                :template-version (env-str (get env "DOCUMENT_TEMPLATE_VERSION")
+                                           (get-in default-config [:documents :template-version]))})
         (assoc :telegram
                (let [raw-profile (some-> (get env "TELEGRAM_PROFILE") str/trim)
                      profile (when-not (str/blank? raw-profile) (str/lower-case raw-profile))

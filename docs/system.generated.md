@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `541abbb7848af6972772eb5f7ade123f9cd1eb7bfe3136a28d12e82560c93677`
+- Catalog version: `3f1d9d9c6fcd605749d1aa51b06772cc1a1ab15baa75a9df136cdf016f75b488`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (40)
+### Schema (41)
 - schema/activation-step
 - schema/betting-bet
 - schema/betting-bookmaker
@@ -23,6 +23,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/content-page
 - schema/content-tag
 - schema/doc-pack
+- schema/document
 - schema/entity
 - schema/faq
 - schema/file
@@ -49,7 +50,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (81)
+### Actions (87)
 - action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
@@ -62,6 +63,9 @@ This file is auto-generated. Do not edit by hand.
 - action/agent-control-run-list
 - action/agent-control-run-revise
 - action/agent-control-trash
+- action/analytics-funnel
+- action/analytics-outstanding-invoices
+- action/analytics-revenue-by-month
 - action/auth-login
 - action/betting-bet-log
 - action/betting-close
@@ -80,6 +84,9 @@ This file is auto-generated. Do not edit by hand.
 - action/content-v2
 - action/doc-pack-read
 - action/doc-pack-upsert
+- action/document-issue
+- action/document-latest
+- action/document-verify
 - action/file-delete
 - action/file-read
 - action/file-upload
@@ -321,6 +328,9 @@ This file is auto-generated. Do not edit by hand.
 - DATOMIC_DB_NAME
 - DATOMIC_STORAGE_DIR
 - DATOMIC_SYSTEM
+- DOCUMENT_RENDERER
+- DOCUMENT_TEMPLATE_VERSION
+- DOCUMENT_VERIFY_SECRET
 - FILES_STORAGE_DIR
 - GITHUB_API_URL
 - GITHUB_COMMITS_PER_PR
@@ -338,22 +348,18 @@ This file is auto-generated. Do not edit by hand.
 - SITE_BASE_PATH
 - SITE_ENABLED
 - SITE_HOST
+- SITE_LEAD_EMAIL_TO
 - SITE_LOGO_FILE_ID
+- SITE_MAIL_FROM
 - SITE_PORT
+- SITE_SMTP_HOST
+- SITE_SMTP_PASS
+- SITE_SMTP_PORT
+- SITE_SMTP_STARTTLS
+- SITE_SMTP_USER
 - SUPERSPORT_BASE_URL
 - SUPERSPORT_TIMEOUT_MS
-- TELEGRAM_AUTO_BIND_USERNAME
-- TELEGRAM_AUTO_SET_WEBHOOK
-- TELEGRAM_BOT_TOKEN
-- TELEGRAM_COMMANDS_ENABLED
-- TELEGRAM_HTTP_TIMEOUT_MS
-- TELEGRAM_LINK_TOKEN_TTL_MS
-- TELEGRAM_NOTIFICATIONS_ENABLED
-- TELEGRAM_POLLING_ENABLED
-- TELEGRAM_POLLING_INTERVAL_MS
-- TELEGRAM_WEBHOOK_BASE_URL
-- TELEGRAM_WEBHOOK_ENABLED
-- TELEGRAM_WEBHOOK_SECRET
+- TELEGRAM_PROFILE
 
 ## Scripts
 
@@ -369,11 +375,13 @@ This file is auto-generated. Do not edit by hand.
 - operations.json
 - plan.schema.json
 - preview
+- promote-live.sh
 - run-service.sh
 - site-screenshot.js
 - spec.schema.json
 - test-system.sh
 - tester_actions.py
+- tg-docs-flow-smoke.clj
 - tg-spinup.sh
 - tg-watch-webhook.sh
 - theme-css-vars.sh
@@ -402,6 +410,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.db
 - darelwasl.docs.generate
 - darelwasl.documents
+- darelwasl.email
 - darelwasl.entity
 - darelwasl.events
 - darelwasl.features.agent-control

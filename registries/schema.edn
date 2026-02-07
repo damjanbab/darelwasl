@@ -543,6 +543,81 @@
                   :flags []}
   :related {:schema [:cap/schema/client :cap/schema/invoice :cap/schema/entity]}}
 
+ {:id :cap/schema/document
+  :title "Issued Document"
+  :version "v1"
+  :attributes
+  [{:ident :document/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Document identity"}
+   {:ident :document/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Workspace-scoped unique key (workspace::type::subject::template-version::payload-hash)"}
+   {:ident :document/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :document/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Document type"}
+   {:ident :document/template
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Renderer/template family (e.g. pdf)"}
+   {:ident :document/template-version
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Template version identifier"}
+   {:ident :document/issued-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Issuance timestamp"}
+   {:ident :document/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Client linked to this document (ref to :client/id)"}
+   {:ident :document/subject-type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Subject type keyword (:client/:invoice/:payment)"}
+   {:ident :document/subject-id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :doc "Subject UUID for the document (client/invoice/payment id)"}
+   {:ident :document/payload-hash
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "SHA-256 of canonical render payload"}
+   {:ident :document/file
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Stored PDF file (ref to :file/id)"}
+   {:ident :document/verification-code
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Verification code printed on the document"}
+   {:ident :document/verification-alg
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Verification algorithm identifier"}]
+  :enums {:document/type [:proposal :invoice :receipt :status-report]
+          :document/verification-alg [:hmac-sha256/v1]
+          :document/subject-type [:client :invoice :payment]}
+  :invariants ["document/key unique (idempotent issuance)"
+               "Document must reference a stored file"
+               "Document must set :entity/type to :entity.type/document"
+               "Workspace required"]
+  :history {:strategy :append}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/file :cap/schema/entity]}}
+
  {:id :cap/schema/parcel
   :title "Parcel"
   :version "v1"

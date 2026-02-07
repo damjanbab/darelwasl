@@ -1,9 +1,12 @@
 (ns darelwasl.checks.actions
   (:require [clojure.string :as str]
             [datomic.client.api :as d]
+            [darelwasl.actions :as actions]
             [darelwasl.auth :as auth]
             [darelwasl.clients :as clients]
+            [darelwasl.config :as config]
             [darelwasl.content :as content]
+            [darelwasl.documents :as documents]
             [darelwasl.fixtures :as fixtures]
             [darelwasl.tasks :as tasks]
             [darelwasl.users :as users])
@@ -331,6 +334,67 @@
     (when created-tag
       (ensure-success failures "Delete content tag" (content/delete-tag! conn (:content.tag/id created-tag) actor)))))
 
+(defn- documents-checks
+  [conn failures actor]
+  (let [state {:config (config/load-config)
+               :db {:conn conn}}
+        client-id clients/default-client-id]
+    (let [issued (documents/issue-document! state {:type :proposal
+                                                   :input {:client/id client-id}
+                                                   :actor actor})
+          issued2 (documents/issue-document! state {:type :proposal
+                                                    :input {:client/id client-id}
+                                                    :actor actor})]
+      (when-not (success? issued)
+        (fail! failures "Issue proposal failed" issued))
+      (when-not (success? issued2)
+        (fail! failures "Issue proposal (second call) failed" issued2))
+      (when (and (success? issued) (success? issued2))
+        (let [d1 (:document issued)
+              d2 (:document issued2)]
+          (when-not (= (:document/id d1) (:document/id d2))
+            (fail! failures "Issuing same proposal twice should reuse the same document/id"
+                   {:first (:document/id d1)
+                    :second (:document/id d2)}))
+          (let [ver (documents/verify-document! state {:input {:document/ref (:entity/ref d1)
+                                                               :document/verification-code (:document/verification-code d1)}
+                                                       :actor actor})]
+            (when-not (true? (:document/valid? ver))
+              (fail! failures "Issued document should verify" ver)))
+          (let [forced (documents/issue-document! state {:type :proposal
+                                                         :input {:client/id client-id
+                                                                 :document/force? true}
+                                                         :actor actor})]
+            (when-not (success? forced)
+              (fail! failures "Force issue proposal failed" forced))
+            (let [d3 (:document forced)]
+              (when (and d3 (= (:document/id d1) (:document/id d3)))
+                (fail! failures "Force issue should create a new document/id"
+                       {:first (:document/id d1)
+                        :forced (:document/id d3)}))
+              (let [latest (documents/latest-document! state {:type :proposal
+                                                              :input {:client/id client-id}
+                                                              :actor actor})]
+                (when-not (success? latest)
+                  (fail! failures "Latest document fetch failed" latest))
+                (when (and (success? latest) d3)
+                  (when-not (= (:document/id (:document latest)) (:document/id d3))
+                    (fail! failures "Latest should return forced-issued document"
+                           {:latest (:document/id (:document latest))
+                            :expected (:document/id d3)})))))))))
+    ;; Payment create should auto-issue a receipt document.
+    (let [res (actions/execute! state {:action/id :cap/action/payment-create
+                                       :actor actor
+                                       :input {:client/id client-id
+                                               :payment/amount 123.45
+                                               :payment/method :cash}})
+          receipt (get-in res [:result :receipt])]
+      (when-let [err (:error res)]
+        (fail! failures "Payment create action failed" err))
+      (when-not (and (map? receipt) (get receipt :document) (get receipt :file))
+        (fail! failures "Payment create should include :receipt {:document .. :file ..}"
+               {:result (:result res)})))))
+
 (defn run-check!
   []
   (let [failures (atom [])]
@@ -343,7 +407,8 @@
                   state' (assoc auth-state :tag-index (tag-index conn))]
               (check-listing conn failures (:tag-index state'))
               (check-mutations conn failures state')
-              (content-checks conn failures (:actor auth-state))))))
+              (content-checks conn failures (:actor auth-state))
+              (documents-checks conn failures (:actor auth-state))))))
       (catch Exception e
         (fail! failures "Action contract checks crashed" (.getMessage e))))
     (if (seq @failures)

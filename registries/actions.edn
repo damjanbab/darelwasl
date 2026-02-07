@@ -1315,7 +1315,8 @@
            :payment/reference :string?
            :payment/note :string?}
   :outputs {:payment :map}
-  :side-effects ["Persist payment"]
+  :side-effects ["Persist payment"
+                 "Issue (or reuse) an immutable receipt document for the payment"]
   :adapter {:integration :local/db}
   :audit {:records [:payment/change]
           :fields [:client/id :invoice/id :payment/amount]}
@@ -1361,12 +1362,13 @@
             :renderer :cap/tooling/documents-pdf}
   :audit {:records [:document/generate]
           :fields [:client/id]}
-  :idempotency {:strategy :none}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id]}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/doc-pack :cap/schema/file]
+  :related {:schema [:cap/schema/doc-pack :cap/schema/document :cap/schema/file]
             :views [:cap/view/file-library]}
   :tooling [:cap/tooling/documents-pdf]}
 
@@ -1385,12 +1387,13 @@
             :renderer :cap/tooling/documents-pdf}
   :audit {:records [:document/generate]
           :fields [:client/id :invoice/id]}
-  :idempotency {:strategy :none}
+  :idempotency {:strategy :dedupe-on
+                :keys [:invoice/id]}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/invoice :cap/schema/file]
+  :related {:schema [:cap/schema/invoice :cap/schema/document :cap/schema/file]
             :views [:cap/view/file-library]}
   :tooling [:cap/tooling/documents-pdf]}
 
@@ -1409,12 +1412,13 @@
             :renderer :cap/tooling/documents-pdf}
   :audit {:records [:document/generate]
           :fields [:client/id :payment/id]}
-  :idempotency {:strategy :none}
+  :idempotency {:strategy :dedupe-on
+                :keys [:payment/id]}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/payment :cap/schema/file]
+  :related {:schema [:cap/schema/payment :cap/schema/document :cap/schema/file]
             :views [:cap/view/file-library]}
   :tooling [:cap/tooling/documents-pdf]}
 
@@ -1432,14 +1436,149 @@
             :renderer :cap/tooling/documents-pdf}
   :audit {:records [:document/generate]
           :fields [:client/id]}
-  :idempotency {:strategy :none}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id]}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/doc-pack :cap/schema/invoice :cap/schema/payment :cap/schema/file]
+  :related {:schema [:cap/schema/doc-pack :cap/schema/invoice :cap/schema/payment :cap/schema/document :cap/schema/file]
             :views [:cap/view/file-library]}
   :tooling [:cap/tooling/documents-pdf]}
+
+ {:id :cap/action/document-issue
+  :title "Document Issue"
+  :version "v1"
+  :purpose "Issue an immutable document (or return an existing issued copy when unchanged)."
+  :inputs {:document/type :keyword
+           :client/id :uuid
+           :invoice/id :uuid?
+           :payment/id :uuid?
+           :document/force? :boolean?
+           :file/slug :string?}
+  :outputs {:document :map
+            :file :map}
+  :side-effects ["Render PDF" "Store PDF file" "Persist issued document record"]
+  :adapter {:integration :cap/integration/local-file-store
+            :renderer :cap/tooling/documents-pdf}
+  :audit {:records [:document/issue]
+          :fields [:document/type :client/id :invoice/id :payment/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:document/type :client/id :invoice/id :payment/id :document/force?]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/invoice :cap/schema/payment]
+            :views [:cap/view/file-library]}
+  :tooling [:cap/tooling/documents-pdf]}
+
+ {:id :cap/action/document-latest
+  :title "Document Latest"
+  :version "v1"
+  :purpose "Fetch the latest issued document for a given subject and type."
+  :inputs {:document/type :keyword
+           :client/id :uuid
+           :invoice/id :uuid?
+           :payment/id :uuid?}
+  :outputs {:document :map
+            :file :map}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:document/read]
+          :fields [:document/type :client/id :invoice/id :payment/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/invoice :cap/schema/payment]
+            :views [:cap/view/file-library]}
+  :tooling []}
+
+ {:id :cap/action/document-verify
+  :title "Document Verify"
+  :version "v1"
+  :purpose "Verify a document ref + verification code pair (server-side, deterministic)."
+  :inputs {:document/ref :string
+           :document/verification-code :string}
+  :outputs {:document/valid? :boolean
+            :document :map?}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:document/verify]
+          :fields [:document/ref]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/document]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/analytics-revenue-by-month
+  :title "Analytics Revenue By Month"
+  :version "v1"
+  :purpose "Sum payments by calendar month."
+  :inputs {:client/id :uuid?
+           :from :instant?
+           :to :instant?}
+  :outputs {:series :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:analytics/read]
+          :fields [:from :to :client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment :cap/schema/client]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/analytics-outstanding-invoices
+  :title "Analytics Outstanding Invoices"
+  :version "v1"
+  :purpose "Compute outstanding balance per invoice and totals."
+  :inputs {:client/id :uuid?
+           :as-of :instant?}
+  :outputs {:invoices :vector
+            :totals :map}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:analytics/read]
+          :fields [:client/id :as-of]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/invoice :cap/schema/payment :cap/schema/client]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/analytics-funnel
+  :title "Analytics Document Funnel"
+  :version "v1"
+  :purpose "Count issued documents by type (proposal → invoice → receipt) for a period."
+  :inputs {:from :instant?
+           :to :instant?
+           :client/id :uuid?}
+  :outputs {:counts :map}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:analytics/read]
+          :fields [:from :to :client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/document :cap/schema/client]
+            :views []}
+  :tooling []}
 
  {:id :cap/action/workspace-promote
   :title "Workspace Promote"

@@ -729,10 +729,10 @@
     [(inline-button "Status notes" "docs:field:status-notes")]
     [(inline-button "Add invoice" "docs:invoice:add")
      (inline-button "Add payment" "docs:payment:add")]
-    [(inline-button "Proposal PDF" "docs:generate:proposal")
-     (inline-button "Status report PDF" "docs:generate:status-report")]
-    [(inline-button "Invoice PDF" "docs:generate:invoice:pick")
-     (inline-button "Receipt PDF" "docs:generate:receipt:pick")]
+    [(inline-button "Issue proposal PDF" "docs:generate:proposal")
+     (inline-button "Issue status report PDF" "docs:generate:status-report")]
+    [(inline-button "Invoice PDF (latest)" "docs:generate:invoice:pick")
+     (inline-button "Receipt PDF (latest)" "docs:generate:receipt:pick")]
     [(inline-button "Change client" "docs:client:pick")
      (inline-button "Close" "docs:cancel")]]})
 

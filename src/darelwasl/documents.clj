@@ -14,9 +14,12 @@
             [darelwasl.workspace :as workspace])
   (:import (java.nio.file Files)
            (java.nio.file.attribute FileAttribute)
+           (java.security MessageDigest)
            (java.time Instant)
            (java.time.format DateTimeFormatter)
-           (java.util Date UUID)))
+           (java.util Date UUID)
+           (javax.crypto Mac)
+           (javax.crypto.spec SecretKeySpec)))
 
 (def ^:private iso-formatter DateTimeFormatter/ISO_INSTANT)
 (def ^:private param-value v/param-value)
@@ -494,21 +497,31 @@
                                           :else (str k)))))))
 
 (defn- render-pdf!
-  [{:keys [type payload]}]
+  [{:keys [type payload renderer]}]
   (let [dir (temp-dir!)
         input-path (.getPath (io/file dir "input.json"))
         out-path (.getPath (io/file dir (str (name type) ".pdf")))]
     (write-json! input-path payload)
-    (let [res (sh/sh "node" "scripts/documents-pdf.js"
-                     "--type" (name type)
-                     "--input" input-path
-                     "--out" out-path)]
-      (when-not (zero? (:exit res))
-        (throw (ex-info "Document PDF render failed"
-                        {:type type
-                         :exit (:exit res)
-                         :out (:out res)
-                         :err (:err res)}))))
+    (case (or renderer :node-playwright)
+      :stub
+      (do
+        (spit out-path "%PDF-1.4\n%stub\n1 0 obj<</Type/Catalog>>endobj\nxref\n0 2\n0000000000 65535 f \n0000000015 00000 n \ntrailer<</Size 2/Root 1 0 R>>\nstartxref\n0\n%%EOF\n")
+        {:ok true})
+
+      :node-playwright
+      (let [res (sh/sh "node" "scripts/documents-pdf.js"
+                       "--type" (name type)
+                       "--input" input-path
+                       "--out" out-path)]
+        (when-not (zero? (:exit res))
+          (throw (ex-info "Document PDF render failed"
+                          {:type type
+                           :exit (:exit res)
+                           :out (:out res)
+                           :err (:err res)}))))
+
+      (throw (ex-info "Unknown documents renderer"
+                      {:renderer renderer})))
     {:dir dir
      :pdf-file (io/file out-path)}))
 
@@ -528,6 +541,624 @@
                 :tempfile pdf-file
                 :size (.length ^java.io.File pdf-file)}]
     (files/create-file! conn {:file upload :slug slug} actor storage-dir)))
+
+(declare base-context
+         client-eid
+         pull-client!
+         pull-doc-pack!
+         invoices-for-client
+         payments-for-client
+         tasks-summary-for-client)
+
+(def ^:private documents-template "pdf")
+(def ^:private verification-alg :hmac-sha256/v1)
+
+(defn- documents-config
+  [state]
+  (let [cfg (get-in state [:config :documents] {})]
+    {:template-version (or (:template-version cfg) "pdf-v3-2026-02-07")
+     :verify-secret (:verify-secret cfg)
+     :renderer (or (:renderer cfg) :node-playwright)}))
+
+(defn- normalize-json-key
+  [k]
+  (cond
+    (keyword? k) (subs (str k) 1)
+    (string? k) k
+    :else (str k)))
+
+(defn- canonical-json-value
+  [v]
+  (cond
+    (keyword? v) (subs (str v) 1)
+    (uuid? v) (str v)
+    (instance? Date v) (format-inst v)
+    (map? v) (into (sorted-map)
+                   (map (fn [[k vv]]
+                          [(normalize-json-key k) (canonical-json-value vv)]))
+                   v)
+    (sequential? v) (mapv canonical-json-value v)
+    :else v))
+
+(defn- canonical-json-str
+  [v]
+  (json/write-str (canonical-json-value v)))
+
+(defn- sha256-hex
+  [^String s]
+  (let [digest (MessageDigest/getInstance "SHA-256")
+        bytes (.getBytes s "UTF-8")]
+    (.update digest bytes)
+    (format "%064x" (java.math.BigInteger. 1 (.digest digest)))))
+
+(def ^:private base32-alphabet
+  (vec "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"))
+
+(defn- base32-encode
+  "RFC 4648 base32 (no padding)."
+  [^bytes bs]
+  (let [len (alength bs)
+        out (StringBuilder.)]
+    (loop [i 0
+           buffer 0
+           bits 0]
+      (cond
+        (and (= i len) (zero? bits))
+        (.toString out)
+
+        (< bits 5)
+        (if (< i len)
+          (let [b (bit-and 255 (aget bs i))]
+            (recur (inc i) (bit-or (bit-shift-left buffer 8) b) (+ bits 8)))
+          (let [idx (bit-and 31 (bit-shift-left buffer (- 5 bits)))]
+            (.append out ^String (str (nth base32-alphabet idx)))
+            (recur i 0 0)))
+
+        :else
+        (let [shift (- bits 5)
+              idx (bit-and 31 (bit-shift-right buffer shift))
+              buffer (bit-and buffer (dec (bit-shift-left 1 shift)))
+              bits shift]
+          (.append out ^String (str (nth base32-alphabet idx)))
+          (recur i buffer bits))))))
+
+(defn- hmac-sha256
+  [^String secret ^String message]
+  (let [mac (Mac/getInstance "HmacSHA256")
+        key (SecretKeySpec. (.getBytes secret "UTF-8") "HmacSHA256")]
+    (.init mac key)
+    (.doFinal mac (.getBytes message "UTF-8"))))
+
+(defn- verification-code
+  [secret document-ref payload-hash]
+  (let [raw (hmac-sha256 secret (str document-ref ":" payload-hash))
+        b32 (base32-encode raw)
+        short (subs b32 0 (min 20 (count b32)))
+        groups (->> (partition-all 4 short)
+                    (map #(apply str %)))]
+    (str/join "-" groups)))
+
+(def ^:private document-pull
+  [:document/id
+   :document/key
+   :document/workspace
+   :document/type
+   :document/template
+   :document/template-version
+   :document/issued-at
+   :document/subject-type
+   :document/subject-id
+   :document/payload-hash
+   :document/verification-code
+   :document/verification-alg
+   :entity/ref
+   {:document/client client-pull}
+   {:document/file [:file/id :file/name :file/slug :file/mime :file/size-bytes :file/checksum :file/created-at :entity/ref]}])
+
+(defn- present-file-lite
+  [file]
+  (when (map? file)
+    (let [file-id (:file/id file)
+          slug (:file/slug file)]
+      (-> file
+          (assoc :file/url (str "/api/files/" file-id "/content"))
+          (assoc :file/ref (when slug (str "file:" slug)))
+          (select-keys [:file/id
+                        :file/name
+                        :file/slug
+                        :file/mime
+                        :file/size-bytes
+                        :file/checksum
+                        :file/created-at
+	                        :file/url
+	                        :file/ref
+	                        :entity/ref])))))
+
+(defn- present-document
+  [doc]
+  (when (map? doc)
+    (-> doc
+        (update :document/issued-at format-inst)
+        (update :document/file present-file-lite)
+        (select-keys [:document/id
+                      :document/type
+                      :document/template
+                      :document/template-version
+                      :document/issued-at
+                      :document/subject-type
+                      :document/subject-id
+                      :document/payload-hash
+                      :document/verification-code
+                      :document/verification-alg
+                      :document/file
+                      :document/client
+                      :entity/ref]))))
+
+(defn- document-eid-by-key
+  [db key]
+  (ffirst (d/q '[:find ?e
+                 :in $ ?k
+                 :where [?e :document/key ?k]]
+               db key)))
+
+(defn- document-by-key
+  [db key]
+  (when-let [eid (document-eid-by-key db key)]
+    (d/pull db document-pull eid)))
+
+(defn- document-eid-by-ref
+  [db ref workspace]
+  (when (and (string? ref) (not (str/blank? ref)))
+    (ffirst (d/q '[:find ?e
+                   :in $ ?ref ?ws
+                   :where [?e :entity/ref ?ref]
+                          [?e :document/workspace ?ws]]
+                 db (str/trim ref) workspace))))
+
+(defn- document-by-ref
+  [db ref workspace]
+  (when-let [eid (document-eid-by-ref db ref workspace)]
+    (d/pull db document-pull eid)))
+
+(defn- latest-document
+  [db {:keys [workspace type subject-type subject-id]}]
+  (when (and workspace type subject-type subject-id)
+    (let [rows (d/q '[:find ?e ?issued
+                      :in $ ?ws ?type ?subject-type ?subject-id
+                      :where [?e :document/workspace ?ws]
+                             [?e :document/type ?type]
+                             [?e :document/subject-type ?subject-type]
+                             [?e :document/subject-id ?subject-id]
+                             [?e :document/issued-at ?issued]]
+                    db workspace type subject-type subject-id)
+          sorted (sort-by second #(compare %2 %1) rows)]
+      (when-let [[eid _] (first sorted)]
+        (d/pull db document-pull eid)))))
+
+(defn issue-document!
+  "Issue an immutable document (or reuse an existing issued copy when unchanged).
+
+  Returns {:document <presented-document> :file <presented-file>} or {:error ...}."
+  [state {:keys [type input actor]}]
+  (let [conn (get-in state [:db :conn])
+        storage-dir (get-in state [:config :files :storage-dir])
+        ws (workspace/actor-workspace actor)
+        body (or input {})
+        {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")
+        force? (boolean (param-value body :document/force?))
+        {:keys [template-version verify-secret renderer]} (documents-config state)]
+    (if-let [conn-err (ensure-conn conn)]
+      conn-err
+      (cond
+        c-err (error 400 c-err)
+        (nil? client-id) (error 400 "client/id is required")
+        (not (present-str? verify-secret)) (error 500 "DOCUMENT_VERIFY_SECRET is required to issue documents")
+        (str/blank? (str storage-dir)) (error 500 "File storage not configured")
+        :else
+        (let [db (d/db conn)
+              client (pull-client! db client-id ws)]
+          (if (:error client)
+            client
+            (let [{ceid :eid} (client-eid db client-id ws)
+                  doc-pack (or (pull-doc-pack! db client-id ws)
+                               {:doc.pack/company-name "Company"
+                                :doc.pack/currency "SAR"
+                                :doc.pack/services-included ""
+                                :doc.pack/payment-plan ""
+                                :doc.pack/status-notes ""})
+                  invoices (invoices-for-client db ceid ws)
+                  payments (payments-for-client db ceid ws)
+                  base (merge (base-context doc-pack client)
+                              {:docType (name type)})
+                  subject (case type
+                            :proposal
+                            {:subject-type :client
+                             :subject-id client-id
+                             :domain-payload (assoc base
+                                                    :servicesIncluded (or (:doc.pack/services-included doc-pack) "")
+                                                    :paymentPlan (or (:doc.pack/payment-plan doc-pack) "")
+                                                    :invoices invoices)
+                             :filename (str "proposal-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")}
+
+                            :status-report
+                            (let [tasks (tasks-summary-for-client db ceid ws)]
+                              {:subject-type :client
+                               :subject-id client-id
+                               :domain-payload (assoc base
+                                                      :statusNotes (or (:doc.pack/status-notes doc-pack) "")
+                                                      :invoices invoices
+                                                      :payments payments
+                                                      :tasks tasks)
+                               :filename (str "status-report-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")})
+
+                            :invoice
+                            (let [{iid :value iid-err :error} (entity/resolve-id db :invoice/id (param-value body :invoice/id) "invoice id")]
+                              (cond
+                                iid-err (error 400 iid-err)
+                                (nil? iid) (error 400 "invoice/id is required")
+                                :else
+                                (let [inv-eid (ffirst (d/q '[:find ?e
+                                                             :in $ ?id ?ws
+                                                             :where [?e :invoice/id ?id]
+                                                                    [?e :invoice/workspace ?ws]]
+                                                           db iid ws))
+                                      inv (when inv-eid (present-invoice (d/pull db invoice-pull inv-eid)))]
+                                  (if-not inv
+                                    (error 404 "Invoice not found")
+                                    (let [inv-payments (->> payments
+                                                            (filter (fn [p] (= iid (get-in p [:payment/invoice :invoice/id]))))
+                                                            vec)]
+                                      {:subject-type :invoice
+                                       :subject-id iid
+                                       :domain-payload (assoc base
+                                                              :invoice inv
+                                                              :payments inv-payments)
+                                       :filename (str "invoice-" (or (:invoice/number inv) (subs (str iid) 0 8)) ".pdf")})))))
+
+                            :receipt
+                            (let [{pid :value pid-err :error} (entity/resolve-id db :payment/id (param-value body :payment/id) "payment id")]
+                              (cond
+                                pid-err (error 400 pid-err)
+                                (nil? pid) (error 400 "payment/id is required")
+                                :else
+                                (let [pay-eid (ffirst (d/q '[:find ?e
+                                                             :in $ ?id ?ws
+                                                             :where [?e :payment/id ?id]
+                                                                    [?e :payment/workspace ?ws]]
+                                                           db pid ws))
+                                      payment (when pay-eid (present-payment (d/pull db payment-pull pay-eid)))]
+                                  (if-not payment
+                                    (error 404 "Payment not found")
+                                    (let [invoice-id (get-in payment [:payment/invoice :invoice/id])
+                                          inv (when invoice-id
+                                                (let [inv-eid (ffirst (d/q '[:find ?e
+                                                                             :in $ ?id ?ws
+                                                                             :where [?e :invoice/id ?id]
+                                                                                    [?e :invoice/workspace ?ws]]
+                                                                           db invoice-id ws))]
+                                                  (when inv-eid (present-invoice (d/pull db invoice-pull inv-eid)))))]
+                                      {:subject-type :payment
+                                       :subject-id pid
+                                       :domain-payload (assoc base
+                                                              :payment payment
+                                                              :invoice inv)
+                                       :filename (str "receipt-" (subs (str pid) 0 8) ".pdf")})))))
+
+                            (error 400 "Unknown document type" {:type type}))]
+              (if (:error subject)
+                subject
+                (let [{:keys [subject-type subject-id domain-payload filename]} subject
+                      payload-hash (sha256-hex (canonical-json-str domain-payload))
+                      base-key (str ws "::" (name type) "::" (name subject-type) "::" (str subject-id) "::" template-version "::" payload-hash)
+                      document-key (if force?
+                                     (str base-key "::force::" (UUID/randomUUID))
+                                     base-key)]
+                  (if-let [existing (when-not force? (document-by-key db document-key))]
+                    (let [doc (present-document existing)]
+                      {:document doc
+                       :file (:document/file doc)})
+                    (let [issued-at (now-inst)
+                          issued-at-str (.format iso-formatter (.toInstant issued-at))
+                          document-ref (entity/unique-ref db :entity.type/document)
+                          code (verification-code verify-secret document-ref payload-hash)
+                          render-payload (assoc domain-payload
+                                                :issuedAt issued-at-str
+                                                :templateVersion template-version
+                                                :documentRef document-ref
+                                                :verificationCode code)
+                          {:keys [dir pdf-file]} (render-pdf! {:type type
+                                                               :payload render-payload
+                                                               :renderer renderer})
+                          stored (store-pdf! conn pdf-file {:filename filename
+                                                            :slug (normalize-text (param-value body :file/slug))}
+                                             actor storage-dir)]
+                      (cleanup-dir! dir)
+                      (if-let [err (:error stored)]
+                        {:error err}
+                        (let [file (:file stored)
+                              file-id (:file/id file)
+                              doc-id (UUID/randomUUID)
+                              base-tx {:document/id doc-id
+                                       :entity/type :entity.type/document
+                                       :entity/ref document-ref
+                                       :document/key document-key
+                                       :document/workspace ws
+                                       :document/type type
+                                       :document/template documents-template
+                                       :document/template-version template-version
+                                       :document/issued-at issued-at
+                                       :document/client [:client/id client-id]
+                                       :document/subject-type subject-type
+                                       :document/subject-id subject-id
+                                       :document/payload-hash payload-hash
+                                       :document/file [:file/id file-id]
+                                       :document/verification-code code
+                                       :document/verification-alg verification-alg}
+                              tx (prov/enrich-tx base-tx (prov/provenance actor))]
+                          (try
+                            (let [tx-res (db/transact! conn {:tx-data [tx]})
+                                  db-after (:db-after tx-res)
+                                  eid (ffirst (d/q '[:find ?e
+                                                     :in $ ?id ?ws
+                                                     :where [?e :document/id ?id]
+                                                            [?e :document/workspace ?ws]]
+                                                   db-after doc-id ws))
+                                  doc (when eid (d/pull db-after document-pull eid))
+                                  presented (present-document doc)]
+                              {:document presented
+                               :file (:document/file presented)})
+                            (catch Exception e
+                              (let [data (ex-data e)
+                                    unique? (or (= (:db/error data) :db.error/unique-conflict)
+                                                (some-> e .getMessage (str/includes? "unique")))]
+                                (if unique?
+                                  (do
+                                    (when file-id
+                                      (try
+                                        (files/delete-file! conn file-id storage-dir actor)
+                                        (catch Exception _)))
+                                    (if-let [doc (document-by-key (d/db conn) document-key)]
+                                      (let [presented (present-document doc)]
+                                        {:document presented
+                                         :file (:document/file presented)})
+                                      (error 500 "Document issuance unique conflict but existing document not found")))
+                                  (do
+                                    (log/error e "Document issuance failed" {:type type})
+                                    (error 500 "Document issuance failed" {:exception (.getMessage e)})))))))))))))))))))
+
+(defn latest-document!
+  "Fetch latest issued document for a subject/type. Returns {:document .. :file ..} or {:error ..}."
+  [state {:keys [type input actor]}]
+  (let [conn (get-in state [:db :conn])
+        ws (workspace/actor-workspace actor)
+        body (or input {})
+        {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")]
+    (if-let [conn-err (ensure-conn conn)]
+      conn-err
+      (cond
+        c-err (error 400 c-err)
+        (nil? client-id) (error 400 "client/id is required")
+        :else
+        (let [db (d/db conn)
+              subject (case type
+                        (:proposal :status-report) {:subject-type :client :subject-id client-id}
+                        :invoice (let [{iid :value iid-err :error} (entity/resolve-id db :invoice/id (param-value body :invoice/id) "invoice id")]
+                                   (cond
+                                     iid-err {:error (error 400 iid-err)}
+                                     (nil? iid) {:error (error 400 "invoice/id is required")}
+                                     :else {:subject-type :invoice :subject-id iid}))
+                        :receipt (let [{pid :value pid-err :error} (entity/resolve-id db :payment/id (param-value body :payment/id) "payment id")]
+                                   (cond
+                                     pid-err {:error (error 400 pid-err)}
+                                     (nil? pid) {:error (error 400 "payment/id is required")}
+                                     :else {:subject-type :payment :subject-id pid}))
+                        {:error (error 400 "Unknown document type" {:type type})})]
+          (if-let [err (:error subject)]
+            err
+            (if-let [doc (latest-document db (merge {:workspace ws :type type} subject))]
+              (let [presented (present-document doc)]
+                {:document presented
+                 :file (:document/file presented)})
+              (error 404 "No issued document found"))))))))
+
+(defn verify-document!
+  "Verify a document ref and verification code pair. Returns {:document/valid? boolean :document map?}."
+  [state {:keys [input actor]}]
+  (let [conn (get-in state [:db :conn])
+        ws (workspace/actor-workspace actor)
+        body (or input {})
+        ref (some-> (param-value body :document/ref) str)
+        code (some-> (param-value body :document/verification-code) str)
+        {:keys [verify-secret]} (documents-config state)]
+    (if-let [conn-err (ensure-conn conn)]
+      conn-err
+      (cond
+        (not (present-str? verify-secret)) (error 500 "DOCUMENT_VERIFY_SECRET is required to verify documents")
+        (not (present-str? ref)) (error 400 "document/ref is required")
+        (not (present-str? code)) (error 400 "document/verification-code is required")
+        :else
+        (let [db (d/db conn)
+              doc (document-by-ref db ref ws)]
+          (if-not doc
+            {:document/valid? false}
+            (let [payload-hash (:document/payload-hash doc)
+                  expected (verification-code verify-secret (:entity/ref doc) payload-hash)
+                  ok? (= (str/trim code) expected)]
+              (cond-> {:document/valid? ok?}
+                ok? (assoc :document (present-document doc))))))))))
+
+(defn- ->instant
+  [v]
+  (cond
+    (instance? Instant v) v
+    (instance? Date v) (.toInstant ^Date v)
+    (string? v) (try (Instant/parse (str/trim v)) (catch Exception _ nil))
+    :else nil))
+
+(defn- in-range?
+  [^Instant v ^Instant from ^Instant to]
+  (and (or (nil? from) (not (neg? (compare v from))))
+       (or (nil? to) (not (pos? (compare v to))))))
+
+(defn analytics-revenue-by-month
+  "Sum payments by YYYY-MM, grouped by currency. Returns {:series [...]}."
+  [conn {:keys [client-id from to]} actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            ws (workspace/actor-workspace actor)
+            {cid :value cid-err :error} (when client-id (entity/resolve-id db :client/id client-id "client id"))
+            from-i (->instant from)
+            to-i (->instant to)]
+        (cond
+          cid-err (error 400 cid-err)
+          :else
+          (let [client-eid (when cid
+                             (ffirst (d/q '[:find ?e
+                                            :in $ ?id ?ws
+                                            :where [?e :client/id ?id]
+                                                   [?e :client/workspace ?ws]]
+                                          db cid ws)))
+                rows (d/q '[:find ?paid ?amt ?cur ?client
+                            :in $ ?ws
+                            :where [?p :payment/workspace ?ws]
+                                   [?p :payment/paid-at ?paid]
+                                   [?p :payment/amount ?amt]
+                                   [?p :payment/currency ?cur]
+                                   [?p :payment/client ?client]]
+                          db ws)
+                filtered (->> rows
+                              (filter (fn [[paid _ _ client]]
+                                        (and (or (nil? client-eid) (= client-eid client))
+                                             (when-let [pi (->instant paid)]
+                                               (in-range? pi from-i to-i))))))
+                by-bucket (group-by (fn [[paid _ cur _]]
+                                      (let [inst (->instant paid)
+                                            ym (.toString (java.time.YearMonth/from (.atZone inst (java.time.ZoneId/systemDefault))))]
+                                        [ym (str cur)]))
+                                    filtered)
+                series (->> by-bucket
+                            (map (fn [[[ym cur] items]]
+                                   {:month ym
+                                    :currency cur
+                                    :total (double (reduce (fn [acc [_ amt _ _]] (+ acc (double amt))) 0.0 items))}))
+                            (sort-by (juxt :month :currency))
+                            vec)]
+            {:series series})))))
+
+(defn analytics-outstanding-invoices
+  "Compute outstanding per invoice and totals. Returns {:invoices [...] :totals {...}}."
+  [conn {:keys [client-id as-of]} actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            ws (workspace/actor-workspace actor)
+            {cid :value cid-err :error} (when client-id (entity/resolve-id db :client/id client-id "client id"))
+            as-of-i (->instant as-of)]
+        (cond
+          cid-err (error 400 cid-err)
+          :else
+          (let [client-eid (when cid
+                             (ffirst (d/q '[:find ?e
+                                            :in $ ?id ?ws
+                                            :where [?e :client/id ?id]
+                                                   [?e :client/workspace ?ws]]
+                                          db cid ws)))
+                inv-eids (if client-eid
+                           (d/q '[:find ?e
+                                  :in $ ?ws ?client
+                                  :where [?e :invoice/workspace ?ws]
+                                         [?e :invoice/client ?client]]
+                                db ws client-eid)
+                           (d/q '[:find ?e
+                                  :in $ ?ws
+                                  :where [?e :invoice/workspace ?ws]]
+                                db ws))
+                invs (->> inv-eids
+                          (map first)
+                          (map #(d/pull db invoice-pull %))
+                          (remove nil?)
+                          (map present-invoice)
+                          vec)
+                pay-eids (if client-eid
+                           (d/q '[:find ?e
+                                  :in $ ?ws ?client
+                                  :where [?e :payment/workspace ?ws]
+                                         [?e :payment/client ?client]]
+                                db ws client-eid)
+                           (d/q '[:find ?e
+                                  :in $ ?ws
+                                  :where [?e :payment/workspace ?ws]]
+                                db ws))
+                pays (->> pay-eids
+                          (map first)
+                          (map #(d/pull db payment-pull %))
+                          (remove nil?)
+                          (filter (fn [p]
+                                    (if-not as-of-i
+                                      true
+                                      (when-let [pi (->instant (:payment/paid-at p))]
+                                        (not (pos? (compare pi as-of-i)))))))
+                          (map present-payment)
+                          vec)
+                pays-by-invoice (group-by (fn [p] (get-in p [:payment/invoice :invoice/id])) pays)
+                invoice-lines (->> invs
+                                   (map (fn [inv]
+                                          (let [iid (:invoice/id inv)
+                                                total (double (or (:invoice/total-amount inv) 0.0))
+                                                payments (get pays-by-invoice iid)
+                                                paid (double (reduce (fn [acc p] (+ acc (double (or (:payment/amount p) 0.0)))) 0.0 payments))
+                                                outstanding (max 0.0 (- total paid))]
+                                            {:invoice/id iid
+                                             :invoice/number (:invoice/number inv)
+                                             :invoice/status (:invoice/status inv)
+                                             :invoice/issued-at (:invoice/issued-at inv)
+                                             :invoice/due-at (:invoice/due-at inv)
+                                             :currency (:invoice/currency inv)
+                                             :total total
+                                             :paid paid
+                                             :outstanding outstanding})))
+                                   (sort-by :invoice/issued-at #(compare %2 %1))
+                                   vec)
+                totals {:total-invoiced (double (reduce + 0.0 (map :total invoice-lines)))
+                        :total-paid (double (reduce + 0.0 (map :paid invoice-lines)))
+                        :total-outstanding (double (reduce + 0.0 (map :outstanding invoice-lines)))}]
+            {:invoices invoice-lines
+             :totals totals})))))
+
+(defn analytics-funnel
+  "Count issued documents by type over a period. Returns {:counts {...}}."
+  [conn {:keys [client-id from to]} actor]
+  (or (ensure-conn conn)
+      (let [db (d/db conn)
+            ws (workspace/actor-workspace actor)
+            {cid :value cid-err :error} (when client-id (entity/resolve-id db :client/id client-id "client id"))
+            from-i (->instant from)
+            to-i (->instant to)]
+        (cond
+          cid-err (error 400 cid-err)
+          :else
+          (let [client-eid (when cid
+                             (ffirst (d/q '[:find ?e
+                                            :in $ ?id ?ws
+                                            :where [?e :client/id ?id]
+                                                   [?e :client/workspace ?ws]]
+                                          db cid ws)))
+                rows (d/q '[:find ?type ?issued ?client
+                            :in $ ?ws
+                            :where [?e :document/workspace ?ws]
+                                   [?e :document/type ?type]
+                                   [?e :document/issued-at ?issued]
+                                   [?e :document/client ?client]]
+                          db ws)
+                filtered (->> rows
+                              (filter (fn [[_ issued client]]
+                                        (and (or (nil? client-eid) (= client-eid client))
+                                             (when-let [ii (->instant issued)]
+                                               (in-range? ii from-i to-i))))))
+                counts (->> filtered
+                            (map first)
+                            (frequencies)
+                            (into {} (map (fn [[k v]] [(keyword (name k)) v]))))]
+            {:counts counts})))))
 
 (defn- base-context
   [doc-pack client]
@@ -610,125 +1241,7 @@
   - :statement/slug optional file slug
   Returns {:file <presented-file>}."
   [state {:keys [type input actor]}]
-  (let [conn (get-in state [:db :conn])
-        storage-dir (get-in state [:config :files :storage-dir])
-        ws (workspace/actor-workspace actor)
-        body (or input {})
-        {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")]
-    (if-let [conn-err (ensure-conn conn)]
-      conn-err
-      (cond
-        c-err (error 400 c-err)
-        (nil? client-id) (error 400 "client/id is required")
-        :else
-        (let [db (d/db conn)
-              client (pull-client! db client-id ws)]
-          (if (:error client)
-            client
-            (let [{ceid :eid} (client-eid db client-id ws)
-                  doc-pack (or (pull-doc-pack! db client-id ws)
-                               {:doc.pack/company-name "Company"
-                                :doc.pack/currency "SAR"
-                                :doc.pack/services-included ""
-                                :doc.pack/payment-plan ""
-                                :doc.pack/status-notes ""})
-                  invoices (invoices-for-client db ceid ws)
-                  payments (payments-for-client db ceid ws)
-                  payload-base (merge (base-context doc-pack client)
-                                      {:generatedAt (.format iso-formatter (Instant/now))
-                                       :docType (name type)})]
-              (try
-                (case type
-                  :proposal
-                  (let [payload (assoc payload-base
-                                       :servicesIncluded (or (:doc.pack/services-included doc-pack) "")
-                                       :paymentPlan (or (:doc.pack/payment-plan doc-pack) "")
-                                       :invoices invoices)
-                        {:keys [dir pdf-file]} (render-pdf! {:type :proposal :payload payload})
-                        filename (str "proposal-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")
-                        res (store-pdf! conn pdf-file {:filename filename
-                                                       :slug (normalize-text (param-value body :file/slug))}
-                                        actor storage-dir)]
-                    (cleanup-dir! dir)
-                    res)
-
-                  :status-report
-                  (let [tasks (tasks-summary-for-client db ceid ws)
-                        payload (assoc payload-base
-                                       :statusNotes (or (:doc.pack/status-notes doc-pack) "")
-                                       :invoices invoices
-                                       :payments payments
-                                       :tasks tasks)
-                        {:keys [dir pdf-file]} (render-pdf! {:type :status-report :payload payload})
-                        filename (str "status-report-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")
-                        res (store-pdf! conn pdf-file {:filename filename
-                                                       :slug (normalize-text (param-value body :file/slug))}
-                                        actor storage-dir)]
-                    (cleanup-dir! dir)
-                    res)
-
-                  :invoice
-                  (let [{iid :value iid-err :error} (entity/resolve-id db :invoice/id (param-value body :invoice/id) "invoice id")]
-                    (cond
-                      iid-err (error 400 iid-err)
-                      (nil? iid) (error 400 "invoice/id is required")
-                      :else
-                      (let [inv-eid (ffirst (d/q '[:find ?e
-                                                   :in $ ?id ?ws
-                                                   :where [?e :invoice/id ?id]
-                                                          [?e :invoice/workspace ?ws]]
-                                                 db iid ws))
-                            inv (when inv-eid (present-invoice (d/pull db invoice-pull inv-eid)))]
-                        (if-not inv
-                          (error 404 "Invoice not found")
-                          (let [inv-payments (->> payments
-                                                  (filter (fn [p] (= iid (get-in p [:payment/invoice :invoice/id]))))
-                                                  vec)
-                                payload (assoc payload-base
-                                               :invoice inv
-                                               :payments inv-payments)
-                                {:keys [dir pdf-file]} (render-pdf! {:type :invoice :payload payload})
-                                filename (str "invoice-" (or (:invoice/number inv) (subs (str iid) 0 8)) ".pdf")
-                                res (store-pdf! conn pdf-file {:filename filename
-                                                               :slug (normalize-text (param-value body :file/slug))}
-                                                actor storage-dir)]
-                            (cleanup-dir! dir)
-                            res)))))
-
-                  :receipt
-                  (let [{pid :value pid-err :error} (entity/resolve-id db :payment/id (param-value body :payment/id) "payment id")]
-                    (cond
-                      pid-err (error 400 pid-err)
-                      (nil? pid) (error 400 "payment/id is required")
-                      :else
-                      (let [pay-eid (ffirst (d/q '[:find ?e
-                                                   :in $ ?id ?ws
-                                                   :where [?e :payment/id ?id]
-                                                          [?e :payment/workspace ?ws]]
-                                                 db pid ws))
-                            payment (when pay-eid (present-payment (d/pull db payment-pull pay-eid)))]
-                        (if-not payment
-                          (error 404 "Payment not found")
-                          (let [invoice-id (get-in payment [:payment/invoice :invoice/id])
-                                inv (when invoice-id
-                                      (let [inv-eid (ffirst (d/q '[:find ?e
-                                                                   :in $ ?id ?ws
-                                                                   :where [?e :invoice/id ?id]
-                                                                          [?e :invoice/workspace ?ws]]
-                                                                 db invoice-id ws))]
-                                        (when inv-eid (present-invoice (d/pull db invoice-pull inv-eid)))))
-                                payload (assoc payload-base
-                                               :payment payment
-                                               :invoice inv)
-                                {:keys [dir pdf-file]} (render-pdf! {:type :receipt :payload payload})
-                                filename (str "receipt-" (subs (str pid) 0 8) ".pdf")
-                                res (store-pdf! conn pdf-file {:filename filename
-                                                               :slug (normalize-text (param-value body :file/slug))}
-                                                actor storage-dir)]
-                            (cleanup-dir! dir)
-                            res)))))
-
-                  (error 400 "Unknown document type" {:type type}))
-                (catch Exception e
-                  (log/error e "Document generation failed" {:type type})
-                  (error 500 "Document generation failed" {:type type}))))))))))
+  (let [res (issue-document! state {:type type :input input :actor actor})]
+    (if-let [err (:error res)]
+      {:error err}
+      {:file (:file res)})))

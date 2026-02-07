@@ -627,7 +627,11 @@ check_schema_load() {
 check_actions() {
   check_clojure_available
   echo "Running action contract checks..."
-  (cd "$ROOT" && clojure -M -m darelwasl.checks.actions)
+  (cd "$ROOT" && \
+    DOCUMENT_VERIFY_SECRET="${DOCUMENT_VERIFY_SECRET:-check-secret}" \
+    DOCUMENT_RENDERER="${DOCUMENT_RENDERER:-stub}" \
+    FILES_STORAGE_DIR="${FILES_STORAGE_DIR:-$ROOT/.cpcache/files-actions}" \
+    clojure -M -m darelwasl.checks.actions)
 }
 
 cleanup_server() {

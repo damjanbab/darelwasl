@@ -368,13 +368,62 @@
 
 (defn- invoice-create
   [state {:keys [input actor]}]
-  (documents/create-invoice! (conn state) (or input {}) actor))
+  (let [body (or input {})
+        status (:invoice/status body)
+        require-issue? (contains? #{:sent :paid} status)
+        doc-secret (get-in state [:config :documents :verify-secret])]
+    (if (and require-issue? (or (nil? doc-secret) (str/blank? (str doc-secret))))
+      {:error {:status 500
+               :message "DOCUMENT_VERIFY_SECRET is required to create sent/paid invoices (auto-issues invoice PDFs)"}}
+      (let [res (documents/create-invoice! (conn state) body actor)]
+        (if-let [err (:error res)]
+          res
+          (let [inv (:invoice res)
+                invoice-id (:invoice/id inv)
+                client-id (get-in inv [:invoice/client :client/id])
+                inv-status (:invoice/status inv)
+                do-issue? (and invoice-id client-id (contains? #{:sent :paid} inv-status))]
+            (if-not do-issue?
+              res
+              (let [issue (documents/issue-document! state {:type :invoice
+                                                           :input {:client/id client-id
+                                                                   :invoice/id invoice-id}
+                                                           :actor actor})]
+                (if-let [derr (:error issue)]
+                  (do
+                    (log/warn "Auto-issuing invoice PDF failed" {:invoice/id invoice-id :error derr})
+                    (assoc res :invoice-pdf/error derr))
+                  (assoc res :invoice-pdf issue))))))))))
 
 (defn- invoice-update
   [state {:keys [input actor]}]
   (let [body (or input {})
         invoice-id (or (:invoice/id body) (:id body))]
-    (documents/update-invoice! (conn state) invoice-id body actor)))
+    (let [requested-status (:invoice/status body)
+          require-issue? (contains? #{:sent :paid} requested-status)
+          doc-secret (get-in state [:config :documents :verify-secret])]
+      (if (and require-issue? (or (nil? doc-secret) (str/blank? (str doc-secret))))
+        {:error {:status 500
+                 :message "DOCUMENT_VERIFY_SECRET is required to set invoice status to sent/paid (auto-issues invoice PDFs)"}}
+        (let [res (documents/update-invoice! (conn state) invoice-id body actor)]
+          (if-let [err (:error res)]
+            res
+            (let [inv (:invoice res)
+                  iid (:invoice/id inv)
+                  client-id (get-in inv [:invoice/client :client/id])
+                  inv-status (:invoice/status inv)
+                  do-issue? (and iid client-id (contains? #{:sent :paid} inv-status))]
+              (if-not do-issue?
+                res
+                (let [issue (documents/issue-document! state {:type :invoice
+                                                             :input {:client/id client-id
+                                                                     :invoice/id iid}
+                                                             :actor actor})]
+                  (if-let [derr (:error issue)]
+                    (do
+                      (log/warn "Auto-issuing invoice PDF failed" {:invoice/id iid :error derr})
+                      (assoc res :invoice-pdf/error derr))
+                    (assoc res :invoice-pdf issue)))))))))))
 
 (defn- invoice-list
   [state {:keys [input actor]}]
@@ -382,7 +431,28 @@
 
 (defn- payment-create
   [state {:keys [input actor]}]
-  (documents/create-payment! (conn state) (or input {}) actor))
+  (let [doc-secret (get-in state [:config :documents :verify-secret])]
+    (if (or (nil? doc-secret) (str/blank? (str doc-secret)))
+      {:error {:status 500
+               :message "DOCUMENT_VERIFY_SECRET is required to create payments (auto-issues receipts)"}}
+      (let [res (documents/create-payment! (conn state) (or input {}) actor)]
+        (if-let [err (:error res)]
+          res
+          (let [payment (:payment res)
+                payment-id (:payment/id payment)
+                client-id (or (:client/id (or input {}))
+                              (get-in payment [:payment/client :client/id]))]
+            (if-not (and payment-id client-id)
+              res
+              (let [issue (documents/issue-document! state {:type :receipt
+                                                           :input {:client/id client-id
+                                                                   :payment/id payment-id}
+                                                           :actor actor})]
+                (if-let [derr (:error issue)]
+                  (do
+                    (log/warn "Auto-issuing receipt failed" {:payment/id payment-id :error derr})
+                    (assoc res :receipt/error derr))
+                  (assoc res :receipt issue))))))))))
 
 (defn- payment-list
   [state {:keys [input actor]}]
@@ -390,19 +460,63 @@
 
 (defn- proposal-generate
   [state {:keys [input actor]}]
-  (documents/generate-document! state {:type :proposal :input (or input {}) :actor actor}))
+  (documents/issue-document! state {:type :proposal :input (or input {}) :actor actor}))
 
 (defn- invoice-pdf-generate
   [state {:keys [input actor]}]
-  (documents/generate-document! state {:type :invoice :input (or input {}) :actor actor}))
+  (documents/issue-document! state {:type :invoice :input (or input {}) :actor actor}))
 
 (defn- receipt-generate
   [state {:keys [input actor]}]
-  (documents/generate-document! state {:type :receipt :input (or input {}) :actor actor}))
+  (documents/issue-document! state {:type :receipt :input (or input {}) :actor actor}))
 
 (defn- status-report-generate
   [state {:keys [input actor]}]
-  (documents/generate-document! state {:type :status-report :input (or input {}) :actor actor}))
+  (documents/issue-document! state {:type :status-report :input (or input {}) :actor actor}))
+
+(defn- document-issue
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        t (or (:document/type body) (:type body))
+        type (when t (if (keyword? t) t (keyword (str t))))]
+    (documents/issue-document! state {:type type :input body :actor actor})))
+
+(defn- document-latest
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        t (or (:document/type body) (:type body))
+        type (when t (if (keyword? t) t (keyword (str t))))]
+    (documents/latest-document! state {:type type :input body :actor actor})))
+
+(defn- document-verify
+  [state {:keys [input actor]}]
+  (documents/verify-document! state {:input (or input {}) :actor actor}))
+
+(defn- analytics-revenue-by-month
+  [state {:keys [input actor]}]
+  (let [body (or input {})]
+    (documents/analytics-revenue-by-month (conn state)
+                                          {:client-id (:client/id body)
+                                           :from (:from body)
+                                           :to (:to body)}
+                                          actor)))
+
+(defn- analytics-outstanding-invoices
+  [state {:keys [input actor]}]
+  (let [body (or input {})]
+    (documents/analytics-outstanding-invoices (conn state)
+                                              {:client-id (:client/id body)
+                                               :as-of (:as-of body)}
+                                              actor)))
+
+(defn- analytics-funnel
+  [state {:keys [input actor]}]
+  (let [body (or input {})]
+    (documents/analytics-funnel (conn state)
+                                {:client-id (:client/id body)
+                                 :from (:from body)
+                                 :to (:to body)}
+                                actor)))
 
 (def ^:private handlers
   {:cap/action/task-create task-create
@@ -446,6 +560,12 @@
    :cap/action/invoice-pdf-generate invoice-pdf-generate
    :cap/action/receipt-generate receipt-generate
    :cap/action/status-report-generate status-report-generate
+   :cap/action/document-issue document-issue
+   :cap/action/document-latest document-latest
+   :cap/action/document-verify document-verify
+   :cap/action/analytics-revenue-by-month analytics-revenue-by-month
+   :cap/action/analytics-outstanding-invoices analytics-outstanding-invoices
+   :cap/action/analytics-funnel analytics-funnel
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update
