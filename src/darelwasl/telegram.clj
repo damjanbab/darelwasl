@@ -18,7 +18,7 @@
 (def ^:private default-timeout-ms 3000)
 
 (def ^:private allowed-commands
-  #{:start :help :tasks :task :stop :new :edit :note :note-edit})
+  #{:start :help :tasks :task :stop :new :edit :note :note-edit :docs})
 
 (defn- present-string?
   [v]
@@ -40,6 +40,12 @@
   (atom {}))
 
 (defonce pending-edits
+  (atom {}))
+
+(def ^:private docs-ttl-ms
+  (* 60 60 1000))
+
+(defonce docs-sessions
   (atom {}))
 (def ^:private max-capture-preview 10)
 (def ^:private max-capture-cards 5)
@@ -339,6 +345,108 @@
             (Date/from (.toInstant zoned)))
           (catch Exception _ nil)))))
 
+(defn- yyyy-mm
+  [^LocalDate d]
+  (format "%04d-%02d" (.getYear d) (.getMonthValue d)))
+
+(defn- yyyy-mm-dd
+  [^LocalDate d]
+  (format "%04d-%02d-%02d" (.getYear d) (.getMonthValue d) (.getDayOfMonth d)))
+
+(defn- parse-ym
+  [s]
+  (try
+    (LocalDate/parse (str (str/trim (or s "")) "-01"))
+    (catch Exception _ nil)))
+
+(defn- local-date->date
+  [^LocalDate d]
+  (when d
+    (let [zoned (.atStartOfDay d (ZoneId/systemDefault))]
+      (Date/from (.toInstant zoned)))))
+
+(defn- parse-ymd->date
+  [s]
+  (try
+    (local-date->date (LocalDate/parse (str/trim (or s ""))))
+    (catch Exception _ nil)))
+
+(defn- prune-docs-sessions!
+  []
+  (let [cutoff (- (System/currentTimeMillis) docs-ttl-ms)]
+    (swap! docs-sessions
+           (fn [entries]
+             (into {}
+                   (filter (fn [[_ v]]
+                             (let [ts (:created-at v 0)]
+                               (>= ts cutoff))))
+                   entries)))))
+
+(defn- save-docs-session!
+  [chat-id session]
+  (prune-docs-sessions!)
+  (swap! docs-sessions assoc (str chat-id) (assoc session :created-at (System/currentTimeMillis))))
+
+(defn- get-docs-session!
+  [chat-id]
+  (prune-docs-sessions!)
+  (get @docs-sessions (str chat-id)))
+
+(defn- take-docs-session!
+  [chat-id]
+  (prune-docs-sessions!)
+  (let [k (str chat-id)
+        value (get @docs-sessions k)]
+    (swap! docs-sessions dissoc k)
+    value))
+
+(defn- date-picker-inline-keyboard
+  [{:keys [month quicks allow-skip? skip-label extra-rows]}]
+  (let [month (or month (LocalDate/now (ZoneId/systemDefault)))
+        month-start (-> month (.withDayOfMonth 1))
+        offset (dec (.getValue (.getDayOfWeek month-start)))
+        days-in-month (.lengthOfMonth month-start)
+        blanks (repeat (max 0 offset) nil)
+        days (map (fn [day]
+                    (let [d (.withDayOfMonth month-start (int day))]
+                      {:text (str day)
+                       :callback_data (str "dp:day:" (yyyy-mm-dd d))}))
+                  (range 1 (inc days-in-month)))
+        cells (concat blanks days)
+        pad (mod (- 7 (mod (count cells) 7)) 7)
+        cells (concat cells (repeat pad nil))
+        weeks (partition 7 cells)
+        month-label (.format month-start (java.time.format.DateTimeFormatter/ofPattern "MMM yyyy"))
+        prev-month (.minusMonths month-start 1)
+        next-month (.plusMonths month-start 1)
+        nav-row [{:text "‹" :callback_data (str "dp:nav:" (yyyy-mm prev-month))}
+                 {:text month-label :callback_data "dp:noop"}
+                 {:text "›" :callback_data (str "dp:nav:" (yyyy-mm next-month))}]
+        header-row (mapv (fn [label] {:text label :callback_data "dp:noop"})
+                         ["Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"])
+        week-rows (mapv (fn [week]
+                          (mapv (fn [cell]
+                                  (if (nil? cell)
+                                    {:text " " :callback_data "dp:noop"}
+                                    cell))
+                                week))
+                        weeks)
+        quicks (or quicks [])
+        quick-rows (when (seq quicks)
+                     (->> quicks
+                          (map (fn [{:keys [id label]}]
+                                 {:text label :callback_data (str "dp:quick:" (name id))}))
+                          (partition-all 2)
+                          (mapv vec)))
+        skip-row (when allow-skip?
+                   [[{:text (or skip-label "Skip") :callback_data "dp:skip"}]])
+        rows (vec (concat [nav-row header-row]
+                          week-rows
+                          (or quick-rows [])
+                          (or skip-row [])
+                          (or extra-rows [])))]
+    {:inline_keyboard rows}))
+
 (defn- latest-pending-reason
   [db task-id]
   (when (and db task-id)
@@ -419,6 +527,40 @@
     {:inline_keyboard
      (conj rows [(inline-button "Create client" (str "task:client:create:" task-id))
                  (inline-button "Cancel" (str "task:client:cancel:" task-id))])}))
+
+(defn- docs-client-pick-inline-keyboard
+  [clients]
+  (let [buttons (map (fn [{:client/keys [id name]}]
+                       (inline-button (truncate-text (or name "Client") 22)
+                                      (str "docs:client:set:" id)))
+                     clients)
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))]
+    {:inline_keyboard
+     (conj rows [(inline-button "Cancel" "docs:cancel")])}))
+
+(defn- docs-menu-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Add payment" "docs:payment:add")
+     (inline-button "Change client" "docs:client:pick")]
+    [(inline-button "Close" "docs:cancel")]]})
+
+(defn- docs-payment-method-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Cash" "docs:payment:method:cash")
+     (inline-button "Transfer" "docs:payment:method:transfer")]
+    [(inline-button "Card" "docs:payment:method:card")
+     (inline-button "Other" "docs:payment:method:other")]
+    [(inline-button "Cancel" "docs:menu")]]})
+
+(defn- docs-payment-reference-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Skip" "docs:payment:ref:skip")
+     (inline-button "Cancel" "docs:menu")]]})
 
 (defn- client-cancel-inline-keyboard
   [task-id]
@@ -1063,6 +1205,22 @@
                         :message-key (str "client-pick-" task-id "-" (System/currentTimeMillis))
                         :reply-markup keyboard})))
 
+(defn- prompt-docs-client-pick!
+  [state chat-id]
+  (let [cfg (get-in state [:config :telegram])
+        conn (ensure-conn state)
+        workspace nil
+        res (clients/list-clients conn {:limit 6} workspace)
+        client-list (or (:clients res) [])
+        prompt (if (seq client-list)
+                 "Pick a client:"
+                 "No clients available yet.")
+        keyboard (docs-client-pick-inline-keyboard client-list)]
+    (send-message! cfg {:chat-id chat-id
+                        :text prompt
+                        :message-key (str "docs-client-pick-" (System/currentTimeMillis))
+                        :reply-markup keyboard})))
+
 (defn- prompt-next-action!
   [state chat-id client]
   (let [cfg (get-in state [:config :telegram])
@@ -1130,43 +1288,24 @@
             reason (:reason pending)
             trimmed (some-> text str/trim)]
         (cond
-          (= stage :followup-date)
-          (if-let [followup (parse-followup-date trimmed)]
-            (let [res (actions/execute! state {:action/id :cap/action/task-set-status
-                                               :actor (actions/actor-from-telegram chat-user)
-                                               :input (cond-> {:task/id task-id
-                                                               :task/status :pending
-                                                               :note/body reason
-                                                               :note/last-contact (now-inst)}
-                                                        followup (assoc :note/next-followup followup))})]
-              (take-pending-reason! chat-id)
-              (if-let [err (:error res)]
-                (send-message! cfg {:chat-id chat-id
-                                    :text (str "Unable to set pending: " (:message err))
-                                    :message-key (str "pending-reason-error-" (System/currentTimeMillis))})
-                (send-task-card! state chat-id (get-in res [:result :task]) {})))
+          (#{:followup-date :followup-date-picker} stage)
+          (let [{:keys [text quicks]} (:picker pending)
+                text (or text "Pick the follow-up date:")
+                quicks (or quicks [{:id :tomorrow :label "Tomorrow"}
+                                   {:id :in-3-days :label "In 3 days"}
+                                   {:id :next-week :label "Next week"}])]
             (send-message! cfg {:chat-id chat-id
-                                :text "Send a follow-up date in YYYY-MM-DD or ISO-8601."
-                                :message-key (str "pending-followup-date-" (System/currentTimeMillis))}))
+                                :text "Use the buttons to choose a date."
+                                :message-key (str "pending-followup-date-click-" (System/currentTimeMillis))
+                                :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
+                                                                            :quicks quicks
+                                                                            :extra-rows [[(inline-button "Cancel" (str "pending:cancel:" task-id))]]})}))
 
           (= stage :followup)
-          (if-let [followup (parse-followup-date trimmed)]
-            (let [res (actions/execute! state {:action/id :cap/action/task-set-status
-                                               :actor (actions/actor-from-telegram chat-user)
-                                               :input (cond-> {:task/id task-id
-                                                               :task/status :pending
-                                                               :note/body reason
-                                                               :note/last-contact (now-inst)}
-                                                        followup (assoc :note/next-followup followup))})]
-              (take-pending-reason! chat-id)
-              (if-let [err (:error res)]
-                (send-message! cfg {:chat-id chat-id
-                                    :text (str "Unable to set pending: " (:message err))
-                                    :message-key (str "pending-reason-error-" (System/currentTimeMillis))})
-                (send-task-card! state chat-id (get-in res [:result :task]) {})))
-            (send-message! cfg {:chat-id chat-id
-                                :text "Choose a follow-up option from the buttons."
-                                :message-key (str "pending-followup-button-" (System/currentTimeMillis))}))
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons to choose a follow-up option."
+                              :message-key (str "pending-followup-button-" (System/currentTimeMillis))
+                              :reply-markup (pending-followup-inline-keyboard task-id)})
 
           :else
           (if (str/blank? trimmed)
@@ -1245,6 +1384,86 @@
                                 :text (str "Unable to create task: " (:message err))
                                 :message-key (str "client-action-error-" (System/currentTimeMillis))})
             (send-task-card! state chat-id (get-in res [:result :task]) {})))))))
+
+(defn- handle-docs-message
+  [state chat-user chat-id text]
+  (let [cfg (get-in state [:config :telegram])
+        session (get-docs-session! chat-id)
+        trimmed (some-> text str/trim)]
+    (when session
+      (case (:stage session)
+        :docs/payment-amount
+        (if (str/blank? trimmed)
+          (send-message! cfg {:chat-id chat-id
+                              :text "Send the payment amount."
+                              :message-key (str "docs-payment-amount-empty-" (System/currentTimeMillis))})
+          (do
+            (save-docs-session! chat-id (-> session
+                                            (assoc :stage :docs/payment-method)
+                                            (assoc-in [:draft :payment/amount] trimmed)))
+            (send-message! cfg {:chat-id chat-id
+                                :text "Choose payment method:"
+                                :message-key (str "docs-payment-method-" (System/currentTimeMillis))
+                                :reply-markup (docs-payment-method-inline-keyboard)})))
+
+        :docs/payment-reference
+        (if (str/blank? trimmed)
+          (send-message! cfg {:chat-id chat-id
+                              :text "Send the payment reference, or tap Skip."
+                              :message-key (str "docs-payment-ref-empty-" (System/currentTimeMillis))
+                              :reply-markup (docs-payment-reference-inline-keyboard)})
+          (let [draft (:draft session)
+                client-id (:client-id session)
+                paid-at (:payment/paid-at draft)]
+            (if-not paid-at
+              (do
+                (save-docs-session! chat-id (assoc session :stage :docs/payment-date))
+                (send-message! cfg {:chat-id chat-id
+                                    :text "Pick payment date:"
+                                    :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))
+                                    :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
+                                                                                :quicks [{:id :today :label "Today"}
+                                                                                         {:id :yesterday :label "Yesterday"}]
+                                                                                :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+              (let [input (cond-> {:client/id client-id
+                                   :payment/amount (:payment/amount draft)
+                                   :payment/method (:payment/method draft)
+                                   :payment/paid-at paid-at}
+                            (present-string? trimmed) (assoc :payment/reference trimmed))
+                    res (actions/execute! state {:action/id :cap/action/payment-create
+                                                 :actor (actions/actor-from-telegram chat-user)
+                                                 :input input})]
+                (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+                (if-let [err (:error res)]
+                  (send-message! cfg {:chat-id chat-id
+                                      :text (str "Unable to add payment: " (:message err))
+                                      :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
+                                      :reply-markup (docs-menu-inline-keyboard)})
+                  (send-message! cfg {:chat-id chat-id
+                                      :text "Payment added."
+                                      :message-key (str "docs-payment-added-" (System/currentTimeMillis))
+                                      :reply-markup (docs-menu-inline-keyboard)}))))))
+
+        :docs/payment-date
+        (send-message! cfg {:chat-id chat-id
+                            :text "Use the calendar buttons to choose a payment date."
+                            :message-key (str "docs-payment-date-click-" (System/currentTimeMillis))})
+
+        :docs/payment-method
+        (send-message! cfg {:chat-id chat-id
+                            :text "Use the buttons to choose a payment method."
+                            :message-key (str "docs-payment-method-click-" (System/currentTimeMillis))
+                            :reply-markup (docs-payment-method-inline-keyboard)})
+
+        :docs/menu
+        (send-message! cfg {:chat-id chat-id
+                            :text "Use the buttons."
+                            :message-key (str "docs-menu-click-" (System/currentTimeMillis))
+                            :reply-markup (docs-menu-inline-keyboard)})
+
+        (send-message! cfg {:chat-id chat-id
+                            :text "Use /docs to start."
+                            :message-key (str "docs-unknown-" (System/currentTimeMillis))})))))
 
 (defn- edit-prompt-text
   [edit-type title]
@@ -1404,6 +1623,211 @@
                                              :message-id message-id
                                              :text "Pending reason cancelled."
                                              :reply-markup {:inline_keyboard []}}))
+      :docs/cancel (do
+                     (take-docs-session! chat-id)
+                     (edit-message! cfg {:chat-id chat-id
+                                         :message-id message-id
+                                         :text "Docs closed."
+                                         :reply-markup {:inline_keyboard []}}))
+      :docs/menu (let [session (get-docs-session! chat-id)]
+                   (if (and chat-user session (:client-id session))
+                     (do
+                       (save-docs-session! chat-id (assoc session :stage :docs/menu))
+                       (edit-message! cfg {:chat-id chat-id
+                                           :message-id message-id
+                                           :text "Documents:"
+                                           :reply-markup (docs-menu-inline-keyboard)}))
+                     (prompt-docs-client-pick! state chat-id)))
+      :docs/client-pick (prompt-docs-client-pick! state chat-id)
+      :docs/client-set (let [cid (:client-id parsed)
+                             client-id (when cid (try (UUID/fromString (str cid)) (catch Exception _ nil)))
+                             client (when (and db client-id) (clients/client-by-id db client-id nil))
+                             name (or (:client/name client) "Client")]
+                         (if (and chat-user client-id)
+                           (do
+                             (save-docs-session! chat-id {:stage :docs/menu
+                                                          :user chat-user
+                                                          :client-id client-id})
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text (str "Documents for " name ":")
+                                                 :reply-markup (docs-menu-inline-keyboard)}))
+                           (send-message! cfg {:chat-id chat-id
+                                               :text "Invalid client."
+                                               :message-key (str "docs-client-invalid-" (System/currentTimeMillis))})))
+      :docs/payment-add (let [session (get-docs-session! chat-id)]
+                          (if (and chat-user session (:client-id session))
+                            (do
+                              (save-docs-session! chat-id (assoc session :stage :docs/payment-amount :draft {:client/id (:client-id session)}))
+                              (edit-message! cfg {:chat-id chat-id
+                                                  :message-id message-id
+                                                  :text "Send payment amount:"
+                                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:menu")]]}}))
+                            (prompt-docs-client-pick! state chat-id)))
+      :docs/payment-method (let [session (get-docs-session! chat-id)
+                                 method-raw (:value parsed)
+                                 method (when method-raw (keyword method-raw))
+                                 quicks [{:id :today :label "Today"}
+                                         {:id :yesterday :label "Yesterday"}]
+                                 month (LocalDate/now (ZoneId/systemDefault))]
+                             (if (and chat-user session (:client-id session) method)
+                               (do
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/payment-date)
+                                                                 (assoc :picker {:kind :docs/payment
+                                                                                 :text "Pick payment date:"
+                                                                                 :quicks quicks})
+                                                                 (assoc-in [:draft :payment/method] method)))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text "Pick payment date:"
+                                                     :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                 :quicks quicks
+                                                                                                 :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "Invalid payment method."
+                                                   :message-key (str "docs-payment-method-invalid-" (System/currentTimeMillis))})))
+      :docs/payment-ref-skip (let [session (get-docs-session! chat-id)
+                                   draft (:draft session)
+                                   client-id (:client-id session)
+                                   paid-at (:payment/paid-at draft)
+                                   input {:client/id client-id
+                                          :payment/amount (:payment/amount draft)
+                                          :payment/method (:payment/method draft)
+                                          :payment/paid-at paid-at}
+                                   res (when (and chat-user session (:client-id session))
+                                         (actions/execute! state {:action/id :cap/action/payment-create
+                                                                  :actor (actions/actor-from-telegram chat-user)
+                                                                  :input input}))]
+                               (if (and chat-user session (:client-id session))
+                                 (if-not paid-at
+                                   (send-message! cfg {:chat-id chat-id
+                                                       :text "Pick payment date first."
+                                                       :message-key (str "docs-payment-date-missing-" (System/currentTimeMillis))})
+                                   (do
+                                   (save-docs-session! chat-id (assoc session :stage :docs/menu :draft nil))
+                                   (if-let [err (:error res)]
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text (str "Unable to add payment: " (:message err))
+                                                         :message-key (str "docs-payment-create-error-" (System/currentTimeMillis))
+                                                         :reply-markup (docs-menu-inline-keyboard)})
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text "Payment added."
+                                                         :message-key (str "docs-payment-added-" (System/currentTimeMillis))
+                                                         :reply-markup (docs-menu-inline-keyboard)}))))
+                                 (prompt-docs-client-pick! state chat-id)))
+      :date-picker/noop nil
+      :date-picker/nav (let [ym (:value parsed)
+                             month (or (parse-ym ym) (LocalDate/now (ZoneId/systemDefault)))
+                             pending (get-pending-reason! chat-id)
+                             session (get-docs-session! chat-id)]
+                         (cond
+                           (and pending (= (:stage pending) :followup-date-picker))
+                           (let [tid (str (:task-id pending))
+                                 text (get-in pending [:picker :text] "Pick the follow-up date:")
+                                 quicks (or (get-in pending [:picker :quicks])
+                                            [{:id :tomorrow :label "Tomorrow"}
+                                             {:id :in-3-days :label "In 3 days"}
+                                             {:id :next-week :label "Next week"}])]
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text text
+                                                 :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                             :quicks quicks
+                                                                                             :extra-rows [[(inline-button "Cancel" (str "pending:cancel:" tid))]]})}))
+                           (and session (= (:stage session) :docs/payment-date))
+                           (let [text (get-in session [:picker :text] "Pick payment date:")
+                                 quicks (or (get-in session [:picker :quicks])
+                                            [{:id :today :label "Today"}
+                                             {:id :yesterday :label "Yesterday"}])]
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text text
+                                                 :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                             :quicks quicks
+                                                                                             :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                           :else nil))
+      :date-picker/day (let [ymd (:value parsed)
+                             picked (parse-ymd->date ymd)
+                             pending (get-pending-reason! chat-id)
+                             session (get-docs-session! chat-id)]
+                         (cond
+                           (and picked pending (= (:stage pending) :followup-date-picker) (present-string? (:reason pending)))
+                           (let [task-id (:task-id pending)
+                                 res (actions/execute! state {:action/id :cap/action/task-set-status
+                                                              :actor (actions/actor-from-telegram chat-user)
+                                                              :input {:task/id task-id
+                                                                      :task/status :pending
+                                                                      :note/body (:reason pending)
+                                                                      :note/last-contact (now-inst)
+                                                                      :note/next-followup picked}})]
+                             (take-pending-reason! chat-id)
+                             (if-let [err (:error res)]
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text (str "Unable to set pending: " (:message err))
+                                                   :message-key (str "pending-followup-error-" (System/currentTimeMillis))})
+                               (do
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text (str "Follow-up date set: " ymd)
+                                                     :reply-markup {:inline_keyboard []}})
+                                 (send-task-card! state chat-id (get-in res [:result :task]) {}))))
+                           (and picked session (= (:stage session) :docs/payment-date))
+                           (do
+                             (save-docs-session! chat-id (-> session
+                                                             (assoc :stage :docs/payment-reference)
+                                                             (assoc-in [:draft :payment/paid-at] picked)))
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text (str "Payment date set: " ymd)
+                                                 :reply-markup {:inline_keyboard []}})
+                             (send-message! cfg {:chat-id chat-id
+                                                 :text "Send the payment reference (optional):"
+                                                 :message-key (str "docs-payment-ref-" (System/currentTimeMillis))
+                                                 :reply-markup (docs-payment-reference-inline-keyboard)}))
+                           :else nil))
+      :date-picker/quick (let [quick-id (some-> (:value parsed) keyword)
+                               today (LocalDate/now (ZoneId/systemDefault))
+                               pending (get-pending-reason! chat-id)
+                               session (get-docs-session! chat-id)
+                               picked-day (cond
+                                            (and pending (= (:stage pending) :followup-date-picker))
+                                            (case quick-id
+                                              :tomorrow (.plusDays today 1)
+                                              :in-3-days (.plusDays today 3)
+                                              :next-week (.plusDays today 7)
+                                              nil)
+                                            (and session (= (:stage session) :docs/payment-date))
+                                            (case quick-id
+                                              :today today
+                                              :yesterday (.minusDays today 1)
+                                              nil)
+                                            :else nil)
+                               ymd (when picked-day (yyyy-mm-dd picked-day))]
+                           (when ymd
+                             (handle-callback state chat-id {:message-id message-id
+                                                            :callback-id nil
+                                                            :data (str "dp:day:" ymd)})))
+      :date-picker/skip (let [pending (get-pending-reason! chat-id)]
+                          (when (and pending (= (:stage pending) :followup-date-picker) (present-string? (:reason pending)))
+                            (let [task-id (:task-id pending)
+                                  res (actions/execute! state {:action/id :cap/action/task-set-status
+                                                               :actor (actions/actor-from-telegram chat-user)
+                                                               :input {:task/id task-id
+                                                                       :task/status :pending
+                                                                       :note/body (:reason pending)
+                                                                       :note/last-contact (now-inst)}})]
+                              (take-pending-reason! chat-id)
+                              (if-let [err (:error res)]
+                                (send-message! cfg {:chat-id chat-id
+                                                    :text (str "Unable to set pending: " (:message err))
+                                                    :message-key (str "pending-followup-error-" (System/currentTimeMillis))})
+                                (do
+                                  (edit-message! cfg {:chat-id chat-id
+                                                      :message-id message-id
+                                                      :text "Follow-up set without a date."
+                                                      :reply-markup {:inline_keyboard []}})
+                                  (send-task-card! state chat-id (get-in res [:result :task]) {}))))))
       :pending/reason (let [tid (:task-id parsed)
                             task-id (try (UUID/fromString tid) (catch Exception _ nil))
                             reason-id (:value parsed)
@@ -1446,10 +1870,21 @@
                             (if (present-string? (:reason pending))
                               (if (= "pick-date" followup-id)
                                 (do
-                                  (save-pending-reason! chat-id (assoc pending :stage :followup-date))
-                                  (send-message! cfg {:chat-id chat-id
-                                                      :text "Send the follow-up date (YYYY-MM-DD)."
-                                                      :message-key (str "pending-followup-date-" tid)}))
+                                  (let [text "Pick the follow-up date:"
+                                        quicks [{:id :tomorrow :label "Tomorrow"}
+                                                {:id :in-3-days :label "In 3 days"}
+                                                {:id :next-week :label "Next week"}]]
+                                    (save-pending-reason! chat-id (assoc pending
+                                                                         :stage :followup-date-picker
+                                                                         :picker {:kind :pending/followup
+                                                                                  :text text
+                                                                                  :quicks quicks}))
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text text
+                                                        :message-key (str "pending-followup-date-" tid)
+                                                        :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
+                                                                                                    :quicks quicks
+                                                                                                    :extra-rows [[(inline-button "Cancel" (str "pending:cancel:" tid))]]})})))
                                 (let [followup (followup-date (keyword followup-id))
                                       res (actions/execute! state {:action/id :cap/action/task-set-status
                                                                    :actor (actions/actor-from-telegram chat-user)
@@ -1736,6 +2171,35 @@
   (when (present-string? data)
     (let [parts (str/split data #":")]
       (case (first parts)
+        "dp"
+        (case (second parts)
+          "noop" {:type :date-picker/noop}
+          "nav" {:type :date-picker/nav
+                 :value (nth parts 2 nil)}
+          "day" {:type :date-picker/day
+                 :value (nth parts 2 nil)}
+          "quick" {:type :date-picker/quick
+                   :value (nth parts 2 nil)}
+          "skip" {:type :date-picker/skip}
+          nil)
+        "docs"
+        (case (second parts)
+          "cancel" {:type :docs/cancel}
+          "menu" {:type :docs/menu}
+          "client" (case (nth parts 2 nil)
+                     "set" {:type :docs/client-set
+                            :client-id (nth parts 3 nil)}
+                     "pick" {:type :docs/client-pick}
+                     nil)
+          "payment" (case (nth parts 2 nil)
+                      "add" {:type :docs/payment-add}
+                      "method" {:type :docs/payment-method
+                                :value (nth parts 3 nil)}
+                      "ref" (case (nth parts 3 nil)
+                              "skip" {:type :docs/payment-ref-skip}
+                              nil)
+                      nil)
+          nil)
         "filter"
         (case (second parts)
           "status" {:type :tasks/filter
@@ -1871,7 +2335,20 @@
                    {:text (str "Unable to list tasks: " (:message err))}
                    {:task-list {:tasks (:tasks resp)
                                 :filters filters
-                                :pending-reasons pending-reasons}})))
+                                   :pending-reasons pending-reasons}})))
+      :docs (if-not chat-user
+              {:text "Chat not linked. Use /start <token> from the app to link."}
+              (let [session (get-docs-session! chat-id)]
+                (if (and session (:client-id session))
+                  {:text "Documents:"
+                   :reply-markup (docs-menu-inline-keyboard)}
+                  (let [workspace nil
+                        res (clients/list-clients conn {:limit 6} workspace)
+                        client-list (or (:clients res) [])
+                        prompt (if (seq client-list) "Pick a client:" "No clients available yet.")
+                        keyboard (docs-client-pick-inline-keyboard client-list)]
+                    {:text prompt
+                     :reply-markup keyboard}))))
       :task (if-not chat-user
               {:text "Chat not linked. Use /start <token> from the app to link."}
               (let [raw (some-> rest (str/split #"\s+" 2) first)
@@ -2039,9 +2516,11 @@
                                          (handle-pending-reason-message state chat-user chat-id text)
                                          (if (get-pending-client! chat-id)
                                            (handle-pending-client-message state chat-user chat-id text)
-                                           (if (get-pending-next-action! chat-id)
-                                             (handle-pending-next-action-message state chat-user chat-id text)
-                                             (handle-freeform-message state chat-user chat-id text)))))
+                                             (if (get-pending-next-action! chat-id)
+                                               (handle-pending-next-action-message state chat-user chat-id text)
+                                             (if (get-docs-session! chat-id)
+                                               (handle-docs-message state chat-user chat-id text)
+                                               (handle-freeform-message state chat-user chat-id text))))))
                                      {:text "Chat not linked. Use /start <token> to link."})))
                 {:keys [text tasks task task-list link-task]} response]
             (cond
@@ -2078,7 +2557,8 @@
                       {:status :handled})
               text (let [send-res (send-message! cfg {:chat-id chat-id
                                                       :text text
-                                                      :message-key (str "update-" update-id "-" (or (some-> command name) "text"))})]
+                                                      :message-key (str "update-" update-id "-" (or (some-> command name) "text"))
+                                                      :reply-markup (:reply-markup response)})]
                      (if (:error send-res)
                        send-res
                        {:status :handled
