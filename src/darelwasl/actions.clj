@@ -511,6 +511,106 @@
   [state {:keys [input actor]}]
   (agreements/list-plan-items (conn state) {:agreement-id (:agreement/id (or input {}))} actor))
 
+(declare invoice-number-for-plan-item)
+
+(defn- find-invoice-for-plan-item
+  [invoices plan-item-id]
+  (some (fn [inv]
+          (when (= plan-item-id (get-in inv [:invoice/plan-item :plan.item/id]))
+            inv))
+        (or invoices [])))
+
+(defn- plan-item-invoice-ensure
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        agreement-id (:agreement/id body)
+        plan-item-id (:plan.item/id body)]
+    (let [conn (conn state)
+          db (d/db conn)
+          agreement (agreements/pull-agreement db agreement-id actor)]
+      (cond
+        (nil? agreement-id)
+        {:error {:status 400 :message "agreement/id is required"}}
+
+        (nil? plan-item-id)
+        {:error {:status 400 :message "plan.item/id is required"}}
+
+        (nil? agreement)
+        {:error {:status 404 :message "Agreement not found"}}
+
+        :else
+        (let [client-id (get-in agreement [:agreement/client :client/id])
+              items (agreements/plan-items-for-agreement db agreement-id actor)
+              plan-item (some (fn [it] (when (= plan-item-id (:plan.item/id it)) it)) items)]
+          (if-not plan-item
+            {:error {:status 404 :message "Plan item not found"}}
+            (let [listed (documents/list-invoices conn {:client-id client-id} actor)]
+              (if-let [err (:error listed)]
+                {:error err}
+                (if-let [existing (find-invoice-for-plan-item (:invoices listed) plan-item-id)]
+                  {:invoice existing}
+                  (let [invoice-input {:client/id client-id
+                                       :agreement/id agreement-id
+                                       :plan.item/id plan-item-id
+                                       :invoice/number (invoice-number-for-plan-item agreement plan-item)
+                                       :invoice/title (:plan.item/label plan-item)
+                                       :invoice/description (str "Auto-generated from agreement " (or (:entity/ref agreement) "—")
+                                                                 " plan item " (or (:plan.item/label plan-item) "—"))
+                                       :invoice/issued-at (java.util.Date.)
+                                       :invoice/due-at (:plan.item/due-at plan-item)
+                                       :invoice/currency (:plan.item/currency plan-item)
+                                       :invoice/total-amount (:plan.item/amount plan-item)
+                                       :invoice/status (or (:plan.item/invoice-status plan-item) :sent)}
+                        created (documents/create-invoice! conn invoice-input actor)]
+                    (if-let [cerr (:error created)]
+                      {:error cerr}
+                      {:invoice (:invoice created)})))))))))))
+
+(defn- plan-item-invoice-issue
+  [state {:keys [input actor]}]
+  (let [res (plan-item-invoice-ensure state {:input input :actor actor})]
+    (if-let [err (:error res)]
+      res
+      (let [inv (:invoice res)
+            invoice-id (:invoice/id inv)
+            client-id (get-in inv [:invoice/client :client/id])
+            doc-secret (get-in state [:config :documents :verify-secret])]
+        (if (or (nil? doc-secret) (str/blank? (str doc-secret)))
+          {:error {:status 500 :message "DOCUMENT_VERIFY_SECRET is required to issue invoice PDFs"}}
+          (let [issue (documents/issue-document! state {:type :invoice
+                                                       :input {:client/id client-id
+                                                               :invoice/id invoice-id}
+                                                       :actor actor})]
+            (if-let [derr (:error issue)]
+              {:invoice inv
+               :invoice-pdf/error derr}
+              {:invoice inv
+               :invoice-pdf issue})))))))
+
+(defn- plan-item-invoice-mark-paid
+  [state {:keys [input actor]}]
+  (let [ensured (plan-item-invoice-ensure state {:input input :actor actor})]
+    (if-let [err (:error ensured)]
+      ensured
+      (let [inv (:invoice ensured)
+            invoice-id (:invoice/id inv)
+            client-id (get-in inv [:invoice/client :client/id])
+            doc-secret (get-in state [:config :documents :verify-secret])]
+        (if (or (nil? doc-secret) (str/blank? (str doc-secret)))
+          {:error {:status 500 :message "DOCUMENT_VERIFY_SECRET is required to mark invoices paid (auto-issues PDFs)"}}
+          (let [updated (documents/update-invoice! (conn state) invoice-id {:invoice/status :paid} actor)]
+            (if-let [uerr (:error updated)]
+              {:error uerr}
+              (let [issue (documents/issue-document! state {:type :invoice
+                                                           :input {:client/id client-id
+                                                                   :invoice/id invoice-id}
+                                                           :actor actor})]
+                (if-let [derr (:error issue)]
+                  {:invoice (:invoice updated)
+                   :invoice-pdf/error derr}
+                  {:invoice (:invoice updated)
+                   :invoice-pdf issue})))))))))
+
 (defn- invoice-number-for-plan-item
   [agreement plan-item]
   (let [aref (:entity/ref agreement)
@@ -744,6 +844,9 @@
    :cap/action/plan-item-update plan-item-update
    :cap/action/plan-item-delete plan-item-delete
    :cap/action/plan-item-list plan-item-list
+   :cap/action/plan-item-invoice-ensure plan-item-invoice-ensure
+   :cap/action/plan-item-invoice-issue plan-item-invoice-issue
+   :cap/action/plan-item-invoice-mark-paid plan-item-invoice-mark-paid
    :cap/action/agreement-generate-due-invoices agreement-generate-due-invoices
    :cap/action/invoice-create invoice-create
    :cap/action/invoice-update invoice-update

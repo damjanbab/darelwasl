@@ -1472,6 +1472,74 @@
             :views [:cap/view/clients]}
   :tooling []}
 
+ {:id :cap/action/plan-item-invoice-ensure
+  :title "Plan Item Invoice Ensure"
+  :version "v1"
+  :purpose "Ensure a plan item has an invoice (create if missing)."
+  :inputs {:agreement/id :uuid
+           :plan.item/id :uuid}
+  :outputs {:invoice :map}
+  :side-effects ["Create missing invoice for plan item"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:agreement/id :plan.item/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id :plan.item/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item :cap/schema/agreement :cap/schema/invoice]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-invoice-issue
+  :title "Plan Item Invoice Issue"
+  :version "v1"
+  :purpose "Ensure an invoice exists for a plan item and issue (or reuse) the immutable invoice PDF."
+  :inputs {:agreement/id :uuid
+           :plan.item/id :uuid}
+  :outputs {:invoice :map
+            :invoice-pdf :map}
+  :side-effects ["Create missing invoice for plan item"
+                 "Auto-issue (or reuse) immutable invoice document"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:agreement/id :plan.item/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id :plan.item/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item :cap/schema/agreement :cap/schema/invoice :cap/schema/document]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-invoice-mark-paid
+  :title "Plan Item Invoice Mark Paid"
+  :version "v1"
+  :purpose "Ensure an invoice exists for a plan item, set status to paid, and issue (or reuse) the immutable invoice PDF."
+  :inputs {:agreement/id :uuid
+           :plan.item/id :uuid}
+  :outputs {:invoice :map
+            :invoice-pdf :map}
+  :side-effects ["Create missing invoice for plan item"
+                 "Mark invoice paid"
+                 "Auto-issue (or reuse) immutable invoice document"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:agreement/id :plan.item/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id :plan.item/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item :cap/schema/agreement :cap/schema/invoice :cap/schema/document]
+            :views [:cap/view/clients]}
+  :tooling []}
+
  {:id :cap/action/agreement-generate-due-invoices
   :title "Agreement Generate Due Invoices"
   :version "v1"

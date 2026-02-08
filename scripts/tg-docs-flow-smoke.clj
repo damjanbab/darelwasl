@@ -75,7 +75,11 @@
 	                                       :cap/action/agreement-create {:result {:agreement {:agreement/id agreement-id
 	                                                                                         :agreement/number "AG-1"
 	                                                                                         :agreement/status :draft}}}
-	                                       :cap/action/plan-item-list {:result {:plan-items []}}
+	                                       :cap/action/plan-item-list {:result {:plan-items [{:plan.item/id plan-item-id
+	                                                                                         :plan.item/label "Installment 1"
+	                                                                                         :plan.item/amount 5000.0
+	                                                                                         :plan.item/currency "SAR"
+	                                                                                         :plan.item/due-at "2026-03-01"}]}}
 	                                       :cap/action/plan-item-create {:result {:plan-item {:plan.item/id plan-item-id}}}
 	                                       {:error {:status 500 :message (str "Unexpected action in smoke: " (:action/id invocation))}}))
 	                  tg/request-json fake-request]
@@ -441,6 +445,22 @@
         (assert! (str/includes? (str (:text payload)) "Plan item") "plan item added confirmation")
         (assert! (any-callback-prefix? rm (str "docs:agreements:plan:list:" agreement-id))
                  "agreement actions include Plan items"))
+
+      ;; plan item list shows per-item actions (invoice/pdf + record payment + mark paid)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 30
+                              :callback_query {:id "cb20"
+                                               :from {:id 7 :username "smoke"}
+                                               :data (str "docs:agreements:plan:list:" agreement-id)
+                                               :message {:message_id 35 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (any-callback-prefix? rm (str "docs:plan-item:invoice:issue:" agreement-id ":"))
+                 "plan list includes Invoice PDF button")
+        (assert! (any-callback-prefix? rm (str "docs:plan-item:payment:" agreement-id ":"))
+                 "plan list includes Record payment button")
+        (assert! (any-callback-prefix? rm (str "docs:plan-item:invoice:paid:" agreement-id ":"))
+                 "plan list includes Mark paid button"))
 
       (println "OK: docs invoice due-date uses inline calendar + No-due-date button")
       (println "OK: docs payment paid-at date requires inline calendar (no skip, no typing fallback)")

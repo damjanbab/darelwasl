@@ -68,6 +68,7 @@
 (declare docs-agreements-menu-inline-keyboard)
 (declare docs-agreement-actions-inline-keyboard)
 (declare docs-agreement-party-inline-keyboard)
+(declare docs-plan-items-inline-keyboard)
 (declare docs-analytics-menu-inline-keyboard)
 (declare docs-plan-item-kind-inline-keyboard)
 (declare docs-plan-item-invoice-on-inline-keyboard)
@@ -822,6 +823,29 @@
   {:inline_keyboard
    [[(inline-button "Skip" (str "docs:agreement:party:skip:" (name field)))
      (inline-button "Cancel" "docs:agreements:menu")]]})
+
+(defn- plan-item-label
+  [it]
+  (let [label (or (:plan.item/label it) "—")
+        amount (or (:plan.item/amount it) "—")
+        cur (or (:plan.item/currency it) "")
+        due (or (:plan.item/due-at it) "—")]
+    (truncate-text (str label " · " amount " " cur " · due " due) 42)))
+
+(defn- docs-plan-items-inline-keyboard
+  [agreement-id plan-items]
+  {:inline_keyboard
+   (vec
+    (concat
+     (mapcat (fn [it]
+               (let [pid (:plan.item/id it)
+                     line [(inline-button (plan-item-label it) "dp:noop")]
+                     actions [(inline-button "Invoice PDF" (str "docs:plan-item:invoice:issue:" agreement-id ":" pid))
+                              (inline-button "Record payment" (str "docs:plan-item:payment:" agreement-id ":" pid))]
+                     actions2 [(inline-button "Mark paid" (str "docs:plan-item:invoice:paid:" agreement-id ":" pid))]]
+                 [line actions actions2]))
+             (or plan-items []))
+     [[(inline-button "Back" (str "docs:agreements:set:" agreement-id))]]))})
 
 (defn- docs-plan-item-kind-inline-keyboard
   []
@@ -2571,27 +2595,95 @@
                                                                         :actor actor
                                                                         :input {:agreement/id agreement-id}})
                                            items (get-in res [:result :plan-items] [])
-                                           lines (if (seq items)
-                                                   (->> items
-                                                        (map-indexed (fn [i it]
-                                                                       (let [label (or (:plan.item/label it) "—")
-                                                                             amount (or (:plan.item/amount it) "—")
-                                                                             currency (or (:plan.item/currency it) "")
-                                                                             due (or (:plan.item/due-at it) "—")]
-                                                                         (format "%d) %s · %s %s · due %s"
-                                                                                 (inc i) label amount currency due))))
-                                                        (str/join "\n"))
-                                                   "No plan items yet.")]
+                                           lines (if (seq items) "Tap an action under the plan item." "No plan items yet.")]
                                        (save-docs-session! chat-id (-> session
                                                                        (assoc :stage :docs/agreement-actions
                                                                               :agreement/id agreement-id)))
                                        (edit-message! cfg {:chat-id chat-id
                                                            :message-id message-id
                                                            :text (str "Plan items:\n" lines)
-                                                           :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))
+                                                           :reply-markup (if (seq items)
+                                                                           (docs-plan-items-inline-keyboard agreement-id items)
+                                                                           (docs-agreement-actions-inline-keyboard agreement-id))}))
                                      (send-message! cfg {:chat-id chat-id
                                                          :text "Invalid agreement."
                                                          :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
+      :docs/plan-item-invoice-issue (let [session (get-docs-session! chat-id)
+                                          aid-raw (:agreement-id parsed)
+                                          pid-raw (:plan-item-id parsed)
+                                          agreement-id (when aid-raw (try (UUID/fromString (str aid-raw)) (catch Exception _ nil)))
+                                          plan-item-id (when pid-raw (try (UUID/fromString (str pid-raw)) (catch Exception _ nil)))
+                                          actor (actions/actor-from-telegram chat-user)]
+                                      (if (and chat-user session (:client-id session) agreement-id plan-item-id)
+                                        (let [res (actions/execute! state {:action/id :cap/action/plan-item-invoice-issue
+                                                                           :actor actor
+                                                                           :input {:agreement/id agreement-id
+                                                                                   :plan.item/id plan-item-id}})
+                                              pdf (get-in res [:result :invoice-pdf :file])]
+                                          (when pdf
+                                            (docs-send-file! state chat-id actor pdf :caption "Invoice"))
+                                          (if-let [err (:error res)]
+                                            (send-message! cfg {:chat-id chat-id
+                                                                :text (str "Unable to issue invoice PDF: " (:message err))
+                                                                :message-key (str "docs-plan-item-invoice-issue-error-" (System/currentTimeMillis))})
+                                            (send-message! cfg {:chat-id chat-id
+                                                                :text "Invoice PDF issued."
+                                                                :message-key (str "docs-plan-item-invoice-issue-ok-" (System/currentTimeMillis))})))
+                                        (send-message! cfg {:chat-id chat-id
+                                                            :text "Invalid plan item."
+                                                            :message-key (str "docs-plan-item-invalid-" (System/currentTimeMillis))})))
+      :docs/plan-item-invoice-paid (let [session (get-docs-session! chat-id)
+                                         aid-raw (:agreement-id parsed)
+                                         pid-raw (:plan-item-id parsed)
+                                         agreement-id (when aid-raw (try (UUID/fromString (str aid-raw)) (catch Exception _ nil)))
+                                         plan-item-id (when pid-raw (try (UUID/fromString (str pid-raw)) (catch Exception _ nil)))
+                                         actor (actions/actor-from-telegram chat-user)]
+                                     (if (and chat-user session (:client-id session) agreement-id plan-item-id)
+                                       (let [res (actions/execute! state {:action/id :cap/action/plan-item-invoice-mark-paid
+                                                                          :actor actor
+                                                                          :input {:agreement/id agreement-id
+                                                                                  :plan.item/id plan-item-id}})
+                                             pdf (get-in res [:result :invoice-pdf :file])]
+                                         (when pdf
+                                           (docs-send-file! state chat-id actor pdf :caption "Invoice"))
+                                         (if-let [err (:error res)]
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text (str "Unable to mark paid: " (:message err))
+                                                               :message-key (str "docs-plan-item-mark-paid-error-" (System/currentTimeMillis))})
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text "Invoice marked paid."
+                                                               :message-key (str "docs-plan-item-mark-paid-ok-" (System/currentTimeMillis))})))
+                                       (send-message! cfg {:chat-id chat-id
+                                                           :text "Invalid plan item."
+                                                           :message-key (str "docs-plan-item-invalid-" (System/currentTimeMillis))})))
+      :docs/plan-item-payment (let [session (get-docs-session! chat-id)
+                                    aid-raw (:agreement-id parsed)
+                                    pid-raw (:plan-item-id parsed)
+                                    agreement-id (when aid-raw (try (UUID/fromString (str aid-raw)) (catch Exception _ nil)))
+                                    plan-item-id (when pid-raw (try (UUID/fromString (str pid-raw)) (catch Exception _ nil)))
+                                    actor (actions/actor-from-telegram chat-user)]
+                                (if (and chat-user session (:client-id session) agreement-id plan-item-id)
+                                  (let [ensure (actions/execute! state {:action/id :cap/action/plan-item-invoice-ensure
+                                                                       :actor actor
+                                                                       :input {:agreement/id agreement-id
+                                                                               :plan.item/id plan-item-id}})
+                                        invoice-id (get-in ensure [:result :invoice :invoice/id])]
+                                    (if-let [err (:error ensure)]
+                                      (send-message! cfg {:chat-id chat-id
+                                                          :text (str "Unable to prepare payment: " (:message err))
+                                                          :message-key (str "docs-plan-item-pay-ensure-error-" (System/currentTimeMillis))})
+                                      (do
+                                        (save-docs-session! chat-id (assoc session
+                                                                           :stage :docs/payment-amount
+                                                                           :draft {:client/id (:client-id session)
+                                                                                   :invoice/id invoice-id}))
+                                        (edit-message! cfg {:chat-id chat-id
+                                                    :message-id message-id
+                                                    :text "Send payment amount:"
+                                                    :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:menu")]]}}))))
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text "Invalid plan item."
+                                                      :message-key (str "docs-plan-item-invalid-" (System/currentTimeMillis))})))
       :docs/agreements-plan-add (let [session (get-docs-session! chat-id)
                                       raw (:agreement-id parsed)
                                       agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))]
@@ -2890,14 +2982,32 @@
                                  method (when method-raw (keyword method-raw))
                                  ]
                              (if (and chat-user session (:client-id session) method)
-                               (do
-                                 (save-docs-session! chat-id (-> session
-                                                                 (assoc :stage :docs/payment-invoice-attach)
-                                                                 (assoc-in [:draft :payment/method] method)))
-                                 (edit-message! cfg {:chat-id chat-id
-                                                     :message-id message-id
-                                                     :text "Attach this payment to an invoice?"
-                                                     :reply-markup (docs-payment-invoice-attach-inline-keyboard)}))
+                               (let [draft (-> (:draft session) (assoc :payment/method method))
+                                     invoice-id (:invoice/id draft)]
+                                 (if invoice-id
+                                   (let [quicks [{:id :today :label "Today"}
+                                                 {:id :yesterday :label "Yesterday"}]
+                                         month (LocalDate/now (ZoneId/systemDefault))]
+                                     (save-docs-session! chat-id (-> session
+                                                                     (assoc :stage :docs/payment-date)
+                                                                     (assoc :draft draft)
+                                                                     (assoc :picker {:kind :docs/payment
+                                                                                     :text "Pick payment date:"
+                                                                                     :quicks quicks})))
+                                     (edit-message! cfg {:chat-id chat-id
+                                                         :message-id message-id
+                                                         :text "Pick payment date:"
+                                                         :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                     :quicks quicks
+                                                                                                     :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                                   (do
+                                     (save-docs-session! chat-id (-> session
+                                                                     (assoc :stage :docs/payment-invoice-attach)
+                                                                     (assoc :draft draft)))
+                                     (edit-message! cfg {:chat-id chat-id
+                                                         :message-id message-id
+                                                         :text "Attach this payment to an invoice?"
+                                                         :reply-markup (docs-payment-invoice-attach-inline-keyboard)}))))
                                (send-message! cfg {:chat-id chat-id
                                                    :text "Invalid payment method."
                                                    :message-key (str "docs-payment-method-invalid-" (System/currentTimeMillis))})))
@@ -3869,6 +3979,17 @@
                                 :value (nth parts 3 nil)}
                         "invoice-on" {:type :docs/plan-item-invoice-on
                                       :value (nth parts 3 nil)}
+                        "invoice" (case (nth parts 3 nil)
+                                    "issue" {:type :docs/plan-item-invoice-issue
+                                             :agreement-id (nth parts 4 nil)
+                                             :plan-item-id (nth parts 5 nil)}
+                                    "paid" {:type :docs/plan-item-invoice-paid
+                                            :agreement-id (nth parts 4 nil)
+                                            :plan-item-id (nth parts 5 nil)}
+                                    nil)
+                        "payment" {:type :docs/plan-item-payment
+                                   :agreement-id (nth parts 3 nil)
+                                   :plan-item-id (nth parts 4 nil)}
                         nil)
           "field" {:type :docs/field
                    :value (nth parts 2 nil)}

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `55f47a0ec435b4996cdd45e68555b47a8f2050d6ee4f7176ae91631a3a83ede9`
+- Catalog version: `12b3ecdfd75073defc72252fcc4e4223ac1fec9740df90b7471e5d4ceca67f97`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -52,7 +52,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (97)
+### Actions (100)
 - action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
@@ -118,6 +118,9 @@ This file is auto-generated. Do not edit by hand.
 - action/person-list
 - action/plan-item-create
 - action/plan-item-delete
+- action/plan-item-invoice-ensure
+- action/plan-item-invoice-issue
+- action/plan-item-invoice-mark-paid
 - action/plan-item-list
 - action/plan-item-update
 - action/proposal-generate
