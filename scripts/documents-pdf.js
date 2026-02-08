@@ -6,6 +6,7 @@
  * - invoice
  * - receipt
  * - status-report
+ * - agreement
  *
  * Usage:
  *   node scripts/documents-pdf.js --type proposal --input <input.json> --out <out.pdf>
@@ -260,8 +261,19 @@ function baseStyles() {
       display: flex;
       justify-content: space-between;
       gap: 12px;
+      align-items: center;
     }
     .footer .right { text-align: right; }
+    .qr {
+      width: 88px;
+      height: 88px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px;
+      background: #fff;
+      display: inline-block;
+    }
+    .qr img { width: 100%; height: 100%; display: block; }
   `;
 }
 
@@ -608,12 +620,96 @@ function statusReportBody(input) {
   `;
 }
 
-function buildHtml(type, input, { logoSvg }) {
+function agreementBody(input) {
+  const agreement = input.agreement || {};
+  const planItems = Array.isArray(input.planItems) ? input.planItems : [];
+  const currency = present(pick(agreement, ["agreement/currency", "currency"])) || present(pick(input.company || {}, ["currency"])) || "SAR";
+
+  function deliveryLine() {
+    const channels = pick(agreement, ["agreement/delivery-channels", "delivery-channels", "deliveryChannels"]);
+    const arr = Array.isArray(channels) ? channels : (typeof channels === "string" ? channels.split(",") : []);
+    const cleaned = arr.map((x) => present(x)).filter(Boolean);
+    return cleaned.length ? cleaned.join(", ") : null;
+  }
+
+  return `
+    <div class="section">
+      <p class="section-title">Agreement</p>
+      <div class="panel">
+        <div class="kv">
+          ${renderBlock("Agreement #", pick(agreement, ["agreement/number", "number"]) ?? "—")}
+          ${renderBlock("Title", pick(agreement, ["agreement/title", "title"]) ?? "—")}
+          ${pick(agreement, ["agreement/effective-at", "effective-at", "effectiveAt"]) ? renderBlock("Effective", formatDateValue(pick(agreement, ["agreement/effective-at", "effective-at", "effectiveAt"]))) : ""}
+          ${pick(agreement, ["agreement/accepted-at", "accepted-at", "acceptedAt"]) ? renderBlock("Accepted", formatDateValue(pick(agreement, ["agreement/accepted-at", "accepted-at", "acceptedAt"]))) : ""}
+          ${deliveryLine() ? renderBlock("Delivery", deliveryLine()) : ""}
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Client</p>
+      <div class="panel">
+        <div class="kv">
+          ${renderBlock("Client Name", (input.client || {}).name)}
+          ${(input.client || {}).email ? renderBlock("Email", (input.client || {}).email) : ""}
+          ${(input.client || {}).phone ? renderBlock("Phone", (input.client || {}).phone) : ""}
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Terms</p>
+      <div class="prose">${escapeHtml(present(pick(agreement, ["agreement/terms", "terms"])) || "—")}</div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Payment Plan</p>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Label</th>
+            <th>Due</th>
+            <th>Kind</th>
+            <th style="text-align:right">Amount (${escapeHtml(currency)})</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            planItems.length
+              ? planItems
+                  .map((it, idx) => {
+                    const label = pick(it, ["plan.item/label", "label"]) ?? "—";
+                    const due = pick(it, ["plan.item/due-at", "due-at", "dueAt"]);
+                    const kind = pick(it, ["plan.item/kind", "kind"]);
+                    const amt = pick(it, ["plan.item/amount", "amount"]);
+                    const cur = present(pick(it, ["plan.item/currency", "currency"])) || currency;
+                    return `
+                      <tr>
+                        <td class="mono">${escapeHtml(String(pick(it, ["plan.item/index", "index"]) ?? idx + 1))}</td>
+                        <td>${escapeHtml(label)}</td>
+                        <td>${escapeHtml(formatDateValue(due))}</td>
+                        <td>${escapeHtml(String(kind ?? "—"))}</td>
+                        <td class="cell-amt">${escapeHtml(formatMoney(amt, cur))}</td>
+                      </tr>
+                    `;
+                  })
+                  .join("\n")
+              : `<tr><td>—</td><td>—</td><td>—</td><td>—</td><td class="cell-amt">—</td></tr>`
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function buildHtml(type, input, { logoSvg, qrDataUrl }) {
   const templateVersion = present(input.templateVersion) || TEMPLATE_VERSION;
   const issuedAtRaw = present(input.issuedAt) || present(input.generatedAt) || new Date().toISOString();
   const issuedAt = formatDateValue(issuedAtRaw);
   const docRef = present(input.documentRef);
   const verificationCode = present(input.verificationCode);
+  const verifyUrl = present(input.verifyUrl);
 
   let title = "";
   let metaLines = [];
@@ -639,6 +735,14 @@ function buildHtml(type, input, { logoSvg }) {
     title = "STATUS REPORT";
     metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
     body = statusReportBody(input);
+  } else if (type === "agreement") {
+    title = "AGREEMENT";
+    const agreement = input.agreement || {};
+    metaLines = [
+      `<strong>Date:</strong> ${escapeHtml(issuedAt)}`,
+      `<strong>Agreement:</strong> ${escapeHtml(present(pick(agreement, ["agreement/number", "number"])) || "—")}`,
+    ];
+    body = agreementBody(input);
   } else {
     throw new Error(`Unknown type: ${type}`);
   }
@@ -648,7 +752,7 @@ function buildHtml(type, input, { logoSvg }) {
   const address = present(pick(company, ["address", "companyAddress", "company_address"])) || "Sari St, Ar Rawdah, Jeddah 23435";
   const contactLines = [`Phone: ${phone}`, `Address: ${address}`, "www.darelwasl.com"];
 
-  return `<!doctype html>
+	  return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -663,14 +767,18 @@ function buildHtml(type, input, { logoSvg }) {
       ${headerHtml({ logoSvg, contactLines })}
       ${titleBlockHtml({ title, metaLines })}
       ${body}
-      <div class="footer">
-        <div>Official Dar El Wasl document.</div>
-        <div class="right">
-          ${docRef ? `Document: <span class="mono">${escapeHtml(docRef)}</span><br/>` : ""}
-          ${verificationCode ? `Verify: <span class="mono">${escapeHtml(verificationCode)}</span><br/>` : ""}
-          Issued ${escapeHtml(issuedAt)} · ${escapeHtml(templateVersion)}
-        </div>
-      </div>
+	      <div class="footer">
+	        <div>
+	          <div>Official Dar El Wasl document.</div>
+	          ${qrDataUrl ? `<div class="qr" aria-hidden="true"><img src="${qrDataUrl}" /></div>` : ""}
+	        </div>
+	        <div class="right">
+	          ${docRef ? `Document: <span class="mono">${escapeHtml(docRef)}</span><br/>` : ""}
+	          ${verificationCode ? `Verify: <span class="mono">${escapeHtml(verificationCode)}</span><br/>` : ""}
+	          ${verifyUrl ? `URL: <span class="mono">${escapeHtml(verifyUrl)}</span><br/>` : ""}
+	          Issued ${escapeHtml(issuedAt)} · ${escapeHtml(templateVersion)}
+	        </div>
+	      </div>
     </div>
   </body>
 </html>`;
@@ -682,15 +790,27 @@ async function run() {
   const inputPath = args.input;
   const outPath = args.out;
   if (!type || !inputPath || !outPath) {
-    throw new Error("Usage: documents-pdf.js --type <proposal|invoice|receipt|status-report> --input <input.json> --out <out.pdf>");
+    throw new Error("Usage: documents-pdf.js --type <proposal|invoice|receipt|status-report|agreement> --input <input.json> --out <out.pdf>");
   }
 
   const input = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+  let qrDataUrl = null;
+  const verifyUrl = present(input.verifyUrl);
+  if (verifyUrl) {
+    try {
+      // Lazy-load so the script still works even if QR is not installed in some environments.
+      const QRCode = require("qrcode");
+      qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 220, margin: 0 });
+    } catch (e) {
+      console.warn("QR generation failed:", e && e.message ? e.message : e);
+      qrDataUrl = null;
+    }
+  }
   const repoRoot = path.resolve(__dirname, "..");
   const logoPath = path.join(repoRoot, "public", "logo.svg");
   const logoSvg = fs.existsSync(logoPath) ? fs.readFileSync(logoPath, "utf8") : null;
 
-  const html = buildHtml(type, input, { logoSvg });
+  const html = buildHtml(type, input, { logoSvg, qrDataUrl });
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
   const browser = await chromium.launch({ headless: true });

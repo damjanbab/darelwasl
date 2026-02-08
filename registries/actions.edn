@@ -1232,11 +1232,242 @@
             :views [:cap/view/clients]}
   :tooling []}
 
+ {:id :cap/action/agreement-create
+  :title "Agreement Create"
+  :version "v1"
+  :purpose "Create an agreement for a client (terms + delivery/consent metadata)."
+  :inputs {:client/id :uuid
+           :agreement/number :string?
+           :agreement/title :string
+           :agreement/terms :string
+           :agreement/effective-at :instant?
+           :agreement/delivery-channels [:set :keyword]
+           :agreement/delivery-email :string?
+           :agreement/delivery-phone :string?
+           :agreement/delivery-telegram-chat-id :string?
+           :agreement/electronic-consent? :boolean?
+           :agreement/consented-at :instant?}
+  :outputs {:agreement :map}
+  :side-effects ["Persist agreement"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:client/id :agreement/number]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/agreement-update
+  :title "Agreement Update"
+  :version "v1"
+  :purpose "Update an agreement (title/terms/delivery/consent fields)."
+  :inputs {:agreement/id :uuid
+           :agreement/number :string?
+           :agreement/title :string?
+           :agreement/terms :string?
+           :agreement/effective-at :instant?
+           :agreement/delivery-channels [:set :keyword]
+           :agreement/delivery-email :string?
+           :agreement/delivery-phone :string?
+           :agreement/delivery-telegram-chat-id :string?
+           :agreement/electronic-consent? :boolean?
+           :agreement/consented-at :instant?
+           :agreement/status :keyword?}
+  :outputs {:agreement :map}
+  :side-effects ["Persist agreement updates"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:agreement/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/agreement-list
+  :title "Agreement List"
+  :version "v1"
+  :purpose "List agreements for a client."
+  :inputs {:client/id :uuid}
+  :outputs {:agreements :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/agreement-accept
+  :title "Agreement Accept"
+  :version "v1"
+  :purpose "Mark an agreement as accepted and auto-generate invoices for plan items configured for acceptance."
+  :inputs {:agreement/id :uuid
+           :agreement/accepted-at :instant?
+           :agreement/accepted-by :string?
+           :agreement/delivery-channels [:set :keyword]
+           :agreement/delivery-email :string?
+           :agreement/delivery-phone :string?
+           :agreement/delivery-telegram-chat-id :string?
+           :agreement/electronic-consent? :boolean?
+           :agreement/consented-at :instant?}
+  :outputs {:agreement :map
+            :invoices :vector}
+  :side-effects ["Persist agreement acceptance"
+                 "Auto-generate invoices from structured payment plan items"
+                 "Auto-issue (or reuse) immutable invoice documents for generated invoices"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:agreement/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id :agreement/accepted-at]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/invoice :cap/schema/document]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-create
+  :title "Plan Item Create"
+  :version "v1"
+  :purpose "Add a structured payment plan item to an agreement."
+  :inputs {:agreement/id :uuid
+           :plan.item/kind :keyword
+           :plan.item/label :string
+           :plan.item/amount :number
+           :plan.item/currency :string?
+           :plan.item/due-at :instant
+           :plan.item/invoice-on :keyword
+           :plan.item/invoice-status :keyword?
+           :plan.item/index :long?
+           :plan.item/active? :boolean?
+           :plan.item/recurrence :string?}
+  :outputs {:plan-item :map}
+  :side-effects ["Persist plan item"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:agreement/id :plan.item/label]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item :cap/schema/agreement]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-update
+  :title "Plan Item Update"
+  :version "v1"
+  :purpose "Update a structured payment plan item."
+  :inputs {:plan.item/id :uuid
+           :plan.item/kind :keyword?
+           :plan.item/label :string?
+           :plan.item/amount :number?
+           :plan.item/currency :string?
+           :plan.item/due-at :instant?
+           :plan.item/invoice-on :keyword?
+           :plan.item/invoice-status :keyword?
+           :plan.item/index :long?
+           :plan.item/active? :boolean?
+           :plan.item/recurrence :string?}
+  :outputs {:plan-item :map}
+  :side-effects ["Persist plan item updates"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:plan.item/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:plan.item/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-delete
+  :title "Plan Item Delete"
+  :version "v1"
+  :purpose "Deactivate (soft-delete) a plan item."
+  :inputs {:plan.item/id :uuid}
+  :outputs {:plan.item/id :uuid}
+  :side-effects ["Deactivate plan item"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:plan.item/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:plan.item/id]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/plan-item-list
+  :title "Plan Item List"
+  :version "v1"
+  :purpose "List plan items for an agreement."
+  :inputs {:agreement/id :uuid}
+  :outputs {:plan-items :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/read]
+          :fields [:agreement/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/payment-plan-item :cap/schema/agreement]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/agreement-generate-due-invoices
+  :title "Agreement Generate Due Invoices"
+  :version "v1"
+  :purpose "Generate invoices for plan items that are due within a window."
+  :inputs {:agreement/id :uuid?
+           :window/days :long?}
+  :outputs {:invoices :vector}
+  :side-effects ["Create missing invoices"
+                 "Auto-issue (or reuse) immutable invoice documents for generated invoices"]
+  :adapter {:integration :local/db}
+  :audit {:records [:invoice/change]
+          :fields [:agreement/id :window/days]}
+  :idempotency {:strategy :none}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/invoice :cap/schema/document]
+            :views [:cap/view/clients]}
+  :tooling []}
+
  {:id :cap/action/invoice-create
   :title "Invoice Create"
   :version "v1"
   :purpose "Create an invoice for a client."
   :inputs {:client/id :uuid
+           :agreement/id :uuid?
+           :plan.item/id :uuid?
            :invoice/number :string
            :invoice/title :string?
            :invoice/description :string?
@@ -1255,7 +1486,7 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/invoice :cap/schema/client]
+  :related {:schema [:cap/schema/invoice :cap/schema/client :cap/schema/agreement :cap/schema/payment-plan-item]
             :views [:cap/view/clients]}
   :tooling []}
 
@@ -1307,6 +1538,8 @@
   :version "v1"
   :purpose "Create a payment record (optionally against an invoice)."
   :inputs {:client/id :uuid
+           :agreement/id :uuid?
+           :plan.item/id :uuid?
            :invoice/id :uuid?
            :payment/paid-at :instant?
            :payment/currency :string?
@@ -1325,7 +1558,7 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/payment :cap/schema/invoice :cap/schema/client]
+  :related {:schema [:cap/schema/payment :cap/schema/invoice :cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/client]
             :views [:cap/view/clients]}
   :tooling []}
 
@@ -1452,6 +1685,7 @@
   :purpose "Issue an immutable document (or return an existing issued copy when unchanged)."
   :inputs {:document/type :keyword
            :client/id :uuid
+           :agreement/id :uuid?
            :invoice/id :uuid?
            :payment/id :uuid?
            :document/force? :boolean?
@@ -1462,14 +1696,14 @@
   :adapter {:integration :cap/integration/local-file-store
             :renderer :cap/tooling/documents-pdf}
   :audit {:records [:document/issue]
-          :fields [:document/type :client/id :invoice/id :payment/id]}
+          :fields [:document/type :client/id :agreement/id :invoice/id :payment/id]}
   :idempotency {:strategy :dedupe-on
-                :keys [:document/type :client/id :invoice/id :payment/id :document/force?]}
+                :keys [:document/type :client/id :agreement/id :invoice/id :payment/id :document/force?]}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/invoice :cap/schema/payment]
+  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/agreement :cap/schema/invoice :cap/schema/payment]
             :views [:cap/view/file-library]}
   :tooling [:cap/tooling/documents-pdf]}
 
@@ -1479,6 +1713,7 @@
   :purpose "Fetch the latest issued document for a given subject and type."
   :inputs {:document/type :keyword
            :client/id :uuid
+           :agreement/id :uuid?
            :invoice/id :uuid?
            :payment/id :uuid?}
   :outputs {:document :map
@@ -1486,13 +1721,13 @@
   :side-effects []
   :adapter {:integration :local/db}
   :audit {:records [:document/read]
-          :fields [:document/type :client/id :invoice/id :payment/id]}
+          :fields [:document/type :client/id :agreement/id :invoice/id :payment/id]}
   :idempotency {:strategy :pure}
   :contracts {:fixtures []}
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/invoice :cap/schema/payment]
+  :related {:schema [:cap/schema/document :cap/schema/file :cap/schema/client :cap/schema/agreement :cap/schema/invoice :cap/schema/payment]
             :views [:cap/view/file-library]}
   :tooling []}
 

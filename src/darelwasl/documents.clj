@@ -51,6 +51,44 @@
   []
   (Date/from (Instant/now)))
 
+(defn- parse-inst
+  "Parse an instant-like value into a java.util.Date.
+  Accepts:
+  - java.util.Date
+  - java.time.Instant
+  - ISO-8601 string (Instant/parse)
+  - date-only string (YYYY-MM-DD), treated as start-of-day UTC."
+  [v]
+  (cond
+    (nil? v) nil
+    (instance? Date v) v
+    (instance? Instant v) (Date/from ^Instant v)
+    (string? v) (let [s (str/trim v)]
+                  (cond
+                    (str/blank? s) nil
+                    (re-matches #"\d{4}-\d{2}-\d{2}" s)
+                    (try
+                      (let [d (java.time.LocalDate/parse s)
+                            i (.toInstant (.atStartOfDay d (java.time.ZoneOffset/UTC)))]
+                        (Date/from i))
+                      (catch Exception _ nil))
+                    :else
+                    (try
+                      (Date/from (Instant/parse s))
+                      (catch Exception _ nil))))
+    :else nil))
+
+(defn- normalize-inst
+  [v label {:keys [required]}]
+  (let [raw (if (sequential? v) (first v) v)]
+    (cond
+      (and required (nil? raw)) {:error (str label " is required")}
+      (nil? raw) {:value nil}
+      :else
+      (if-let [d (parse-inst raw)]
+        {:value d}
+        {:error (str "Invalid " label)}))))
+
 (defn- present-str?
   [v]
   (and (string? v) (not (str/blank? v))))
@@ -113,6 +151,8 @@
   [:invoice/id
    :invoice/key
    {:invoice/client client-pull}
+   {:invoice/agreement [:agreement/id :agreement/number :entity/ref]}
+   {:invoice/plan-item [:plan.item/id :plan.item/label :entity/ref]}
    :invoice/workspace
    :invoice/number
    :invoice/title
@@ -128,6 +168,8 @@
   [:payment/id
    {:payment/client client-pull}
    {:payment/invoice [:invoice/id :invoice/number :entity/ref]}
+   {:payment/agreement [:agreement/id :agreement/number :entity/ref]}
+   {:payment/plan-item [:plan.item/id :plan.item/label :entity/ref]}
    :payment/workspace
    :payment/paid-at
    :payment/currency
@@ -135,6 +177,40 @@
    :payment/method
    :payment/reference
    :payment/note
+   :entity/ref])
+
+(def ^:private agreement-pull
+  [:agreement/id
+   :agreement/key
+   {:agreement/client client-pull}
+   :agreement/workspace
+   :agreement/number
+   :agreement/title
+   :agreement/terms
+   :agreement/status
+   :agreement/effective-at
+   :agreement/accepted-at
+   :agreement/accepted-by
+   :agreement/delivery-channels
+   :agreement/delivery-email
+   :agreement/delivery-phone
+   :agreement/delivery-telegram-chat-id
+   :agreement/electronic-consent?
+   :agreement/consented-at
+   :entity/ref])
+
+(def ^:private plan-item-pull
+  [:plan.item/id
+   :plan.item/kind
+   :plan.item/label
+   :plan.item/amount
+   :plan.item/currency
+   :plan.item/due-at
+   :plan.item/invoice-on
+   :plan.item/invoice-status
+   :plan.item/index
+   :plan.item/active?
+   :plan.item/recurrence
    :entity/ref])
 
 (defn- present-doc-pack
@@ -155,6 +231,20 @@
   (when (map? p)
     (-> p
         (update :payment/paid-at format-inst))))
+
+(defn- present-agreement
+  [a]
+  (when (map? a)
+    (-> a
+        (update :agreement/effective-at format-inst)
+        (update :agreement/accepted-at format-inst)
+        (update :agreement/consented-at format-inst))))
+
+(defn- present-plan-item
+  [it]
+  (when (map? it)
+    (-> it
+        (update :plan.item/due-at format-inst))))
 
 (defn- doc-pack-key
   [workspace client-id]
@@ -299,60 +389,113 @@
             ws (workspace/actor-workspace actor)
             db (d/db conn)
             {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")
+            agreement-id-raw (param-value body :agreement/id)
+            plan-item-id-raw (param-value body :plan.item/id)
+            {agreement-id :value agreement-id-err :error} (when agreement-id-raw
+                                                           (entity/resolve-id db :agreement/id agreement-id-raw "agreement id"))
+            {plan-item-id :value plan-item-id-err :error} (when plan-item-id-raw
+                                                           (entity/resolve-id db :plan.item/id plan-item-id-raw "plan item id"))
             number (normalize-text (param-value body :invoice/number))
             title (normalize-text (param-value body :invoice/title))
             desc (normalize-text (param-value body :invoice/description))
             currency (normalize-text (or (param-value body :invoice/currency) (param-value body :currency)))
             amount (normalize-money (or (param-value body :invoice/total-amount) (param-value body :total)))
             {status :value status-err :error} (normalize-enum (param-value body :invoice/status) allowed-invoice-status "invoice status")
-            issued-at (or (param-value body :invoice/issued-at) (now-inst))
-            due-at (param-value body :invoice/due-at)]
+            {issued-at :value issued-at-err :error} (normalize-inst (or (param-value body :invoice/issued-at) (now-inst))
+                                                                    "invoice/issued-at"
+                                                                    {:required true})
+            {due-at :value due-at-err :error} (normalize-inst (param-value body :invoice/due-at) "invoice/due-at" {:required false})]
         (cond
           c-err (error 400 c-err)
           (nil? client-id) (error 400 "client/id is required")
+          agreement-id-err (error 400 agreement-id-err)
+          plan-item-id-err (error 400 plan-item-id-err)
           (not (present-str? number)) (error 400 "invoice/number is required")
           (nil? amount) (error 400 "invoice/total-amount is required")
           status-err (error 400 status-err)
+          issued-at-err (error 400 issued-at-err)
+          due-at-err (error 400 due-at-err)
           :else
           (let [{ceid :eid ceid-err :error} (client-eid db client-id ws)]
             (cond
               ceid-err ceid-err
               (nil? ceid) (error 404 "Client not found")
               :else
-              (let [inv-id (UUID/randomUUID)
-                    key (str ws "::" number)
-                    base {:invoice/id inv-id
-                          :entity/type :entity.type/invoice
-                          :invoice/key key
-                          :invoice/client [:client/id client-id]
-                          :invoice/workspace ws
-                          :invoice/number number
-                          :invoice/issued-at issued-at
-                          :invoice/currency (or currency "SAR")
-                          :invoice/total-amount amount
-                          :invoice/status (or status :draft)}
-                    base (cond-> base
-                           title (assoc :invoice/title title)
-                           desc (assoc :invoice/description desc)
-                           due-at (assoc :invoice/due-at due-at))
-                    base (entity/with-ref db base)
-                    tx-prov (prov/provenance actor)
-                    tx (prov/enrich-tx base tx-prov)]
-                (try
-                  (let [tx-res (db/transact! conn {:tx-data [tx]})
-                        db-after (:db-after tx-res)
-                        eid (ffirst (d/q '[:find ?e
-                                           :in $ ?id ?ws
-                                           :where [?e :invoice/id ?id]
-                                                  [?e :invoice/workspace ?ws]]
-                                         db-after inv-id ws))
-                        inv (when eid (d/pull db-after invoice-pull eid))]
-                    {:invoice (present-invoice inv)})
-                  (catch Exception e
-                    (log/error e "Failed to create invoice")
-                    (error 500 "Failed to create invoice"
-                           {:exception (.getMessage e)
-                            :data (when (instance? clojure.lang.ExceptionInfo e) (ex-data e))}))))))))))
+              (let [agreement-eid (when agreement-id
+                                    (ffirst (d/q '[:find ?e
+                                                   :in $ ?id ?ws
+                                                   :where [?e :agreement/id ?id]
+                                                          [?e :agreement/workspace ?ws]]
+                                                 db agreement-id ws)))
+                    agreement-client-id (when agreement-eid
+                                          (ffirst (d/q '[:find ?cid
+                                                         :in $ ?e
+                                                         :where [?e :agreement/client ?c]
+                                                                [?c :client/id ?cid]]
+                                                       db agreement-eid)))
+                    plan-item-eid (when plan-item-id
+                                    (ffirst (d/q '[:find ?e
+                                                   :in $ ?id ?ws
+                                                   :where [?e :plan.item/id ?id]
+                                                          [?e :plan.item/workspace ?ws]]
+                                                 db plan-item-id ws)))
+                    plan-item-agreement-id (when plan-item-eid
+                                             (ffirst (d/q '[:find ?aid
+                                                            :in $ ?e
+                                                            :where [?e :plan.item/agreement ?a]
+                                                                   [?a :agreement/id ?aid]]
+                                                          db plan-item-eid)))]
+                (cond
+                  (and agreement-id (nil? agreement-eid))
+                  (error 404 "Agreement not found")
+
+                  (and agreement-client-id (not= client-id agreement-client-id))
+                  (error 400 "Agreement client mismatch")
+
+                  (and plan-item-id (nil? plan-item-eid))
+                  (error 404 "Plan item not found")
+
+                  (and agreement-id plan-item-agreement-id (not= agreement-id plan-item-agreement-id))
+                  (error 400 "Plan item agreement mismatch")
+
+                  :else
+                  (let [resolved-agreement-id (or agreement-id plan-item-agreement-id)
+                        inv-id (UUID/randomUUID)
+                        key (str ws "::" number)
+                        base {:invoice/id inv-id
+                              :entity/type :entity.type/invoice
+                              :invoice/key key
+                              :invoice/client [:client/id client-id]
+                              :invoice/workspace ws
+                              :invoice/number number
+                              :invoice/issued-at issued-at
+                              :invoice/currency (or currency "SAR")
+                              :invoice/total-amount amount
+                              :invoice/status (or status :draft)}
+                        base (cond-> base
+                               title (assoc :invoice/title title)
+                               desc (assoc :invoice/description desc)
+                               due-at (assoc :invoice/due-at due-at)
+                               resolved-agreement-id (assoc :invoice/agreement [:agreement/id resolved-agreement-id])
+                               plan-item-id (assoc :invoice/plan-item [:plan.item/id plan-item-id]))
+                        base (entity/with-ref db base)
+                        tx-prov (prov/provenance actor)
+                        tx (prov/enrich-tx base tx-prov)]
+                    (try
+                      (let [tx-res (db/transact! conn {:tx-data [tx]})
+                            db-after (:db-after tx-res)
+                            eid (ffirst (d/q '[:find ?e
+                                               :in $ ?id ?ws
+                                               :where [?e :invoice/id ?id]
+                                                      [?e :invoice/workspace ?ws]]
+                                             db-after inv-id ws))
+                            inv (when eid (d/pull db-after invoice-pull eid))]
+                        {:invoice (present-invoice inv)})
+                      (catch Exception e
+                        (log/error e "Failed to create invoice")
+                        (error 500 "Failed to create invoice"
+                               {:exception (.getMessage e)
+                                :data (when (instance? clojure.lang.ExceptionInfo e) (ex-data e))}))))))))))))
 
 (defn update-invoice!
   [conn invoice-id input actor]
@@ -405,57 +548,99 @@
             ws (workspace/actor-workspace actor)
             db (d/db conn)
             {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")
+            agreement-id-raw (param-value body :agreement/id)
+            plan-item-id-raw (param-value body :plan.item/id)
+            {agreement-id :value agreement-id-err :error} (when agreement-id-raw
+                                                           (entity/resolve-id db :agreement/id agreement-id-raw "agreement id"))
+            {plan-item-id :value plan-item-id-err :error} (when plan-item-id-raw
+                                                           (entity/resolve-id db :plan.item/id plan-item-id-raw "plan item id"))
             invoice-id (param-value body :invoice/id)
             {iid :value iid-err :error} (when invoice-id (entity/resolve-id db :invoice/id invoice-id "invoice id"))
             amount (normalize-money (or (param-value body :payment/amount) (param-value body :amount)))
             currency (normalize-text (or (param-value body :payment/currency) (param-value body :currency)))
             {method :value method-err :error} (normalize-enum (param-value body :payment/method) allowed-payment-method "payment method")
-            paid-at (or (param-value body :payment/paid-at) (now-inst))
+            {paid-at :value paid-at-err :error} (normalize-inst (param-value body :payment/paid-at) "payment/paid-at" {:required true})
             reference (normalize-text (param-value body :payment/reference))
             note (normalize-text (param-value body :payment/note))]
         (cond
           c-err (error 400 c-err)
           (nil? client-id) (error 400 "client/id is required")
+          agreement-id-err (error 400 agreement-id-err)
+          plan-item-id-err (error 400 plan-item-id-err)
           iid-err (error 400 iid-err)
           (nil? amount) (error 400 "payment/amount is required")
           method-err (error 400 method-err)
+          paid-at-err (error 400 paid-at-err)
           :else
           (let [{ceid :eid ceid-err :error} (client-eid db client-id ws)]
             (cond
               ceid-err ceid-err
               (nil? ceid) (error 404 "Client not found")
               :else
-              (let [pay-id (UUID/randomUUID)
-                    base {:payment/id pay-id
-                          :entity/type :entity.type/payment
-                          :payment/client [:client/id client-id]
-                          :payment/workspace ws
-                          :payment/paid-at paid-at
-                          :payment/currency (or currency "SAR")
-                          :payment/amount amount
-                          :payment/method (or method :transfer)}
-                    base (cond-> base
-                           iid (assoc :payment/invoice [:invoice/id iid])
-                           reference (assoc :payment/reference reference)
-                           note (assoc :payment/note note))
-                    base (entity/with-ref db base)
-                    tx-prov (prov/provenance actor)
-                    tx (prov/enrich-tx base tx-prov)]
-                (try
-                  (let [tx-res (db/transact! conn {:tx-data [tx]})
-                        db-after (:db-after tx-res)
-                        eid (ffirst (d/q '[:find ?e
-                                           :in $ ?id ?ws
-                                           :where [?e :payment/id ?id]
-                                                  [?e :payment/workspace ?ws]]
-                                         db-after pay-id ws))
-                        p (when eid (d/pull db-after payment-pull eid))]
-                    {:payment (present-payment p)})
-                  (catch Exception e
-                    (log/error e "Failed to create payment")
-                    (error 500 "Failed to create payment"
-                           {:exception (.getMessage e)
-                            :data (when (instance? clojure.lang.ExceptionInfo e) (ex-data e))}))))))))))
+              (let [agreement-eid (when agreement-id
+                                    (ffirst (d/q '[:find ?e
+                                                   :in $ ?id ?ws
+                                                   :where [?e :agreement/id ?id]
+                                                          [?e :agreement/workspace ?ws]]
+                                                 db agreement-id ws)))
+                    agreement-client-id (when agreement-eid
+                                          (ffirst (d/q '[:find ?cid
+                                                         :in $ ?e
+                                                         :where [?e :agreement/client ?c]
+                                                                [?c :client/id ?cid]]
+                                                       db agreement-eid)))
+                    plan-item-eid (when plan-item-id
+                                    (ffirst (d/q '[:find ?e
+                                                   :in $ ?id ?ws
+                                                   :where [?e :plan.item/id ?id]
+                                                          [?e :plan.item/workspace ?ws]]
+                                                 db plan-item-id ws)))
+                    plan-item-agreement-id (when plan-item-eid
+                                             (ffirst (d/q '[:find ?aid
+                                                            :in $ ?e
+                                                            :where [?e :plan.item/agreement ?a]
+                                                                   [?a :agreement/id ?aid]]
+                                                          db plan-item-eid)))]
+                (cond
+                  (and agreement-id (nil? agreement-eid)) (error 404 "Agreement not found")
+                  (and agreement-client-id (not= client-id agreement-client-id)) (error 400 "Agreement client mismatch")
+                  (and plan-item-id (nil? plan-item-eid)) (error 404 "Plan item not found")
+                  (and agreement-id plan-item-agreement-id (not= agreement-id plan-item-agreement-id)) (error 400 "Plan item agreement mismatch")
+                  :else
+                  (let [resolved-agreement-id (or agreement-id plan-item-agreement-id)
+                        pay-id (UUID/randomUUID)
+                        base {:payment/id pay-id
+                              :entity/type :entity.type/payment
+                              :payment/client [:client/id client-id]
+                              :payment/workspace ws
+                              :payment/paid-at paid-at
+                              :payment/currency (or currency "SAR")
+                              :payment/amount amount
+                              :payment/method (or method :transfer)}
+                        base (cond-> base
+                               iid (assoc :payment/invoice [:invoice/id iid])
+                               reference (assoc :payment/reference reference)
+                               note (assoc :payment/note note)
+                               resolved-agreement-id (assoc :payment/agreement [:agreement/id resolved-agreement-id])
+                               plan-item-id (assoc :payment/plan-item [:plan.item/id plan-item-id]))
+                        base (entity/with-ref db base)
+                        tx-prov (prov/provenance actor)
+                        tx (prov/enrich-tx base tx-prov)]
+                    (try
+                      (let [tx-res (db/transact! conn {:tx-data [tx]})
+                            db-after (:db-after tx-res)
+                            eid (ffirst (d/q '[:find ?e
+                                               :in $ ?id ?ws
+                                               :where [?e :payment/id ?id]
+                                                      [?e :payment/workspace ?ws]]
+                                             db-after pay-id ws))
+                            p (when eid (d/pull db-after payment-pull eid))]
+                        {:payment (present-payment p)})
+                      (catch Exception e
+                        (log/error e "Failed to create payment")
+                        (error 500 "Failed to create payment"
+                               {:exception (.getMessage e)
+                                :data (when (instance? clojure.lang.ExceptionInfo e) (ex-data e))}))))))))))))
 
 (defn list-payments
   [conn {:keys [client-id]} actor]
@@ -546,6 +731,8 @@
          client-eid
          pull-client!
          pull-doc-pack!
+         pull-agreement!
+         plan-items-for-agreement
          invoices-for-client
          payments-for-client
          tasks-summary-for-client)
@@ -557,6 +744,7 @@
   [state]
   (let [cfg (get-in state [:config :documents] {})]
     {:template-version (or (:template-version cfg) "pdf-v3-2026-02-07")
+     :verify-base-url (some-> (or (:verify-base-url cfg) "https://www.darelwasl.com") str str/trim)
      :verify-secret (:verify-secret cfg)
      :renderer (or (:renderer cfg) :node-playwright)}))
 
@@ -746,7 +934,7 @@
         body (or input {})
         {client-id :value c-err :error} (normalize-uuid (param-value body :client/id) "client id")
         force? (boolean (param-value body :document/force?))
-        {:keys [template-version verify-secret renderer]} (documents-config state)]
+        {:keys [template-version verify-base-url verify-secret renderer]} (documents-config state)]
     (if-let [conn-err (ensure-conn conn)]
       conn-err
       (cond
@@ -790,6 +978,29 @@
                                                       :payments payments
                                                       :tasks tasks)
                                :filename (str "status-report-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")})
+
+                            :agreement
+                            (let [{aid :value aid-err :error} (entity/resolve-id db :agreement/id (param-value body :agreement/id) "agreement id")]
+                              (cond
+                                aid-err (error 400 aid-err)
+                                (nil? aid) (error 400 "agreement/id is required")
+                                :else
+                                (let [agreement (some-> (pull-agreement! db aid ws) present-agreement)]
+                                  (cond
+                                    (nil? agreement) (error 404 "Agreement not found")
+                                    (not= client-id (get-in agreement [:agreement/client :client/id]))
+                                    (error 400 "Agreement client mismatch")
+                                    :else
+                                    (let [items (plan-items-for-agreement db aid ws)]
+                                      {:subject-type :agreement
+                                       :subject-id aid
+                                       :domain-payload (assoc base
+                                                              :agreement agreement
+                                                              :planItems items)
+                                       :filename (str "agreement-" (or (:agreement/number agreement)
+                                                                       (some-> (:entity/ref agreement) str/trim not-empty)
+                                                                       (subs (str aid) 0 8))
+                                                      ".pdf")})))))
 
                             :invoice
                             (let [{iid :value iid-err :error} (entity/resolve-id db :invoice/id (param-value body :invoice/id) "invoice id")]
@@ -861,11 +1072,16 @@
                           issued-at-str (.format iso-formatter (.toInstant issued-at))
                           document-ref (entity/unique-ref db :entity.type/document)
                           code (verification-code verify-secret document-ref payload-hash)
+                          base-url (some-> (or verify-base-url "") (str/replace #"/+$" ""))
+                          enc (fn [s] (java.net.URLEncoder/encode (str s) "UTF-8"))
+                          verify-url (when-not (str/blank? base-url)
+                                       (str base-url "/verify?ref=" (enc document-ref) "&code=" (enc code)))
                           render-payload (assoc domain-payload
                                                 :issuedAt issued-at-str
                                                 :templateVersion template-version
                                                 :documentRef document-ref
-                                                :verificationCode code)
+                                                :verificationCode code
+                                                :verifyUrl verify-url)
                           {:keys [dir pdf-file]} (render-pdf! {:type type
                                                                :payload render-payload
                                                                :renderer renderer})
@@ -942,6 +1158,11 @@
         (let [db (d/db conn)
               subject (case type
                         (:proposal :status-report) {:subject-type :client :subject-id client-id}
+                        :agreement (let [{aid :value aid-err :error} (entity/resolve-id db :agreement/id (param-value body :agreement/id) "agreement id")]
+                                     (cond
+                                       aid-err {:error (error 400 aid-err)}
+                                       (nil? aid) {:error (error 400 "agreement/id is required")}
+                                       :else {:subject-type :agreement :subject-id aid}))
                         :invoice (let [{iid :value iid-err :error} (entity/resolve-id db :invoice/id (param-value body :invoice/id) "invoice id")]
                                    (cond
                                      iid-err {:error (error 400 iid-err)}
@@ -1187,6 +1408,39 @@
         peid (doc-pack-eid-by-key db key)]
     (when peid
       (d/pull db doc-pack-pull peid))))
+
+(defn- agreement-eid
+  [db agreement-id workspace]
+  (when agreement-id
+    (ffirst (d/q '[:find ?e
+                   :in $ ?id ?ws
+                   :where [?e :agreement/id ?id]
+                          [?e :agreement/workspace ?ws]]
+                 db agreement-id workspace))))
+
+(defn- pull-agreement!
+  [db agreement-id workspace]
+  (when-let [eid (agreement-eid db agreement-id workspace)]
+    (d/pull db agreement-pull eid)))
+
+(defn- plan-items-for-agreement
+  [db agreement-id workspace]
+  (when-let [aeid (agreement-eid db agreement-id workspace)]
+    (->> (d/q '[:find ?e ?idx ?due
+                :in $ ?a ?ws
+                :where [?e :plan.item/agreement ?a]
+                       [?e :plan.item/workspace ?ws]
+                       [(get-else $ ?e :plan.item/active? true) ?active]
+                       [(get-else $ ?e :plan.item/index 999999) ?idx]
+                       [?e :plan.item/due-at ?due]
+                       [(= true ?active)]]
+              db aeid workspace)
+         (sort-by (fn [[_ idx due]] [(long idx) due]))
+         (map first)
+         (map #(d/pull db plan-item-pull %))
+         (remove nil?)
+         (map present-plan-item)
+         vec)))
 
 (defn- invoices-for-client
   [db client-eid workspace]

@@ -3,7 +3,9 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [datomic.client.api :as d]
             [darelwasl.account-statement :as account-statement]
+            [darelwasl.agreements :as agreements]
             [darelwasl.documents :as documents]
             [darelwasl.automations :as automations]
             [darelwasl.betting :as betting]
@@ -454,6 +456,167 @@
                     (assoc res :receipt/error derr))
                   (assoc res :receipt issue))))))))))
 
+(defn- agreement-create
+  [state {:keys [input actor]}]
+  (agreements/create-agreement! (conn state) (or input {}) actor))
+
+(defn- agreement-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        agreement-id (or (:agreement/id body) (:id body))]
+    (agreements/update-agreement! (conn state) agreement-id (dissoc body :agreement/id :id) actor)))
+
+(defn- agreement-list
+  [state {:keys [input actor]}]
+  (agreements/list-agreements (conn state) {:client-id (:client/id (or input {}))} actor))
+
+(defn- plan-item-create
+  [state {:keys [input actor]}]
+  (agreements/create-plan-item! (conn state) (or input {}) actor))
+
+(defn- plan-item-update
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        plan-item-id (or (:plan.item/id body) (:id body))]
+    (agreements/update-plan-item! (conn state) plan-item-id (dissoc body :plan.item/id :id) actor)))
+
+(defn- plan-item-delete
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        plan-item-id (or (:plan.item/id body) (:id body))]
+    (agreements/delete-plan-item! (conn state) plan-item-id actor)))
+
+(defn- plan-item-list
+  [state {:keys [input actor]}]
+  (agreements/list-plan-items (conn state) {:agreement-id (:agreement/id (or input {}))} actor))
+
+(defn- invoice-number-for-plan-item
+  [agreement plan-item]
+  (let [aref (:entity/ref agreement)
+        idx (:plan.item/index plan-item)
+        suffix (cond
+                 (number? idx) (format "%03d" (long idx))
+                 :else (some-> (:entity/ref plan-item) str/trim not-empty))]
+    (str "INV-" (or aref "AG") "-" (or suffix "X"))))
+
+(defn- existing-invoice-for-plan-item
+  [db ws plan-item-id]
+  (ffirst (d/q '[:find ?id
+                 :in $ ?ws ?pid
+                 :where [?e :invoice/workspace ?ws]
+                        [?e :invoice/plan-item [:plan.item/id ?pid]]
+                        [?e :invoice/id ?id]]
+               db ws plan-item-id)))
+
+(defn- generate-invoices-for-plan-items!
+  [state agreement plan-items actor]
+  (let [conn (conn state)
+        db (d/db conn)
+        ws (workspace/actor-workspace actor)
+        client-id (get-in agreement [:agreement/client :client/id])]
+    (reduce (fn [acc plan-item]
+              (let [pid (:plan.item/id plan-item)
+                    existing (when pid (existing-invoice-for-plan-item db ws pid))]
+                (if existing
+                  acc
+                  (let [input {:client/id client-id
+                               :agreement/id (:agreement/id agreement)
+                               :plan.item/id pid
+                               :invoice/number (invoice-number-for-plan-item agreement plan-item)
+                               :invoice/title (:plan.item/label plan-item)
+                               :invoice/description (str "Auto-generated from agreement " (or (:entity/ref agreement) "—")
+                                                         " plan item " (or (:plan.item/label plan-item) "—"))
+                               :invoice/issued-at (java.util.Date.)
+                               :invoice/due-at (:plan.item/due-at plan-item)
+                               :invoice/currency (:plan.item/currency plan-item)
+                               :invoice/total-amount (:plan.item/amount plan-item)
+                               :invoice/status (or (:plan.item/invoice-status plan-item) :sent)}
+                        created (documents/create-invoice! conn input actor)]
+                    (if-let [err (:error created)]
+                      (do
+                        (log/warn "Auto invoice generation failed" {:plan.item/id pid :error err})
+                        acc)
+                      (let [invoice-id (get-in created [:invoice :invoice/id])
+                            issue (documents/issue-document! state {:type :invoice
+                                                                   :input {:client/id client-id
+                                                                           :invoice/id invoice-id}
+                                                                   :actor actor})]
+                        (conj acc (cond-> (:invoice created)
+                                    (:error issue) (assoc :invoice-pdf/error (:error issue))
+                                    (nil? (:error issue)) (assoc :invoice-pdf issue)))))))))
+            []
+            (or plan-items []))))
+
+(defn- agreement-accept
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        agreement-id (:agreement/id body)
+        doc-secret (get-in state [:config :documents :verify-secret])]
+    (if (or (nil? doc-secret) (str/blank? (str doc-secret)))
+      {:error {:status 500
+               :message "DOCUMENT_VERIFY_SECRET is required to accept agreements (auto-issues documents)"}}
+      (let [accepted (agreements/accept-agreement! (conn state) agreement-id body actor)]
+        (if-let [err (:error accepted)]
+          accepted
+          (let [db (d/db (conn state))
+                agreement (agreements/pull-agreement db agreement-id actor)
+                plan-items (agreements/plan-items-for-agreement db agreement-id actor)
+                acceptance-items (->> (or plan-items [])
+                                      (filter (fn [it] (= :accepted (:plan.item/invoice-on it))))
+                                      vec)
+                invoices (when (and agreement (seq acceptance-items))
+                           (generate-invoices-for-plan-items! state agreement acceptance-items actor))
+                agreement-doc (when agreement
+                                (documents/issue-document! state {:type :agreement
+                                                                 :input {:client/id (get-in agreement [:agreement/client :client/id])
+                                                                         :agreement/id (:agreement/id agreement)}
+                                                                 :actor actor}))]
+	            {:agreement (:agreement accepted)
+	             :invoices (vec (or invoices []))
+	             :agreement-pdf agreement-doc}))))))
+
+(defn- agreement-generate-due-invoices
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        conn (conn state)
+        db (d/db conn)
+        ws (workspace/actor-workspace actor)
+        {days :value days-err :error} (v/normalize-long (v/param-value body :window/days) "window days")
+        days (or days 14)
+        horizon (java.util.Date/from (.plusSeconds (java.time.Instant/now) (* 86400 (long days))))
+        agreement-id (:agreement/id body)
+        agreement-ids (if agreement-id
+                        [agreement-id]
+                        (->> (d/q '[:find ?id
+                                    :in $ ?ws
+                                    :where [?e :agreement/workspace ?ws]
+                                           [?e :agreement/status :accepted]
+                                           [?e :agreement/id ?id]]
+                                  db ws)
+                             (map first)
+                             vec))
+        agreements (->> agreement-ids
+                        (map #(agreements/pull-agreement db % actor))
+                        (remove nil?)
+                        vec)]
+    (if days-err
+      {:error {:status 400 :message days-err}}
+      (let [generated (->> agreements
+                           (mapcat (fn [agreement]
+                                     (let [aid (:agreement/id agreement)
+                                           items (agreements/plan-items-for-agreement db aid actor)
+                                           due-items (->> (or items [])
+                                                          (filter (fn [it]
+                                                                    (and (= :due (:plan.item/invoice-on it))
+                                                                         (let [d (:plan.item/due-at it)]
+                                                                           (and (instance? java.util.Date d)
+                                                                                (not (.after d horizon)))))))
+                                                          vec)]
+                                       (when (seq due-items)
+                                         (generate-invoices-for-plan-items! state agreement due-items actor)))))
+                           vec)]
+        {:invoices generated}))))
+
 (defn- payment-list
   [state {:keys [input actor]}]
   (documents/list-payments (conn state) {:client-id (:client/id (or input {}))} actor))
@@ -551,6 +714,15 @@
    :cap/action/account-statement-generate account-statement-generate
    :cap/action/doc-pack-upsert doc-pack-upsert
    :cap/action/doc-pack-read doc-pack-read
+   :cap/action/agreement-create agreement-create
+   :cap/action/agreement-update agreement-update
+   :cap/action/agreement-list agreement-list
+   :cap/action/agreement-accept agreement-accept
+   :cap/action/plan-item-create plan-item-create
+   :cap/action/plan-item-update plan-item-update
+   :cap/action/plan-item-delete plan-item-delete
+   :cap/action/plan-item-list plan-item-list
+   :cap/action/agreement-generate-due-invoices agreement-generate-due-invoices
    :cap/action/invoice-create invoice-create
    :cap/action/invoice-update invoice-update
    :cap/action/invoice-list invoice-list

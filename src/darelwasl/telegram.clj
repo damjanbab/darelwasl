@@ -65,6 +65,10 @@
 (declare edit-message!)
 (declare docs-menu-inline-keyboard)
 (declare docs-payment-reference-inline-keyboard)
+(declare docs-agreements-menu-inline-keyboard)
+(declare docs-agreement-actions-inline-keyboard)
+(declare docs-plan-item-kind-inline-keyboard)
+(declare docs-plan-item-invoice-on-inline-keyboard)
 
 (defn- prune-captures!
   []
@@ -586,6 +590,57 @@
                                       :message-key (str "docs-inv-added-" (System/currentTimeMillis))
                                       :reply-markup (docs-menu-inline-keyboard)}))))))
 
+        (= (:stage session) :docs/plan-item-due-time)
+        (let [ymd (get-in session [:draft :plan.item/due-date])
+              d (when ymd (try (LocalDate/parse (str ymd)) (catch Exception _ nil)))
+              picked (when d (local-date-time->date d t))]
+          (when picked
+            (let [draft (:draft session)
+                  actor (actions/actor-from-telegram chat-user)
+                  agreement-id (or (:agreement/id session) (:agreement/id draft))
+                  ;; Prefer client doc-pack currency; fallback to SAR.
+                  doc-pack-res (when (and actor (:client-id session))
+                                 (actions/execute! state {:action/id :cap/action/doc-pack-read
+                                                          :actor actor
+                                                          :input {:client/id (:client-id session)}}))
+                  currency (or (get-in doc-pack-res [:result :doc-pack :doc.pack/currency])
+                               "SAR")
+                  existing (when (and actor agreement-id)
+                             (actions/execute! state {:action/id :cap/action/plan-item-list
+                                                      :actor actor
+                                                      :input {:agreement/id agreement-id}}))
+                  idx (when (and existing (nil? (:error existing)))
+                        (inc (count (get-in existing [:result :plan-items] []))))
+                  input (cond-> {:agreement/id agreement-id
+                                 :plan.item/kind (:plan.item/kind draft)
+                                 :plan.item/invoice-on (:plan.item/invoice-on draft)
+                                 :plan.item/label (:plan.item/label draft)
+                                 :plan.item/amount (:plan.item/amount draft)
+                                 :plan.item/currency currency
+                                 :plan.item/due-at picked}
+                          (number? idx) (assoc :plan.item/index idx))
+                  res (actions/execute! state {:action/id :cap/action/plan-item-create
+                                               :actor actor
+                                               :input input})]
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-actions
+                                                     :agreement/id agreement-id
+                                                     :draft nil)))
+              (if-let [err (:error res)]
+                (send-message! cfg {:chat-id chat-id
+                                    :text (str "Unable to add plan item: " (:message err))
+                                    :message-key (str "docs-plan-item-error-" (System/currentTimeMillis))
+                                    :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                (do
+                  (edit-message! cfg {:chat-id chat-id
+                                      :message-id message-id
+                                      :text (str "Due time set: " (.format t fmt))
+                                      :reply-markup {:inline_keyboard []}})
+                  (send-message! cfg {:chat-id chat-id
+                                      :text "Plan item added."
+                                      :message-key (str "docs-plan-item-added-" (System/currentTimeMillis))
+                                      :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))))))
+
         :else nil))))
 
 (defn- latest-pending-reason
@@ -719,6 +774,55 @@
                rows)]
     {:inline_keyboard (vec rows)}))
 
+(defn- docs-agreement-pick-inline-keyboard
+  [agreements on-pick-data & {:keys [cancel-data]}]
+  (let [buttons (map (fn [a]
+                       (let [aid (:agreement/id a)
+                             num (or (:agreement/number a) (subs (str aid) 0 8))
+                             status (some-> (:agreement/status a) name)
+                             label (truncate-text (str num (when status (str " · " status))) 28)]
+                         (inline-button label (format on-pick-data aid))))
+                     (or agreements []))
+        rows (->> buttons
+                  (partition-all 2)
+                  (mapv vec))
+        rows (if cancel-data
+               (conj rows [(inline-button "Cancel" cancel-data)])
+               rows)]
+    {:inline_keyboard (vec rows)}))
+
+(defn- docs-agreements-menu-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Pick agreement" "docs:agreements:pick")
+     (inline-button "Create agreement" "docs:agreements:create")]
+    [(inline-button "Back" "docs:menu")]]})
+
+(defn- docs-agreement-actions-inline-keyboard
+  [agreement-id]
+  {:inline_keyboard
+   [[(inline-button "Plan items" (str "docs:agreements:plan:list:" agreement-id))
+     (inline-button "Add plan item" (str "docs:agreements:plan:add:" agreement-id))]
+    [(inline-button "Accept + issue PDFs" (str "docs:agreements:accept:" agreement-id))
+     (inline-button "Generate due invoices" (str "docs:agreements:due:" agreement-id))]
+    [(inline-button "Back" "docs:agreements:menu")]]})
+
+(defn- docs-plan-item-kind-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Installment" "docs:plan-item:kind:installment")
+     (inline-button "Milestone" "docs:plan-item:kind:milestone")]
+    [(inline-button "Recurring" "docs:plan-item:kind:recurring")
+     (inline-button "Cancel" "docs:agreements:menu")]]})
+
+(defn- docs-plan-item-invoice-on-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "On accept" "docs:plan-item:invoice-on:accepted")
+     (inline-button "On due date" "docs:plan-item:invoice-on:due")]
+    [(inline-button "Manual" "docs:plan-item:invoice-on:manual")
+     (inline-button "Cancel" "docs:agreements:menu")]]})
+
 (defn- docs-menu-inline-keyboard
   []
   {:inline_keyboard
@@ -729,6 +833,7 @@
     [(inline-button "Status notes" "docs:field:status-notes")]
     [(inline-button "Add invoice" "docs:invoice:add")
      (inline-button "Add payment" "docs:payment:add")]
+    [(inline-button "Agreements" "docs:agreements:menu")]
     [(inline-button "Issue proposal PDF" "docs:generate:proposal")
      (inline-button "Issue status report PDF" "docs:generate:status-report")]
     [(inline-button "Invoice PDF (latest)" "docs:generate:invoice:pick")
@@ -1855,6 +1960,83 @@
                                         :message-key (str "docs-payment-added-" (System/currentTimeMillis))
                                         :reply-markup (docs-menu-inline-keyboard)}))))))
 
+          :docs/agreement-title
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send agreement title."
+                                :message-key (str "docs-agreement-title-empty-" (System/currentTimeMillis))
+                                :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-terms)
+                                              (assoc :draft {:agreement/title trimmed})))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Send agreement terms (free-form)."
+                                  :message-key (str "docs-agreement-terms-" (System/currentTimeMillis))
+                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})))
+
+          :docs/agreement-terms
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send agreement terms."
+                                :message-key (str "docs-agreement-terms-empty-" (System/currentTimeMillis))
+                                :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
+            (let [month (LocalDate/now (ZoneId/systemDefault))
+                  quicks [{:id :today :label "Today"}
+                          {:id :tomorrow :label "Tomorrow"}]]
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-effective-date)
+                                              (assoc :picker {:kind :docs/agreement-effective
+                                                              :text "Pick agreement effective date (optional):"
+                                                              :quicks quicks})
+                                              (assoc-in [:draft :agreement/terms] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Pick agreement effective date (optional):"
+                                  :message-key (str "docs-agreement-effective-" (System/currentTimeMillis))
+                                  :reply-markup (date-picker-inline-keyboard {:month month
+                                                                              :quicks quicks
+                                                                              :allow-skip? true
+                                                                              :skip-label "Skip (no effective date)"
+                                                                              :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})})))
+
+          :docs/plan-item-label
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send plan item label."
+                                :message-key (str "docs-plan-item-label-empty-" (System/currentTimeMillis))
+                                :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/plan-item-amount)
+                                              (assoc-in [:draft :plan.item/label] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Send plan item amount (e.g. 5000 or 5,000 SAR):"
+                                  :message-key (str "docs-plan-item-amount-" (System/currentTimeMillis))
+                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})))
+
+          :docs/plan-item-amount
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send plan item amount."
+                                :message-key (str "docs-plan-item-amount-empty-" (System/currentTimeMillis))
+                                :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
+            (let [month (LocalDate/now (ZoneId/systemDefault))
+                  quicks [{:id :in-7-days :label "+7 days"}
+                          {:id :in-14-days :label "+14 days"}
+                          {:id :in-30-days :label "+30 days"}]]
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/plan-item-due-date)
+                                              (assoc :picker {:kind :docs/plan-item-due
+                                                              :text "Pick plan item due date:"
+                                                              :quicks quicks})
+                                              (assoc-in [:draft :plan.item/amount] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Pick plan item due date:"
+                                  :message-key (str "docs-plan-item-due-" (System/currentTimeMillis))
+                                  :reply-markup (date-picker-inline-keyboard {:month month
+                                                                              :quicks quicks
+                                                                              :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})})))
+
           :docs/payment-time
           (send-message! cfg {:chat-id chat-id
                               :text "Pick payment time using the buttons (optional)."
@@ -1862,6 +2044,14 @@
                               :reply-markup (time-picker-inline-keyboard {:allow-skip? true
                                                                           :skip-label "Skip time"
                                                                           :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})
+
+          :docs/plan-item-due-time
+          (send-message! cfg {:chat-id chat-id
+                              :text "Pick plan item due time using the buttons (optional)."
+                              :message-key (str "docs-plan-item-due-time-click-" (System/currentTimeMillis))
+                              :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                          :skip-label "Skip time"
+                                                                          :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})})
 
           :docs/payment-date
           (let [month (LocalDate/now (ZoneId/systemDefault))
@@ -1897,6 +2087,35 @@
                               :reply-markup (time-picker-inline-keyboard {:allow-skip? true
                                                                           :skip-label "Skip time"
                                                                           :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})
+
+          :docs/agreement-effective-date
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the calendar buttons to pick an effective date (optional)."
+                              :message-key (str "docs-agreement-effective-click-" (System/currentTimeMillis))
+                              :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
+                                                                          :quicks [{:id :today :label "Today"}
+                                                                                   {:id :tomorrow :label "Tomorrow"}]
+                                                                          :allow-skip? true
+                                                                          :skip-label "Skip (no effective date)"
+                                                                          :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})})
+
+          :docs/plan-item-due-date
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the calendar buttons to pick a due date."
+                              :message-key (str "docs-plan-item-due-click-" (System/currentTimeMillis))
+                              :reply-markup (date-picker-inline-keyboard {:month (LocalDate/now (ZoneId/systemDefault))
+                                                                          :quicks [{:id :in-7-days :label "+7 days"}
+                                                                                   {:id :in-14-days :label "+14 days"}
+                                                                                   {:id :in-30-days :label "+30 days"}]
+                                                                          :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})})
+
+          :docs/agreement-actions
+          (let [agreement-id (:agreement/id session)]
+            (when agreement-id
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Agreement:"
+                                  :message-key (str "docs-agreement-actions-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))
 
           :docs/payment-invoice-attach
           (send-message! cfg {:chat-id chat-id
@@ -2098,6 +2317,208 @@
                                            :text "Documents:"
                                            :reply-markup (docs-menu-inline-keyboard)}))
                      (prompt-docs-client-pick! state chat-id)))
+      :docs/agreements-menu (let [session (get-docs-session! chat-id)]
+                              (if (and chat-user session (:client-id session))
+                                (do
+                                  (save-docs-session! chat-id (assoc session :stage :docs/agreements-menu))
+                                  (edit-message! cfg {:chat-id chat-id
+                                                      :message-id message-id
+                                                      :text "Agreements:"
+                                                      :reply-markup (docs-agreements-menu-inline-keyboard)}))
+                                (prompt-docs-client-pick! state chat-id)))
+      :docs/agreements-pick (let [session (get-docs-session! chat-id)
+                                  actor (actions/actor-from-telegram chat-user)]
+                              (if (and chat-user session (:client-id session))
+                                (let [res (actions/execute! state {:action/id :cap/action/agreement-list
+                                                                   :actor actor
+                                                                   :input {:client/id (:client-id session)}})
+                                      agreements (get-in res [:result :agreements] [])
+                                      kb (docs-agreement-pick-inline-keyboard agreements "docs:agreements:set:%s"
+                                                                              :cancel-data "docs:agreements:menu")]
+                                  (save-docs-session! chat-id (assoc session :stage :docs/agreements-pick))
+                                  (edit-message! cfg {:chat-id chat-id
+                                                      :message-id message-id
+                                                      :text "Pick agreement:"
+                                                      :reply-markup kb}))
+                                (prompt-docs-client-pick! state chat-id)))
+      :docs/agreements-set (let [session (get-docs-session! chat-id)
+                                 raw (:agreement-id parsed)
+                                 agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))]
+                             (if (and chat-user session (:client-id session) agreement-id)
+                               (do
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/agreement-actions
+                                                                        :agreement/id agreement-id
+                                                                        :draft nil)))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text "Agreement:"
+                                                     :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "Invalid agreement."
+                                                   :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
+      :docs/agreements-create (let [session (get-docs-session! chat-id)]
+                               (if (and chat-user session (:client-id session))
+                                 (do
+                                   (save-docs-session! chat-id (-> session
+                                                                   (assoc :stage :docs/agreement-title
+                                                                          :agreement/id nil
+                                                                          :draft nil)))
+                                   (edit-message! cfg {:chat-id chat-id
+                                                       :message-id message-id
+                                                       :text "Send agreement title:"
+                                                       :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}}))
+                                 (prompt-docs-client-pick! state chat-id)))
+      :docs/agreements-plan-list (let [session (get-docs-session! chat-id)
+                                       raw (:agreement-id parsed)
+                                       agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                       actor (actions/actor-from-telegram chat-user)]
+                                   (if (and chat-user session (:client-id session) agreement-id)
+                                     (let [res (actions/execute! state {:action/id :cap/action/plan-item-list
+                                                                        :actor actor
+                                                                        :input {:agreement/id agreement-id}})
+                                           items (get-in res [:result :plan-items] [])
+                                           lines (if (seq items)
+                                                   (->> items
+                                                        (map-indexed (fn [i it]
+                                                                       (let [label (or (:plan.item/label it) "—")
+                                                                             amount (or (:plan.item/amount it) "—")
+                                                                             currency (or (:plan.item/currency it) "")
+                                                                             due (or (:plan.item/due-at it) "—")]
+                                                                         (format "%d) %s · %s %s · due %s"
+                                                                                 (inc i) label amount currency due))))
+                                                        (str/join "\n"))
+                                                   "No plan items yet.")]
+                                       (save-docs-session! chat-id (-> session
+                                                                       (assoc :stage :docs/agreement-actions
+                                                                              :agreement/id agreement-id)))
+                                       (edit-message! cfg {:chat-id chat-id
+                                                           :message-id message-id
+                                                           :text (str "Plan items:\n" lines)
+                                                           :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text "Invalid agreement."
+                                                         :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
+      :docs/agreements-plan-add (let [session (get-docs-session! chat-id)
+                                      raw (:agreement-id parsed)
+                                      agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))]
+                                  (if (and chat-user session (:client-id session) agreement-id)
+                                    (do
+                                      (save-docs-session! chat-id (-> session
+                                                                      (assoc :stage :docs/plan-item-kind
+                                                                             :agreement/id agreement-id
+                                                                             :draft {:agreement/id agreement-id})))
+                                      (edit-message! cfg {:chat-id chat-id
+                                                          :message-id message-id
+                                                          :text "Choose plan item kind:"
+                                                          :reply-markup (docs-plan-item-kind-inline-keyboard)}))
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text "Invalid agreement."
+                                                        :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
+      :docs/plan-item-kind (let [session (get-docs-session! chat-id)
+                                 raw (:value parsed)
+                                 kind (when raw (keyword raw))]
+                             (if (and chat-user session (contains? #{:installment :milestone :recurring} kind))
+                               (do
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/plan-item-invoice-on)
+                                                                 (assoc-in [:draft :plan.item/kind] kind)))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text "When should invoices be generated?"
+                                                     :reply-markup (docs-plan-item-invoice-on-inline-keyboard)}))
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "Pick a valid kind."
+                                                   :message-key (str "docs-plan-item-kind-invalid-" (System/currentTimeMillis))})))
+      :docs/plan-item-invoice-on (let [session (get-docs-session! chat-id)
+                                       raw (:value parsed)
+                                       on (when raw (keyword raw))]
+                                   (if (and chat-user session (contains? #{:accepted :due :manual} on))
+                                     (do
+                                       (save-docs-session! chat-id (-> session
+                                                                       (assoc :stage :docs/plan-item-label)
+                                                                       (assoc-in [:draft :plan.item/invoice-on] on)))
+                                       (edit-message! cfg {:chat-id chat-id
+                                                           :message-id message-id
+                                                           :text "Send plan item label:"
+                                                           :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}}))
+                                     (send-message! cfg {:chat-id chat-id
+                                                         :text "Pick a valid invoice option."
+                                                         :message-key (str "docs-plan-item-on-invalid-" (System/currentTimeMillis))})))
+      :docs/agreements-accept (let [session (get-docs-session! chat-id)
+                                    raw (:agreement-id parsed)
+                                    agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                    actor (actions/actor-from-telegram chat-user)]
+                                (if (and chat-user session (:client-id session) agreement-id)
+                                  (do
+                                    (when message-id
+                                      (edit-message! cfg {:chat-id chat-id
+                                                          :message-id message-id
+                                                          :text "Accepting agreement + issuing PDFs…"
+                                                          :reply-markup {:inline_keyboard []}}))
+                                    (let [res (actions/execute! state {:action/id :cap/action/agreement-accept
+                                                                       :actor actor
+                                                                       :input {:agreement/id agreement-id}})
+                                          agreement-pdf (get-in res [:result :agreement-pdf :file])
+                                          invoices (get-in res [:result :invoices] [])
+                                          send-agreement (when agreement-pdf
+                                                           (docs-send-file! state chat-id actor agreement-pdf :caption "Agreement"))
+                                          invoice-files (->> invoices
+                                                             (keep (fn [inv] (get-in inv [:invoice-pdf :file])))
+                                                             vec)
+                                          send-invoices (->> invoice-files
+                                                             (map (fn [f] (docs-send-file! state chat-id actor f :caption "Invoice")))
+                                                             vec)]
+                                      (save-docs-session! chat-id (-> session
+                                                                      (assoc :stage :docs/agreement-actions
+                                                                             :agreement/id agreement-id)))
+                                      (if-let [err (:error res)]
+                                        (send-message! cfg {:chat-id chat-id
+                                                            :text (str "Unable to accept agreement: " (:message err))
+                                                            :message-key (str "docs-agreement-accept-error-" (System/currentTimeMillis))
+                                                            :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                                        (if-let [send-err (:error send-agreement)]
+                                          (send-message! cfg {:chat-id chat-id
+                                                              :text (str "Accepted, but could not send agreement PDF: " send-err)
+                                                              :message-key (str "docs-agreement-accept-send-error-" (System/currentTimeMillis))
+                                                              :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                                          (send-message! cfg {:chat-id chat-id
+                                                              :text (str "Accepted. Sent agreement + " (count invoice-files) " invoice PDFs.")
+                                                              :message-key (str "docs-agreement-accept-ok-" (System/currentTimeMillis))
+                                                              :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))))
+                                  (send-message! cfg {:chat-id chat-id
+                                                      :text "Invalid agreement."
+                                                      :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
+      :docs/agreements-due (let [session (get-docs-session! chat-id)
+                                 raw (:agreement-id parsed)
+                                 agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                 actor (actions/actor-from-telegram chat-user)]
+                             (if (and chat-user session (:client-id session) agreement-id)
+                               (let [res (actions/execute! state {:action/id :cap/action/agreement-generate-due-invoices
+                                                                  :actor actor
+                                                                  :input {:agreement/id agreement-id
+                                                                          :window/days 30}})
+                                     invoices (get-in res [:result :invoices] [])
+                                     invoice-files (->> invoices
+                                                        (keep (fn [inv] (get-in inv [:invoice-pdf :file])))
+                                                        vec)
+                                     _ (doseq [f invoice-files]
+                                         (docs-send-file! state chat-id actor f :caption "Invoice"))]
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/agreement-actions
+                                                                        :agreement/id agreement-id)))
+                                 (if-let [err (:error res)]
+                                   (send-message! cfg {:chat-id chat-id
+                                                       :text (str "Unable to generate due invoices: " (:message err))
+                                                       :message-key (str "docs-agreement-due-error-" (System/currentTimeMillis))
+                                                       :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                                   (send-message! cfg {:chat-id chat-id
+                                                       :text (str "Generated " (count invoice-files) " due invoice PDFs.")
+                                                       :message-key (str "docs-agreement-due-ok-" (System/currentTimeMillis))
+                                                       :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))
+                               (send-message! cfg {:chat-id chat-id
+                                                   :text "Invalid agreement."
+                                                   :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
       :docs/client-pick (prompt-docs-client-pick! state chat-id)
       :docs/client-set (let [cid (:client-id parsed)
                              client-id (when cid (try (UUID/fromString (str cid)) (catch Exception _ nil)))
@@ -2517,6 +2938,31 @@
                                                                                              :allow-skip? true
                                                                                              :skip-label "No due date"
                                                                                              :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                           (and session (= (:stage session) :docs/agreement-effective-date))
+                           (let [text (get-in session [:picker :text] "Pick agreement effective date (optional):")
+                                 quicks (or (get-in session [:picker :quicks])
+                                            [{:id :today :label "Today"}
+                                             {:id :tomorrow :label "Tomorrow"}])]
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text text
+                                                 :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                             :quicks quicks
+                                                                                             :allow-skip? true
+                                                                                             :skip-label "Skip (no effective date)"
+                                                                                             :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})}))
+                           (and session (= (:stage session) :docs/plan-item-due-date))
+                           (let [text (get-in session [:picker :text] "Pick plan item due date:")
+                                 quicks (or (get-in session [:picker :quicks])
+                                            [{:id :in-7-days :label "+7 days"}
+                                             {:id :in-14-days :label "+14 days"}
+                                             {:id :in-30-days :label "+30 days"}])]
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text text
+                                                 :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                             :quicks quicks
+                                                                                             :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})}))
                            :else nil))
       :date-picker/day (let [ymd (:value parsed)
                              picked (parse-ymd->date ymd)
@@ -2567,6 +3013,50 @@
 	                                                 :reply-markup (time-picker-inline-keyboard {:allow-skip? true
 	                                                                                            :skip-label "Skip time"
 	                                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})}))
+                           (and picked session (= (:stage session) :docs/agreement-effective-date))
+                           (let [draft (:draft session)
+                                 actor (actions/actor-from-telegram chat-user)
+                                 input (cond-> {:client/id (:client-id session)
+                                                :agreement/title (:agreement/title draft)
+                                                :agreement/terms (:agreement/terms draft)}
+                                         picked (assoc :agreement/effective-at picked))
+                                 res (actions/execute! state {:action/id :cap/action/agreement-create
+                                                              :actor actor
+                                                              :input input})
+                                 agreement (get-in res [:result :agreement])
+                                 agreement-id (:agreement/id agreement)]
+                             (if-let [err (:error res)]
+                               (do
+                                 (save-docs-session! chat-id (assoc session :stage :docs/agreements-menu :draft nil))
+                                 (send-message! cfg {:chat-id chat-id
+                                                     :text (str "Unable to create agreement: " (:message err))
+                                                     :message-key (str "docs-agreement-create-error-" (System/currentTimeMillis))
+                                                     :reply-markup (docs-agreements-menu-inline-keyboard)}))
+                               (do
+                                 (save-docs-session! chat-id (-> session
+                                                                 (assoc :stage :docs/agreement-actions
+                                                                        :agreement/id agreement-id
+                                                                        :draft nil)))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text (str "Effective date set: " ymd)
+                                                     :reply-markup {:inline_keyboard []}})
+                                 (send-message! cfg {:chat-id chat-id
+                                                     :text "Agreement created."
+                                                     :message-key (str "docs-agreement-created-" (System/currentTimeMillis))
+                                                     :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))))
+                           (and picked session (= (:stage session) :docs/plan-item-due-date))
+                           (do
+                             (save-docs-session! chat-id (-> session
+                                                             (assoc :stage :docs/plan-item-due-time)
+                                                             (update :draft dissoc :plan.item/due-at :plan.item/due-date)
+                                                             (assoc-in [:draft :plan.item/due-date] ymd)))
+                             (edit-message! cfg {:chat-id chat-id
+                                                 :message-id message-id
+                                                 :text "Pick plan item due time (optional):"
+                                                 :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                                            :skip-label "Skip time"
+                                                                                            :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})}))
 	                           :else nil))
       :date-picker/quick (let [quick-id (some-> (:value parsed) keyword)
                                today (LocalDate/now (ZoneId/systemDefault))
@@ -2585,6 +3075,17 @@
                                               :yesterday (.minusDays today 1)
                                               nil)
                                             (and session (= (:stage session) :docs/inv-due-date))
+                                            (case quick-id
+                                              :in-7-days (.plusDays today 7)
+                                              :in-14-days (.plusDays today 14)
+                                              :in-30-days (.plusDays today 30)
+                                              nil)
+                                            (and session (= (:stage session) :docs/agreement-effective-date))
+                                            (case quick-id
+                                              :today today
+                                              :tomorrow (.plusDays today 1)
+                                              nil)
+                                            (and session (= (:stage session) :docs/plan-item-due-date))
                                             (case quick-id
                                               :in-7-days (.plusDays today 7)
                                               :in-14-days (.plusDays today 14)
@@ -2616,6 +3117,38 @@
                                                       :text "Follow-up set without a date."
                                                       :reply-markup {:inline_keyboard []}})
                                   (send-task-card! state chat-id (get-in res [:result :task]) {})))))
+                          (let [session (get-docs-session! chat-id)]
+                            (when (and session (= (:stage session) :docs/agreement-effective-date))
+                              (let [draft (:draft session)
+                                    actor (actions/actor-from-telegram chat-user)
+                                    input {:client/id (:client-id session)
+                                           :agreement/title (:agreement/title draft)
+                                           :agreement/terms (:agreement/terms draft)}
+                                    res (actions/execute! state {:action/id :cap/action/agreement-create
+                                                                 :actor actor
+                                                                 :input input})
+                                    agreement (get-in res [:result :agreement])
+                                    agreement-id (:agreement/id agreement)]
+                                (if-let [err (:error res)]
+                                  (do
+                                    (save-docs-session! chat-id (assoc session :stage :docs/agreements-menu :draft nil))
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text (str "Unable to create agreement: " (:message err))
+                                                        :message-key (str "docs-agreement-create-error-" (System/currentTimeMillis))
+                                                        :reply-markup (docs-agreements-menu-inline-keyboard)}))
+                                  (do
+                                    (save-docs-session! chat-id (-> session
+                                                                    (assoc :stage :docs/agreement-actions
+                                                                           :agreement/id agreement-id
+                                                                           :draft nil)))
+                                    (edit-message! cfg {:chat-id chat-id
+                                                        :message-id message-id
+                                                        :text "No effective date set."
+                                                        :reply-markup {:inline_keyboard []}})
+                                    (send-message! cfg {:chat-id chat-id
+                                                        :text "Agreement created."
+                                                        :message-key (str "docs-agreement-created-" (System/currentTimeMillis))
+                                                        :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))))))
                           (let [session (get-docs-session! chat-id)]
                             (when (and session (= (:stage session) :docs/inv-due-date))
                               (let [draft (:draft session)
@@ -2655,22 +3188,29 @@
                               hour (when (re-matches #"\d{2}" (str raw))
                                      (try (Integer/parseInt (str raw)) (catch Exception _ nil)))]
                           (when (and session (number? hour) (<= 0 hour 23)
-                                     (#{:docs/payment-time :docs/inv-due-time} (:stage session)))
-                            (edit-message! cfg {:chat-id chat-id
-                                                :message-id message-id
-                                                :text (str "Pick minutes for " (format "%02d" (int hour)) ":")
-                                                :reply-markup (time-picker-minutes-inline-keyboard {:hour hour
-                                                                                                    :allow-skip? true
-                                                                                                    :skip-label "Skip time"
-                                                                                                    :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})))
+                                     (#{:docs/payment-time :docs/inv-due-time :docs/plan-item-due-time} (:stage session)))
+                            (let [cancel (if (= (:stage session) :docs/plan-item-due-time) "docs:agreements:menu" "docs:menu")]
+                              (edit-message! cfg {:chat-id chat-id
+                                                  :message-id message-id
+                                                  :text (str "Pick minutes for " (format "%02d" (int hour)) ":")
+                                                  :reply-markup (time-picker-minutes-inline-keyboard {:hour hour
+                                                                                                      :allow-skip? true
+                                                                                                      :skip-label "Skip time"
+                                                                                                      :extra-rows [[(inline-button "Cancel" cancel)]]})})))) 
       :time-picker/back (let [session (get-docs-session! chat-id)]
-                          (when (and session (#{:docs/payment-time :docs/inv-due-time} (:stage session)))
-                            (edit-message! cfg {:chat-id chat-id
-                                                :message-id message-id
-                                                :text "Pick time (optional):"
-                                                :reply-markup (time-picker-inline-keyboard {:allow-skip? true
-                                                                                            :skip-label "Skip time"
-                                                                                            :extra-rows [[(inline-button "Cancel" "docs:menu")]]})})))
+                          (when (and session (#{:docs/payment-time :docs/inv-due-time :docs/plan-item-due-time} (:stage session)))
+                            (let [cancel (if (= (:stage session) :docs/plan-item-due-time) "docs:agreements:menu" "docs:menu")
+                                  label (case (:stage session)
+                                          :docs/payment-time "Pick payment time (optional):"
+                                          :docs/inv-due-time "Pick invoice due time (optional):"
+                                          :docs/plan-item-due-time "Pick plan item due time (optional):"
+                                          "Pick time (optional):")]
+                              (edit-message! cfg {:chat-id chat-id
+                                                  :message-id message-id
+                                                  :text label
+                                                  :reply-markup (time-picker-inline-keyboard {:allow-skip? true
+                                                                                              :skip-label "Skip time"
+                                                                                              :extra-rows [[(inline-button "Cancel" cancel)]]})}))))
       :time-picker/set (apply-docs-time-picker-set! state {:chat-id chat-id
                                                            :chat-user chat-user
                                                            :message-id message-id
@@ -3011,9 +3551,9 @@
                          (send-message! cfg {:chat-id chat-id
                                              :text "Invalid client action."
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
-		      (do
-		        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-		        nil))))
+							      (do
+							        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+							        nil)))
 (defn- parse-callback
   [data]
   (when (present-string? data)
@@ -3037,7 +3577,7 @@
                   :value (nth parts 2 nil)}
           "back" {:type :time-picker/back}
           "set" {:type :time-picker/set
-                 :value (nth parts 2 nil)}
+                 :value (str (nth parts 2 "") (nth parts 3 ""))}
           "skip" {:type :time-picker/skip}
           nil)
         "docs"
@@ -3050,6 +3590,29 @@
                             :client-id (nth parts 3 nil)}
                      "pick" {:type :docs/client-pick}
                      nil)
+          "agreements" (case (nth parts 2 nil)
+                         "menu" {:type :docs/agreements-menu}
+                         "pick" {:type :docs/agreements-pick}
+                         "create" {:type :docs/agreements-create}
+                         "set" {:type :docs/agreements-set
+                                :agreement-id (nth parts 3 nil)}
+                         "accept" {:type :docs/agreements-accept
+                                   :agreement-id (nth parts 3 nil)}
+                         "due" {:type :docs/agreements-due
+                                :agreement-id (nth parts 3 nil)}
+                         "plan" (case (nth parts 3 nil)
+                                  "list" {:type :docs/agreements-plan-list
+                                          :agreement-id (nth parts 4 nil)}
+                                  "add" {:type :docs/agreements-plan-add
+                                         :agreement-id (nth parts 4 nil)}
+                                  nil)
+                         nil)
+          "plan-item" (case (nth parts 2 nil)
+                        "kind" {:type :docs/plan-item-kind
+                                :value (nth parts 3 nil)}
+                        "invoice-on" {:type :docs/plan-item-invoice-on
+                                      :value (nth parts 3 nil)}
+                        nil)
           "field" {:type :docs/field
                    :value (nth parts 2 nil)}
           "currency" {:type :docs/currency

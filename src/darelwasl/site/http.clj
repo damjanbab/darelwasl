@@ -4,11 +4,66 @@
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.content :as content]
+            [darelwasl.documents :as documents]
             [darelwasl.files :as files]
             [darelwasl.outbox :as outbox]
             [darelwasl.site.templates :as templates]
+            [darelwasl.workspace :as workspace]
             [ring.util.codec :as codec]
             [ring.util.response :as resp]))
+
+(defn- verify-facts
+  [db workspace-id {:keys [document] :as verification}]
+  (when (and (:document/valid? verification) (map? document))
+    (let [ws (or (get-in document [:document/client :client/workspace])
+                 (workspace/resolve-id workspace-id))
+          doc-type (:document/type document)
+          subject-type (:document/subject-type document)
+          subject-id (:document/subject-id document)
+          base [[:document (or (:entity/ref document) "—")]
+                [:type (some-> doc-type name)]
+                [:issued (or (:document/issued-at document) "—")]]
+          pull (fn [pattern eid]
+                 (when eid (d/pull db pattern eid)))]
+      (case subject-type
+        :invoice
+        (let [eid (ffirst (d/q '[:find ?e
+                                 :in $ ?id ?ws
+                                 :where [?e :invoice/id ?id]
+                                        [?e :invoice/workspace ?ws]]
+                               db subject-id ws))
+              inv (pull [:invoice/number :invoice/total-amount :invoice/currency :invoice/due-at] eid)]
+          (cond-> base
+            (:invoice/number inv) (conj [:invoice (str (:invoice/number inv))])
+            (:invoice/total-amount inv) (conj [:amount (str (:invoice/total-amount inv) " " (or (:invoice/currency inv) ""))])
+            (:invoice/due-at inv) (conj [:due (str (:invoice/due-at inv))])))
+
+        :payment
+        (let [eid (ffirst (d/q '[:find ?e
+                                 :in $ ?id ?ws
+                                 :where [?e :payment/id ?id]
+                                        [?e :payment/workspace ?ws]]
+                               db subject-id ws))
+              pay (pull [:payment/amount :payment/currency :payment/paid-at :payment/reference] eid)]
+          (cond-> base
+            (:payment/amount pay) (conj [:amount (str (:payment/amount pay) " " (or (:payment/currency pay) ""))])
+            (:payment/paid-at pay) (conj [:paid (str (:payment/paid-at pay))])
+            (:payment/reference pay) (conj [:reference (str (:payment/reference pay))])))
+
+        :agreement
+        (let [eid (ffirst (d/q '[:find ?e
+                                 :in $ ?id ?ws
+                                 :where [?e :agreement/id ?id]
+                                        [?e :agreement/workspace ?ws]]
+                               db subject-id ws))
+              agr (pull [:agreement/number :agreement/title :agreement/accepted-at] eid)]
+          (cond-> base
+            (:agreement/number agr) (conj [:agreement (str (:agreement/number agr))])
+            (:agreement/title agr) (conj [:title (str (:agreement/title agr))])
+            (:agreement/accepted-at agr) (conj [:accepted (str (:agreement/accepted-at agr))])))
+
+        ;; default subject types
+        base))))
 
 (def ^:private supported-lang-prefixes
   {"ar" :ar
@@ -274,6 +329,27 @@
                        {:status 200
                         :headers {"Content-Type" "text/plain; charset=utf-8"}
                         :body "ok"}
+
+                       (and (= method :get) (= path "/verify"))
+                       (let [ref (some-> (or (get query "ref") (get query "document")) str str/trim)
+                             code (some-> (or (get query "code") (get query "verification")) str str/trim)
+                             verification (when (and (not (str/blank? ref)) (not (str/blank? code)))
+                                            (documents/verify-document! {:db db :config config}
+                                                                    {:input {:document/ref ref
+                                                                             :document/verification-code code}
+                                                                     :actor nil}))
+                             facts (when verification (verify-facts (d/db conn) (workspace/default-id) verification))
+                             verification (cond
+                                            (nil? verification) {:valid? nil}
+                                            (:error verification) {:valid? false}
+                                            :else {:valid? (:document/valid? verification)
+                                                   :facts facts})]
+                         (templates/public-verify {:public-base-url public-base-url
+                                                   :base-path base-path
+                                                   :lang lang
+                                                   :path (str prefix "/verify")
+                                                   :query query
+                                                   :verification verification}))
 
                        (static-path? path)
                        (let [static-resp (resp/file-response (subs path 1) {:root "public"})]

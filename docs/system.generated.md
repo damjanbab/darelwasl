@@ -2,13 +2,14 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `3f1d9d9c6fcd605749d1aa51b06772cc1a1ab15baa75a9df136cdf016f75b488`
+- Catalog version: `06db049806dcc7ab1cd60d501a6e9c2b487996df5be033eacf4ddc5ed8524567`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (41)
+### Schema (43)
 - schema/activation-step
+- schema/agreement
 - schema/betting-bet
 - schema/betting-bookmaker
 - schema/betting-event
@@ -38,6 +39,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/ownership
 - schema/parcel
 - schema/payment
+- schema/payment-plan-item
 - schema/person
 - schema/persona
 - schema/provenance
@@ -50,7 +52,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (87)
+### Actions (96)
 - action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
@@ -63,6 +65,11 @@ This file is auto-generated. Do not edit by hand.
 - action/agent-control-run-list
 - action/agent-control-run-revise
 - action/agent-control-trash
+- action/agreement-accept
+- action/agreement-create
+- action/agreement-generate-due-invoices
+- action/agreement-list
+- action/agreement-update
 - action/analytics-funnel
 - action/analytics-outstanding-invoices
 - action/analytics-revenue-by-month
@@ -108,6 +115,10 @@ This file is auto-generated. Do not edit by hand.
 - action/payment-list
 - action/person-detail
 - action/person-list
+- action/plan-item-create
+- action/plan-item-delete
+- action/plan-item-list
+- action/plan-item-update
 - action/proposal-generate
 - action/receipt-generate
 - action/site-screenshot-bundle
@@ -330,6 +341,7 @@ This file is auto-generated. Do not edit by hand.
 - DATOMIC_SYSTEM
 - DOCUMENT_RENDERER
 - DOCUMENT_TEMPLATE_VERSION
+- DOCUMENT_VERIFY_BASE_URL
 - DOCUMENT_VERIFY_SECRET
 - FILES_STORAGE_DIR
 - GITHUB_API_URL
@@ -392,6 +404,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.account-statement
 - darelwasl.actions
 - darelwasl.agent-control.gc
+- darelwasl.agreements
 - darelwasl.app
 - darelwasl.auth
 - darelwasl.automations

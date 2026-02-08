@@ -443,6 +443,48 @@
                       (str "<section class='section-pad'><h1>Page not found</h1>"
                            "<p>No content found at <strong>" (escape-html path) "</strong>.</p></section>"))})
 
+(defn public-verify
+  [{:keys [public-base-url base-path lang path query verification]}]
+  (let [spec (lang-spec lang)
+        prefix (:prefix spec)
+        verify-path (str prefix "/verify")
+        action-href (with-base base-path verify-path)
+        ref (or (get query "ref") (get query "document") "")
+        code (or (get query "code") (get query "verification") "")
+        {:keys [valid? facts]} verification
+        banner (cond
+                 (nil? valid?) ""
+                 valid? "<div style='padding:12px 14px;border-radius:14px;border:1px solid #bbf7d0;background:#f0fdf4;color:#14532d;margin:14px 0;'><strong>VALID</strong> Dar El Wasl document.</div>"
+                 :else "<div style='padding:12px 14px;border-radius:14px;border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;margin:14px 0;'><strong>INVALID</strong> document verification code.</div>")
+        facts-html (when (and valid? (seq facts))
+                     (str "<div style='margin-top:10px;padding:14px 16px;border-radius:14px;border:1px solid #e2e8f0;background:#fff;'>"
+                          "<h3 style='margin:0 0 10px;font-size:16px;'>Document details</h3>"
+                          "<dl style='display:grid;grid-template-columns: 180px 1fr;gap:8px 14px;margin:0;'>"
+                          (apply str (for [[k v] facts]
+                                       (str "<dt style='color:#475569;'>" (escape-html (name k)) "</dt>"
+                                            "<dd style='margin:0;font-weight:600;'>" (escape-html (str v)) "</dd>")))
+                          "</dl></div>"))]
+    {:status 200
+     :headers {"Content-Type" "text/html; charset=utf-8"}
+     :body (public-page {:title "Verify document"
+                         :description "Verify a Dar El Wasl document."
+                         :public-base-url public-base-url
+                         :base-path base-path
+                         :lang lang
+                         :path path
+                         :image-path "/logo.jpg"}
+                        (str "<section class='section-pad'>"
+                             "<h1>Verify a document</h1>"
+                             "<p>Enter the document reference and verification code to confirm authenticity.</p>"
+                             "<form method='get' action='" (escape-html action-href) "' style='margin-top:14px;display:grid;gap:10px;max-width:520px;'>"
+                             "<label>Document reference<br/><input name='ref' value='" (escape-html ref) "' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/></label>"
+                             "<label>Verification code<br/><input name='code' value='" (escape-html code) "' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/></label>"
+                             "<button type='submit' style='padding:10px 14px;border-radius:12px;border:1px solid #1f2147;background:#1f2147;color:#fff;font-weight:700;width:max-content;'>Verify</button>"
+                             "</form>"
+                             banner
+                             (or facts-html "")
+                             "</section>"))}))
+
 (defn public-route
   [{:keys [public-base-url base-path lang path contact query]}]
   (let [spec (lang-spec lang)

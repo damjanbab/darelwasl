@@ -428,6 +428,166 @@
                   :flags []}
   :related {:schema [:cap/schema/client :cap/schema/entity]}}
 
+ {:id :cap/schema/agreement
+  :title "Agreement"
+  :version "v1"
+  :attributes
+  [{:ident :agreement/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Agreement identity"}
+   {:ident :agreement/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Workspace-scoped unique key (workspace::client-id::agreement-number)"}
+   {:ident :agreement/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :agreement/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :agreement/number
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Human agreement number (optional, but recommended)"}
+   {:ident :agreement/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Agreement title"}
+   {:ident :agreement/terms
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Agreement terms (free-form text)"}
+   {:ident :agreement/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Agreement lifecycle status"}
+   {:ident :agreement/effective-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Agreement effective date/time (optional)"}
+   {:ident :agreement/accepted-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the client accepted/signed (optional)"}
+   {:ident :agreement/accepted-by
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Who accepted/signed (name/role, optional)"}
+   {:ident :agreement/delivery-channels
+    :type :db.type/keyword
+    :cardinality :db.cardinality/many
+    :doc "Client-agreed delivery channels for documents"}
+   {:ident :agreement/delivery-email
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Delivery email (optional)"}
+   {:ident :agreement/delivery-phone
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Delivery phone/WhatsApp number (optional)"}
+   {:ident :agreement/delivery-telegram-chat-id
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Delivery Telegram chat id (optional)"}
+   {:ident :agreement/electronic-consent?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Client consented to receive electronic documents"}
+   {:ident :agreement/consented-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Consent timestamp (optional)"}]
+  :enums {:agreement/status [:draft :accepted :void]
+          :agreement/delivery-channels [:email :whatsapp :telegram :paper]}
+  :invariants ["Client required"
+               "Agreement title required"
+               "Agreement status in enum"
+               "Entity type set to :entity.type/agreement"
+               "Workspace required"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/entity]}}
+
+ {:id :cap/schema/payment-plan-item
+  :title "Payment Plan Item"
+  :version "v1"
+  :attributes
+  [{:ident :plan.item/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Plan item identity"}
+   {:ident :plan.item/agreement
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked agreement (ref to :agreement/id)"}
+   {:ident :plan.item/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}
+   {:ident :plan.item/kind
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Item kind (installment/milestone/recurring)"}
+   {:ident :plan.item/label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Item label shown to the client"}
+   {:ident :plan.item/amount
+    :type :db.type/double
+    :cardinality :db.cardinality/one
+    :doc "Item amount"}
+   {:ident :plan.item/currency
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Currency"}
+   {:ident :plan.item/due-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Due date/time"}
+   {:ident :plan.item/invoice-on
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "When to generate an invoice for this item"}
+   {:ident :plan.item/invoice-status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Initial invoice status when generated"}
+   {:ident :plan.item/index
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Ordering index (optional)"}
+   {:ident :plan.item/active?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Whether the item is active"}
+   {:ident :plan.item/recurrence
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Recurrence rule (optional, e.g. P1M for monthly)"}]
+  :enums {:plan.item/kind [:installment :milestone :recurring]
+          :plan.item/invoice-on [:accepted :due :manual]
+          :plan.item/invoice-status [:draft :sent]}
+  :invariants ["Agreement required"
+               "Item label required"
+               "Amount required"
+               "Due date required"
+               "Item kind in enum"
+               "Entity type set to :entity.type/payment-plan-item"
+               "Workspace required"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/entity]}}
+
  {:id :cap/schema/invoice
   :title "Invoice"
   :version "v1"
@@ -462,6 +622,14 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Invoice description / line items (optional)"}
+   {:ident :invoice/agreement
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked agreement (ref to :agreement/id) (optional)"}
+   {:ident :invoice/plan-item
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked payment plan item (ref to :plan.item/id) (optional)"}
    {:ident :invoice/issued-at
     :type :db.type/instant
     :cardinality :db.cardinality/one
@@ -487,8 +655,8 @@
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
-                  :flags []}
-  :related {:schema [:cap/schema/client :cap/schema/entity]}}
+                  :flags [:invoice/agreement :invoice/plan-item]}
+  :related {:schema [:cap/schema/client :cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/entity]}}
 
  {:id :cap/schema/payment
   :title "Payment"
@@ -507,6 +675,14 @@
     :type :db.type/ref
     :cardinality :db.cardinality/one
     :doc "Linked invoice (ref to :invoice/id) (optional)"}
+   {:ident :payment/agreement
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked agreement (ref to :agreement/id) (optional)"}
+   {:ident :payment/plan-item
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked payment plan item (ref to :plan.item/id) (optional)"}
    {:ident :payment/workspace
     :type :db.type/string
     :cardinality :db.cardinality/one
@@ -540,8 +716,8 @@
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
-                  :flags []}
-  :related {:schema [:cap/schema/client :cap/schema/invoice :cap/schema/entity]}}
+                  :flags [:payment/agreement :payment/plan-item]}
+  :related {:schema [:cap/schema/client :cap/schema/invoice :cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/entity]}}
 
  {:id :cap/schema/document
   :title "Issued Document"
@@ -584,7 +760,7 @@
    {:ident :document/subject-type
     :type :db.type/keyword
     :cardinality :db.cardinality/one
-    :doc "Subject type keyword (:client/:invoice/:payment)"}
+    :doc "Subject type keyword (:client/:agreement/:invoice/:payment)"}
    {:ident :document/subject-id
     :type :db.type/uuid
     :cardinality :db.cardinality/one
@@ -605,9 +781,9 @@
     :type :db.type/keyword
     :cardinality :db.cardinality/one
     :doc "Verification algorithm identifier"}]
-  :enums {:document/type [:proposal :invoice :receipt :status-report]
+  :enums {:document/type [:proposal :agreement :invoice :receipt :status-report]
           :document/verification-alg [:hmac-sha256/v1]
-          :document/subject-type [:client :invoice :payment]}
+          :document/subject-type [:client :agreement :invoice :payment]}
   :invariants ["document/key unique (idempotent issuance)"
                "Document must reference a stored file"
                "Document must set :entity/type to :entity.type/document"
