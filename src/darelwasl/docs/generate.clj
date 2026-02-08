@@ -55,6 +55,8 @@
                               (registry-summary entries :agent "Agents")
                               (registry-summary entries :policy "Policies")
                               (registry-summary entries :internal "Internal capabilities")
+                              (registry-summary entries :service "Services")
+                              (registry-summary entries :contract "Contracts")
                               (registry-summary entries :recipe "Recipes")
                               (registry-summary entries :tooling "Tooling")
                               (registry-summary entries :theme "Theme")

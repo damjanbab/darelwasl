@@ -1,0 +1,74 @@
+[
+ {:id :service/entrepreneur-license
+  :title "Entrepreneur License (MISA)"
+  :category :service.category/licensing
+  :jurisdiction :saudi}
+ {:id :service/general-investment-license
+  :title "General Investment License"
+  :category :service.category/licensing
+  :jurisdiction :saudi}
+ {:id :service/gcc-national-license
+  :title "GCC National License"
+  :category :service.category/licensing
+  :jurisdiction :saudi}
+ {:id :service/rhq-license
+  :title "Regional HQ (RHQ) License"
+  :category :service.category/licensing
+  :jurisdiction :saudi}
+
+ {:id :service/pro-services
+  :title "PRO / Government Services"
+  :category :service.category/pro
+  :jurisdiction :saudi
+  :repeatable? true}
+
+ {:id :service/trademark-registration
+  :title "Trademark Registration"
+  :category :service.category/ip
+  :jurisdiction :saudi
+  :repeatable? true}
+
+ {:id :service/uk-company-formation
+  :title "UK Company Formation"
+  :category :service.category/company-formation
+  :jurisdiction :uk}
+ {:id :service/us-company-formation
+  :title "US Company Formation"
+  :category :service.category/company-formation
+  :jurisdiction :us}
+
+ {:id :service/attestation-pakistan
+  :title "Pakistan Company Attestation & Documentation"
+  :category :service.category/attestation
+  :jurisdiction :pakistan
+  :repeatable? true}
+ {:id :service/attestation-india
+  :title "India Company Attestation & Documentation"
+  :category :service.category/attestation
+  :jurisdiction :india
+  :repeatable? true}
+ {:id :service/attestation-oman
+  :title "Oman Company Attestation & Documentation"
+  :category :service.category/attestation
+  :jurisdiction :oman
+  :repeatable? true}
+ {:id :service/attestation-uae
+  :title "UAE Company Attestation & Documentation"
+  :category :service.category/attestation
+  :jurisdiction :uae
+  :repeatable? true}
+
+ {:id :service/premium-residency
+  :title "Saudi Premium Residency"
+  :category :service.category/residency
+  :jurisdiction :saudi}
+ {:id :service/investor-pr
+  :title "Investor Permanent Residency (PR)"
+  :category :service.category/residency
+  :jurisdiction :saudi}
+
+ {:id :service/company-liquidation
+  :title "Company Deregistration & Liquidation"
+  :category :service.category/liquidation
+  :jurisdiction :saudi}
+]

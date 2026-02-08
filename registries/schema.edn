@@ -221,6 +221,10 @@
     :type :db.type/ref
     :cardinality :db.cardinality/one
     :doc "Linked client (ref to :client/id)"}
+   {:ident :task/service-case
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked service case (ref to :service.case/id, optional)"}
    {:ident :task/assignee
     :type :db.type/ref
     :cardinality :db.cardinality/one
@@ -302,10 +306,22 @@
    {:ident :client/workspace
     :type :db.type/string
     :cardinality :db.cardinality/one
-    :doc "Workspace/tenant scope"}]
+    :doc "Workspace/tenant scope"}
+   {:ident :client/portal-token
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Opaque token granting public portal access for this client (optional; rotate to revoke)"}
+   {:ident :client/portal-token-created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Timestamp when the current portal token was issued"}]
   :enums {:client/status [:lead :active :waiting :closed]
           :client/channel [:whatsapp :phone :email]}
-  :invariants ["Client name required" "Entity type set to :entity.type/person" "Workspace required when multi-tenant"]
+  :invariants ["Client name required"
+               "Entity type set to :entity.type/person"
+               "Workspace required when multi-tenant"
+               "Portal tokens are revocable and should be treated as secrets"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
                   :forward true
@@ -314,6 +330,181 @@
             :actions [:cap/action/client-create
                       :cap/action/client-update]
             :views [:cap/view/tasks]}}
+
+ {:id :cap/schema/service-case
+  :title "Service Case"
+  :version "v1"
+  :attributes
+  [{:ident :service.case/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Service case identity"}
+   {:ident :service.case/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :service.case/service
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Service type key (e.g., :service/entrepreneur-license)"}
+   {:ident :service.case/title
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Human title for this case"}
+   {:ident :service.case/lifecycle
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Universal case lifecycle state (S0..S9) used for client-facing progress"}
+   {:ident :service.case/lifecycle-reason
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Optional reason when lifecycle = action-required/blocked/rejected (public-safe phrasing)"}
+   {:ident :service.case/contract-key
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Optional workflow contract key (data-driven; may change over time)"}
+   {:ident :service.case/contract-version
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Contract version pinned for this case (optional)"}
+   {:ident :service.case/assignee
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Primary internal assignee for this case (optional)"}
+   {:ident :service.case/files
+    :type :db.type/ref
+    :cardinality :db.cardinality/many
+    :doc "Files associated with this case (refs to :file/id)"}
+   {:ident :service.case/public-max-phase
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Highest public phase reached (monotonic; for gamified progress bar)"}
+   {:ident :service.case/public-current-phase
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Current public phase (curated, may be behind max-phase in edge cases)"}
+   {:ident :service.case/archived?
+    :type :db.type/boolean
+    :cardinality :db.cardinality/one
+    :doc "Whether this case is archived"}
+   {:ident :service.case/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :service.case/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update timestamp"}
+   {:ident :service.case/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}]
+  :enums {:service.case/lifecycle [:s0/intake
+                                   :s1/eligibility-validated
+                                   :s2/documents-complete
+                                   :s3/submitted
+                                   :s4/under-review
+                                   :s5/action-required
+                                   :s6/completed
+                                   :s7/rejected
+                                   :s8/blocked
+                                   :s9/closed]
+          :service.case/public-phase [:public.phase/onboarding
+                                      :public.phase/licensing
+                                      :public.phase/activation
+                                      :public.phase/banking
+                                      :public.phase/closed]}
+  :invariants ["Service cases link to exactly one client"
+               "Entity type set to :entity.type/service-case"
+               "Lifecycle is universal; workflow semantics live in contracts"
+               "Public phase fields must not expose authority names"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/file :cap/schema/entity]}}
+
+ {:id :cap/schema/service-case-step
+  :title "Service Case Step"
+  :version "v1"
+  :attributes
+  [{:ident :service.case.step/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Service case step identity"}
+   {:ident :service.case.step/case
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Owning service case (ref to :service.case/id)"}
+   {:ident :service.case.step/step
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Step id keyword (stable within a contract)"}
+   {:ident :service.case.step/order
+    :type :db.type/long
+    :cardinality :db.cardinality/one
+    :doc "Display order for this step within the case"}
+   {:ident :service.case.step/owner
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Who drives this step (client/internal)"}
+   {:ident :service.case.step/status
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Step status (internal truth)"}
+   {:ident :service.case.step/reason
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Optional reason or query text (internal-only; not shown on public portal)"}
+   {:ident :service.case.step/public-phase
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Public phase mapping for this step"}
+   {:ident :service.case.step/public-label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Public-safe label for this step (no authority names)"}
+   {:ident :service.case.step/public-next-action
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "If waiting on client, a public-safe next action prompt (optional)"}
+   {:ident :service.case.step/internal-label
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Internal label for operators (may include authority names)"}
+   {:ident :service.case.step/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update timestamp"}
+   {:ident :service.case.step/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}]
+  :enums {:service.case.step/status [:not-started
+                                     :waiting-client
+                                     :submitted
+                                     :under-review
+                                     :action-required
+                                     :blocked
+                                     :done
+                                     :rejected
+                                     :skipped]
+          :service.case.step/owner [:client :internal]
+          :service.case.step/public-phase [:public.phase/onboarding
+                                           :public.phase/licensing
+                                           :public.phase/activation
+                                           :public.phase/banking
+                                           :public.phase/closed]}
+  :invariants ["Steps link to exactly one case"
+               "Entity type set to :entity.type/service-case-step"
+               "Public labels must not expose authority names"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case :cap/schema/entity]}}
 
  {:id :cap/schema/person
   :title "Person (Land Registry)"

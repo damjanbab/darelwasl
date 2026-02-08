@@ -50,6 +50,7 @@
 	               :verify-base-url "https://www.darelwasl.com"
 	               :renderer :node-playwright
 	               :template-version "pdf-v3-2026-02-07"}
+     :portal {:base-url nil}
 	   :outbox {:worker-enabled? false
 	            :poll-ms 1000}
    :datomic {:storage-dir "data/datomic"
@@ -244,6 +245,10 @@
                                            (get-in default-config [:outbox :worker-enabled?]))
                 :poll-ms (parse-int (get env "OUTBOX_WORKER_POLL_MS")
                                     (get-in default-config [:outbox :poll-ms]))})
+        (assoc :portal
+               {:base-url (env-str (get env "PORTAL_BASE_URL")
+                                   (or (get-in default-config [:portal :base-url])
+                                       (get-in default-config [:documents :verify-base-url])))})
         (assoc-in [:datomic :storage-dir]
                   (normalize-storage-dir (get env "DATOMIC_STORAGE_DIR")
                                          (get-in default-config [:datomic :storage-dir])))

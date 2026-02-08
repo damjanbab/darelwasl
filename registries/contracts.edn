@@ -1,0 +1,381 @@
+[
+ {:id :contract/entrepreneur-license/saudi/v0
+  :title "Entrepreneur License (Saudi) — v0"
+  :version "v0"
+  :service/id :service/entrepreneur-license
+  :public/phases [{:id :public.phase/onboarding :label "Onboarding"}
+                  {:id :public.phase/licensing :label "Licensing & Registration"}
+                  {:id :public.phase/activation :label "Activation & Portals"}
+                  {:id :public.phase/banking :label "Banking & Handover"}
+                  {:id :public.phase/closed :label "Closed"}]
+  :steps [{:id :step/intake
+           :order 10
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Onboarding started"}
+           :internal {:label "Intake"}}
+          {:id :step/eligibility
+           :order 20
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Eligibility checked"}
+           :internal {:label "Eligibility validation"}}
+          {:id :step/documents
+           :order 30
+           :owner :client
+           :public {:phase :public.phase/onboarding
+                    :label "Documents collection"
+                    :next-action "Upload the requested documents"}
+           :internal {:label "Collect client documents"}}
+          {:id :step/business-plan-approval
+           :order 40
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "Pre-approval in progress"}
+           :internal {:label "Business plan approval (Startup Saudi / MISA)"}}
+          {:id :step/license-issued
+           :order 50
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "License in progress"}
+           :internal {:label "License issuance"}}
+          {:id :step/cr-issued
+           :order 60
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "Company registration in progress"}
+           :internal {:label "Commercial Registration (CR)"}}
+          {:id :step/tax-registration
+           :order 70
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "ZATCA (VAT & TIN)"}}
+          {:id :step/social-insurance
+           :order 80
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "GOSI"}}
+          {:id :step/national-address
+           :order 90
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "National Address (SPL)"}}
+          {:id :step/chamber-membership
+           :order 100
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "Chamber of Commerce (COC)"}}
+          {:id :step/workforce-portals
+           :order 110
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Workforce portals setup"}
+           :internal {:label "Qiwa + Ministry of Labor portals"}}
+          {:id :step/immigration-portals
+           :order 120
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Operational subscriptions setup"}
+           :internal {:label "Muqeem + Mudad subscriptions"}}
+          {:id :step/gm-visa
+           :order 130
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Visa process in progress"}
+           :internal {:label "General Manager visa / transfer"}}
+          {:id :step/bank-account-opened
+           :order 140
+           :owner :internal
+           :public {:phase :public.phase/banking
+                    :label "Banking & handover"}
+           :internal {:label "Bank account opening"}}
+          {:id :step/close
+           :order 150
+           :owner :internal
+           :public {:phase :public.phase/closed
+                    :label "Closed"}
+           :internal {:label "Close case"}}]}
+
+ {:id :contract/gcc-national-license/saudi/v0
+  :title "GCC National Registration — v0"
+  :version "v0"
+  :service/id :service/gcc-national-license
+  :public/phases [{:id :public.phase/onboarding :label "Onboarding"}
+                  {:id :public.phase/licensing :label "Licensing & Registration"}
+                  {:id :public.phase/activation :label "Activation & Portals"}
+                  {:id :public.phase/banking :label "Banking & Handover"}
+                  {:id :public.phase/closed :label "Closed"}]
+  :steps [{:id :step/intake
+           :order 10
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Onboarding started"}
+           :internal {:label "Intake"}}
+          {:id :step/eligibility
+           :order 20
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Eligibility checked"}
+           :internal {:label "GCC identity eligibility validation"}}
+          {:id :step/documents
+           :order 30
+           :owner :client
+           :public {:phase :public.phase/onboarding
+                    :label "Documents collection"
+                    :next-action "Upload the requested documents"}
+           :internal {:label "Collect GCC documents (identity, etc.)"}}
+          {:id :step/cr-issued
+           :order 40
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "Company registration in progress"}
+           :internal {:label "Commercial Registration (CR) — direct issuance"}}
+          {:id :step/tax-registration
+           :order 50
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "ZATCA (VAT & TIN)"}}
+          {:id :step/social-insurance
+           :order 60
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "GOSI"}}
+          {:id :step/national-address
+           :order 70
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "National Address (SPL)"}}
+          {:id :step/chamber-membership
+           :order 80
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "Chamber of Commerce (COC)"}}
+          {:id :step/workforce-portals
+           :order 90
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Workforce portals setup"}
+           :internal {:label "Qiwa + Ministry of Labor portals"}}
+          {:id :step/immigration-portals
+           :order 100
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Operational subscriptions setup"}
+           :internal {:label "Muqeem + Mudad subscriptions"}}
+          {:id :step/gm-visa
+           :order 110
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Visa process in progress"}
+           :internal {:label "General Manager visa / transfer"}}
+          {:id :step/bank-account-opened
+           :order 120
+           :owner :internal
+           :public {:phase :public.phase/banking
+                    :label "Banking & handover"}
+           :internal {:label "Bank account opening"}}
+          {:id :step/close
+           :order 130
+           :owner :internal
+           :public {:phase :public.phase/closed
+                    :label "Closed"}
+           :internal {:label "Close case"}}]}
+
+ {:id :contract/general-investment-license/saudi/v0
+  :title "General Investment License (Saudi) — v0"
+  :version "v0"
+  :service/id :service/general-investment-license
+  :public/phases [{:id :public.phase/onboarding :label "Onboarding"}
+                  {:id :public.phase/licensing :label "Licensing & Registration"}
+                  {:id :public.phase/activation :label "Activation & Portals"}
+                  {:id :public.phase/banking :label "Banking & Handover"}
+                  {:id :public.phase/closed :label "Closed"}]
+  :steps [{:id :step/intake
+           :order 10
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Onboarding started"}
+           :internal {:label "Intake"}}
+          {:id :step/eligibility
+           :order 20
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Eligibility checked"}
+           :internal {:label "Eligibility validation"}}
+          {:id :step/foreign-company-documents
+           :order 30
+           :owner :client
+           :public {:phase :public.phase/onboarding
+                    :label "Group documentation"
+                    :next-action "Upload the requested foreign company documents"}
+           :internal {:label "Foreign company docs: CR/MOA/AOA/FS + attestations + translations"}}
+          {:id :step/license-issued
+           :order 40
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "License in progress"}
+           :internal {:label "General Investment License issuance"}}
+          {:id :step/cr-issued
+           :order 50
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "Company registration in progress"}
+           :internal {:label "Commercial Registration (CR)"}}
+          {:id :step/tax-registration
+           :order 60
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "ZATCA (VAT & TIN)"}}
+          {:id :step/social-insurance
+           :order 70
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "GOSI"}}
+          {:id :step/national-address
+           :order 80
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "National Address (SPL)"}}
+          {:id :step/chamber-membership
+           :order 90
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "Chamber of Commerce (COC)"}}
+          {:id :step/workforce-portals
+           :order 100
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Workforce portals setup"}
+           :internal {:label "Qiwa + Ministry of Labor portals"}}
+          {:id :step/immigration-portals
+           :order 110
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Operational subscriptions setup"}
+           :internal {:label "Muqeem + Mudad subscriptions"}}
+          {:id :step/gm-visa
+           :order 120
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Visa process in progress"}
+           :internal {:label "General Manager visa / transfer"}}
+          {:id :step/bank-account-opened
+           :order 130
+           :owner :internal
+           :public {:phase :public.phase/banking
+                    :label "Banking & handover"}
+           :internal {:label "Bank account opening"}}
+          {:id :step/close
+           :order 140
+           :owner :internal
+           :public {:phase :public.phase/closed
+                    :label "Closed"}
+           :internal {:label "Close case"}}]}
+
+ {:id :contract/rhq-license/saudi/v0
+  :title "RHQ License (Saudi) — v0"
+  :version "v0"
+  :service/id :service/rhq-license
+  :public/phases [{:id :public.phase/onboarding :label "Onboarding"}
+                  {:id :public.phase/licensing :label "Licensing & Registration"}
+                  {:id :public.phase/activation :label "Activation & Portals"}
+                  {:id :public.phase/banking :label "Banking & Handover"}
+                  {:id :public.phase/closed :label "Closed"}]
+  :steps [{:id :step/intake
+           :order 10
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Onboarding started"}
+           :internal {:label "Intake"}}
+          {:id :step/eligibility
+           :order 20
+           :owner :internal
+           :public {:phase :public.phase/onboarding
+                    :label "Eligibility checked"}
+           :internal {:label "Eligibility validation"}}
+          {:id :step/group-documents-3
+           :order 30
+           :owner :client
+           :public {:phase :public.phase/onboarding
+                    :label "Group documentation"
+                    :next-action "Upload the requested documents for the corporate group"}
+           :internal {:label "3 foreign companies docs: CR/MOA/AOA/FS + attestations + translations"}}
+          {:id :step/license-issued
+           :order 40
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "License in progress"}
+           :internal {:label "RHQ License issuance"}}
+          {:id :step/cr-issued
+           :order 50
+           :owner :internal
+           :public {:phase :public.phase/licensing
+                    :label "Company registration in progress"}
+           :internal {:label "Commercial Registration (CR)"}}
+          {:id :step/tax-registration
+           :order 60
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "ZATCA (VAT & TIN)"}}
+          {:id :step/social-insurance
+           :order 70
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "GOSI"}}
+          {:id :step/national-address
+           :order 80
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "National Address (SPL)"}}
+          {:id :step/chamber-membership
+           :order 90
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Government registrations in progress"}
+           :internal {:label "Chamber of Commerce (COC)"}}
+          {:id :step/workforce-portals
+           :order 100
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Workforce portals setup"}
+           :internal {:label "Qiwa + Ministry of Labor portals"}}
+          {:id :step/immigration-portals
+           :order 110
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Operational subscriptions setup"}
+           :internal {:label "Muqeem + Mudad subscriptions"}}
+          {:id :step/gm-visa
+           :order 120
+           :owner :internal
+           :public {:phase :public.phase/activation
+                    :label "Visa process in progress"}
+           :internal {:label "General Manager visa / transfer"}}
+          {:id :step/bank-account-opened
+           :order 130
+           :owner :internal
+           :public {:phase :public.phase/banking
+                    :label "Banking & handover"}
+           :internal {:label "Bank account opening"}}
+          {:id :step/close
+           :order 140
+           :owner :internal
+           :public {:phase :public.phase/closed
+                    :label "Closed"}
+           :internal {:label "Close case"}}]}
+]

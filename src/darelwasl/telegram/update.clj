@@ -87,7 +87,9 @@
                                                (handle-pending-next-action-message state chat-user chat-id text)
                                                (if (get-docs-session! chat-id)
                                                  (handle-docs-message state chat-user chat-id text)
-                                                 (handle-freeform-message state chat-user chat-id text))))))
+                                                 (if (get-services-session! chat-id)
+                                                   (handle-services-message state chat-user chat-id text)
+                                                   (handle-freeform-message state chat-user chat-id text)))))))
                                        {:text "Chat not linked. Use /start <token> to link."})))
                   {:keys [text tasks task task-list link-task]} response]
               (cond
@@ -132,4 +134,3 @@
                           :telegram/command command
                           :telegram/message-id (:telegram/message-id send-res)}))
                 :else {:status :handled}))))))))
-

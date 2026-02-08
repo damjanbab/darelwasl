@@ -13,7 +13,9 @@
             [darelwasl.events :as events]
             [darelwasl.files :as files]
             [darelwasl.github :as github]
+            [darelwasl.outbox :as outbox]
             [darelwasl.site.screenshots :as site-screenshots]
+            [darelwasl.service-cases :as service-cases]
             [darelwasl.tasks :as tasks]
             [darelwasl.users :as users]
             [darelwasl.validation :as v]
@@ -848,6 +850,60 @@
                                  :to (:to body)}
                                 actor)))
 
+(defn- service-list
+  [_state _invocation]
+  {:services (service-cases/list-services)})
+
+(defn- service-case-create
+  [state {:keys [input actor]}]
+  (service-cases/create-case! (conn state) (or input {}) actor))
+
+(defn- service-case-list
+  [state {:keys [input actor]}]
+  (service-cases/list-cases (conn state) (or input {}) actor))
+
+(defn- service-case-read
+  [state {:keys [input actor]}]
+  (service-cases/read-case (conn state) (or input {}) actor))
+
+(defn- service-case-step-set-status
+  [state {:keys [input actor]}]
+  (service-cases/set-step-status! (conn state) (or input {}) actor))
+
+(defn- client-portal-link
+  [state {:keys [input actor]}]
+  (service-cases/portal-link state (or input {}) actor))
+
+(defn- telegram-notify
+  [state {:keys [input actor]}]
+  (let [conn (conn state)
+        body (or input {})
+        user-id (v/param-value body :user/id)
+        text (some-> (or (v/param-value body :telegram/text) (v/param-value body :text)) str str/trim)
+        message-key (some-> (or (v/param-value body :telegram/message-key) (v/param-value body :message-key)) str str/trim)
+        message-key (when-not (str/blank? message-key) message-key)]
+    (cond
+      (nil? conn) (error 500 "Database not ready")
+      (nil? user-id) (error 400 "user/id is required")
+      (str/blank? text) (error 400 "telegram/text is required")
+      :else
+      (let [db (d/db conn)
+            chat-id (ffirst (d/q '[:find ?chat
+                                   :in $ ?uid
+                                   :where [?u :user/id ?uid]
+                                          [?u :user/telegram-chat-id ?chat]]
+                                 db user-id))]
+        (if (str/blank? (str chat-id))
+          {:status :skipped}
+          (let [dedupe (or message-key (str "tg:" user-id ":" (hash text)))]
+            (if-let [err (:error (outbox/enqueue! conn {:integration :integration/telegram
+                                                       :payload {:chat-id (str chat-id)
+                                                                 :text text
+                                                                 :message-key dedupe}
+                                                       :dedupe-key dedupe}))]
+              (error 500 "Failed to enqueue telegram notification" {:error err})
+              {:status :ok})))))))
+
 (def ^:private handlers
   {:cap/action/task-create task-create
    :cap/action/task-update task-update
@@ -909,6 +965,13 @@
    :cap/action/analytics-revenue-by-month analytics-revenue-by-month
    :cap/action/analytics-outstanding-invoices analytics-outstanding-invoices
    :cap/action/analytics-funnel analytics-funnel
+   :cap/action/service-list service-list
+   :cap/action/service-case-create service-case-create
+   :cap/action/service-case-list service-case-list
+   :cap/action/service-case-read service-case-read
+   :cap/action/service-case-step-set-status service-case-step-set-status
+   :cap/action/client-portal-link client-portal-link
+   :cap/action/telegram-notify telegram-notify
    :cap/action/user-list user-list
    :cap/action/user-create user-create
    :cap/action/user-update user-update

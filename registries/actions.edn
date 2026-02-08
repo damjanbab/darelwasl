@@ -2182,4 +2182,146 @@
   :related {:schema []
             :views [:cap/view/agent-control]}
   :tooling []}
+
+ {:id :cap/action/service-list
+  :title "List Services"
+  :version "v1"
+  :inputs {}
+  :outputs {:services :vector}
+  :side-effects []
+  :adapter {:integration :local/registries}
+  :audit {:records [:services/read]
+          :fields []}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/service-case-create
+  :title "Create Service Case"
+  :version "v1"
+  :inputs {:client/id :uuid
+           :service/id :keyword
+           :service.case/title :string?
+           :service.case/assignee :uuid?}
+  :outputs {:service.case/id :uuid
+            :service.case/steps :vector}
+  :side-effects ["Persist service case and initial steps" "May create internal tasks for next steps"]
+  :adapter {:integration :local/db}
+  :audit {:records [:service-case/change]
+          :fields [:client/id :service/id :service.case/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id :service/id :service.case/title]}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case :cap/schema/service-case-step :cap/schema/task]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/service-case-list
+  :title "List Service Cases"
+  :version "v1"
+  :inputs {:client/id :uuid}
+  :outputs {:service.cases :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:service-case/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case :cap/schema/service-case-step]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/service-case-read
+  :title "Read Service Case"
+  :version "v1"
+  :inputs {:service.case/id :uuid}
+  :outputs {:service.case/id :uuid
+            :service.case/steps :vector}
+  :side-effects []
+  :adapter {:integration :local/db}
+  :audit {:records [:service-case/read]
+          :fields [:service.case/id]}
+  :idempotency {:strategy :pure}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case :cap/schema/service-case-step]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/service-case-step-set-status
+  :title "Set Service Case Step Status"
+  :version "v1"
+  :inputs {:service.case/id :uuid
+           :service.case.step/step :keyword
+           :service.case.step/status :keyword
+           :service.case.step/reason :string?}
+  :outputs {:service.case/id :uuid
+            :service.case/steps :vector}
+  :side-effects ["Persist step status change" "May update case lifecycle and public progress" "May create internal tasks for next steps"]
+  :adapter {:integration :local/db}
+  :audit {:records [:service-case/change]
+          :fields [:service.case/id :service.case.step/step :service.case.step/status]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:service.case/id :service.case.step/step :service.case.step/status :service.case.step/reason]}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/service-case :cap/schema/service-case-step :cap/schema/task]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/client-portal-link
+  :title "Get Client Portal Link"
+  :version "v1"
+  :inputs {:client/id :uuid}
+  :outputs {:portal/url :string
+            :client/ref :string}
+  :side-effects ["May issue/rotate a client portal token"]
+  :adapter {:integration :local/db}
+  :audit {:records [:portal/read]
+          :fields [:client/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:client/id]}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/client :cap/schema/service-case]
+            :views []}
+  :tooling []}
+
+ {:id :cap/action/telegram-notify
+  :title "Telegram Notify"
+  :version "v1"
+  :inputs {:user/id :uuid
+           :telegram/text :string
+           :telegram/message-key :string?}
+  :outputs {:status :keyword}
+  :side-effects ["Enqueue telegram outbox message when user has a chat id"]
+  :adapter {:integration :integration/telegram}
+  :audit {:records [:telegram/notify]
+          :fields [:user/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:telegram/message-key]}
+  :contracts {:fixtures [:fixtures/users]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/user :cap/schema/outbox]
+            :views []}
+  :tooling []}
 ]

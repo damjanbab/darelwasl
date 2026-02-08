@@ -6,3 +6,4 @@
 (load "telegram/callbacks_tasks")
 (load "telegram/callbacks_docs")
 (load "telegram/callbacks_pickers")
+(load "telegram/callbacks_services")

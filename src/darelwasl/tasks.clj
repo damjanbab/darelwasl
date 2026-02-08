@@ -63,6 +63,7 @@
    :fact/valid-until
    {:task/assignee [:user/id :user/username :user/name]}
    {:task/client [:client/id :client/name :client/status :client/channel :client/phone :client/email]}
+   {:task/service-case [:service.case/id :service.case/title :entity/ref]}
    :task/due-date
    :task/priority
    {:task/tags [:tag/id :tag/name]}
@@ -213,6 +214,29 @@
                      (:id value))
     (vector? value) (second value)
     :else value))
+
+(defn- service-case-id-value
+  [value]
+  (cond
+    (map? value) (or (:service.case/id value)
+                     (:service-case/id value)
+                     (:id value))
+    (vector? value) (second value)
+    :else value))
+
+(defn- validate-service-case!
+  [db case-id workspace-id]
+  (cond
+    (nil? case-id) {:case nil}
+    :else
+    (let [eid (ffirst (d/q '[:find ?e
+                             :in $ ?id ?workspace
+                             :where [?e :service.case/id ?id]
+                                    [?e :service.case/workspace ?workspace]]
+                           db case-id workspace-id))]
+      (if eid
+        {:case {:service.case/id case-id}}
+        {:error (error 404 "Service case not found")}))))
 
 (defn- task-eid
   [db task-id workspace-id]
@@ -608,7 +632,11 @@
                                                                                :allow-blank? false})
         {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")
         client-raw (param-value body :task/client)
-        client-id (client-id-value client-raw)]
+        client-id (client-id-value client-raw)
+        case-raw (or (param-value body :task/service-case)
+                     (param-value body :service.case/id))
+        case-id (service-case-id-value case-raw)
+        {case-id :value case-err :error} (normalize-uuid case-id "service case id")]
     (cond
       title-err (error 400 title-err)
       desc-err (error 400 desc-err)
@@ -623,12 +651,15 @@
       extended-err (error 400 extended-err)
       automation-err (error 400 automation-err)
       assignee-err (error 400 assignee-err)
+      case-err (error 400 case-err)
       :else
       (let [{assignee :assignee assignee-error :error} (validate-assignee! db assignee-id)
-            {client :client client-error :error} (validate-client! db client-id workspace)]
+            {client :client client-error :error} (validate-client! db client-id workspace)
+            {case :case case-error :error} (validate-service-case! db case-id workspace)]
         (cond
           assignee-error {:error assignee-error}
           client-error {:error client-error}
+          case-error {:error case-error}
           :else
           (let [tag-ids (or value #{})
                 base {:task/id (UUID/randomUUID)
@@ -646,7 +677,8 @@
                 data (cond-> base
                        due-date (assoc :task/due-date due-date)
                        (and pending? pending-reason) (assoc :task/pending-reason pending-reason)
-                       automation-key (assoc :task/automation-key automation-key))]
+                       automation-key (assoc :task/automation-key automation-key)
+                       case (assoc :task/service-case [:service.case/id (:service.case/id case)]))]
             {:data data
              :pending-reason pending-reason
              :pending-note {:note/next-followup next-followup

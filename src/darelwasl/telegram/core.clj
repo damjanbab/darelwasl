@@ -5,7 +5,7 @@
 (def ^:private default-timeout-ms 3000)
 
 (def ^:private allowed-commands
-  #{:start :help :tasks :task :stop :new :edit :note :note-edit :docs})
+  #{:start :help :tasks :task :stop :new :edit :note :note-edit :docs :services})
 
 (defn- present-string?
   [v]
@@ -446,4 +446,3 @@
         (log/warn e "Failed to unbind Telegram chat" {:chat-id chat-id})
         {:error "Unable to unbind chat"}))
     {:error "No database connection"}))
-

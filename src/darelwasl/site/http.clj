@@ -7,6 +7,7 @@
             [darelwasl.documents :as documents]
             [darelwasl.files :as files]
             [darelwasl.outbox :as outbox]
+            [darelwasl.service-cases :as service-cases]
             [darelwasl.site.templates :as templates]
             [darelwasl.workspace :as workspace]
             [ring.util.codec :as codec]
@@ -363,6 +364,27 @@
                                                    :path (str prefix "/verify")
                                                    :query query
                                                    :verification verification}))
+
+                       (and (= method :get)
+                            (or (= path "/portal")
+                                (str/starts-with? path "/portal/")))
+                       (let [[_ client-ref token] (re-matches #"/portal/([^/]+)/([^/]+)" path)
+                             client-ref (some-> client-ref codec/url-decode str str/trim)
+                             token (some-> token codec/url-decode str str/trim)
+                             portal (when (and (not (str/blank? client-ref))
+                                               (not (str/blank? token)))
+                                      (service-cases/public-portal-read conn {:client-ref client-ref
+                                                                             :token token}))]
+                         (if (or (nil? portal) (:error portal))
+                           (templates/public-not-found {:public-base-url public-base-url
+                                                        :base-path base-path
+                                                        :lang lang
+                                                        :path path})
+                           (templates/public-portal {:public-base-url public-base-url
+                                                     :base-path base-path
+                                                     :lang lang
+                                                     :path (str prefix "/portal")
+                                                     :portal portal})))
 
                        (static-path? path)
                        (let [static-resp (resp/file-response (subs path 1) {:root "public"})]

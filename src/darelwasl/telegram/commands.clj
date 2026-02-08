@@ -35,7 +35,8 @@
       :help {:text (str "Commands: /start <link-token>, /help, /tasks, /task <uuid>, "
                         "/new <title> [| description], /edit <task-id> <title> [| description], "
                         "/note <task-id> <comment>, /note-edit <task-id> <comment>, /stop.\n"
-                        "Link chat with /start using a token from the app. Notifications require flags on.")}
+                        "/docs, /services.\n"
+                        "Link chat with /start using a token from the app. Notifications require flags on (and outbox worker on).")}
       :start (let [token (or (some-> rest (str/split #"\s+" 2) first)
                              (some->> text
                                       (re-matches #"^/start(?:@[A-Za-z0-9_]+)?\s+(.*)$")
@@ -90,6 +91,9 @@
                                                  :user chat-user})
                     {:text prompt
                      :reply-markup keyboard}))))
+      :services (if-not chat-user
+                  {:text "Chat not linked. Use /start <token> from the app to link."}
+                  (handle-services-command state chat-id chat-user))
       :task (if-not chat-user
               {:text "Chat not linked. Use /start <token> from the app to link."}
               (let [raw (some-> rest (str/split #"\s+" 2) first)
@@ -178,4 +182,3 @@
                      {:task (get-in action-res [:result :task])
                       :link-task (get-in action-res [:result :task])})))))
       {:text "Unknown command. Send /help for available commands."})))
-

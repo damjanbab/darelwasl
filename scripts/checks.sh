@@ -55,7 +55,7 @@ check_governance() {
 check_registries() {
   echo "Checking registry files exist and are non-empty..."
   local missing=0
-  for f in schema actions views integrations agents policies internal recipes tooling theme automations; do
+  for f in schema actions views integrations agents policies internal services contracts recipes tooling theme automations; do
     local path="$ROOT/registries/$f.edn"
     if [ ! -s "$path" ]; then
       echo "Missing or empty registry: $path"
@@ -125,6 +125,8 @@ check_registry_fields() {
   require_keys "$ROOT/registries/agents.edn" ":id" ":version" ":allowed-paths" ":proofs" ":policies" ":routing"
   require_keys "$ROOT/registries/policies.edn" ":id" ":version" ":policy-path" ":enforces"
   require_keys "$ROOT/registries/internal.edn" ":id" ":version" ":var" ":stability" ":tags"
+  require_keys "$ROOT/registries/services.edn" ":id" ":title"
+  require_keys "$ROOT/registries/contracts.edn" ":id" ":version" ":service/id" ":steps"
   require_keys "$ROOT/registries/tooling.edn" ":id" ":version" ":invocation" ":scope" ":determinism" ":enforces"
   require_keys "$ROOT/registries/theme.edn" ":id" ":version" ":colors" ":typography" ":spacing" ":radius" ":shadows" ":motion" ":compatibility"
   require_keys "$ROOT/registries/automations.edn" ":id" ":version" ":enabled" ":triggers" ":handler"
@@ -190,6 +192,8 @@ check_edn_parse() {
                       (str root "/registries/agents.edn")
                       (str root "/registries/policies.edn")
                       (str root "/registries/internal.edn")
+                      (str root "/registries/services.edn")
+                      (str root "/registries/contracts.edn")
                       (str root "/registries/recipes.edn")
                       (str root "/registries/tooling.edn")
                       (str root "/registries/theme.edn")

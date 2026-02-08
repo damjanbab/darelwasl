@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `ec2cafa00e9c6541b55defcca2d436e8ff746a3b7adb19fa9f1622966da9bc0c`
+- Catalog version: `971bcad6f7c41d866c9fd2bf8dafe86e42f3d2b9033a9cb805822581b81cbdce`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (43)
+### Schema (45)
 - schema/activation-step
 - schema/agreement
 - schema/betting-bet
@@ -43,6 +43,8 @@ This file is auto-generated. Do not edit by hand.
 - schema/person
 - schema/persona
 - schema/provenance
+- schema/service-case
+- schema/service-case-step
 - schema/support-responsibility
 - schema/system
 - schema/tag
@@ -52,7 +54,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (100)
+### Actions (107)
 - action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
@@ -82,6 +84,7 @@ This file is auto-generated. Do not edit by hand.
 - action/betting-settle
 - action/business-upsert
 - action/client-create
+- action/client-portal-link
 - action/client-update
 - action/comparison-row-delete
 - action/comparison-row-upsert
@@ -125,6 +128,11 @@ This file is auto-generated. Do not edit by hand.
 - action/plan-item-update
 - action/proposal-generate
 - action/receipt-generate
+- action/service-case-create
+- action/service-case-list
+- action/service-case-read
+- action/service-case-step-set-status
+- action/service-list
 - action/site-screenshot-bundle
 - action/status-report-generate
 - action/system-service-restart
@@ -146,6 +154,7 @@ This file is auto-generated. Do not edit by hand.
 - action/task-set-tags
 - action/task-update
 - action/telegram-handle-update
+- action/telegram-notify
 - action/telegram-send-message
 - action/telegram-set-webhook
 - action/user-create
@@ -209,6 +218,29 @@ This file is auto-generated. Do not edit by hand.
 - internal/catalog-entry
 - internal/catalog-read
 
+### Services (15)
+- attestation-india
+- attestation-oman
+- attestation-pakistan
+- attestation-uae
+- company-liquidation
+- entrepreneur-license
+- gcc-national-license
+- general-investment-license
+- investor-pr
+- premium-residency
+- pro-services
+- rhq-license
+- trademark-registration
+- uk-company-formation
+- us-company-formation
+
+### Contracts (4)
+- entrepreneur-license/saudi/v0
+- gcc-national-license/saudi/v0
+- general-investment-license/saudi/v0
+- rhq-license/saudi/v0
+
 ### Recipes (0)
 
 ### Tooling (20)
@@ -238,7 +270,10 @@ This file is auto-generated. Do not edit by hand.
 - default
 - site-premium
 
-### Automations (1)
+### Automations (4)
+- automation/task-telegram-notify-assigned
+- automation/task-telegram-notify-due
+- automation/task-telegram-notify-status
 - automation/telegram-onboarding-task
 
 ## Routes
@@ -360,6 +395,7 @@ This file is auto-generated. Do not edit by hand.
 - GITHUB_TOKEN_FILE
 - OUTBOX_WORKER_ENABLED
 - OUTBOX_WORKER_POLL_MS
+- PORTAL_BASE_URL
 - REZULTATI_BASE_URL
 - REZULTATI_CACHE_TTL_MS
 - REZULTATI_TIMEOUT_MS
@@ -426,6 +462,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.clients
 - darelwasl.config
 - darelwasl.content
+- darelwasl.contracts
 - darelwasl.db
 - darelwasl.docs.generate
 - darelwasl.documents
@@ -476,6 +513,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.rezultati-scraper
 - darelwasl.schema
 - darelwasl.server
+- darelwasl.service-cases
 - darelwasl.shared.block-types
 - darelwasl.site.http
 - darelwasl.site.screenshots

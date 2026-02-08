@@ -217,6 +217,36 @@
                         "outstanding" {:type :docs/analytics-outstanding}
                         nil)
           nil)
+        "svc"
+        (case (second parts)
+          "cancel" {:type :svc/cancel}
+          "menu" {:type :svc/menu}
+          "cases" {:type :svc/cases}
+          "portal" {:type :svc/portal}
+          "client" (case (nth parts 2 nil)
+                     "pick" {:type :svc/client-pick}
+                     "set" {:type :svc/client-set
+                            :client-id (nth parts 3 nil)}
+                     nil)
+          "create" (case (nth parts 2 nil)
+                     "menu" {:type :svc/create-menu}
+                     nil)
+          "case" (case (nth parts 2 nil)
+                   "create" {:type :svc/case-create
+                             :service-id (nth parts 3 nil)}
+                   "open" (let [raw (nth parts 3 nil)]
+                            (if (present-string? raw)
+                              {:type :svc/case-open
+                               :case-id raw}
+                              {:type :svc/case-open-current}))
+                   nil)
+          "step" (case (nth parts 2 nil)
+                   "open" {:type :svc/step-open
+                           :step-id (nth parts 3 nil)}
+                   "set" {:type :svc/step-set
+                          :status (nth parts 3 nil)}
+                   nil)
+          nil)
         "filter"
         (case (second parts)
           "status" {:type :tasks/filter
@@ -296,4 +326,3 @@
                     :value (nth parts 3 nil)}
           nil)
         nil))))
-

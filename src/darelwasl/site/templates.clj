@@ -485,6 +485,87 @@
                              (or facts-html "")
                              "</section>"))}))
 
+(defn- phase-label
+  [phase]
+  (case phase
+    :public.phase/onboarding "Onboarding"
+    :public.phase/licensing "Licensing & Registration"
+    :public.phase/activation "Activation & Portals"
+    :public.phase/banking "Banking & Handover"
+    :public.phase/closed "Closed"
+    "Progress"))
+
+(defn- lifecycle-label
+  [lifecycle]
+  (case lifecycle
+    :s0/intake "In progress"
+    :s1/eligibility-validated "In progress"
+    :s2/documents-complete "In progress"
+    :s3/submitted "Submitted"
+    :s4/under-review "Under review"
+    :s5/action-required "Waiting on you"
+    :s6/completed "Completed"
+    :s7/rejected "Closed"
+    :s8/blocked "Waiting on you"
+    :s9/closed "Closed"
+    "In progress"))
+
+(defn- progress-bar
+  "Public monotonic progress bar: fills up to max-phase."
+  [max-phase]
+  (let [phases [:public.phase/onboarding :public.phase/licensing :public.phase/activation :public.phase/banking :public.phase/closed]
+        rank (fn [p] (.indexOf phases p))
+        max-r (max 0 (rank max-phase))]
+    (str "<div class='dw-progress' role='progressbar' aria-label='Progress'>"
+         (apply str
+                (map-indexed (fn [idx phase]
+                               (let [active? (<= idx max-r)
+                                     cls (str "dw-progress-seg" (when active? " is-on"))]
+                                 (str "<div class='" cls "' title='" (escape-html (phase-label phase)) "'></div>")))
+                             phases))
+         "</div>")))
+
+(defn public-portal
+  [{:keys [public-base-url base-path lang path portal]}]
+  (let [{:keys [client service.cases]} portal
+        name (or (:client/name client) "Client")
+        body (str "<section class='section-pad'>"
+                  "<h1>" (escape-html name) "</h1>"
+                  "<p class='muted'>Your documents and progress live here.</p>"
+                  (if (seq service.cases)
+                    (apply str
+                           (for [c service.cases]
+                             (let [title (or (:service.case/title c) "Service")
+                                   max-phase (:service.case/public-max-phase c)
+                                   lifecycle (:service.case/lifecycle c)
+                                   status (lifecycle-label lifecycle)
+                                   next-actions (or (:public/next-actions c) [])]
+                               (str "<div class='card' style='margin:14px 0;'>"
+                                    "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
+                                    "<div><div class='eyebrow'>Case</div><h3 style='margin:6px 0;'>" (escape-html title) "</h3></div>"
+                                    "<div class='pill'>" (escape-html status) "</div>"
+                                    "</div>"
+                                    (progress-bar max-phase)
+                                    "<div class='muted' style='margin-top:10px;'>Current phase: " (escape-html (phase-label max-phase)) "</div>"
+                                    (when (seq next-actions)
+                                      (str "<div style='margin-top:10px;'><div class='label'>Next action</div>"
+                                           "<ul class='bullet-list'>"
+                                           (apply str (for [a next-actions] (str "<li>" (escape-html a) "</li>")))
+                                           "</ul></div>"))
+                                    "</div>"))))
+                    "<div class='card'><p>No active cases yet.</p></div>")
+                  "</section>")]
+    {:status 200
+     :headers {"Content-Type" "text/html; charset=utf-8"}
+     :body (public-page {:title (str "Client Portal | " name)
+                         :description "Client portal."
+                         :public-base-url public-base-url
+                         :base-path base-path
+                         :lang lang
+                         :path path
+                         :image-path "/logo.jpg"}
+                        body)}))
+
 (defn public-route
   [{:keys [public-base-url base-path lang path contact query]}]
   (let [spec (lang-spec lang)

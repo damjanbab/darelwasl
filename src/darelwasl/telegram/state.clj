@@ -25,6 +25,9 @@
 
 (defonce docs-sessions
   (atom {}))
+
+(defonce services-sessions
+  (atom {}))
 (defn- prune-captures!
   []
   (let [cutoff (- (System/currentTimeMillis) capture-ttl-ms)]
@@ -195,6 +198,17 @@
                                (>= ts cutoff))))
                    entries)))))
 
+(defn- prune-services-sessions!
+  []
+  (let [cutoff (- (System/currentTimeMillis) docs-ttl-ms)]
+    (swap! services-sessions
+           (fn [entries]
+             (into {}
+                   (filter (fn [[_ v]]
+                             (let [ts (:created-at v 0)]
+                               (>= ts cutoff))))
+                   entries)))))
+
 (defn- save-docs-session!
   [chat-id session]
   (prune-docs-sessions!)
@@ -211,4 +225,22 @@
   (let [k (str chat-id)
         value (get @docs-sessions k)]
     (swap! docs-sessions dissoc k)
+    value))
+
+(defn- save-services-session!
+  [chat-id session]
+  (prune-services-sessions!)
+  (swap! services-sessions assoc (str chat-id) (assoc session :created-at (System/currentTimeMillis))))
+
+(defn- get-services-session!
+  [chat-id]
+  (prune-services-sessions!)
+  (get @services-sessions (str chat-id)))
+
+(defn- take-services-session!
+  [chat-id]
+  (prune-services-sessions!)
+  (let [k (str chat-id)
+        value (get @services-sessions k)]
+    (swap! services-sessions dissoc k)
     value))

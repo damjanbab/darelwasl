@@ -6,5 +6,28 @@
   :triggers [{:event/type :telegram/linked}]
   :handler :cap/automation.handler/telegram-onboarding-task
   :notes "Demonstrates external event -> internal action invocation. Must be idempotent via :task/automation-key."}
-]
 
+ {:id :cap/automation/task-telegram-notify-assigned
+  :title "Notify assignee on task assignment (Telegram)"
+  :version "v1"
+  :enabled true
+  :triggers [{:event/type :task/assigned}]
+  :handler :cap/automation.handler/task-telegram-notify
+  :notes "Enqueues a Telegram notification for the task assignee when a task is assigned."}
+
+ {:id :cap/automation/task-telegram-notify-status
+  :title "Notify assignee on task status changes (Telegram)"
+  :version "v1"
+  :enabled true
+  :triggers [{:event/type :task/status-changed}]
+  :handler :cap/automation.handler/task-telegram-notify
+  :notes "Enqueues a Telegram notification for the task assignee when status changes."}
+
+ {:id :cap/automation/task-telegram-notify-due
+  :title "Notify assignee on due date changes (Telegram)"
+  :version "v1"
+  :enabled true
+  :triggers [{:event/type :task/due-changed}]
+  :handler :cap/automation.handler/task-telegram-notify
+  :notes "Enqueues a Telegram notification for the task assignee when due date changes."}
+]

@@ -467,6 +467,25 @@ section .cta.secondary {
   padding: 24px;
 }
 
+.dw-progress {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dw-progress-seg {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(70, 86, 106, 0.18);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.dw-progress-seg.is-on {
+  background: linear-gradient(90deg, rgba(14, 165, 233, 0.9), rgba(11, 120, 181, 0.9));
+  border-color: rgba(14, 165, 233, 0.35);
+}
+
 .card--icon {
   position: relative;
   padding-top: 54px;

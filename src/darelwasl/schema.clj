@@ -87,7 +87,9 @@
                    [:betting.bookmaker/id :entity.type/betting-bookmaker]
                    [:betting.quote/id :entity.type/betting-quote]
                    [:betting.bet/id :entity.type/betting-bet]
-                   [:betting.fact/id :entity.type/betting-fact]]
+                   [:betting.fact/id :entity.type/betting-fact]
+                   [:service.case/id :entity.type/service-case]
+                   [:service.case.step/id :entity.type/service-case-step]]
           tx-data (->> mapping
                        (mapcat (fn [[ident type-kw]]
                                  (let [eids (map first (d/q '[:find ?e
@@ -157,11 +159,21 @@
                                         :where [?e :client/id _]
                                                (not [?e :client/workspace _])]
                                       db))
+          case-eids (map first (d/q '[:find ?e
+                                      :where [?e :service.case/id _]
+                                             (not [?e :service.case/workspace _])]
+                                    db))
+          step-eids (map first (d/q '[:find ?e
+                                      :where [?e :service.case.step/id _]
+                                             (not [?e :service.case.step/workspace _])]
+                                    db))
           tx-data (->> (concat (map (fn [e] [:db/add e :fact/workspace ws]) task-eids)
                                (map (fn [e] [:db/add e :tag/workspace ws]) tag-eids)
                                (map (fn [e] [:db/add e :file/workspace ws]) file-eids)
                                (map (fn [e] [:db/add e :note/workspace ws]) note-eids)
-                               (map (fn [e] [:db/add e :client/workspace ws]) client-eids))
+                               (map (fn [e] [:db/add e :client/workspace ws]) client-eids)
+                               (map (fn [e] [:db/add e :service.case/workspace ws]) case-eids)
+                               (map (fn [e] [:db/add e :service.case.step/workspace ws]) step-eids))
                        vec)]
       (when (seq tx-data)
         (db/transact! conn {:tx-data tx-data})

@@ -2,7 +2,6 @@
   (:require [clojure.tools.logging :as log]
             [darelwasl.actions :as actions]
             [darelwasl.http.common :as common]
-            [darelwasl.telegram :as telegram]
             [darelwasl.tasks :as tasks]))
 
 (def ^:private task-id-path
@@ -41,10 +40,6 @@
                                               :actor (actions/actor-from-session (:auth/session request) workspace)
                                               :input (or (:body-params request) {})})
           res (if (:error action-res) {:error (:error action-res)} (:result action-res))]
-      (when-not (:error res)
-        (telegram/notify-task-event! state {:event :task/created
-                                            :task (:task res)
-                                            :actor (:auth/session request)}))
       (common/handle-task-result res 201))))
 
 (defn update-task-handler
@@ -69,10 +64,6 @@
                                               :input (assoc (or (:body-params request) {})
                                                             :task/id task-id)})
           res (if (:error action-res) {:error (:error action-res)} (:result action-res))]
-      (when-not (:error res)
-        (telegram/notify-task-event! state {:event :task/status-changed
-                                            :task (:task res)
-                                            :actor (:auth/session request)}))
       (common/handle-task-result res))))
 
 (defn assign-task-handler
@@ -85,10 +76,6 @@
                                               :input (assoc (or (:body-params request) {})
                                                             :task/id task-id)})
           res (if (:error action-res) {:error (:error action-res)} (:result action-res))]
-      (when-not (:error res)
-        (telegram/notify-task-event! state {:event :task/assigned
-                                            :task (:task res)
-                                            :actor (:auth/session request)}))
       (common/handle-task-result res))))
 
 (defn due-date-handler
@@ -101,10 +88,6 @@
                                               :input (assoc (or (:body-params request) {})
                                                             :task/id task-id)})
           res (if (:error action-res) {:error (:error action-res)} (:result action-res))]
-      (when-not (:error res)
-        (telegram/notify-task-event! state {:event :task/due-changed
-                                            :task (:task res)
-                                            :actor (:auth/session request)}))
       (common/handle-task-result res))))
 
 (defn client-handler

@@ -14,6 +14,8 @@
    :agents "registries/agents.edn"
    :policies "registries/policies.edn"
    :internal "registries/internal.edn"
+   :services "registries/services.edn"
+   :contracts "registries/contracts.edn"
    :recipes "registries/recipes.edn"
    :tooling "registries/tooling.edn"
    :theme "registries/theme.edn"
@@ -68,6 +70,8 @@
     :agents :agent
     :policies :policy
     :internal :internal
+    :services :service
+    :contracts :contract
     :recipes :recipe
     :tooling :tooling
     :theme :theme
