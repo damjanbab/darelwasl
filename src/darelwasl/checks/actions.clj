@@ -387,7 +387,8 @@
                                        :actor actor
                                        :input {:client/id client-id
                                                :payment/amount 123.45
-                                               :payment/method :cash}})
+                                               :payment/method :cash
+                                               :payment/paid-at (java.util.Date.)}})
           receipt (get-in res [:result :receipt])]
       (when-let [err (:error res)]
         (fail! failures "Payment create action failed" err))
