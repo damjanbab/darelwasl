@@ -67,6 +67,8 @@
 (declare docs-payment-reference-inline-keyboard)
 (declare docs-agreements-menu-inline-keyboard)
 (declare docs-agreement-actions-inline-keyboard)
+(declare docs-agreement-party-inline-keyboard)
+(declare docs-analytics-menu-inline-keyboard)
 (declare docs-plan-item-kind-inline-keyboard)
 (declare docs-plan-item-invoice-on-inline-keyboard)
 
@@ -798,14 +800,28 @@
      (inline-button "Create agreement" "docs:agreements:create")]
     [(inline-button "Back" "docs:menu")]]})
 
+(defn- docs-analytics-menu-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Revenue (12 months)" "docs:analytics:revenue")
+     (inline-button "Outstanding invoices" "docs:analytics:outstanding")]
+    [(inline-button "Back" "docs:menu")]]})
+
 (defn- docs-agreement-actions-inline-keyboard
   [agreement-id]
   {:inline_keyboard
    [[(inline-button "Plan items" (str "docs:agreements:plan:list:" agreement-id))
      (inline-button "Add plan item" (str "docs:agreements:plan:add:" agreement-id))]
-    [(inline-button "Accept + issue PDFs" (str "docs:agreements:accept:" agreement-id))
-     (inline-button "Generate due invoices" (str "docs:agreements:due:" agreement-id))]
+    [(inline-button "Issue proposal PDF" (str "docs:agreements:propose:" agreement-id))
+     (inline-button "Accept + issue PDFs" (str "docs:agreements:accept:" agreement-id))]
+    [(inline-button "Generate due invoices" (str "docs:agreements:due:" agreement-id))]
     [(inline-button "Back" "docs:agreements:menu")]]})
+
+(defn- docs-agreement-party-inline-keyboard
+  [field]
+  {:inline_keyboard
+   [[(inline-button "Skip" (str "docs:agreement:party:skip:" (name field)))
+     (inline-button "Cancel" "docs:agreements:menu")]]})
 
 (defn- docs-plan-item-kind-inline-keyboard
   []
@@ -834,8 +850,8 @@
     [(inline-button "Add invoice" "docs:invoice:add")
      (inline-button "Add payment" "docs:payment:add")]
     [(inline-button "Agreements" "docs:agreements:menu")]
-    [(inline-button "Issue proposal PDF" "docs:generate:proposal")
-     (inline-button "Issue status report PDF" "docs:generate:status-report")]
+    [(inline-button "Analytics" "docs:analytics:menu")]
+    [(inline-button "Issue status report PDF" "docs:generate:status-report")]
     [(inline-button "Invoice PDF (latest)" "docs:generate:invoice:pick")
      (inline-button "Receipt PDF (latest)" "docs:generate:receipt:pick")]
     [(inline-button "Change client" "docs:client:pick")
@@ -1981,6 +1997,66 @@
                                 :text "Send agreement terms."
                                 :message-key (str "docs-agreement-terms-empty-" (System/currentTimeMillis))
                                 :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-client-company)
+                                              (assoc-in [:draft :agreement/terms] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Client company/legal name (optional). Send it, or tap Skip."
+                                  :message-key (str "docs-agreement-client-company-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-party-inline-keyboard :client-company)})))
+
+          :docs/agreement-client-company
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send client company name, or tap Skip."
+                                :message-key (str "docs-agreement-client-company-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-agreement-party-inline-keyboard :client-company)})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-client-representative)
+                                              (assoc-in [:draft :agreement/client-company] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Client representative/signatory (optional). Send it, or tap Skip."
+                                  :message-key (str "docs-agreement-client-rep-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-party-inline-keyboard :client-representative)})))
+
+          :docs/agreement-client-representative
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send client representative, or tap Skip."
+                                :message-key (str "docs-agreement-client-rep-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-agreement-party-inline-keyboard :client-representative)})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-our-representative)
+                                              (assoc-in [:draft :agreement/client-representative] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Our representative (optional). Send it, or tap Skip."
+                                  :message-key (str "docs-agreement-our-rep-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-party-inline-keyboard :our-representative)})))
+
+          :docs/agreement-our-representative
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send our representative, or tap Skip."
+                                :message-key (str "docs-agreement-our-rep-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-agreement-party-inline-keyboard :our-representative)})
+            (do
+              (save-docs-session! chat-id (-> session
+                                              (assoc :stage :docs/agreement-our-recipient)
+                                              (assoc-in [:draft :agreement/our-representative] trimmed)))
+              (send-message! cfg {:chat-id chat-id
+                                  :text "Who receives funds (optional). Send it, or tap Skip."
+                                  :message-key (str "docs-agreement-recipient-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-party-inline-keyboard :our-recipient)})))
+
+          :docs/agreement-our-recipient
+          (if (str/blank? trimmed)
+            (send-message! cfg {:chat-id chat-id
+                                :text "Send recipient, or tap Skip."
+                                :message-key (str "docs-agreement-recipient-empty-" (System/currentTimeMillis))
+                                :reply-markup (docs-agreement-party-inline-keyboard :our-recipient)})
             (let [month (LocalDate/now (ZoneId/systemDefault))
                   quicks [{:id :today :label "Today"}
                           {:id :tomorrow :label "Tomorrow"}]]
@@ -1989,7 +2065,7 @@
                                               (assoc :picker {:kind :docs/agreement-effective
                                                               :text "Pick agreement effective date (optional):"
                                                               :quicks quicks})
-                                              (assoc-in [:draft :agreement/terms] trimmed)))
+                                              (assoc-in [:draft :agreement/our-recipient] trimmed)))
               (send-message! cfg {:chat-id chat-id
                                   :text "Pick agreement effective date (optional):"
                                   :message-key (str "docs-agreement-effective-" (System/currentTimeMillis))
@@ -2317,6 +2393,71 @@
                                            :text "Documents:"
                                            :reply-markup (docs-menu-inline-keyboard)}))
                      (prompt-docs-client-pick! state chat-id)))
+      :docs/analytics-menu (let [session (get-docs-session! chat-id)]
+                             (if (and chat-user session (:client-id session))
+                               (do
+                                 (save-docs-session! chat-id (assoc session :stage :docs/analytics-menu))
+                                 (edit-message! cfg {:chat-id chat-id
+                                                     :message-id message-id
+                                                     :text "Analytics:"
+                                                     :reply-markup (docs-analytics-menu-inline-keyboard)}))
+                               (prompt-docs-client-pick! state chat-id)))
+      :docs/analytics-revenue (let [session (get-docs-session! chat-id)
+                                    actor (actions/actor-from-telegram chat-user)]
+                                (if (and chat-user session (:client-id session))
+                                  (let [from (.toString (.minus (Instant/now) (Duration/ofDays 365)))
+                                        res (actions/execute! state {:action/id :cap/action/analytics-revenue-by-month
+                                                                    :actor actor
+                                                                    :input {:client/id (:client-id session)
+                                                                            :from from}})
+                                        series (get-in res [:result :series] [])]
+                                    (if-let [err (:error res)]
+                                      (send-message! cfg {:chat-id chat-id
+                                                          :text (str "Unable to fetch revenue: " (:message err))
+                                                          :message-key (str "docs-analytics-revenue-error-" (System/currentTimeMillis))
+                                                          :reply-markup (docs-analytics-menu-inline-keyboard)})
+                                      (let [lines (if (seq series)
+                                                    (->> series
+                                                         (map (fn [{:keys [month currency total]}]
+                                                                (str month " · " (format "%.2f" (double (or total 0.0))) " " currency)))
+                                                         (str/join "\n"))
+                                                    "No payments in the last 12 months.")]
+                                        (send-message! cfg {:chat-id chat-id
+                                                            :text (str "Revenue (last 12 months):\n" lines)
+                                                            :message-key (str "docs-analytics-revenue-ok-" (System/currentTimeMillis))
+                                                            :reply-markup (docs-analytics-menu-inline-keyboard)}))))
+                                  (prompt-docs-client-pick! state chat-id)))
+      :docs/analytics-outstanding (let [session (get-docs-session! chat-id)
+                                        actor (actions/actor-from-telegram chat-user)]
+                                    (if (and chat-user session (:client-id session))
+                                      (let [res (actions/execute! state {:action/id :cap/action/analytics-outstanding-invoices
+                                                                        :actor actor
+                                                                        :input {:client/id (:client-id session)}})
+                                            invs (get-in res [:result :invoices] [])
+                                            totals (get-in res [:result :totals] {})
+                                            by-cur (->> invs
+                                                        (group-by :currency)
+                                                        (map (fn [[cur xs]]
+                                                               [cur (double (reduce + 0.0 (map :outstanding xs)))]))
+                                                        (sort-by first)
+                                                        vec)]
+                                        (if-let [err (:error res)]
+                                          (send-message! cfg {:chat-id chat-id
+                                                              :text (str "Unable to fetch outstanding invoices: " (:message err))
+                                                              :message-key (str "docs-analytics-outstanding-error-" (System/currentTimeMillis))
+                                                              :reply-markup (docs-analytics-menu-inline-keyboard)})
+                                          (let [summary (if (seq by-cur)
+                                                          (str/join "\n" (map (fn [[cur total]] (str (or cur "—") ": " (format "%.2f" total))) by-cur))
+                                                          "No invoices found.")
+                                                headline (format "Totals: invoiced %.2f · paid %.2f · outstanding %.2f"
+                                                                 (double (or (:total-invoiced totals) 0.0))
+                                                                 (double (or (:total-paid totals) 0.0))
+                                                                 (double (or (:total-outstanding totals) 0.0)))]
+                                            (send-message! cfg {:chat-id chat-id
+                                                                :text (str "Outstanding invoices:\n" headline "\n\nBy currency:\n" summary)
+                                                                :message-key (str "docs-analytics-outstanding-ok-" (System/currentTimeMillis))
+                                                                :reply-markup (docs-analytics-menu-inline-keyboard)}))))
+                                      (prompt-docs-client-pick! state chat-id)))
       :docs/agreements-menu (let [session (get-docs-session! chat-id)]
                               (if (and chat-user session (:client-id session))
                                 (do
@@ -2369,6 +2510,58 @@
                                                        :text "Send agreement title:"
                                                        :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}}))
                                  (prompt-docs-client-pick! state chat-id)))
+      :docs/agreement-party-skip (let [session (get-docs-session! chat-id)
+                                       field-str (:field parsed)
+                                       field (when field-str (keyword field-str))]
+                                   (when session
+                                     (let [draft (or (:draft session) {})
+                                           respond! (fn [payload]
+                                                      (if message-id
+                                                        (edit-message! cfg (assoc payload :chat-id chat-id :message-id message-id))
+                                                        (send-message! cfg (assoc payload :chat-id chat-id :message-key (str "docs-agreement-party-skip-" (System/currentTimeMillis))))))]
+                                       (case field
+                                         :client-company
+                                         (do
+                                           (save-docs-session! chat-id (-> session
+                                                                           (assoc :stage :docs/agreement-client-representative)
+                                                                           (assoc :draft draft)))
+                                           (respond! {:text "Client representative/signatory (optional). Send it, or tap Skip."
+                                                      :reply-markup (docs-agreement-party-inline-keyboard :client-representative)}))
+
+                                         :client-representative
+                                         (do
+                                           (save-docs-session! chat-id (-> session
+                                                                           (assoc :stage :docs/agreement-our-representative)
+                                                                           (assoc :draft draft)))
+                                           (respond! {:text "Our representative (optional). Send it, or tap Skip."
+                                                      :reply-markup (docs-agreement-party-inline-keyboard :our-representative)}))
+
+                                         :our-representative
+                                         (do
+                                           (save-docs-session! chat-id (-> session
+                                                                           (assoc :stage :docs/agreement-our-recipient)
+                                                                           (assoc :draft draft)))
+                                           (respond! {:text "Who receives funds (optional). Send it, or tap Skip."
+                                                      :reply-markup (docs-agreement-party-inline-keyboard :our-recipient)}))
+
+                                         :our-recipient
+                                         (let [month (LocalDate/now (ZoneId/systemDefault))
+                                               quicks [{:id :today :label "Today"}
+                                                       {:id :tomorrow :label "Tomorrow"}]]
+                                           (save-docs-session! chat-id (-> session
+                                                                           (assoc :stage :docs/agreement-effective-date)
+                                                                           (assoc :picker {:kind :docs/agreement-effective
+                                                                                           :text "Pick agreement effective date (optional):"
+                                                                                           :quicks quicks})
+                                                                           (assoc :draft draft)))
+                                           (respond! {:text "Pick agreement effective date (optional):"
+                                                      :reply-markup (date-picker-inline-keyboard {:month month
+                                                                                                  :quicks quicks
+                                                                                                  :allow-skip? true
+                                                                                                  :skip-label "Skip (no effective date)"
+                                                                                                  :extra-rows [[(inline-button "Cancel" "docs:agreements:menu")]]})}))
+
+                                         nil))))
       :docs/agreements-plan-list (let [session (get-docs-session! chat-id)
                                        raw (:agreement-id parsed)
                                        agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
@@ -2445,6 +2638,45 @@
                                      (send-message! cfg {:chat-id chat-id
                                                          :text "Pick a valid invoice option."
                                                          :message-key (str "docs-plan-item-on-invalid-" (System/currentTimeMillis))})))
+      :docs/agreements-propose (let [session (get-docs-session! chat-id)
+                                     raw (:agreement-id parsed)
+                                     agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
+                                     actor (actions/actor-from-telegram chat-user)
+                                     actor-name (or (:user/username chat-user) (:user/name chat-user))]
+                                 (if (and chat-user session (:client-id session) agreement-id)
+                                   (do
+                                     (when message-id
+                                       (edit-message! cfg {:chat-id chat-id
+                                                           :message-id message-id
+                                                           :text "Issuing proposal PDF…"
+                                                           :reply-markup {:inline_keyboard []}}))
+                                     (let [res (actions/execute! state {:action/id :cap/action/agreement-propose
+                                                                        :actor actor
+                                                                        :input {:agreement/id agreement-id
+                                                                                :agreement/proposed-by actor-name}})
+                                           proposal-pdf (get-in res [:result :proposal-pdf :file])
+                                           send-proposal (when proposal-pdf
+                                                           (docs-send-file! state chat-id actor proposal-pdf :caption "Proposal"))]
+                                       (save-docs-session! chat-id (-> session
+                                                                       (assoc :stage :docs/agreement-actions
+                                                                              :agreement/id agreement-id)))
+                                       (if-let [err (:error res)]
+                                         (send-message! cfg {:chat-id chat-id
+                                                             :text (str "Unable to issue proposal: " (:message err))
+                                                             :message-key (str "docs-agreement-propose-error-" (System/currentTimeMillis))
+                                                             :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                                         (if-let [send-err (:error send-proposal)]
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text (str "Proposal issued, but could not send PDF: " send-err)
+                                                               :message-key (str "docs-agreement-propose-send-error-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})
+                                           (send-message! cfg {:chat-id chat-id
+                                                               :text "Proposal issued and sent."
+                                                               :message-key (str "docs-agreement-propose-ok-" (System/currentTimeMillis))
+                                                               :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))))
+                                   (send-message! cfg {:chat-id chat-id
+                                                       :text "Invalid agreement."
+                                                       :message-key (str "docs-agreement-invalid-" (System/currentTimeMillis))})))
       :docs/agreements-accept (let [session (get-docs-session! chat-id)
                                     raw (:agreement-id parsed)
                                     agreement-id (when raw (try (UUID/fromString (str raw)) (catch Exception _ nil)))
@@ -3019,7 +3251,16 @@
                                  input (cond-> {:client/id (:client-id session)
                                                 :agreement/title (:agreement/title draft)
                                                 :agreement/terms (:agreement/terms draft)}
-                                         picked (assoc :agreement/effective-at picked))
+                                         (present-string? (:agreement/client-company draft))
+                                         (assoc :agreement/client-company (:agreement/client-company draft))
+                                         (present-string? (:agreement/client-representative draft))
+                                         (assoc :agreement/client-representative (:agreement/client-representative draft))
+                                         (present-string? (:agreement/our-representative draft))
+                                         (assoc :agreement/our-representative (:agreement/our-representative draft))
+                                         (present-string? (:agreement/our-recipient draft))
+                                         (assoc :agreement/our-recipient (:agreement/our-recipient draft))
+                                         picked
+                                         (assoc :agreement/effective-at picked))
                                  res (actions/execute! state {:action/id :cap/action/agreement-create
                                                               :actor actor
                                                               :input input})
@@ -3121,9 +3362,17 @@
                             (when (and session (= (:stage session) :docs/agreement-effective-date))
                               (let [draft (:draft session)
                                     actor (actions/actor-from-telegram chat-user)
-                                    input {:client/id (:client-id session)
-                                           :agreement/title (:agreement/title draft)
-                                           :agreement/terms (:agreement/terms draft)}
+                                    input (cond-> {:client/id (:client-id session)
+                                                   :agreement/title (:agreement/title draft)
+                                                   :agreement/terms (:agreement/terms draft)}
+                                            (present-string? (:agreement/client-company draft))
+                                            (assoc :agreement/client-company (:agreement/client-company draft))
+                                            (present-string? (:agreement/client-representative draft))
+                                            (assoc :agreement/client-representative (:agreement/client-representative draft))
+                                            (present-string? (:agreement/our-representative draft))
+                                            (assoc :agreement/our-representative (:agreement/our-representative draft))
+                                            (present-string? (:agreement/our-recipient draft))
+                                            (assoc :agreement/our-recipient (:agreement/our-recipient draft)))
                                     res (actions/execute! state {:action/id :cap/action/agreement-create
                                                                  :actor actor
                                                                  :input input})
@@ -3596,6 +3845,8 @@
                          "create" {:type :docs/agreements-create}
                          "set" {:type :docs/agreements-set
                                 :agreement-id (nth parts 3 nil)}
+                         "propose" {:type :docs/agreements-propose
+                                    :agreement-id (nth parts 3 nil)}
                          "accept" {:type :docs/agreements-accept
                                    :agreement-id (nth parts 3 nil)}
                          "due" {:type :docs/agreements-due
@@ -3607,6 +3858,12 @@
                                          :agreement-id (nth parts 4 nil)}
                                   nil)
                          nil)
+          "agreement" (case (nth parts 2 nil)
+                        "party" (case (nth parts 3 nil)
+                                  "skip" {:type :docs/agreement-party-skip
+                                          :field (nth parts 4 nil)}
+                                  nil)
+                        nil)
           "plan-item" (case (nth parts 2 nil)
                         "kind" {:type :docs/plan-item-kind
                                 :value (nth parts 3 nil)}
@@ -3655,6 +3912,11 @@
                                           :payment-id (nth parts 4 nil)}
                                    nil)
                        nil)
+          "analytics" (case (nth parts 2 nil)
+                        "menu" {:type :docs/analytics-menu}
+                        "revenue" {:type :docs/analytics-revenue}
+                        "outstanding" {:type :docs/analytics-outstanding}
+                        nil)
           nil)
         "filter"
         (case (second parts)

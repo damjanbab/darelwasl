@@ -296,7 +296,7 @@
       (let [{:keys [payload]} (last-call calls)]
         (assert! (str/includes? (str (:text payload)) "terms") "prompts agreement terms"))
 
-      ;; agreement terms -> effective date picker (skip allowed)
+      ;; agreement terms -> party fields (skip allowed via buttons)
       (reset! calls [])
       (tg/handle-update state {:update_id 21
                               :message {:message_id 27
@@ -305,13 +305,55 @@
                                         :text "These are the terms."}})
       (let [{:keys [payload]} (last-call calls)
             rm (:reply_markup payload)]
+        (assert! (has-callback? rm "docs:agreement:party:skip:client-company")
+                 "agreement party client company shows Skip button"))
+
+      ;; skip client company -> client representative
+      (reset! calls [])
+      (tg/handle-update state {:update_id 22
+                              :callback_query {:id "cb14"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreement:party:skip:client-company"
+                                               :message {:message_id 28 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "Client representative") "prompts client representative"))
+
+      ;; skip client representative -> our representative
+      (reset! calls [])
+      (tg/handle-update state {:update_id 23
+                              :callback_query {:id "cb15"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreement:party:skip:client-representative"
+                                               :message {:message_id 28 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "Our representative") "prompts our representative"))
+
+      ;; skip our representative -> recipient
+      (reset! calls [])
+      (tg/handle-update state {:update_id 24
+                              :callback_query {:id "cb16"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreement:party:skip:our-representative"
+                                               :message {:message_id 28 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "receives funds") "prompts recipient"))
+
+      ;; skip recipient -> effective date picker (skip allowed)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 25
+                              :callback_query {:id "cb17"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreement:party:skip:our-recipient"
+                                               :message {:message_id 28 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
         (assert! (any-callback-prefix? rm "dp:day:") "agreement effective date shows calendar")
         (assert! (has-callback? rm "dp:skip") "agreement effective date allows skip"))
 
       ;; skip effective date -> agreement created with actions keyboard
       (reset! calls [])
-      (tg/handle-update state {:update_id 22
-                              :callback_query {:id "cb14"
+      (tg/handle-update state {:update_id 26
+                              :callback_query {:id "cb18"
                                                :from {:id 7 :username "smoke"}
                                                :data "dp:skip"
                                                :message {:message_id 28 :chat {:id 42}}}})
@@ -323,8 +365,8 @@
 
       ;; add plan item -> kind picker
       (reset! calls [])
-      (tg/handle-update state {:update_id 23
-                              :callback_query {:id "cb15"
+      (tg/handle-update state {:update_id 27
+                              :callback_query {:id "cb19"
                                                :from {:id 7 :username "smoke"}
                                                :data (str "docs:agreements:plan:add:" agreement-id)
                                                :message {:message_id 29 :chat {:id 42}}}})
@@ -334,8 +376,8 @@
 
       ;; pick kind -> invoice-on picker
       (reset! calls [])
-      (tg/handle-update state {:update_id 24
-                              :callback_query {:id "cb16"
+      (tg/handle-update state {:update_id 28
+                              :callback_query {:id "cb20"
                                                :from {:id 7 :username "smoke"}
                                                :data "docs:plan-item:kind:installment"
                                                :message {:message_id 30 :chat {:id 42}}}})
@@ -345,8 +387,8 @@
 
       ;; pick invoice-on -> prompt label
       (reset! calls [])
-      (tg/handle-update state {:update_id 25
-                              :callback_query {:id "cb17"
+      (tg/handle-update state {:update_id 29
+                              :callback_query {:id "cb21"
                                                :from {:id 7 :username "smoke"}
                                                :data "docs:plan-item:invoice-on:due"
                                                :message {:message_id 31 :chat {:id 42}}}})

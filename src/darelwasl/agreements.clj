@@ -117,7 +117,7 @@
         {:error (str "Invalid " label)}))))
 
 (def ^:private allowed-agreement-status
-  #{:draft :accepted :void})
+  #{:draft :proposed :accepted :void})
 
 (def ^:private allowed-delivery-channels
   #{:email :whatsapp :telegram :paper})
@@ -139,9 +139,15 @@
    :agreement/title
    :agreement/terms
    :agreement/status
+   :agreement/proposed-at
+   :agreement/proposed-by
    :agreement/effective-at
    :agreement/accepted-at
    :agreement/accepted-by
+   :agreement/client-company
+   :agreement/client-representative
+   :agreement/our-representative
+   :agreement/our-recipient
    :agreement/delivery-channels
    :agreement/delivery-email
    :agreement/delivery-phone
@@ -213,6 +219,7 @@
   [a]
   (when (map? a)
     (-> a
+        (update :agreement/proposed-at format-inst)
         (update :agreement/effective-at format-inst)
         (update :agreement/accepted-at format-inst)
         (update :agreement/consented-at format-inst)
@@ -221,9 +228,15 @@
                       :agreement/title
                       :agreement/terms
                       :agreement/status
+                      :agreement/proposed-at
+                      :agreement/proposed-by
                       :agreement/effective-at
                       :agreement/accepted-at
                       :agreement/accepted-by
+                      :agreement/client-company
+                      :agreement/client-representative
+                      :agreement/our-representative
+                      :agreement/our-recipient
                       :agreement/delivery-channels
                       :agreement/delivery-email
                       :agreement/delivery-phone
@@ -283,6 +296,10 @@
 	          number (normalize-text (param-value body :agreement/number))
 	          title (normalize-text (param-value body :agreement/title))
 	          terms (normalize-text (param-value body :agreement/terms))
+            client-company (normalize-text (param-value body :agreement/client-company))
+            client-rep (normalize-text (param-value body :agreement/client-representative))
+            our-rep (normalize-text (param-value body :agreement/our-representative))
+            our-recipient (normalize-text (param-value body :agreement/our-recipient))
 	          {effective-at :value effective-at-err :error} (normalize-inst (param-value body :agreement/effective-at)
 	                                                                        "agreement/effective-at"
 	                                                                        {:required false})
@@ -325,6 +342,10 @@
                     base (cond-> base
                            number (assoc :agreement/number number)
                            effective-at (assoc :agreement/effective-at effective-at)
+                           client-company (assoc :agreement/client-company client-company)
+                           client-rep (assoc :agreement/client-representative client-rep)
+                           our-rep (assoc :agreement/our-representative our-rep)
+                           our-recipient (assoc :agreement/our-recipient our-recipient)
                            (seq channels) (assoc :agreement/delivery-channels (set channels))
                            delivery-email (assoc :agreement/delivery-email delivery-email)
                            delivery-phone (assoc :agreement/delivery-phone delivery-phone)
@@ -358,6 +379,10 @@
 	          number (normalize-text (param-value body :agreement/number))
 	          title (normalize-text (param-value body :agreement/title))
 	          terms (normalize-text (param-value body :agreement/terms))
+            client-company (normalize-text (param-value body :agreement/client-company))
+            client-rep (normalize-text (param-value body :agreement/client-representative))
+            our-rep (normalize-text (param-value body :agreement/our-representative))
+            our-recipient (normalize-text (param-value body :agreement/our-recipient))
 	          {effective-at :value effective-at-err :error} (normalize-inst (param-value body :agreement/effective-at)
 	                                                                        "agreement/effective-at"
 	                                                                        {:required false})
@@ -386,6 +411,10 @@
                               [:db/add eid :agreement/terms terms]
                               [:db/add eid :agreement/effective-at effective-at]
                               [:db/add eid :agreement/status status]
+                              [:db/add eid :agreement/client-company client-company]
+                              [:db/add eid :agreement/client-representative client-rep]
+                              [:db/add eid :agreement/our-representative our-rep]
+                              [:db/add eid :agreement/our-recipient our-recipient]
                               [:db/add eid :agreement/delivery-channels (when (seq channels) (set channels))]
                               [:db/add eid :agreement/delivery-email delivery-email]
                               [:db/add eid :agreement/delivery-phone delivery-phone]
@@ -636,6 +665,7 @@
 	          ws (workspace/actor-workspace actor)
 	          db (d/db conn)
 	          {:keys [eid id error]} (agreement-eid db agreement-id ws)
+            current-status (when eid (:agreement/status (d/pull db [:agreement/status] eid)))
 	          {accepted-at :value accepted-at-err :error} (normalize-inst (param-value body :agreement/accepted-at)
 	                                                                      "agreement/accepted-at"
 	                                                                      {:required false
@@ -654,6 +684,7 @@
 	      (cond
 	        error error
 	        (nil? eid) (error 404 "Agreement not found")
+            (not= :proposed current-status) (error 400 "Agreement must be proposed before acceptance")
 	        accepted-at-err (error 400 accepted-at-err)
 	        chan-err (error 400 chan-err)
 	        consented-at-err (error 400 consented-at-err)
@@ -680,3 +711,41 @@
               (catch Exception e
                 (log/error e "Failed to accept agreement" {:agreement/id id})
                 (error 500 "Failed to accept agreement"))))))))
+
+(defn propose-agreement!
+  "Mark agreement as proposed (proposal issued/sent)."
+  [conn agreement-id input actor]
+  (or (ensure-conn conn)
+      (let [body (or input {})
+            ws (workspace/actor-workspace actor)
+            db (d/db conn)
+            {:keys [eid id error]} (agreement-eid db agreement-id ws)
+            current-status (when eid (:agreement/status (d/pull db [:agreement/status] eid)))
+            {proposed-at :value proposed-at-err :error} (normalize-inst (param-value body :agreement/proposed-at)
+                                                                        "agreement/proposed-at"
+                                                                        {:required false
+                                                                         :default (now-inst)})
+            proposed-by (normalize-text (param-value body :agreement/proposed-by))]
+        (cond
+          error error
+          (nil? eid) (error 404 "Agreement not found")
+          (= :accepted current-status) (error 400 "Agreement already accepted")
+          (= :void current-status) (error 400 "Agreement is void")
+          proposed-at-err (error 400 proposed-at-err)
+          :else
+          (let [tx-prov (prov/provenance actor)
+                tx-data (->> [[:db/add eid :agreement/status :proposed]
+                              [:db/add eid :agreement/proposed-at proposed-at]
+                              [:db/add eid :agreement/proposed-by proposed-by]]
+                             (remove (fn [[_ _ v]] (nil? v)))
+                             (map #(prov/enrich-tx % tx-prov))
+                             vec)]
+            (try
+              (when (seq tx-data)
+                (db/transact! conn {:tx-data tx-data}))
+              (let [db-after (d/db conn)
+                    pulled (d/pull db-after agreement-pull eid)]
+                {:agreement (present-agreement pulled)})
+              (catch Exception e
+                (log/error e "Failed to propose agreement" {:agreement/id id})
+                (error 500 "Failed to propose agreement"))))))))

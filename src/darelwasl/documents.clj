@@ -188,9 +188,15 @@
    :agreement/title
    :agreement/terms
    :agreement/status
+   :agreement/proposed-at
+   :agreement/proposed-by
    :agreement/effective-at
    :agreement/accepted-at
    :agreement/accepted-by
+   :agreement/client-company
+   :agreement/client-representative
+   :agreement/our-representative
+   :agreement/our-recipient
    :agreement/delivery-channels
    :agreement/delivery-email
    :agreement/delivery-phone
@@ -236,6 +242,7 @@
   [a]
   (when (map? a)
     (-> a
+        (update :agreement/proposed-at format-inst)
         (update :agreement/effective-at format-inst)
         (update :agreement/accepted-at format-inst)
         (update :agreement/consented-at format-inst))))
@@ -960,13 +967,36 @@
                               {:docType (name type)})
                   subject (case type
                             :proposal
-                            {:subject-type :client
-                             :subject-id client-id
-                             :domain-payload (assoc base
-                                                    :servicesIncluded (or (:doc.pack/services-included doc-pack) "")
-                                                    :paymentPlan (or (:doc.pack/payment-plan doc-pack) "")
-                                                    :invoices invoices)
-                             :filename (str "proposal-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")}
+                            (let [agreement-id-raw (param-value body :agreement/id)]
+                              (if (nil? agreement-id-raw)
+                                {:subject-type :client
+                                 :subject-id client-id
+                                 :domain-payload (assoc base
+                                                        :servicesIncluded (or (:doc.pack/services-included doc-pack) "")
+                                                        :paymentPlan (or (:doc.pack/payment-plan doc-pack) "")
+                                                        :invoices invoices)
+                                 :filename (str "proposal-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")}
+                                (let [{aid :value aid-err :error} (entity/resolve-id db :agreement/id agreement-id-raw "agreement id")]
+                                  (cond
+                                    aid-err (error 400 aid-err)
+                                    (nil? aid) (error 400 "agreement/id is required")
+                                    :else
+                                    (let [agreement (some-> (pull-agreement! db aid ws) present-agreement)]
+                                      (cond
+                                        (nil? agreement) (error 404 "Agreement not found")
+                                        (not= client-id (get-in agreement [:agreement/client :client/id]))
+                                        (error 400 "Agreement client mismatch")
+                                        :else
+                                        (let [items (plan-items-for-agreement db aid ws)]
+                                          {:subject-type :agreement
+                                           :subject-id aid
+                                           :domain-payload (assoc base
+                                                                  :agreement agreement
+                                                                  :planItems items)
+                                           :filename (str "proposal-" (or (:agreement/number agreement)
+                                                                          (some-> (:entity/ref agreement) str/trim not-empty)
+                                                                          (subs (str aid) 0 8))
+                                                          ".pdf")})))))))
 
                             :status-report
                             (let [tasks (tasks-summary-for-client db ceid ws)]
@@ -1075,7 +1105,7 @@
                           base-url (some-> (or verify-base-url "") (str/replace #"/+$" ""))
                           enc (fn [s] (java.net.URLEncoder/encode (str s) "UTF-8"))
                           verify-url (when-not (str/blank? base-url)
-                                       (str base-url "/verify?ref=" (enc document-ref) "&code=" (enc code)))
+                                       (str base-url "/verify/" (enc document-ref) "/" (enc code)))
                           render-payload (assoc domain-payload
                                                 :issuedAt issued-at-str
                                                 :templateVersion template-version

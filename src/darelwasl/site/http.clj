@@ -330,9 +330,22 @@
                         :headers {"Content-Type" "text/plain; charset=utf-8"}
                         :body "ok"}
 
-                       (and (= method :get) (= path "/verify"))
-                       (let [ref (some-> (or (get query "ref") (get query "document")) str str/trim)
-                             code (some-> (or (get query "code") (get query "verification")) str str/trim)
+                       (and (= method :get)
+                            (or (= path "/verify")
+                                (str/starts-with? path "/verify/")))
+                       (let [[_ ref-path code-path] (re-matches #"/verify/([^/]+)/([^/]+)" path)
+                             ref (some-> (or ref-path
+                                             (get query "ref")
+                                             (get query "document"))
+                                         codec/url-decode
+                                         str
+                                         str/trim)
+                             code (some-> (or code-path
+                                              (get query "code")
+                                              (get query "verification"))
+                                          codec/url-decode
+                                          str
+                                          str/trim)
                              verification (when (and (not (str/blank? ref)) (not (str/blank? code)))
                                             (documents/verify-document! {:db db :config config}
                                                                     {:input {:document/ref ref

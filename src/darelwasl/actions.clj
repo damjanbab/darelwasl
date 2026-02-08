@@ -470,6 +470,27 @@
   [state {:keys [input actor]}]
   (agreements/list-agreements (conn state) {:client-id (:client/id (or input {}))} actor))
 
+(defn- agreement-propose
+  [state {:keys [input actor]}]
+  (let [body (or input {})
+        agreement-id (:agreement/id body)
+        doc-secret (get-in state [:config :documents :verify-secret])]
+    (if (or (nil? doc-secret) (str/blank? (str doc-secret)))
+      {:error {:status 500
+               :message "DOCUMENT_VERIFY_SECRET is required to propose agreements (issues proposal PDFs)"}}
+      (let [proposed (agreements/propose-agreement! (conn state) agreement-id body actor)]
+        (if-let [err (:error proposed)]
+          proposed
+          (let [db (d/db (conn state))
+                agreement (agreements/pull-agreement db agreement-id actor)
+                proposal-doc (when agreement
+                               (documents/issue-document! state {:type :proposal
+                                                                :input {:client/id (get-in agreement [:agreement/client :client/id])
+                                                                        :agreement/id (:agreement/id agreement)}
+                                                                :actor actor}))]
+            {:agreement (:agreement proposed)
+             :proposal-pdf proposal-doc}))))))
+
 (defn- plan-item-create
   [state {:keys [input actor]}]
   (agreements/create-plan-item! (conn state) (or input {}) actor))
@@ -717,6 +738,7 @@
    :cap/action/agreement-create agreement-create
    :cap/action/agreement-update agreement-update
    :cap/action/agreement-list agreement-list
+   :cap/action/agreement-propose agreement-propose
    :cap/action/agreement-accept agreement-accept
    :cap/action/plan-item-create plan-item-create
    :cap/action/plan-item-update plan-item-update

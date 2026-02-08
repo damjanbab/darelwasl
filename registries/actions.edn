@@ -1241,6 +1241,10 @@
            :agreement/title :string
            :agreement/terms :string
            :agreement/effective-at :instant?
+           :agreement/client-company :string?
+           :agreement/client-representative :string?
+           :agreement/our-representative :string?
+           :agreement/our-recipient :string?
            :agreement/delivery-channels [:set :keyword]
            :agreement/delivery-email :string?
            :agreement/delivery-phone :string?
@@ -1270,6 +1274,10 @@
            :agreement/title :string?
            :agreement/terms :string?
            :agreement/effective-at :instant?
+           :agreement/client-company :string?
+           :agreement/client-representative :string?
+           :agreement/our-representative :string?
+           :agreement/our-recipient :string?
            :agreement/delivery-channels [:set :keyword]
            :agreement/delivery-email :string?
            :agreement/delivery-phone :string?
@@ -1308,6 +1316,30 @@
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/agreement :cap/schema/client]
+            :views [:cap/view/clients]}
+  :tooling []}
+
+ {:id :cap/action/agreement-propose
+  :title "Agreement Propose"
+  :version "v1"
+  :purpose "Mark an agreement as proposed (proposal issued) and issue an immutable proposal PDF for that agreement draft."
+  :inputs {:agreement/id :uuid
+           :agreement/proposed-at :instant?
+           :agreement/proposed-by :string?}
+  :outputs {:agreement :map
+            :proposal-pdf :map}
+  :side-effects ["Persist agreement status transition to :proposed"
+                 "Auto-issue (or reuse) immutable proposal document for the agreement"]
+  :adapter {:integration :local/db}
+  :audit {:records [:agreement/change]
+          :fields [:agreement/id :agreement/proposed-at]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:agreement/id :agreement/proposed-at]}
+  :contracts {:fixtures []}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/agreement :cap/schema/payment-plan-item :cap/schema/document]
             :views [:cap/view/clients]}
   :tooling []}
 

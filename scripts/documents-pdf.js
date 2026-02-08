@@ -302,6 +302,10 @@ function titleBlockHtml({ title, metaLines }) {
 }
 
 function proposalBody(input) {
+  if (input && input.agreement) {
+    return agreementBody(input);
+  }
+
   const company = input.company || {};
   const client = input.client || {};
   const currency = present(company.currency) || "SAR";
@@ -640,6 +644,10 @@ function agreementBody(input) {
           ${renderBlock("Agreement #", pick(agreement, ["agreement/number", "number"]) ?? "—")}
           ${renderBlock("Title", pick(agreement, ["agreement/title", "title"]) ?? "—")}
           ${pick(agreement, ["agreement/effective-at", "effective-at", "effectiveAt"]) ? renderBlock("Effective", formatDateValue(pick(agreement, ["agreement/effective-at", "effective-at", "effectiveAt"]))) : ""}
+          ${present(pick(agreement, ["agreement/client-company", "client-company", "clientCompany"])) ? renderBlock("Client Company", pick(agreement, ["agreement/client-company", "client-company", "clientCompany"])) : ""}
+          ${present(pick(agreement, ["agreement/client-representative", "client-representative", "clientRepresentative"])) ? renderBlock("Client Representative", pick(agreement, ["agreement/client-representative", "client-representative", "clientRepresentative"])) : ""}
+          ${present(pick(agreement, ["agreement/our-representative", "our-representative", "ourRepresentative"])) ? renderBlock("Our Representative", pick(agreement, ["agreement/our-representative", "our-representative", "ourRepresentative"])) : ""}
+          ${present(pick(agreement, ["agreement/our-recipient", "our-recipient", "ourRecipient"])) ? renderBlock("Recipient", pick(agreement, ["agreement/our-recipient", "our-recipient", "ourRecipient"])) : ""}
           ${pick(agreement, ["agreement/accepted-at", "accepted-at", "acceptedAt"]) ? renderBlock("Accepted", formatDateValue(pick(agreement, ["agreement/accepted-at", "accepted-at", "acceptedAt"]))) : ""}
           ${deliveryLine() ? renderBlock("Delivery", deliveryLine()) : ""}
         </div>
@@ -718,6 +726,12 @@ function buildHtml(type, input, { logoSvg, qrDataUrl }) {
   if (type === "proposal") {
     title = "PROPOSAL";
     metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
+    if (input && input.agreement) {
+      const agreementNo = pick(input.agreement, ["agreement/number", "number"]);
+      const agreementTitle = pick(input.agreement, ["agreement/title", "title"]);
+      if (present(agreementNo)) metaLines.push(`<strong>Agreement #:</strong> ${escapeHtml(agreementNo)}`);
+      if (present(agreementTitle)) metaLines.push(`<strong>Title:</strong> ${escapeHtml(agreementTitle)}`);
+    }
     body = proposalBody(input);
   } else if (type === "invoice") {
     title = "INVOICE";

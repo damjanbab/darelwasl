@@ -466,6 +466,14 @@
     :type :db.type/keyword
     :cardinality :db.cardinality/one
     :doc "Agreement lifecycle status"}
+   {:ident :agreement/proposed-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "When the proposal was issued/sent (optional)"}
+   {:ident :agreement/proposed-by
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Who issued/sent the proposal (optional)"}
    {:ident :agreement/effective-at
     :type :db.type/instant
     :cardinality :db.cardinality/one
@@ -478,6 +486,22 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Who accepted/signed (name/role, optional)"}
+   {:ident :agreement/client-company
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Client company/legal name (optional)"}
+   {:ident :agreement/client-representative
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Client representative/signatory (optional)"}
+   {:ident :agreement/our-representative
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Dar El Wasl representative (optional)"}
+   {:ident :agreement/our-recipient
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Who receives funds (optional)"}
    {:ident :agreement/delivery-channels
     :type :db.type/keyword
     :cardinality :db.cardinality/many
@@ -502,7 +526,7 @@
     :type :db.type/instant
     :cardinality :db.cardinality/one
     :doc "Consent timestamp (optional)"}]
-  :enums {:agreement/status [:draft :accepted :void]
+  :enums {:agreement/status [:draft :proposed :accepted :void]
           :agreement/delivery-channels [:email :whatsapp :telegram :paper]}
   :invariants ["Client required"
                "Agreement title required"
