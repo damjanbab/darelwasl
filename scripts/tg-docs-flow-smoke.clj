@@ -4,6 +4,7 @@
    [datomic.client.api :as d]
    [darelwasl.actions :as actions]
    [darelwasl.clients :as clients]
+   [darelwasl.tasks :as tasks]
    [darelwasl.telegram :as tg]))
 
 (defn- assert!
@@ -36,37 +37,48 @@
 
 (defn- run!
   []
-  (let [calls (atom [])
-        user {:user/id #uuid "00000000-0000-0000-0000-000000000001"
-              :user/username "smoke"
-              :actor/workspace nil}
-        client-id #uuid "10000000-0000-0000-0000-000000000001"
-        state {:config {:telegram {:webhook-enabled? true
-                                   :commands-enabled? true
-                                   :bot-token "test-token"}}
-               :db {:conn :fake-conn}}
+	    (let [calls (atom [])
+	          user {:user/id #uuid "00000000-0000-0000-0000-000000000001"
+	                :user/username "smoke"
+	                :actor/workspace nil}
+	          client-id #uuid "10000000-0000-0000-0000-000000000001"
+	          agreement-id #uuid "40000000-0000-0000-0000-000000000001"
+	          plan-item-id #uuid "50000000-0000-0000-0000-000000000001"
+	          state {:config {:telegram {:webhook-enabled? true
+	                                     :commands-enabled? true
+	                                     :bot-token "test-token"}}
+	                 :db {:conn :fake-conn}}
         fake-request (fn [_cfg path payload]
                        (swap! calls conj {:path path :payload payload})
                        {:ok true :result {:message_id 999}})]
-    (with-redefs [tg/log-telegram-message! (fn [& _] nil)
-                  tg/ensure-conn (fn [_] :fake-conn)
-                  d/db (fn [_] :fake-db)
-                  darelwasl.telegram/user-by-chat-id (fn [_db _chat-id] user)
-                  clients/list-clients (fn [_conn _params _workspace]
-                                         {:clients [{:client/id client-id :client/name "Acme"}]})
+	    (with-redefs [tg/log-telegram-message! (fn [& _] nil)
+	                  tg/ensure-conn (fn [_] :fake-conn)
+	                  d/db (fn [_] :fake-db)
+	                  tasks/list-tasks (fn [_conn _params] {:tasks []})
+	                  darelwasl.telegram/user-by-chat-id (fn [_db _chat-id] user)
+	                  clients/list-clients (fn [_conn _params _workspace]
+	                                         {:clients [{:client/id client-id :client/name "Acme"}]})
                   clients/client-by-id (fn [_conn _client-id _workspace]
                                          {:client/id client-id :client/name "Acme"})
-                  actions/execute! (fn [_state {:keys [input] :as invocation}]
-                                     (case (:action/id invocation)
-                                       :cap/action/doc-pack-upsert {:result {:doc-pack {:client/id (:client/id input)}}}
-                                       :cap/action/invoice-create {:result {:invoice {:invoice/id #uuid "20000000-0000-0000-0000-000000000001"
-                                                                                     :invoice/number (get input :invoice/number)
-                                                                                     :invoice/status (get input :invoice/status)}}}
-                                       :cap/action/payment-create {:result {:payment {:payment/id #uuid "30000000-0000-0000-0000-000000000001"}}}
-                                       :cap/action/invoice-list {:result {:invoices []}}
-                                       :cap/action/payment-list {:result {:payments []}}
-                                       {:error {:status 500 :message (str "Unexpected action in smoke: " (:action/id invocation))}}))
-                  tg/request-json fake-request]
+	                  actions/execute! (fn [_state {:keys [input] :as invocation}]
+	                                     (case (:action/id invocation)
+	                                       :cap/action/doc-pack-upsert {:result {:doc-pack {:client/id (:client/id input)}}}
+	                                       :cap/action/doc-pack-read {:result {:doc-pack {:client/id (:client/id input)
+	                                                                                     :doc.pack/currency "SAR"}}}
+	                                       :cap/action/invoice-create {:result {:invoice {:invoice/id #uuid "20000000-0000-0000-0000-000000000001"
+	                                                                                     :invoice/number (get input :invoice/number)
+	                                                                                     :invoice/status (get input :invoice/status)}}}
+	                                       :cap/action/payment-create {:result {:payment {:payment/id #uuid "30000000-0000-0000-0000-000000000001"}}}
+	                                       :cap/action/invoice-list {:result {:invoices []}}
+	                                       :cap/action/payment-list {:result {:payments []}}
+	                                       :cap/action/agreement-list {:result {:agreements []}}
+	                                       :cap/action/agreement-create {:result {:agreement {:agreement/id agreement-id
+	                                                                                         :agreement/number "AG-1"
+	                                                                                         :agreement/status :draft}}}
+	                                       :cap/action/plan-item-list {:result {:plan-items []}}
+	                                       :cap/action/plan-item-create {:result {:plan-item {:plan.item/id plan-item-id}}}
+	                                       {:error {:status 500 :message (str "Unexpected action in smoke: " (:action/id invocation))}}))
+	                  tg/request-json fake-request]
       ;; /docs -> client pick keyboard
       (reset! calls [])
       (tg/handle-update state {:update_id 1
@@ -252,8 +264,145 @@
         (assert! (= path "sendMessage") "note skip sends confirmation")
         (assert! (str/includes? (str (:text payload)) "Payment") "payment added confirmation"))
 
+      ;; open agreements menu
+      (reset! calls [])
+      (tg/handle-update state {:update_id 18
+                              :callback_query {:id "cb12"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreements:menu"
+                                               :message {:message_id 25 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)]
+        (assert! (= path "editMessageText") "agreements menu edits message")
+        (assert! (has-callback? (:reply_markup payload) "docs:agreements:create")
+                 "agreements menu has Create agreement"))
+
+      ;; start agreement wizard
+      (reset! calls [])
+      (tg/handle-update state {:update_id 19
+                              :callback_query {:id "cb13"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:agreements:create"
+                                               :message {:message_id 25 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "agreement title") "prompts agreement title"))
+
+      ;; agreement title -> agreement terms
+      (reset! calls [])
+      (tg/handle-update state {:update_id 20
+                              :message {:message_id 26
+                                        :chat {:id 42}
+                                        :from {:id 7 :username "smoke"}
+                                        :text "Agreement for Acme"}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "terms") "prompts agreement terms"))
+
+      ;; agreement terms -> effective date picker (skip allowed)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 21
+                              :message {:message_id 27
+                                        :chat {:id 42}
+                                        :from {:id 7 :username "smoke"}
+                                        :text "These are the terms."}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (any-callback-prefix? rm "dp:day:") "agreement effective date shows calendar")
+        (assert! (has-callback? rm "dp:skip") "agreement effective date allows skip"))
+
+      ;; skip effective date -> agreement created with actions keyboard
+      (reset! calls [])
+      (tg/handle-update state {:update_id 22
+                              :callback_query {:id "cb14"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "dp:skip"
+                                               :message {:message_id 28 :chat {:id 42}}}})
+      (let [{:keys [path payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (= path "sendMessage") "agreement create sends confirmation")
+        (assert! (any-callback-prefix? rm (str "docs:agreements:plan:add:" agreement-id))
+                 "agreement actions include Add plan item"))
+
+      ;; add plan item -> kind picker
+      (reset! calls [])
+      (tg/handle-update state {:update_id 23
+                              :callback_query {:id "cb15"
+                                               :from {:id 7 :username "smoke"}
+                                               :data (str "docs:agreements:plan:add:" agreement-id)
+                                               :message {:message_id 29 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (has-callback? (:reply_markup payload) "docs:plan-item:kind:installment")
+                 "plan item kind picker present"))
+
+      ;; pick kind -> invoice-on picker
+      (reset! calls [])
+      (tg/handle-update state {:update_id 24
+                              :callback_query {:id "cb16"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:plan-item:kind:installment"
+                                               :message {:message_id 30 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (has-callback? (:reply_markup payload) "docs:plan-item:invoice-on:due")
+                 "plan item invoice-on picker present"))
+
+      ;; pick invoice-on -> prompt label
+      (reset! calls [])
+      (tg/handle-update state {:update_id 25
+                              :callback_query {:id "cb17"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "docs:plan-item:invoice-on:due"
+                                               :message {:message_id 31 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "label") "prompts plan item label"))
+
+      ;; label -> amount
+      (reset! calls [])
+      (tg/handle-update state {:update_id 26
+                              :message {:message_id 32
+                                        :chat {:id 42}
+                                        :from {:id 7 :username "smoke"}
+                                        :text "Installment 1"}})
+      (let [{:keys [payload]} (last-call calls)]
+        (assert! (str/includes? (str (:text payload)) "amount") "prompts plan item amount"))
+
+      ;; amount -> due date calendar (no skip)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 27
+                              :message {:message_id 33
+                                        :chat {:id 42}
+                                        :from {:id 7 :username "smoke"}
+                                        :text "5000"}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (any-callback-prefix? rm "dp:day:") "plan item due date shows calendar")
+        (assert! (not (has-callback? rm "dp:skip")) "plan item due date does NOT allow skip"))
+
+      ;; pick due date -> due time picker (skip allowed)
+      (reset! calls [])
+      (tg/handle-update state {:update_id 28
+                              :callback_query {:id "cb18"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "dp:day:2026-03-01"
+                                               :message {:message_id 34 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (any-callback-prefix? rm "tp:hour:") "plan item due time shows hour picker")
+        (assert! (has-callback? rm "tp:skip") "plan item due time allows skip"))
+
+      ;; skip due time -> plan item created
+      (reset! calls [])
+      (tg/handle-update state {:update_id 29
+                              :callback_query {:id "cb19"
+                                               :from {:id 7 :username "smoke"}
+                                               :data "tp:skip"
+                                               :message {:message_id 34 :chat {:id 42}}}})
+      (let [{:keys [payload]} (last-call calls)
+            rm (:reply_markup payload)]
+        (assert! (str/includes? (str (:text payload)) "Plan item") "plan item added confirmation")
+        (assert! (any-callback-prefix? rm (str "docs:agreements:plan:list:" agreement-id))
+                 "agreement actions include Plan items"))
+
       (println "OK: docs invoice due-date uses inline calendar + No-due-date button")
       (println "OK: docs payment paid-at date requires inline calendar (no skip, no typing fallback)")
-      (println "OK: time picker + note step are click-first (no typing fallback)"))))
+      (println "OK: time picker + note step are click-first (no typing fallback)")
+      (println "OK: agreements + plan items flow is click-first"))))
 
 (run!)

@@ -3148,7 +3148,7 @@
                                     (send-message! cfg {:chat-id chat-id
                                                         :text "Agreement created."
                                                         :message-key (str "docs-agreement-created-" (System/currentTimeMillis))
-                                                        :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)})))))))
+                                                        :reply-markup (docs-agreement-actions-inline-keyboard agreement-id)}))))))
                           (let [session (get-docs-session! chat-id)]
                             (when (and session (= (:stage session) :docs/inv-due-date))
                               (let [draft (:draft session)
@@ -3175,8 +3175,8 @@
 		                                    (send-message! cfg {:chat-id chat-id
 		                                                        :text "Invoice added."
 		                                                        :message-key (str "docs-inv-added-" (System/currentTimeMillis))
-		                                                        :reply-markup (docs-menu-inline-keyboard)}))))))
-                          )
+		                                                        :reply-markup (docs-menu-inline-keyboard)})))))
+                          ))
       :time-picker/now (let [now-time (.toLocalTime (java.time.ZonedDateTime/now (ZoneId/systemDefault)))
                              raw (.format now-time (java.time.format.DateTimeFormatter/ofPattern "HHmm"))]
                          (apply-docs-time-picker-set! state {:chat-id chat-id
@@ -3551,9 +3551,9 @@
                          (send-message! cfg {:chat-id chat-id
                                              :text "Invalid client action."
                                                 :message-key (str "client-action-invalid-" (System/currentTimeMillis))})))
-							      (do
-							        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
-							        nil)))
+										      (do
+										        (log/warn "Unhandled telegram callback" {:data data :parsed parsed :chat-id chat-id})
+										        nil))))
 (defn- parse-callback
   [data]
   (when (present-string? data)
