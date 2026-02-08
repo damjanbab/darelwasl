@@ -1,0 +1,23 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "telegram-ops",
+  "title": "Telegram ops agent",
+  "allowed_paths": [
+    "scripts/",
+    "docs/",
+    "agents/",
+    "policies/"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "scripts/checks.sh governance",
+      "scripts/checks.sh docs",
+      "scripts/checks.sh actions"
+    ]
+  }
+}
+

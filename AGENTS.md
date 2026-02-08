@@ -11,6 +11,9 @@ Optimize for:
 - `scripts/` (automation + checks; CI entrypoint is `scripts/checks.sh`)
 - Generated inventory only: `docs/system.generated.md` + `docs/catalog.edn` (via `scripts/generate-docs.sh`)
 
+## Ops runbooks (start here)
+- Telegram dev/prod bots + promotion: `docs/ops/telegram-bots.md`
+
 ## Agents (capability contracts)
 Agent contracts live under `agents/` (one folder per agent type). Each contract defines:
 - Allowed paths (what the agent may change)

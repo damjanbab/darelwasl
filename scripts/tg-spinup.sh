@@ -6,9 +6,34 @@ cd "$ROOT"
 
 mkdir -p .cpcache/tg
 
-TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_bot_token}"
-SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_webhook_secret}"
-BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_webhook_base_url}"
+PROFILE="${TELEGRAM_PROFILE:-dev}"
+PROFILE="$(echo "$PROFILE" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+if [[ "$PROFILE" != "dev" && "$PROFILE" != "prod" ]]; then
+  echo "Invalid TELEGRAM_PROFILE: $PROFILE (expected dev|prod)" >&2
+  exit 2
+fi
+
+# Default to dev-bot secrets (policy: telegram-dev-bot-only).
+if [[ "$PROFILE" == "dev" ]]; then
+  TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_dev_bot_token}"
+  SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_dev_webhook_secret}"
+  BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_dev_webhook_base_url}"
+else
+  TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_prod_bot_token}"
+  SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_prod_webhook_secret}"
+  BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_prod_webhook_base_url}"
+fi
+
+# Back-compat fallbacks (older file names).
+if [[ ! -f "$TOKEN_FILE" && -f "$ROOT/.secrets/telegram_bot_token" ]]; then
+  TOKEN_FILE="$ROOT/.secrets/telegram_bot_token"
+fi
+if [[ ! -f "$SECRET_FILE" && -f "$ROOT/.secrets/telegram_webhook_secret" ]]; then
+  SECRET_FILE="$ROOT/.secrets/telegram_webhook_secret"
+fi
+if [[ ! -f "$BASE_URL_FILE" && -f "$ROOT/.secrets/telegram_webhook_base_url" ]]; then
+  BASE_URL_FILE="$ROOT/.secrets/telegram_webhook_base_url"
+fi
 WATCH_PID_FILE="$ROOT/.cpcache/tg/webhook-watch.pid"
 WATCH_LOG_FILE="$ROOT/.cpcache/tg/webhook-watch.log"
 
@@ -43,11 +68,49 @@ if [[ -z "$WEBHOOK_SECRET" ]]; then
   exit 2
 fi
 
-export TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
-export TELEGRAM_WEBHOOK_SECRET="$WEBHOOK_SECRET"
-export TELEGRAM_WEBHOOK_ENABLED=true
-export TELEGRAM_COMMANDS_ENABLED=true
-export TELEGRAM_NOTIFICATIONS_ENABLED=true
+export TELEGRAM_PROFILE="$PROFILE"
+
+if [[ "$PROFILE" == "dev" ]]; then
+  export TELEGRAM_DEV_BOT_TOKEN="$BOT_TOKEN"
+  export TELEGRAM_DEV_WEBHOOK_SECRET="$WEBHOOK_SECRET"
+  export TELEGRAM_DEV_WEBHOOK_ENABLED=true
+  export TELEGRAM_DEV_COMMANDS_ENABLED=true
+  export TELEGRAM_DEV_NOTIFICATIONS_ENABLED=true
+else
+  export TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
+  export TELEGRAM_WEBHOOK_SECRET="$WEBHOOK_SECRET"
+  export TELEGRAM_WEBHOOK_ENABLED=true
+  export TELEGRAM_COMMANDS_ENABLED=true
+  export TELEGRAM_NOTIFICATIONS_ENABLED=true
+fi
+
+expected="${TELEGRAM_EXPECTED_BOT_USERNAME:-mimi}"
+expected="$(echo "$expected" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+if [[ "${SKIP_TELEGRAM_BOT_IDENTITY_CHECK:-}" != "1" ]]; then
+  echo "Verifying bot identity via getMe..."
+  ME_JSON="$(curl -sS "https://api.telegram.org/bot${BOT_TOKEN}/getMe" || true)"
+  USERNAME="$(ME_JSON="$ME_JSON" python3 - <<'PY'
+import json, os
+raw = os.environ.get("ME_JSON","")
+try:
+  data = json.loads(raw)
+  u = (data.get("result") or {}).get("username") or ""
+  print(str(u))
+except Exception:
+  print("")
+PY
+)"
+  uname="$(echo "$USERNAME" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  if [[ -z "$uname" ]]; then
+    echo "Unable to read bot username from getMe response. Set SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
+    exit 2
+  fi
+  if [[ "$PROFILE" == "dev" && "$uname" != "$expected" ]]; then
+    echo "Refusing to run: dev bot username '$uname' != expected '$expected'." >&2
+    echo "Set TELEGRAM_EXPECTED_BOT_USERNAME to the dev bot username, or SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
+    exit 2
+  fi
+fi
 
 echo "Starting backend (if not already running)..."
 FORCE_RESTART_BACKEND="${FORCE_RESTART_BACKEND:-false}"
@@ -91,8 +154,8 @@ echo $! > .cpcache/tg/ssh_tunnel.pid
 
 TUNNEL_URL=""
 for _ in {1..160}; do
-  if rg -n "https://[a-z0-9]+\\.lhr\\.life" .cpcache/tg/tunnel.log >/dev/null 2>&1; then
-    TUNNEL_URL="$(rg -o "https://[a-z0-9]+\\.lhr\\.life" .cpcache/tg/tunnel.log | tail -n 1)"
+  if grep -Eo "https://[a-z0-9]+\\.lhr\\.life" .cpcache/tg/tunnel.log >/dev/null 2>&1; then
+    TUNNEL_URL="$(grep -Eo "https://[a-z0-9]+\\.lhr\\.life" .cpcache/tg/tunnel.log | tail -n 1)"
     break
   fi
   sleep 0.5
@@ -108,6 +171,11 @@ WEBHOOK_URL="${TUNNEL_URL}/api/telegram/webhook"
 umask 077
 mkdir -p "$(dirname "$BASE_URL_FILE")"
 echo "$TUNNEL_URL" > "$BASE_URL_FILE"
+if [[ "$PROFILE" == "dev" ]]; then
+  export TELEGRAM_DEV_WEBHOOK_BASE_URL="$TUNNEL_URL"
+else
+  export TELEGRAM_WEBHOOK_BASE_URL="$TUNNEL_URL"
+fi
 
 echo "Registering webhook with Telegram..."
 RESP="$(curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
@@ -142,12 +210,17 @@ nohup "$ROOT/scripts/tg-watch-webhook.sh" > "$WATCH_LOG_FILE" 2>&1 &
 echo $! > "$WATCH_PID_FILE"
 
 echo "Generating link token for user 'damjan'..."
+LINK_USERNAME="${TG_LINK_USER:-damjan}"
 COOKIE_JAR="$ROOT/.cpcache/tg/cookies.txt"
 rm -f "$COOKIE_JAR"
 
 curl -sS -c "$COOKIE_JAR" -X POST "http://localhost:3000/api/login" \
   -H "content-type: application/json" \
-  -d '{"user/username":"damjan","user/password":"Damjan1!"}' >/dev/null
+  -d "{\"user/username\":\"${LINK_USERNAME}\",\"user/password\":\"Damjan1!\"}" >/dev/null || true
+
+if [[ ! -s "$COOKIE_JAR" ]]; then
+  echo "Unable to login as ${LINK_USERNAME} to generate a link token; continuing without token." >&2
+fi
 
 LINK_TOKEN_JSON="$(curl -sS -b "$COOKIE_JAR" -X POST "http://localhost:3000/api/telegram/link-token" \
   -H "content-type: application/json" \
@@ -180,7 +253,7 @@ if [[ -f "$RECOGNIZE_FILE" ]]; then
 fi
 
 echo ""
-echo "Ready. In Telegram:"
+echo "Ready (${PROFILE}). In Telegram:"
 echo "  1) Send /start ${LINK_TOKEN}"
 echo "  2) Send /new Test from Telegram | hello"
 echo "  3) Send /tasks"

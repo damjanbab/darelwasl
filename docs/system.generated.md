@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `84970d2f28dad29b7c9e91c27c63d2b78340efb871052fe73c588022b344e300`
+- Catalog version: `465e263aa6125e5cbe98ae94bba4afd80eaa99463da9d10245480a01ecef3629`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -438,6 +438,7 @@ This file is auto-generated. Do not edit by hand.
 - test-system.sh
 - tester_actions.py
 - tg-docs-flow-smoke.clj
+- tg-report-card-flow-smoke.clj
 - tg-spinup.sh
 - tg-watch-webhook.sh
 - theme-css-vars.sh

@@ -609,6 +609,26 @@ def _telegram_preview_env(prod: dict[str, str]) -> dict[str, str]:
     return env
 
 
+def _telegram_bot_username(bot_token: str) -> str:
+    tok = (bot_token or "").strip()
+    if not tok:
+        return ""
+    proc = subprocess.run(
+        ["curl", "-sS", f"https://api.telegram.org/bot{tok}/getMe"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    raw = proc.stdout or ""
+    try:
+        data = json.loads(raw)
+        username = ((data.get("result") or {}).get("username") or "").strip()
+        return username.lower()
+    except Exception:
+        return ""
+
+
 def cmd_start(args: argparse.Namespace) -> int:
     root = repo_root()
     validate_id(args.id)
@@ -694,6 +714,13 @@ def cmd_start(args: argparse.Namespace) -> int:
         site_enabled = False
         prod_env = _read_prod_env()
         env.update(_telegram_preview_env(prod_env))
+        if os.environ.get("SKIP_TELEGRAM_BOT_IDENTITY_CHECK", "").strip() != "1":
+            expected = (prod_env.get("TELEGRAM_EXPECTED_BOT_USERNAME") or os.environ.get("TELEGRAM_EXPECTED_BOT_USERNAME") or "mimi").strip().lower()
+            actual = _telegram_bot_username(env.get("TELEGRAM_BOT_TOKEN", ""))
+            if not actual:
+                raise SystemExit("Unable to verify Telegram bot identity via getMe. Set SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass.")
+            if actual != expected:
+                raise SystemExit(f"Refusing to start telegram preview: bot username '{actual}' != expected '{expected}'.")
 
     pid = start_service_with_env(root, args.id, env=env)
     wait_http_ok(f"http://127.0.0.1:{ports.app}/health")

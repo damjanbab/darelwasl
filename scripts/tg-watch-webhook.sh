@@ -6,9 +6,33 @@ cd "$ROOT"
 
 mkdir -p .cpcache/tg
 
-TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_bot_token}"
-SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_webhook_secret}"
-BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_webhook_base_url}"
+PROFILE="${TELEGRAM_PROFILE:-dev}"
+PROFILE="$(echo "$PROFILE" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+if [[ "$PROFILE" != "dev" && "$PROFILE" != "prod" ]]; then
+  echo "Invalid TELEGRAM_PROFILE: $PROFILE (expected dev|prod)" >&2
+  exit 2
+fi
+
+if [[ "$PROFILE" == "dev" ]]; then
+  TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_dev_bot_token}"
+  SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_dev_webhook_secret}"
+  BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_dev_webhook_base_url}"
+else
+  TOKEN_FILE="${TOKEN_FILE:-$ROOT/.secrets/telegram_prod_bot_token}"
+  SECRET_FILE="${SECRET_FILE:-$ROOT/.secrets/telegram_prod_webhook_secret}"
+  BASE_URL_FILE="${BASE_URL_FILE:-$ROOT/.secrets/telegram_prod_webhook_base_url}"
+fi
+
+# Back-compat fallbacks (older file names).
+if [[ ! -f "$TOKEN_FILE" && -f "$ROOT/.secrets/telegram_bot_token" ]]; then
+  TOKEN_FILE="$ROOT/.secrets/telegram_bot_token"
+fi
+if [[ ! -f "$SECRET_FILE" && -f "$ROOT/.secrets/telegram_webhook_secret" ]]; then
+  SECRET_FILE="$ROOT/.secrets/telegram_webhook_secret"
+fi
+if [[ ! -f "$BASE_URL_FILE" && -f "$ROOT/.secrets/telegram_webhook_base_url" ]]; then
+  BASE_URL_FILE="$ROOT/.secrets/telegram_webhook_base_url"
+fi
 TUNNEL_LOG="${TUNNEL_LOG:-$ROOT/.cpcache/tg/tunnel.log}"
 TUNNEL_PID_FILE="${TUNNEL_PID_FILE:-$ROOT/.cpcache/tg/ssh_tunnel.pid}"
 
@@ -29,12 +53,40 @@ if [[ -z "$BOT_TOKEN" || -z "$WEBHOOK_SECRET" ]]; then
   exit 2
 fi
 
+expected="${TELEGRAM_EXPECTED_BOT_USERNAME:-mimi}"
+expected="$(echo "$expected" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+if [[ "${SKIP_TELEGRAM_BOT_IDENTITY_CHECK:-}" != "1" && "$PROFILE" == "dev" ]]; then
+  echo "Verifying bot identity via getMe..."
+  ME_JSON="$(curl -sS "https://api.telegram.org/bot${BOT_TOKEN}/getMe" || true)"
+  USERNAME="$(ME_JSON="$ME_JSON" python3 - <<'PY'
+import json, os
+raw = os.environ.get("ME_JSON","")
+try:
+  data = json.loads(raw)
+  u = (data.get("result") or {}).get("username") or ""
+  print(str(u))
+except Exception:
+  print("")
+PY
+)"
+  uname="$(echo "$USERNAME" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  if [[ -z "$uname" ]]; then
+    echo "Unable to read bot username from getMe response. Set SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
+    exit 2
+  fi
+  if [[ "$uname" != "$expected" ]]; then
+    echo "Refusing to run: dev bot username '$uname' != expected '$expected'." >&2
+    echo "Set TELEGRAM_EXPECTED_BOT_USERNAME to the dev bot username, or SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
+    exit 2
+  fi
+fi
+
 extract-latest-domain() {
   if [[ ! -f "$TUNNEL_LOG" ]]; then
     echo ""
     return 0
   fi
-  rg -o "https://[a-z0-9]+\\.lhr\\.life" "$TUNNEL_LOG" | tail -n 1 || true
+  grep -Eo "https://[a-z0-9]+\\.lhr\\.life" "$TUNNEL_LOG" | tail -n 1 || true
 }
 
 ensure-tunnel-running() {
@@ -64,18 +116,19 @@ set-webhook() {
     --data-urlencode "secret_token=${WEBHOOK_SECRET}" \
     --data-urlencode "drop_pending_updates=true")"
 
-  if command -v jq >/dev/null 2>&1; then
-    local ok
-    ok="$(echo "$resp" | jq -r '.ok')"
-    if [[ "$ok" != "true" ]]; then
-      echo "Failed to set webhook: $(echo "$resp" | jq -r '.description // .')"
-      return 1
-    fi
-  else
-    if ! echo "$resp" | rg -q "\"ok\"\\s*:\\s*true"; then
-      echo "Failed to set webhook (no jq to parse response): $resp"
-      return 1
-    fi
+  OK="$(RESP="$resp" python3 - <<'PY'
+import json, os
+raw = os.environ.get("RESP","")
+try:
+  data = json.loads(raw)
+  print("true" if data.get("ok") is True else "false")
+except Exception:
+  print("false")
+PY
+)"
+  if [[ "$OK" != "true" ]]; then
+    echo "Failed to set webhook: $resp"
+    return 1
   fi
 
   umask 077
@@ -100,4 +153,3 @@ while true; do
 
   sleep 2
 done
-

@@ -9,4 +9,4 @@ The important rule: **the contract is enforced by automation**, not by trust.
 
 Agent contracts live in subfolders (one per agent type), e.g.:
 - `agents/website/` – public-facing website changes (templates, CSS, assets).
-
+- `agents/telegram-ops/` – Telegram dev/prod bot ops + promotion wiring (scripts + docs).
