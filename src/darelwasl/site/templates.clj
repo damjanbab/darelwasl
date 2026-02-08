@@ -527,14 +527,15 @@
 
 (defn public-portal
   [{:keys [public-base-url base-path lang path portal]}]
-  (let [{:keys [client service.cases]} portal
+  (let [client (:client portal)
+        service-cases (:service.cases portal)
         name (or (:client/name client) "Client")
         body (str "<section class='section-pad'>"
                   "<h1>" (escape-html name) "</h1>"
                   "<p class='muted'>Your documents and progress live here.</p>"
-                  (if (seq service.cases)
+                  (if (seq service-cases)
                     (apply str
-                           (for [c service.cases]
+                           (for [c service-cases]
                              (let [title (or (:service.case/title c) "Service")
                                    max-phase (:service.case/public-max-phase c)
                                    lifecycle (:service.case/lifecycle c)
