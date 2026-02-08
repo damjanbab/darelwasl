@@ -224,6 +224,8 @@
     (vector? value) (second value)
     :else value))
 
+(declare error)
+
 (defn- validate-service-case!
   [db case-id workspace-id]
   (cond

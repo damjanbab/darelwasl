@@ -883,9 +883,9 @@
         message-key (some-> (or (v/param-value body :telegram/message-key) (v/param-value body :message-key)) str str/trim)
         message-key (when-not (str/blank? message-key) message-key)]
     (cond
-      (nil? conn) (error 500 "Database not ready")
-      (nil? user-id) (error 400 "user/id is required")
-      (str/blank? text) (error 400 "telegram/text is required")
+      (nil? conn) {:error {:status 500 :message "Database not ready"}}
+      (nil? user-id) {:error {:status 400 :message "user/id is required"}}
+      (str/blank? text) {:error {:status 400 :message "telegram/text is required"}}
       :else
       (let [db (d/db conn)
             chat-id (ffirst (d/q '[:find ?chat
@@ -901,7 +901,9 @@
                                                                  :text text
                                                                  :message-key dedupe}
                                                        :dedupe-key dedupe}))]
-              (error 500 "Failed to enqueue telegram notification" {:error err})
+              {:error {:status 500
+                       :message "Failed to enqueue telegram notification"
+                       :details {:error err}}}
               {:status :ok})))))))
 
 (def ^:private handlers
