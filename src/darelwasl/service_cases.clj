@@ -299,8 +299,8 @@
                   (let [db1 (d/db conn)
                         created (fetch-case* db1 case-id ws)
                         steps' (fetch-steps* db1 case-id ws)]
-                    {:service.case (present-case created)
-                     :steps steps'})))))))))))
+                    {:case (present-case created)
+                     :steps steps'}))))))))))
 
 (defn list-cases
   [conn params actor]
@@ -321,11 +321,11 @@
                                    [?e :service.case/created-at ?created]]
                           db0 client-id ws)
                 eids (->> rows (sort-by second) reverse (map first) vec)
-                items (->> eids
-                           (map #(d/pull db0 case-pull %))
-                           (map present-case)
-                           vec)]
-            {:service.cases items})))))
+            items (->> eids
+                       (map #(d/pull db0 case-pull %))
+                       (map present-case)
+                       vec)]
+            {:cases items})))))
 
 (defn read-case
   [conn params actor]
@@ -338,7 +338,7 @@
           (nil? case-id) (error 400 "service.case/id is required")
           :else
           (if-let [c (fetch-case* db0 case-id ws)]
-            {:service.case (present-case c)
+            {:case (present-case c)
              :steps (fetch-steps* db0 case-id ws)}
             (error 404 "Service case not found"))))))
 
@@ -409,7 +409,7 @@
                       (catch Exception e
                         (log/warn e "Failed to update derived case fields")))
                     (let [db2 (d/db conn)]
-                      {:service.case (present-case (fetch-case* db2 case-id ws))
+                      {:case (present-case (fetch-case* db2 case-id ws))
                        :steps (fetch-steps* db2 case-id ws)}))))))))))))
 
 (def ^:private token-alphabet "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
@@ -470,8 +470,10 @@
         res (ensure-client-portal-token! conn client-id ws)]
     (if-let [err (:error res)]
       err
-      {:portal/url (str base "/portal/" (:client/ref res) "/" (:portal/token res))
-       :client/ref (:client/ref res)})))
+      (let [url (str base "/portal/" (:client/ref res) "/" (:portal/token res))]
+        {:link url
+         :portal/url url
+         :client/ref (:client/ref res)}))))
 
 (defn public-portal-read
   "Used by the public site. Verifies a client ref + token pair and returns
