@@ -442,19 +442,65 @@
           res
           (let [payment (:payment res)
                 payment-id (:payment/id payment)
+                invoice-id (get-in payment [:payment/invoice :invoice/id])
                 client-id (or (:client/id (or input {}))
-                              (get-in payment [:payment/client :client/id]))]
-            (if-not (and payment-id client-id)
-              res
-              (let [issue (documents/issue-document! state {:type :receipt
-                                                           :input {:client/id client-id
-                                                                   :payment/id payment-id}
-                                                           :actor actor})]
-                (if-let [derr (:error issue)]
-                  (do
-                    (log/warn "Auto-issuing receipt failed" {:payment/id payment-id :error derr})
-                    (assoc res :receipt/error derr))
-                  (assoc res :receipt issue))))))))))
+                              (get-in payment [:payment/client :client/id]))
+                res (if-not (and payment-id client-id)
+                      res
+                      (let [issue (documents/issue-document! state {:type :receipt
+                                                                   :input {:client/id client-id
+                                                                           :payment/id payment-id}
+                                                                   :actor actor})]
+                        (if-let [derr (:error issue)]
+                          (do
+                            (log/warn "Auto-issuing receipt failed" {:payment/id payment-id :error derr})
+                            (assoc res :receipt/error derr))
+                          (assoc res :receipt issue))))
+                mark-paid (when invoice-id
+                            (try
+                              (let [conn (conn state)
+                                    db (d/db conn)
+                                    ws (workspace/actor-workspace actor)
+                                    inv-eid (ffirst (d/q '[:find ?e
+                                                           :in $ ?id ?ws
+                                                           :where [?e :invoice/id ?id]
+                                                                  [?e :invoice/workspace ?ws]]
+                                                         db invoice-id ws))
+                                    inv (when inv-eid
+                                          (d/pull db [:invoice/id
+                                                      :invoice/total-amount
+                                                      :invoice/status
+                                                      {:invoice/client [:client/id]}]
+                                                  inv-eid))
+                                    total (double (or (:invoice/total-amount inv) 0.0))
+                                    paid (double (reduce + 0.0
+                                                         (map first
+                                                              (d/q '[:find ?amt
+                                                                     :in $ ?ws ?iid
+                                                                     :where [?p :payment/workspace ?ws]
+                                                                            [?p :payment/invoice [:invoice/id ?iid]]
+                                                                            [?p :payment/amount ?amt]]
+                                                                   db ws invoice-id))))
+                                    fully-paid? (and (pos? total) (>= (+ paid 0.000001) total))
+                                    already-paid? (= :paid (:invoice/status inv))]
+                                (when (and inv fully-paid? (not already-paid?))
+                                  (let [updated (documents/update-invoice! conn invoice-id {:invoice/status :paid} actor)
+                                        uerr (:error updated)
+                                        updated-invoice (:invoice updated)
+                                        issue-inv (when-not uerr
+                                                    (documents/issue-document! state {:type :invoice
+                                                                                     :input {:client/id (get-in inv [:invoice/client :client/id])
+                                                                                             :invoice/id invoice-id}
+                                                                                     :actor actor}))]
+                                    (cond-> {}
+                                      updated-invoice (assoc :invoice updated-invoice)
+                                      uerr (assoc :invoice/error uerr)
+                                      (and issue-inv (:error issue-inv)) (assoc :invoice-pdf/error (:error issue-inv))
+                                      (and issue-inv (nil? (:error issue-inv))) (assoc :invoice-pdf issue-inv)))))
+                              (catch Exception e
+                                (log/warn e "Failed to recompute invoice paid status after payment" {:invoice/id invoice-id})
+                                nil)))]
+            (merge res (or mark-paid {}))))))))
 
 (defn- agreement-create
   [state {:keys [input actor]}]

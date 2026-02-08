@@ -639,23 +639,23 @@
                                                     [?e :agreement/workspace ?ws]]
                                            db aid ws))]
             (if-not agreement-eid
-              (error 404 "Agreement not found")
-              (let [items (->> (d/q '[:find ?e ?idx ?due
-                                      :in $ ?a ?ws
-                                      :where [?e :plan.item/agreement ?a]
-                                             [?e :plan.item/workspace ?ws]
-                                             [(get-else $ ?e :plan.item/active? true) ?active]
-                                             [(get-else $ ?e :plan.item/index 999999) ?idx]
-                                             [?e :plan.item/due-at ?due]
-                                             [(= true ?active)]]
-                                    db agreement-eid ws)
-                               (sort-by (fn [[_ idx due]] [(long idx) due]))
-                               (map first)
-                               (map #(d/pull db plan-item-pull %))
-                               (remove nil?)
-                               (map present-plan-item)
-                               vec)]
-                {:plan-items items})))))))
+	              (error 404 "Agreement not found")
+	              (let [items (->> (d/q '[:find ?e ?active ?idx ?due
+	                                      :in $ ?a ?ws
+	                                      :where [?e :plan.item/agreement ?a]
+	                                             [?e :plan.item/workspace ?ws]
+	                                             [(get-else $ ?e :plan.item/active? true) ?active]
+	                                             [(get-else $ ?e :plan.item/index 999999) ?idx]
+	                                             [?e :plan.item/due-at ?due]]
+	                                    db agreement-eid ws)
+	                               (sort-by (fn [[_ active idx due]]
+	                                          [(if (= true active) 0 1) (long idx) due]))
+	                               (map first)
+	                               (map #(d/pull db plan-item-pull %))
+	                               (remove nil?)
+	                               (map present-plan-item)
+	                               vec)]
+	                {:plan-items items})))))))
 
 (defn accept-agreement!
   "Mark agreement accepted; does not generate invoices here (actions layer orchestrates)."

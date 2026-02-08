@@ -1,0 +1,12 @@
+(comment "Telegram implementation is split across focused modules (loaded into `darelwasl.telegram`).")
+
+(load "telegram/core")
+(load "telegram/state")
+(load "telegram/docs")
+(load "telegram/docs_flow")
+(load "telegram/tasks")
+(load "telegram/pending")
+(load "telegram/commands")
+(load "telegram/callback_parse")
+(load "telegram/update")
+(load "telegram/callbacks")

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `12b3ecdfd75073defc72252fcc4e4223ac1fec9740df90b7471e5d4ceca67f97`
+- Catalog version: `ec2cafa00e9c6541b55defcca2d436e8ff746a3b7adb19fa9f1622966da9bc0c`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -246,6 +246,7 @@ This file is auto-generated. Do not edit by hand.
 - /+$
 - /:id
 - /:id{[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}}
+- /:ref/:code
 - /_preview
 - /_preview/
 - /_preview/([^/]+)/([^/]+)(?:/.*)?$
@@ -326,6 +327,7 @@ This file is auto-generated. Do not edit by hand.
 - /telegram
 - /users
 - /v2
+- /verify
 - /webhook
 
 ## Config Env Vars (from config.clj)

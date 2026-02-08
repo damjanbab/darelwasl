@@ -446,7 +446,7 @@
         (assert! (any-callback-prefix? rm (str "docs:agreements:plan:list:" agreement-id))
                  "agreement actions include Plan items"))
 
-      ;; plan item list shows per-item actions (invoice/pdf + record payment + mark paid)
+      ;; plan item list shows per-item actions (open + invoice/pdf + record payment)
       (reset! calls [])
       (tg/handle-update state {:update_id 30
                               :callback_query {:id "cb20"
@@ -455,12 +455,12 @@
                                                :message {:message_id 35 :chat {:id 42}}}})
       (let [{:keys [payload]} (last-call calls)
             rm (:reply_markup payload)]
+        (assert! (any-callback-prefix? rm (str "docs:plan-item:open:" agreement-id ":"))
+                 "plan list includes plan item open button")
         (assert! (any-callback-prefix? rm (str "docs:plan-item:invoice:issue:" agreement-id ":"))
                  "plan list includes Invoice PDF button")
         (assert! (any-callback-prefix? rm (str "docs:plan-item:payment:" agreement-id ":"))
-                 "plan list includes Record payment button")
-        (assert! (any-callback-prefix? rm (str "docs:plan-item:invoice:paid:" agreement-id ":"))
-                 "plan list includes Mark paid button"))
+                 "plan list includes Record payment button"))
 
       (println "OK: docs invoice due-date uses inline calendar + No-due-date button")
       (println "OK: docs payment paid-at date requires inline calendar (no skip, no typing fallback)")

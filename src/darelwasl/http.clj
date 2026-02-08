@@ -18,6 +18,7 @@
             [darelwasl.http.routes.tasks :as task-routes]
             [darelwasl.http.routes.telegram :as telegram-routes]
             [darelwasl.http.routes.users :as users-routes]
+            [darelwasl.site.http :as site-http]
             [muuntaja.core :as m]
             [reitit.ring :as ring]
             [reitit.ring.middleware.exception :as exception]
@@ -51,6 +52,19 @@
   [state]
   ["/health" {:get (fn [_request] (common/health-response state))}])
 
+(defn verify-route
+  [state]
+  ["/verify"
+   {:get (fn [request]
+           (site-http/handle-request {:db (:db state)
+                                      :config (:config state)}
+                                     request))}
+   ["/:ref/:code"
+    {:get (fn [request]
+            (site-http/handle-request {:db (:db state)
+                                       :config (:config state)}
+                                      request))}]])
+
 (defn api-routes
   [state]
   (into ["/api"]
@@ -82,13 +96,14 @@
                            :data {:muuntaja muuntaja-instance
                                   :middleware preview-middleware}})
           preview-handler (ring/ring-handler preview-router)
-          app-router (ring/router
-                      (concat
-                       [(health-route state)]
-                       [(api-routes state)])
-                      {:conflicts nil
-                       :data {:muuntaja muuntaja-instance
-                              :middleware default-middleware}})
+	          app-router (ring/router
+	                      (concat
+	                       [(health-route state)]
+	                       [(verify-route state)]
+	                       [(api-routes state)])
+	                      {:conflicts nil
+	                       :data {:muuntaja muuntaja-instance
+	                              :middleware default-middleware}})
           app-handler (ring/ring-handler
                        app-router
                        (ring/routes
