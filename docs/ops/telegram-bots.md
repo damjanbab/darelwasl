@@ -74,7 +74,7 @@ scripts/tg-spinup.sh
 
 Defaults:
 - Targets **dev** profile (`TELEGRAM_PROFILE=dev`) and reads `.secrets/telegram_dev_*` files by default.
-- Refuses to proceed if the bot username does not match `TELEGRAM_EXPECTED_BOT_USERNAME` (default `mimi`), unless `SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1`.
+- If `TELEGRAM_EXPECTED_BOT_USERNAME` is set, it refuses to proceed if the bot username does not match (unless `SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1`).
 
 Files (dev defaults):
 - `.secrets/telegram_dev_bot_token`
@@ -88,6 +88,7 @@ Files (dev defaults):
 Scripts that can message Telegram should verify bot identity first:
 
 - Set `TELEGRAM_EXPECTED_BOT_USERNAME` (e.g. `mimi`) to enforce the dev bot.
+- If `TELEGRAM_EXPECTED_BOT_USERNAME` is unset, scripts will still call `getMe` and print a warning with the detected bot username.
 - Set `SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1` only for exceptional offline/testing cases.
 
 ### Single-flight Telegram previews

@@ -53,7 +53,7 @@ if [[ -z "$BOT_TOKEN" || -z "$WEBHOOK_SECRET" ]]; then
   exit 2
 fi
 
-expected="${TELEGRAM_EXPECTED_BOT_USERNAME:-mimi}"
+expected="${TELEGRAM_EXPECTED_BOT_USERNAME:-}"
 expected="$(echo "$expected" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
 if [[ "${SKIP_TELEGRAM_BOT_IDENTITY_CHECK:-}" != "1" && "$PROFILE" == "dev" ]]; then
   echo "Verifying bot identity via getMe..."
@@ -74,10 +74,14 @@ PY
     echo "Unable to read bot username from getMe response. Set SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
     exit 2
   fi
-  if [[ "$uname" != "$expected" ]]; then
+  if [[ -n "$expected" && "$uname" != "$expected" ]]; then
     echo "Refusing to run: dev bot username '$uname' != expected '$expected'." >&2
     echo "Set TELEGRAM_EXPECTED_BOT_USERNAME to the dev bot username, or SKIP_TELEGRAM_BOT_IDENTITY_CHECK=1 to bypass." >&2
     exit 2
+  fi
+  if [[ -z "$expected" ]]; then
+    echo "WARNING: TELEGRAM_EXPECTED_BOT_USERNAME not set; running with dev bot username '$uname'." >&2
+    echo "Set TELEGRAM_EXPECTED_BOT_USERNAME for strict identity checking." >&2
   fi
 fi
 

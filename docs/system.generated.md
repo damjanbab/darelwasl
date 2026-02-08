@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `465e263aa6125e5cbe98ae94bba4afd80eaa99463da9d10245480a01ecef3629`
+- Catalog version: `f34823fd414719460f7213bbd680d63667aa383cd6ec4fab8d517dd3b231c32a`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -441,6 +441,7 @@ This file is auto-generated. Do not edit by hand.
 - tg-report-card-flow-smoke.clj
 - tg-spinup.sh
 - tg-watch-webhook.sh
+- tgctl.sh
 - theme-css-vars.sh
 - website-agent
 
