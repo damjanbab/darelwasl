@@ -253,9 +253,15 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :unique :db.unique/value
-    :doc "Stable idempotency key for automation-created tasks (optional, unique when set)"}]
+    :doc "Stable idempotency key for automation-created tasks (optional, unique when set)"}
+   {:ident :task/report-card-type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "When set, the task can be completed via a structured report card flow (optional)"}]
   :enums {:task/status [:todo :in-progress :pending :done]
-          :task/priority [:low :medium :high]}
+          :task/priority [:low :medium :high]
+          :task/report-card-type [:report.card.type/onboarding
+                                  :report.card.type/proposal-response]}
   :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Client required" "Tags reference existing tag entities" "Entity type set to :entity.type/task" "Automation key unique when present"]
   :history {:strategy :overwrite}
   :compatibility {:backward true
@@ -2037,6 +2043,65 @@
                   :forward true
                   :flags []}
   :related {:schema [:cap/schema/entity]}}
+
+ {:id :cap/schema/report-card
+  :title "Report Card"
+  :version "v1"
+  :attributes
+  [{:ident :report.card/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Report card identity"}
+   {:ident :report.card/type
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Report card type enum"}
+   {:ident :report.card/client
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked client (ref to :client/id)"}
+   {:ident :report.card/task
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Linked task (ref to :task/id, optional)"}
+   {:ident :report.card/fields
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "EDN string payload holding arbitrary fields"}
+   {:ident :report.card/submitted-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Submission timestamp"}
+   {:ident :report.card/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :report.card/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Last update timestamp"}
+   {:ident :report.card/automation-key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Stable idempotency key (optional, unique when set)"}
+   {:ident :report.card/workspace
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Workspace/tenant scope"}]
+  :enums {:report.card/type [:report.card.type/onboarding
+                             :report.card.type/proposal-response]}
+  :invariants ["Type required"
+               "Client required"
+               "Fields payload required"
+               "Entity type set to :entity.type/report-card"
+               "Workspace required"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/task :cap/schema/client :cap/schema/entity]}}
 
  {:id :cap/schema/note
   :title "Note (fact/annotation)"

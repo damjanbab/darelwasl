@@ -19,15 +19,17 @@
      parsed
      cfg]}
    ctx]
-  (let
-   [ymd
+ (let
+  [ymd
     (:value parsed)
     picked
     (parse-ymd->date ymd)
     pending
     (get-pending-reason! chat-id)
     session
-    (get-docs-session! chat-id)]
+    (get-docs-session! chat-id)
+    rc-session
+    (get-report-card-session! chat-id)]
    (cond
     (and
      picked
@@ -270,7 +272,26 @@
             "Back"
             (str "docs:plan-item:open:" aid ":" pid))]]})}))
     :else
-    nil))))
+    (when (and picked rc-session (= (:stage rc-session) :rc/pick-date))
+      (let [typ (:type rc-session)]
+        (save-report-card-session!
+         chat-id
+         (-> rc-session
+             (update :history (fnil conj []) {:stage (:stage rc-session) :fields (:fields rc-session)})
+             (assoc :stage :rc/pick-time)
+             (assoc-in [:fields :meeting/date] ymd)
+             (update :fields dissoc :meeting/time)))
+        (edit-message!
+         cfg
+         {:chat-id chat-id
+          :message-id message-id
+          :text (str (rc-title typ) "\n\nPick time (optional):")
+          :reply-markup
+          (time-picker-inline-keyboard
+           {:allow-skip? true
+            :skip-label "Skip time"
+            :extra-rows [[(inline-button "Back" "rc:back")]
+                         [(inline-button "Back to task" "rc:cancel")]]})})))))))
 
 (defmethod
  handle-callback-dispatch
@@ -297,7 +318,9 @@
     pending
     (get-pending-reason! chat-id)
     session
-    (get-docs-session! chat-id)]
+    (get-docs-session! chat-id)
+    rc-session
+    (get-report-card-session! chat-id)]
    (cond
     (and pending (= (:stage pending) :followup-date-picker))
     (let
@@ -461,7 +484,23 @@
             "Back"
             (str "docs:plan-item:open:" aid ":" pid))]]})}))
     :else
-    nil))))
+    (when (and rc-session (= (:stage rc-session) :rc/pick-date))
+      (let [typ (:type rc-session)]
+        (save-report-card-session! chat-id (assoc rc-session :picker/month month))
+        (edit-message!
+         cfg
+         {:chat-id chat-id
+          :message-id message-id
+          :text (str (rc-title typ) "\n\nPick the scheduled date:")
+          :reply-markup
+          (date-picker-inline-keyboard
+           {:month month
+            :quicks [{:id :tomorrow :label "Tomorrow"}
+                     {:id :in-3-days :label "In 3 days"}
+                     {:id :next-week :label "Next week"}]
+            :extra-rows [[(inline-button "Skip" "rc:schedule:skip")
+                         (inline-button "Back" "rc:back")]
+                        [(inline-button "Back to task" "rc:cancel")]]})})))))))
 
 (defmethod
  handle-callback-dispatch
@@ -489,6 +528,8 @@
     (get-pending-reason! chat-id)
     session
     (get-docs-session! chat-id)
+    rc-session
+    (get-report-card-session! chat-id)
     picked-day
     (cond
      (and pending (= (:stage pending) :followup-date-picker))
@@ -537,6 +578,16 @@
       :in-30-days
       (.plusDays today 30)
       nil)
+     (and rc-session (= (:stage rc-session) :rc/pick-date))
+     (case
+      quick-id
+      :tomorrow
+      (.plusDays today 1)
+      :in-3-days
+      (.plusDays today 3)
+      :next-week
+      (.plusDays today 7)
+      nil)
      :else
      nil)
     ymd
@@ -549,6 +600,31 @@
      {:message-id message-id,
       :callback-id nil,
       :data (str "dp:day:" ymd)})))))
+
+(defn- apply-rc-time-picker-set!
+  [state {:keys [chat-id chat-user message-id raw]}]
+  (let [cfg (get-in state [:config :telegram])
+        session (get-report-card-session! chat-id)
+        typ (:type session)
+        t (when (and (present-string? raw) (re-matches #"\d{4}" (str raw)))
+            (hhmm->local-time raw))
+        fmt (java.time.format.DateTimeFormatter/ofPattern "HH:mm")]
+    (when (and session (= (:stage session) :rc/pick-time))
+      (let [services (get-in (actions/execute! state {:action/id :cap/action/service-list
+                                                      :actor {:actor/type :actor.type/system}})
+                             [:result :services])
+            session (-> session
+                        (update :history (fnil conj []) {:stage (:stage session) :fields (:fields session)})
+                        (assoc :stage :rc/service)
+                        (cond-> (some? t) (assoc-in [:fields :meeting/time] (.format t fmt)))
+                        (cond-> (nil? t) (update :fields dissoc :meeting/time)))]
+        (save-report-card-session! chat-id session)
+        (edit-message!
+         cfg
+         {:chat-id chat-id
+          :message-id message-id
+          :text (str (rc-title typ) "\n\nStep 3/4: Primary service interest?")
+          :reply-markup (rc-service-keyboard services)})))))
 
 (defmethod
  handle-callback-dispatch
@@ -756,59 +832,73 @@
      parsed
      cfg]}
    ctx]
-  (let
-   [session (get-docs-session! chat-id)]
-   (when
-    (and
-     session
-     (#{:docs/payment-time
-        :docs/inv-due-time
-        :docs/plan-item-edit-due-time
-        :docs/plan-item-due-time
-        :docs/agreement-accept-time}
-      (:stage session)))
-    (let
-     [cancel
-      (case
-       (:stage session)
-       :docs/plan-item-due-time
-       "docs:agreements:menu"
-       :docs/plan-item-edit-due-time
-       (let
-        [aid
-         (get-in session [:draft :agreement/id])
-         pid
-         (get-in session [:draft :plan.item/id])]
-        (str "docs:plan-item:open:" aid ":" pid))
-       :docs/agreement-accept-time
-       (let
-        [aid (get-in session [:draft :agreement/id])]
-        (str "docs:agreements:set:" aid))
-       "docs:menu")
-      label
-      (case
-       (:stage session)
-       :docs/payment-time
-       "Pick payment time (optional):"
-       :docs/inv-due-time
-       "Pick invoice due time (optional):"
-       :docs/plan-item-due-time
-       "Pick plan item due time (optional):"
-       :docs/plan-item-edit-due-time
-       "Pick new due time (optional):"
-       :docs/agreement-accept-time
-       "Pick acceptance time (optional):"
-       "Pick time (optional):")]
-     (edit-message!
-      cfg
-      {:chat-id chat-id,
-       :message-id message-id,
-       :text label,
-       :reply-markup
-       (time-picker-inline-keyboard
-        {:allow-skip? true,
-         :skip-label "Skip time",
-         :extra-rows [[(inline-button "Cancel" cancel)]]})}))))))
+  (let [session (get-docs-session! chat-id)
+        rc-session (get-report-card-session! chat-id)]
+    (cond
+      (and session
+           (#{:docs/payment-time
+              :docs/inv-due-time
+              :docs/plan-item-edit-due-time
+              :docs/plan-item-due-time
+              :docs/agreement-accept-time}
+            (:stage session)))
+      (let
+       [cancel
+        (case
+         (:stage session)
+         :docs/plan-item-due-time
+         "docs:agreements:menu"
+         :docs/plan-item-edit-due-time
+         (let
+          [aid
+           (get-in session [:draft :agreement/id])
+           pid
+           (get-in session [:draft :plan.item/id])]
+          (str "docs:plan-item:open:" aid ":" pid))
+         :docs/agreement-accept-time
+         (let
+          [aid (get-in session [:draft :agreement/id])]
+          (str "docs:agreements:set:" aid))
+         "docs:menu")
+        label
+        (case
+         (:stage session)
+         :docs/payment-time
+         "Pick payment time (optional):"
+         :docs/inv-due-time
+         "Pick invoice due time (optional):"
+         :docs/plan-item-due-time
+         "Pick plan item due time (optional):"
+         :docs/plan-item-edit-due-time
+         "Pick new due time (optional):"
+         :docs/agreement-accept-time
+         "Pick acceptance time (optional):"
+         "Pick time (optional):")]
+       (edit-message!
+        cfg
+        {:chat-id chat-id,
+         :message-id message-id,
+         :text label,
+         :reply-markup
+         (time-picker-inline-keyboard
+          {:allow-skip? true,
+           :skip-label "Skip time",
+           :extra-rows [[(inline-button "Cancel" cancel)]]})}))
+
+      (and rc-session (= (:stage rc-session) :rc/pick-time))
+      (edit-message!
+       cfg
+       {:chat-id chat-id
+        :message-id message-id
+        :text (str (rc-title (:type rc-session)) "\n\nPick time (optional):")
+        :reply-markup
+        (time-picker-inline-keyboard
+         {:allow-skip? true
+          :skip-label "Skip time"
+          :extra-rows [[(inline-button "Back" "rc:back")]
+                       [(inline-button "Back to task" "rc:cancel")]]})})
+
+      :else nil))))
 
 (defmethod
  handle-callback-dispatch
@@ -827,55 +917,67 @@
      parsed
      cfg]}
    ctx]
-  (let
-   [session
-    (get-docs-session! chat-id)
-    raw
-    (:value parsed)
-    hour
-    (when
-     (re-matches #"\d{2}" (str raw))
-     (try (Integer/parseInt (str raw)) (catch Exception _ nil)))]
-   (when
-    (and
-     session
-     (number? hour)
-     (<= 0 hour 23)
-     (#{:docs/payment-time
-        :docs/inv-due-time
-        :docs/plan-item-edit-due-time
-        :docs/plan-item-due-time
-        :docs/agreement-accept-time}
-      (:stage session)))
-    (let
-     [cancel
-      (case
-       (:stage session)
-       :docs/plan-item-due-time
-       "docs:agreements:menu"
-       :docs/plan-item-edit-due-time
-       (let
-        [aid
-         (get-in session [:draft :agreement/id])
-         pid
-         (get-in session [:draft :plan.item/id])]
-        (str "docs:plan-item:open:" aid ":" pid))
-       :docs/agreement-accept-time
-       (let
-        [aid (get-in session [:draft :agreement/id])]
-        (str "docs:agreements:set:" aid))
-       "docs:menu")]
-     (edit-message!
-      cfg
-      {:chat-id chat-id,
-       :message-id message-id,
-       :text (str "Pick minutes for " (format "%02d" (int hour)) ":"),
-       :reply-markup
-       (time-picker-minutes-inline-keyboard
-        {:hour hour,
-         :allow-skip? true,
-         :skip-label "Skip time",
-         :extra-rows [[(inline-button "Cancel" cancel)]]})}))))))
+  (let [session (get-docs-session! chat-id)
+        rc-session (get-report-card-session! chat-id)
+        raw (:value parsed)
+        hour
+        (when (re-matches #"\d{2}" (str raw))
+          (try (Integer/parseInt (str raw)) (catch Exception _ nil)))]
+    (cond
+      (and session
+           (number? hour)
+           (<= 0 hour 23)
+           (#{:docs/payment-time
+              :docs/inv-due-time
+              :docs/plan-item-edit-due-time
+              :docs/plan-item-due-time
+              :docs/agreement-accept-time}
+            (:stage session)))
+      (let
+       [cancel
+        (case
+         (:stage session)
+         :docs/plan-item-due-time
+         "docs:agreements:menu"
+         :docs/plan-item-edit-due-time
+         (let
+          [aid
+           (get-in session [:draft :agreement/id])
+           pid
+           (get-in session [:draft :plan.item/id])]
+          (str "docs:plan-item:open:" aid ":" pid))
+         :docs/agreement-accept-time
+         (let
+          [aid (get-in session [:draft :agreement/id])]
+          (str "docs:agreements:set:" aid))
+         "docs:menu")]
+       (edit-message!
+        cfg
+        {:chat-id chat-id,
+         :message-id message-id,
+         :text (str "Pick minutes for " (format "%02d" (int hour)) ":"),
+         :reply-markup
+         (time-picker-minutes-inline-keyboard
+          {:hour hour,
+           :allow-skip? true,
+           :skip-label "Skip time",
+           :extra-rows [[(inline-button "Cancel" cancel)]]})}))
+
+      (and rc-session (number? hour) (<= 0 hour 23) (= (:stage rc-session) :rc/pick-time))
+      (edit-message!
+       cfg
+       {:chat-id chat-id
+        :message-id message-id
+        :text (str (rc-title (:type rc-session)) "\n\nPick minutes for " (format "%02d" (int hour)) ":")
+        :reply-markup
+        (time-picker-minutes-inline-keyboard
+         {:hour hour
+          :allow-skip? true
+          :skip-label "Skip time"
+          :extra-rows [[(inline-button "Back" "rc:back")]
+                       [(inline-button "Back to task" "rc:cancel")]]})})
+
+      :else nil))))
 
 (defmethod
  handle-callback-dispatch
@@ -894,19 +996,28 @@
      parsed
      cfg]}
    ctx]
-  (let
-   [now-time
-    (.toLocalTime (java.time.ZonedDateTime/now (ZoneId/systemDefault)))
-    raw
-    (.format
-     now-time
-     (java.time.format.DateTimeFormatter/ofPattern "HHmm"))]
-   (apply-docs-time-picker-set!
-    state
-    {:chat-id chat-id,
-     :chat-user chat-user,
-     :message-id message-id,
-     :raw raw}))))
+  (let [now-time (.toLocalTime (java.time.ZonedDateTime/now (ZoneId/systemDefault)))
+        raw (.format now-time (java.time.format.DateTimeFormatter/ofPattern "HHmm"))
+        docs-session (get-docs-session! chat-id)
+        rc-session (get-report-card-session! chat-id)]
+    (cond
+      docs-session
+      (apply-docs-time-picker-set!
+       state
+       {:chat-id chat-id,
+        :chat-user chat-user,
+        :message-id message-id,
+        :raw raw})
+
+      (and rc-session (= (:stage rc-session) :rc/pick-time))
+      (apply-rc-time-picker-set!
+       state
+       {:chat-id chat-id
+        :chat-user chat-user
+        :message-id message-id
+        :raw raw})
+
+      :else nil))))
 
 (defmethod
  handle-callback-dispatch
@@ -925,12 +1036,26 @@
      parsed
      cfg]}
    ctx]
-  (apply-docs-time-picker-set!
-   state
-   {:chat-id chat-id,
-    :chat-user chat-user,
-    :message-id message-id,
-    :raw (:value parsed)})))
+  (let [docs-session (get-docs-session! chat-id)
+        rc-session (get-report-card-session! chat-id)]
+    (cond
+      docs-session
+      (apply-docs-time-picker-set!
+       state
+       {:chat-id chat-id,
+        :chat-user chat-user,
+        :message-id message-id,
+        :raw (:value parsed)})
+
+      (and rc-session (= (:stage rc-session) :rc/pick-time))
+      (apply-rc-time-picker-set!
+       state
+       {:chat-id chat-id
+        :chat-user chat-user
+        :message-id message-id
+        :raw (:value parsed)})
+
+      :else nil))))
 
 (defmethod
  handle-callback-dispatch
@@ -949,10 +1074,23 @@
      parsed
      cfg]}
    ctx]
-  (apply-docs-time-picker-set!
-   state
-   {:chat-id chat-id,
-    :chat-user chat-user,
-    :message-id message-id,
-    :raw "0000"})))
+  (let [docs-session (get-docs-session! chat-id)
+        rc-session (get-report-card-session! chat-id)]
+    (cond
+      docs-session
+      (apply-docs-time-picker-set!
+       state
+       {:chat-id chat-id,
+        :chat-user chat-user,
+        :message-id message-id,
+        :raw "0000"})
 
+      (and rc-session (= (:stage rc-session) :rc/pick-time))
+      (apply-rc-time-picker-set!
+       state
+       {:chat-id chat-id
+        :chat-user chat-user
+        :message-id message-id
+        :raw nil})
+
+      :else nil))))

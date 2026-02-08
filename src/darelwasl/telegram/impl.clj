@@ -5,6 +5,7 @@
 (load "telegram/docs")
 (load "telegram/docs_flow")
 (load "telegram/services")
+(load "telegram/report_cards")
 (load "telegram/tasks")
 (load "telegram/pending")
 (load "telegram/commands")

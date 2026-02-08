@@ -2304,6 +2304,30 @@
             :views []}
   :tooling []}
 
+ {:id :cap/action/report-card-submit
+  :title "Report Card Submit"
+  :version "v1"
+  :inputs {:report.card/type :keyword
+           :task/id :uuid
+           :client/id :uuid
+           :report.card/fields :string}
+  :outputs {:report.card/id :uuid
+            :task/id :uuid
+            :next-task/id :uuid?}
+  :side-effects ["Persist report card" "Mark source task done" "Create follow-up task (stub)"]
+  :adapter {:integration :local/db}
+  :audit {:records [:report-card/change]
+          :fields [:report.card/type :task/id :client/id]}
+  :idempotency {:strategy :dedupe-on
+                :keys [:report.card/type :task/id]}
+  :contracts {:fixtures [:fixtures/users :fixtures/clients :fixtures/tasks]}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/report-card :cap/schema/task :cap/schema/client]
+            :views []}
+  :tooling []}
+
  {:id :cap/action/telegram-notify
   :title "Telegram Notify"
   :version "v1"

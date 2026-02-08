@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `971bcad6f7c41d866c9fd2bf8dafe86e42f3d2b9033a9cb805822581b81cbdce`
+- Catalog version: `84970d2f28dad29b7c9e91c27c63d2b78340efb871052fe73c588022b344e300`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (45)
+### Schema (46)
 - schema/activation-step
 - schema/agreement
 - schema/betting-bet
@@ -43,6 +43,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/person
 - schema/persona
 - schema/provenance
+- schema/report-card
 - schema/service-case
 - schema/service-case-step
 - schema/support-responsibility
@@ -54,7 +55,7 @@ This file is auto-generated. Do not edit by hand.
 - schema/user
 - schema/value
 
-### Actions (107)
+### Actions (108)
 - action/account-statement-generate
 - action/activation-step-delete
 - action/activation-step-upsert
@@ -128,6 +129,7 @@ This file is auto-generated. Do not edit by hand.
 - action/plan-item-update
 - action/proposal-generate
 - action/receipt-generate
+- action/report-card-submit
 - action/service-case-create
 - action/service-case-list
 - action/service-case-read
@@ -510,6 +512,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.main
 - darelwasl.outbox
 - darelwasl.provenance
+- darelwasl.report-cards
 - darelwasl.rezultati-scraper
 - darelwasl.schema
 - darelwasl.server

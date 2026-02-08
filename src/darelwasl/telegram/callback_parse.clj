@@ -247,6 +247,27 @@
                           :status (nth parts 3 nil)}
                    nil)
           nil)
+        "rc"
+        (case (second parts)
+          "start" {:type :rc/start
+                   :task-id (nth parts 2 nil)}
+          "cancel" {:type :rc/cancel}
+          "back" {:type :rc/back}
+          "contacted" {:type :rc/contacted
+                       :value (nth parts 2 nil)}
+          "schedule" (case (nth parts 2 nil)
+                       "pick-date" {:type :rc/schedule-pick-date}
+                       "skip" {:type :rc/schedule-skip}
+                       nil)
+          "service" {:type :rc/service
+                     :value (nth parts 2 nil)}
+          "budget" {:type :rc/budget
+                    :value (nth parts 2 nil)}
+          "notes" (case (nth parts 2 nil)
+                    "skip" {:type :rc/notes-skip}
+                    nil)
+          "submit" {:type :rc/submit}
+          nil)
         "filter"
         (case (second parts)
           "status" {:type :tasks/filter

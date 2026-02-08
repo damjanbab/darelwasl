@@ -79,22 +79,32 @@
 (defn- task-inline-keyboard
   [task]
   (let [id (str (:task/id task))
-        archived? (:task/archived? task)]
+        archived? (:task/archived? task)
+        report-type (:task/report-card-type task)
+        report-label (case report-type
+                       :report.card.type/onboarding "Onboarding report"
+                       :report.card.type/proposal-response "Proposal response"
+                       "Report card")
+        report-row (when report-type
+                     [(inline-button report-label (str "rc:start:" id))])]
     {:inline_keyboard
-     [[(inline-button "🔵 Todo" (str "task:status:" id ":todo"))
-       (inline-button "🟡 In progress" (str "task:status:" id ":in-progress"))]
-      [(inline-button "🔴 Pending" (str "task:status:" id ":pending"))
-       (inline-button "🟢 Done" (str "task:status:" id ":done"))]
-      [(inline-button "Edit title" (str "task:edit:title:" id))
-       (inline-button "Edit desc" (str "task:edit:desc:" id))]
-      [(inline-button "Add note" (str "task:note:add:" id))
-       (inline-button "Edit note" (str "task:note:edit:" id))]
-      [(inline-button "Delete note" (str "task:note:delete:" id))
-       (inline-button "Delete task" (str "task:delete:" id))]
-      [(inline-button "Tasks" "filter:refresh")
-       (inline-button (if archived? "Unarchive" "Archive")
-                      (str "task:archive:" id ":" (if archived? "false" "true")))]
-      [(inline-button "Refresh" (str "task:view:" id))]]}))
+     (vec
+      (concat
+       (when report-row [report-row])
+       [[(inline-button "🔵 Todo" (str "task:status:" id ":todo"))
+         (inline-button "🟡 In progress" (str "task:status:" id ":in-progress"))]
+        [(inline-button "🔴 Pending" (str "task:status:" id ":pending"))
+         (inline-button "🟢 Done" (str "task:status:" id ":done"))]
+        [(inline-button "Edit title" (str "task:edit:title:" id))
+         (inline-button "Edit desc" (str "task:edit:desc:" id))]
+        [(inline-button "Add note" (str "task:note:add:" id))
+         (inline-button "Edit note" (str "task:note:edit:" id))]
+        [(inline-button "Delete note" (str "task:note:delete:" id))
+         (inline-button "Delete task" (str "task:delete:" id))]
+        [(inline-button "Tasks" "filter:refresh")
+         (inline-button (if archived? "Unarchive" "Archive")
+                        (str "task:archive:" id ":" (if archived? "false" "true")))]
+        [(inline-button "Refresh" (str "task:view:" id))]]))}))
 
 (defn- status-label
   [status]
@@ -293,4 +303,3 @@
                   (log/warn "Telegram notification enqueue failed" {:event event :error err})))))
           (catch Exception e
             (log/warn e "Telegram notification failed")))))))
-

@@ -27,6 +27,10 @@
   (delay (or (some-> @task-schema-entry (get-in [:enums :task/priority]) set)
              #{:low :medium :high})))
 
+(def ^:private allowed-report-card-types
+  (delay (or (some-> @task-schema-entry (get-in [:enums :task/report-card-type]) set)
+             #{})))
+
 (def ^:private allowed-note-types
   #{:note.type/comment :note.type/pending-reason :note.type/system})
 
@@ -70,6 +74,7 @@
    :task/archived?
    :task/extended?
    :task/automation-key
+   :task/report-card-type
    :task/pending-reason])
 
 (defn- format-inst
@@ -632,6 +637,9 @@
                                                                               "automation key"
                                                                               {:required false
                                                                                :allow-blank? false})
+        {report-card-type :value report-type-err :error} (normalize-enum (param-value body :task/report-card-type)
+                                                                         @allowed-report-card-types
+                                                                         "report card type")
         {assignee-id :value assignee-err :error} (normalize-uuid (param-value body :task/assignee) "assignee")
         client-raw (param-value body :task/client)
         client-id (client-id-value client-raw)
@@ -652,6 +660,7 @@
       archived-err (error 400 archived-err)
       extended-err (error 400 extended-err)
       automation-err (error 400 automation-err)
+      report-type-err (error 400 report-type-err)
       assignee-err (error 400 assignee-err)
       case-err (error 400 case-err)
       :else
@@ -680,6 +689,7 @@
                        due-date (assoc :task/due-date due-date)
                        (and pending? pending-reason) (assoc :task/pending-reason pending-reason)
                        automation-key (assoc :task/automation-key automation-key)
+                       report-card-type (assoc :task/report-card-type report-card-type)
                        case (assoc :task/service-case [:service.case/id (:service.case/id case)]))]
             {:data data
              :pending-reason pending-reason

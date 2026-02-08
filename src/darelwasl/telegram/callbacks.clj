@@ -7,3 +7,4 @@
 (load "telegram/callbacks_docs")
 (load "telegram/callbacks_pickers")
 (load "telegram/callbacks_services")
+(load "telegram/callbacks_report_cards")

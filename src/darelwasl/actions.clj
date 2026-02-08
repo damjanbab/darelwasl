@@ -14,6 +14,7 @@
             [darelwasl.files :as files]
             [darelwasl.github :as github]
             [darelwasl.outbox :as outbox]
+            [darelwasl.report-cards :as report-cards]
             [darelwasl.site.screenshots :as site-screenshots]
             [darelwasl.service-cases :as service-cases]
             [darelwasl.tasks :as tasks]
@@ -874,6 +875,10 @@
   [state {:keys [input actor]}]
   (service-cases/portal-link state (or input {}) actor))
 
+(defn- report-card-submit
+  [state {:keys [input actor]}]
+  (report-cards/submit! (conn state) (or input {}) actor))
+
 (defn- telegram-notify
   [state {:keys [input actor]}]
   (let [conn (conn state)
@@ -973,6 +978,7 @@
    :cap/action/service-case-read service-case-read
    :cap/action/service-case-step-set-status service-case-step-set-status
    :cap/action/client-portal-link client-portal-link
+   :cap/action/report-card-submit report-card-submit
    :cap/action/telegram-notify telegram-notify
    :cap/action/user-list user-list
    :cap/action/user-create user-create

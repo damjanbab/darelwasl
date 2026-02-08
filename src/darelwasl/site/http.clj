@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
+            [darelwasl.actions :as actions]
             [darelwasl.content :as content]
             [darelwasl.documents :as documents]
             [darelwasl.files :as files]
@@ -195,6 +196,110 @@
     (catch Exception e
       (log/warn e "Failed to enqueue lead notifications"))))
 
+(defn- system-actor
+  [workspace-id]
+  {:actor/type :actor.type/system
+   :actor/surface :surface/http
+   :actor/workspace (workspace/resolve-id workspace-id)})
+
+(defn- user-id-by-username
+  [db username]
+  (when-not (str/blank? (str username))
+    (ffirst (d/q '[:find ?uid
+                   :in $ ?u
+                   :where [?e :user/username ?u]
+                          [?e :user/id ?uid]]
+                 db (str/trim (str username))))))
+
+(defn- client-id-by-email
+  [db workspace-id email]
+  (when-not (str/blank? (str email))
+    (ffirst (d/q '[:find ?id
+                   :in $ ?ws ?email
+                   :where [?e :client/workspace ?ws]
+                          [?e :client/email ?email]
+                          [?e :client/id ?id]]
+                 db (workspace/resolve-id workspace-id) (str/trim (str email))))))
+
+(defn- client-id-by-phone
+  [db workspace-id phone]
+  (when-not (str/blank? (str phone))
+    (ffirst (d/q '[:find ?id
+                   :in $ ?ws ?phone
+                   :where [?e :client/workspace ?ws]
+                          [?e :client/phone ?phone]
+                          [?e :client/id ?id]]
+                 db (workspace/resolve-id workspace-id) (str/trim (str phone))))))
+
+(defn- ensure-intake-client!
+  [state lead]
+  (let [conn (get-in state [:db :conn])
+        db (when conn (d/db conn))
+        ws (workspace/default-id)
+        email (:lead/email lead)
+        phone (:lead/phone lead)
+        existing (or (client-id-by-email db ws email)
+                     (client-id-by-phone db ws phone))]
+    (if existing
+      {:client/id existing}
+      (let [name (or (some-> phone str str/trim not-empty)
+                     (some-> email str str/trim not-empty)
+                     "Website lead")
+            input {:client/name (str "Website lead · " name)
+                   :client/status :lead
+                   :client/channel (cond
+                                    (not (str/blank? phone)) :whatsapp
+                                    (not (str/blank? email)) :email
+                                    :else :whatsapp)
+                   :client/phone (when-not (str/blank? phone) phone)
+                   :client/email (when-not (str/blank? email) email)
+                   :client/notes (str "Activities: " (or (:lead/activities lead) "-") "\n"
+                                      "Ownership: " (or (:lead/ownership lead) "-") "\n"
+                                      "Residency: " (or (:lead/residency lead) "-") "\n"
+                                      "Target start month: " (or (:lead/start-month lead) "-") "\n"
+                                      "Preferred language: " (or (:lead/preferred-lang lead) "-"))}
+            res (actions/execute! state {:action/id :cap/action/client-create
+                                        :actor (system-actor ws)
+                                        :input input})
+            err (:error res)
+            client (get-in res [:result :client])]
+        (if err
+          {:error err}
+          {:client/id (:client/id client)})))))
+
+(defn- create-intake-task!
+  [state lead client-id]
+  (let [conn (get-in state [:db :conn])
+        db (when conn (d/db conn))
+        ws (workspace/default-id)
+        username (or (some-> (get-in state [:config :site :intake-assignee-username]) str str/trim not-empty)
+                     "huda")
+        assignee-id (user-id-by-username db username)
+        actor (system-actor ws)
+        lead-id (:lead/id lead)
+        desc (str "New website consultation lead\n\n"
+                  "Activities:\n" (or (:lead/activities lead) "-") "\n\n"
+                  "Ownership: " (or (:lead/ownership lead) "-") "\n"
+                  "Residency: " (or (:lead/residency lead) "-") "\n"
+                  "Start month: " (or (:lead/start-month lead) "-") "\n"
+                  "Preferred language: " (or (:lead/preferred-lang lead) "-") "\n\n"
+                  "Email: " (or (:lead/email lead) "-") "\n"
+                  "Phone: " (or (:lead/phone lead) "-"))
+        input {:task/title "Onboard consultation client"
+               :task/description desc
+               :task/status :todo
+               :task/priority :medium
+               :task/client client-id
+               :task/assignee assignee-id
+               :task/report-card-type :report.card.type/onboarding
+               :task/automation-key (str "site-lead:onboarding:" lead-id)}]
+    (cond
+      (nil? assignee-id) {:error {:status 500 :message (str "Assignee user not found: " username)}}
+      :else
+      (actions/execute! state {:action/id :cap/action/task-create
+                               :actor actor
+                               :input input}))))
+
 (defn- handle-consultation-submit
   [state {:keys [base-path prefix lang]} request]
   (let [params (decode-form-body request)
@@ -228,7 +333,13 @@
                   :lead/preferred-lang preferred-lang}]
         (append-lead! lead)
         (when-let [conn (get-in state [:db :conn])]
-          (enqueue-lead-notifications! conn (:config state) lead))))
+          (enqueue-lead-notifications! conn (:config state) lead))
+        (try
+          (let [client-res (ensure-intake-client! state lead)]
+            (when-let [cid (:client/id client-res)]
+              (create-intake-task! state lead cid)))
+          (catch Exception e
+            (log/warn e "Failed to create intake client/task")))))
     (when ok?
       (log/info "Public consultation lead received"
                 {:lang lang
