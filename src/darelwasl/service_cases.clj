@@ -560,31 +560,34 @@
   {:client ... :service.cases ...} or {:error ...}."
   [conn {:keys [client-ref token]}]
   (or (ensure-conn conn)
-      (let [db0 (d/db conn)
-            token (some-> token str str/trim)
-            client-ref (some-> client-ref str str/trim)]
-        (cond
-          (str/blank? client-ref) (error 400 "Missing client ref")
-          (str/blank? token) (error 400 "Missing token")
-          :else
-	          (let [client-id (entity/lookup-id-by-ref db0 :client/id client-ref)
-	                [client-eid client] (when client-id
-	                                      (first (d/q '[:find ?c (pull ?c [:client/id
-	                                                                    :client/name
-	                                                                    :entity/ref
-	                                                                    :client/portal-token
-	                                                                    :client/portal-token-created-at
-	                                                                    :client/workspace])
-	                                                      :in $ ?id
-	                                                      :where [?c :client/id ?id]]
-	                                                    db0 client-id)))
-                ok? (= token (:client/portal-token client))
-                ws (:client/workspace client)]
-            (if-not (and client ok?)
-              (error 404 "Portal not found")
-              (let [cases (d/q '[:find ?e ?created
-                                 :in $ ?cid ?ws
-                                 :where [?c :client/id ?cid]
+	      (let [db0 (d/db conn)
+	            token (some-> token str str/trim)
+	            client-ref (some-> client-ref str str/trim)]
+	        (cond
+	          (str/blank? client-ref) (error 400 "Missing client ref")
+	          (str/blank? token) (error 400 "Missing token")
+	          :else
+		          (let [client-id (entity/lookup-id-by-ref db0 :client/id client-ref)
+		                client-eid (when client-id
+		                             (ffirst (d/q '[:find ?c
+		                                            :in $ ?id
+		                                            :where [?c :client/id ?id]]
+		                                          db0 client-id)))
+		                client (when client-eid
+		                         (d/pull db0 [:client/id
+		                                      :client/name
+		                                      :entity/ref
+		                                      :client/portal-token
+		                                      :client/portal-token-created-at
+		                                      :client/workspace]
+		                                 client-eid))
+	                ok? (= token (:client/portal-token client))
+	                ws (:client/workspace client)]
+	            (if-not (and client ok? ws)
+	              (error 404 "Portal not found")
+	              (let [cases (d/q '[:find ?e ?created
+	                                 :in $ ?cid ?ws
+	                                 :where [?c :client/id ?cid]
                                         [?c :client/workspace ?ws]
                                         [?e :service.case/client ?c]
                                         [?e :service.case/workspace ?ws]
