@@ -792,7 +792,7 @@
                        "add('','amount','');"
                        "})();"
                        "</script>"
-                       "</section>")))}))
+                       "</section>"))}))
 
 (defn public-route
   [{:keys [public-base-url base-path lang path contact query]}]

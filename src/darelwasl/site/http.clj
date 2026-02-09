@@ -308,9 +308,9 @@
                 path (when (and (string? storage-path) (not (str/blank? storage-path)))
                        (.getPath (io/file storage-dir storage-path)))]
             (when (and ok? path (.exists (io/file path)))
-              (-> (resp/file-response path)
-                  (resp/content-type (or mime "application/pdf"))
-                  (resp/header "Content-Disposition" (str "attachment; filename=\"" (or name "document.pdf") "\"")))))))))))
+                  (-> (resp/file-response path)
+                      (resp/content-type (or mime "application/pdf"))
+                      (resp/header "Content-Disposition" (str "attachment; filename=\"" (or name "document.pdf") "\""))))))))))
 
 (defn- client-id-by-email
   [db workspace-id email]
@@ -773,7 +773,7 @@
 	                         portal-url (when (and portal-token client-ref)
 	                                      (with-base base-path (str "/portal/" (str client-ref) "/" (str portal-token) "?submitted=" (if ok? "1" "0"))))]
 	                     (-> (resp/redirect (or portal-url (with-base base-path "/")))
-	                         (assoc :status 303)))))))
+	                         (assoc :status 303))))))
 
 	              (and (= method :get)
 	                   (or (= path "/portal")
