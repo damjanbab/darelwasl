@@ -9,11 +9,11 @@
     "currency": "SAR"
   },
   "client": {
-    "name": "Website lead · +966 50 000 0000",
+    "name": "Client Name",
     "email": "client@example.com",
     "phone": "+966 50 000 0000"
   },
-  "consultationBrief": "{\"activities\":\"Software consultancy + local hiring\",\"ownership\":\"100% foreign ownership\",\"residency\":\"Non-resident\",\"startMonth\":\"Mar 2026\",\"preferredLang\":\"en\",\"email\":\"client@example.com\",\"phone\":\"+966 50 000 0000\"}",
+  "consultationBrief": "{\"contactName\":\"Client Name\",\"companyName\":\"Example Co\",\"primaryInterest\":\"saudi-setup\",\"goal\":\"Launch quickly with a compliant setup and a clear activation plan.\",\"activities\":\"Software consultancy + local hiring\",\"ownership\":\"individual\",\"residency\":\"non-resident\",\"startMonth\":\"2026-03\",\"docsStatus\":\"progress\",\"preferredLang\":\"en\",\"preferredContact\":\"whatsapp\",\"email\":\"client@example.com\",\"phone\":\"+966 50 000 0000\"}",
   "sections": [
     {
       "type": "hero",
@@ -21,6 +21,7 @@
       "refLine": "Before your proposal",
       "subtitle": "A focused meeting to align scope and milestones. Your proposal is issued to your portal today.",
       "chips": [
+        "Saudi setup",
         "Clear scope",
         "Transparent fees",
         "Proposal today"

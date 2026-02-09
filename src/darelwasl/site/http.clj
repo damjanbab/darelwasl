@@ -163,6 +163,12 @@
          "Lead ID: " (v :lead/id) "\n"
          "Created: " (v :lead/created-at) "\n"
          "Language: " (v :lead/lang) "\n\n"
+         "Name: " (v :lead/contact-name) "\n"
+         "Company: " (v :lead/company-name) "\n"
+         "Primary interest: " (v :lead/primary-interest) "\n"
+         "Document readiness: " (v :lead/docs-status) "\n"
+         "Preferred contact: " (v :lead/preferred-contact) "\n\n"
+         "Goal:\n" (v :lead/goal) "\n\n"
          "Activities:\n" (v :lead/activities) "\n\n"
          "Ownership: " (v :lead/ownership) "\n"
          "Residency: " (v :lead/residency) "\n"
@@ -339,6 +345,8 @@
         ws (workspace/default-id)
         email (:lead/email lead)
         phone (:lead/phone lead)
+        contact-name (some-> (:lead/contact-name lead) str str/trim not-empty)
+        company-name (some-> (:lead/company-name lead) str str/trim not-empty)
         existing (or (client-id-by-email db ws email)
                      (client-id-by-phone db ws phone))]
     (if existing
@@ -346,7 +354,8 @@
       (let [name (or (some-> phone str str/trim not-empty)
                      (some-> email str str/trim not-empty)
                      "Website lead")
-            input {:client/name (str "Website lead · " name)
+            display-name (or company-name contact-name name "Website lead")
+            input {:client/name display-name
                    :client/status :lead
                    :client/channel (cond
                                     (not (str/blank? phone)) :whatsapp
@@ -354,7 +363,14 @@
                                     :else :whatsapp)
                    :client/phone (when-not (str/blank? phone) phone)
                    :client/email (when-not (str/blank? email) email)
-                   :client/notes (str "Activities: " (or (:lead/activities lead) "-") "\n"
+                   :client/notes (str "Source: website consultation\n"
+                                      "Name: " (or contact-name "-") "\n"
+                                      "Company: " (or company-name "-") "\n"
+                                      "Primary interest: " (or (:lead/primary-interest lead) "-") "\n"
+                                      "Document readiness: " (or (:lead/docs-status lead) "-") "\n"
+                                      "Preferred contact: " (or (:lead/preferred-contact lead) "-") "\n"
+                                      "Goal: " (or (:lead/goal lead) "-") "\n\n"
+                                      "Activities: " (or (:lead/activities lead) "-") "\n"
                                       "Ownership: " (or (:lead/ownership lead) "-") "\n"
                                       "Residency: " (or (:lead/residency lead) "-") "\n"
                                       "Target start month: " (or (:lead/start-month lead) "-") "\n"
@@ -394,6 +410,12 @@
                   "- Proposal inputs: objective, pricing model, deposit (optional), milestones (≥ 1)\n"
                   "- Any notes that affect scope or delivery\n\n"
                   "Lead details\n"
+                  "Name: " (or (:lead/contact-name lead) "-") "\n"
+                  "Company: " (or (:lead/company-name lead) "-") "\n"
+                  "Primary interest: " (or (:lead/primary-interest lead) "-") "\n"
+                  "Document readiness: " (or (:lead/docs-status lead) "-") "\n"
+                  "Preferred contact: " (or (:lead/preferred-contact lead) "-") "\n\n"
+                  "Goal:\n" (or (:lead/goal lead) "-") "\n\n"
                   "Activities:\n" (or (:lead/activities lead) "-") "\n\n"
                   "Ownership: " (or (:lead/ownership lead) "-") "\n"
                   "Residency: " (or (:lead/residency lead) "-") "\n"
@@ -419,32 +441,51 @@
 (defn- handle-consultation-submit
   [state {:keys [base-path prefix lang]} request]
   (let [params (decode-form-body request)
+        website (str/trim (get params "website" ""))
+        spam? (not (str/blank? website))
+        contact-name (str/trim (get params "contact_name" ""))
+        company-name (str/trim (get params "company_name" ""))
+        primary-interest (str/trim (get params "primary_interest" ""))
+        goal (str/trim (get params "goal" ""))
         activities (str/trim (get params "activities" ""))
         email (str/trim (get params "email" ""))
         phone (str/trim (get params "phone" ""))
         ownership (str/trim (get params "ownership" ""))
         residency (str/trim (get params "residency" ""))
         start-month (str/trim (get params "start_month" ""))
-        preferred-lang (str/trim (get params "lang" ""))
-        ok? (and (not (str/blank? activities))
+        docs-status (str/trim (get params "docs_status" ""))
+        preferred-contact (str/trim (get params "preferred_contact" ""))
+        preferred-lang (str/trim (or (get params "preferred_lang")
+                                     (get params "lang")
+                                     ""))
+        ok? (and (not (str/blank? primary-interest))
+                 (not (str/blank? activities))
                  (or (not (str/blank? email))
                      (not (str/blank? phone))))
         qs (cond
+             spam? "sent=1"
              (not ok?) "error=1"
              (not (str/blank? email)) "sent=1&portal=1"
              :else "sent=1")
         location (with-base base-path (str prefix "/contact?" qs "#consultation"))]
-    (when ok?
+    ;; Honeypot: pretend success, do not persist.
+    (when (and ok? (not spam?))
       (let [lead {:lead/id (java.util.UUID/randomUUID)
                   :lead/created-at (str (java.time.Instant/now))
                   :lead/source "public-site"
                   :lead/lang (or (some-> lang name) "en")
                   :lead/ip (:remote-addr request)
                   :lead/user-agent (get-in request [:headers "user-agent"])
+                  :lead/contact-name contact-name
+                  :lead/company-name company-name
+                  :lead/primary-interest primary-interest
+                  :lead/goal goal
                   :lead/activities activities
                   :lead/ownership ownership
                   :lead/residency residency
                   :lead/start-month start-month
+                  :lead/docs-status docs-status
+                  :lead/preferred-contact preferred-contact
                   :lead/email email
                   :lead/phone phone
                   :lead/preferred-lang preferred-lang}]
@@ -464,27 +505,39 @@
                       portal-url (when (and token client-ref)
                                    (str (request-public-base-url request)
                                         (with-base base-path (str "/portal/" client-ref "/" token))))]
-	                  ;; Store consultation brief + sections used by the consultation PDF.
-	                  (let [brief (json/write-str {:activities activities
-	                                               :ownership ownership
-	                                               :residency residency
-	                                               :startMonth start-month
-	                                               :preferredLang preferred-lang
-	                                               :email email
-	                                               :phone phone})
-	                        sections (json/write-str [{:type "hero"
-	                                                  :title "CONSULTATION PACK"
-	                                                  :refLine "Before your proposal"
-	                                                  :subtitle "A focused meeting to align scope and milestones. Your proposal is issued to your portal today."
-	                                                  :chips ["Clear scope" "Transparent fees" "Proposal today"]
-	                                                  :backgroundSvg "saudi-hero"}
-	                                                 {:type "icon-grid"
-	                                                  :title "What we’ll cover"
-	                                                  :items [{:icon "checklist" :label "Your goals" :desc "Clarify your objectives and setup preferences."}
-	                                                          {:icon "documents" :label "Key details" :desc "Activities, ownership profile, and timeline."}
-	                                                          {:icon "process" :label "Scope" :desc "Services included and expected deliverables."}
-	                                                          {:icon "process" :label "Fees & milestones" :desc "Agree fees and the payment schedule."}]}])
-	                        actor (system-actor ws)]
+		                  ;; Store consultation brief + sections used by the consultation PDF.
+		                  (let [brief (json/write-str {:contactName contact-name
+		                                               :companyName company-name
+		                                               :primaryInterest primary-interest
+		                                               :goal goal
+		                                               :activities activities
+		                                               :ownership ownership
+		                                               :residency residency
+		                                               :startMonth start-month
+		                                               :docsStatus docs-status
+		                                               :preferredLang preferred-lang
+		                                               :preferredContact preferred-contact
+		                                               :email email
+		                                               :phone phone})
+		                        service-chip (case primary-interest
+		                                       "saudi-setup" "Saudi setup"
+		                                       "pro-ops" "Operations"
+		                                       "trademark" "Trademark"
+		                                       "attestation" "Attestation"
+		                                       "Tailored")
+		                        sections (json/write-str [{:type "hero"
+		                                                  :title "CONSULTATION PACK"
+		                                                  :refLine "Before your proposal"
+		                                                  :subtitle "A focused meeting to align scope and milestones. Your proposal is issued to your portal today."
+		                                                  :chips [service-chip "Clear scope" "Transparent fees" "Proposal today"]
+		                                                  :backgroundSvg "saudi-hero"}
+		                                                 {:type "icon-grid"
+		                                                  :title "What we’ll cover"
+		                                                  :items [{:icon "checklist" :label "Your goals" :desc "Clarify your objectives and setup preferences."}
+		                                                          {:icon "documents" :label "Key details" :desc "Activities, ownership profile, and timeline."}
+		                                                          {:icon "process" :label "Scope" :desc "Services included and expected deliverables."}
+		                                                          {:icon "process" :label "Fees & milestones" :desc "Agree fees and the payment schedule."}]}])
+		                        actor (system-actor ws)]
 	                    (actions/execute! state {:action/id :cap/action/doc-pack-upsert
 	                                             :actor actor
 	                                             :input {:client/id cid

@@ -92,6 +92,22 @@ function formatDateValue(v) {
   return formatDateTime(date);
 }
 
+function formatMonthValue(v) {
+  const raw = present(v);
+  if (!raw) return "—";
+  if (raw === "—") return raw;
+  if (/^\d{4}-\d{2}$/.test(raw)) {
+    const date = new Date(`${raw}-01T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return raw;
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: DEFAULT_TZ,
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  }
+  return raw;
+}
+
 function escapeHtml(s) {
   return String(s || "")
     .replace(/&/g, "&amp;")
@@ -763,21 +779,103 @@ function renderWorksheetRow(label, value) {
   `;
 }
 
+function labelPrimaryInterest(v) {
+  const s = present(v);
+  if (!s) return null;
+  switch (s) {
+    case "saudi-setup":
+      return "Saudi business setup";
+    case "pro-ops":
+      return "Operations support";
+    case "trademark":
+      return "Trademark / IP";
+    case "attestation":
+      return "Attestation & legalization";
+    case "other":
+      return "Other / not sure";
+    default:
+      return s;
+  }
+}
+
+function labelOwnership(v) {
+  const s = present(v);
+  if (!s) return null;
+  switch (s) {
+    case "individual":
+      return "Individual";
+    case "parent":
+      return "Parent company";
+    case "gcc":
+      return "GCC";
+    default:
+      return s;
+  }
+}
+
+function labelResidency(v) {
+  const s = present(v);
+  if (!s) return null;
+  switch (s) {
+    case "saudi":
+      return "Saudi";
+    case "resident":
+      return "Resident";
+    case "non-resident":
+      return "Non-resident";
+    default:
+      return s;
+  }
+}
+
+function labelDocsStatus(v) {
+  const s = present(v);
+  if (!s) return null;
+  switch (s) {
+    case "ready":
+      return "Ready";
+    case "progress":
+      return "In progress";
+    case "unsure":
+      return "Not sure";
+    default:
+      return s;
+  }
+}
+
+function labelLang(v) {
+  const s = present(v);
+  if (!s) return null;
+  switch (s) {
+    case "en":
+      return "EN";
+    case "ar":
+      return "AR";
+    case "ur":
+      return "UR";
+    default:
+      return s;
+  }
+}
+
 function renderConsultationWorksheet(raw) {
   const parsed = tryParseJson(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
+
+  const primaryInterest = labelPrimaryInterest(parsed.primaryInterest);
+  const goal = present(parsed.goal);
 
   return `
     <div class="section">
       <p class="section-title">Proposal Inputs (to confirm)</p>
       <div class="panel">
         <div class="kv">
-          ${renderWorksheetRow("Primary service", null)}
-          ${renderWorksheetRow("Objective", null)}
+          ${renderWorksheetRow("Primary service", primaryInterest)}
+          ${renderWorksheetRow("Objective", goal)}
           ${renderWorksheetRow("Fee model", null)}
           ${renderWorksheetRow("Payment milestones", null)}
-          ${renderWorksheetRow("Target start", parsed.startMonth)}
-          ${renderWorksheetRow("Preferred language", parsed.preferredLang)}
+          ${renderWorksheetRow("Target start", formatMonthValue(parsed.startMonth))}
+          ${renderWorksheetRow("Preferred language", labelLang(parsed.preferredLang))}
         </div>
       </div>
       <p class="meta-line">Final values will appear in your Proposal document in the portal.</p>
@@ -791,11 +889,13 @@ function renderConsultationBrief(raw) {
     return renderAsListOrProse(raw);
   }
 
+  const primaryInterest = labelPrimaryInterest(parsed.primaryInterest) || "—";
   const activities = present(parsed.activities) || "—";
-  const ownership = present(parsed.ownership) || "—";
-  const residency = present(parsed.residency) || "—";
-  const startMonth = present(parsed.startMonth) || "—";
-  const preferredLang = present(parsed.preferredLang) || "—";
+  const ownership = labelOwnership(parsed.ownership) || "—";
+  const residency = labelResidency(parsed.residency) || "—";
+  const docsStatus = labelDocsStatus(parsed.docsStatus) || "—";
+  const startMonth = formatMonthValue(parsed.startMonth) || "—";
+  const preferredLang = labelLang(parsed.preferredLang) || "—";
   const notes = present(parsed.notes);
 
   return `
@@ -803,9 +903,11 @@ function renderConsultationBrief(raw) {
       <p class="section-title">Consultation Summary</p>
       <div class="panel">
         <div class="kv">
+          ${renderBlock("Primary interest", primaryInterest)}
           ${renderBlock("Activities", activities)}
           ${renderBlock("Ownership", ownership)}
           ${renderBlock("Residency", residency)}
+          ${renderBlock("Document readiness", docsStatus)}
           ${renderBlock("Target start", startMonth)}
           ${renderBlock("Preferred language", preferredLang)}
         </div>

@@ -2708,42 +2708,133 @@
                                 "<a class='cta primary' href='" (escape-html (href "/contact#consultation")) "'>" (escape-html next-cta) "</a>"
                                 "</section>")))}
 
-       "/contact"
-       {:status 200
-        :headers {"Content-Type" "text/html; charset=utf-8"}
-        :body (let [contact (merge public-defaults (or contact {}))
-                    email (:email contact)
-	                    phone (:phone contact)
-	                    phone-display (or (:phone-display contact) phone)
-	                    phone-local (:phone-local contact)
-	                    sent? (= "1" (get (or query {}) "sent"))
-	                    portal? (= "1" (get (or query {}) "portal"))
-	                    error? (= "1" (get (or query {}) "error"))
-                    page-title (case lang
-                                 :ar "احجز استشارة"
-                                 :ur "مشاورت طے کریں"
-                                 "Schedule a consultation")
-                    strapline (case lang
-                               :ar "أرسل تفاصيلك وسنرد عليك بقائمة متطلبات مخصصة."
-                               :ur "اپنی تفصیلات بھیجیں اور ہم آپ کو مخصوص چیک لسٹ کے ساتھ جواب دیں گے۔"
-                               "Send your details and we’ll respond with a tailored checklist.")
-                    form-title (case lang
-                                 :ar "نموذج الاستشارة"
-                                 :ur "مشاورتی فارم"
-                                 "Consultation form")
-                    form-note (case lang
-                               :ar "املأ النموذج وسنرد عليك بقائمة متطلبات مخصصة."
-                               :ur "فارم بھریں اور ہم آپ کو مخصوص چیک لسٹ کے ساتھ جواب دیں گے۔"
-                               "Fill out the form and we’ll reply with a tailored checklist.")
-                    inputs-title (case lang
-                                   :ar "احجز استشارة"
-                                   :ur "مشاورت طے کریں"
-                                   "Schedule a consultation")
-                    contact-title (case lang
-                                    :ar "طرق التواصل"
-                                    :ur "رابطے کے طریقے"
-                                    "Contact methods")]
-                (public-page {:title (case lang
+	       "/contact"
+	       {:status 200
+	        :headers {"Content-Type" "text/html; charset=utf-8"}
+	        :body (let [contact (merge public-defaults (or contact {}))
+	                    email (:email contact)
+		                    phone (:phone contact)
+		                    phone-display (or (:phone-display contact) phone)
+		                    phone-local (:phone-local contact)
+		                    sent? (= "1" (get (or query {}) "sent"))
+		                    portal? (= "1" (get (or query {}) "portal"))
+		                    error? (= "1" (get (or query {}) "error"))
+	                    page-title (case lang
+	                                 :ar "احجز استشارة"
+	                                 :ur "مشاورت طے کریں"
+	                                 "Schedule a consultation")
+	                    strapline (case lang
+	                               :ar "أرسل تفاصيلك وسنرد عليك بقائمة متطلبات مخصصة."
+	                               :ur "اپنی تفصیلات بھیجیں اور ہم آپ کو مخصوص چیک لسٹ کے ساتھ جواب دیں گے۔"
+	                               "Send your details and we’ll respond with a tailored checklist.")
+	                    form-title (case lang
+	                                 :ar "نموذج الاستشارة"
+	                                 :ur "مشاورتی فارم"
+	                                 "Consultation form")
+	                    form-note (case lang
+	                               :ar "املأ النموذج وسنرد عليك بقائمة متطلبات مخصصة."
+	                               :ur "فارم بھریں اور ہم آپ کو مخصوص چیک لسٹ کے ساتھ جواب دیں گے۔"
+	                               "Fill out the form and we’ll reply with a tailored checklist.")
+	                    wizard-note (case lang
+	                                  :ar "يستغرق حوالي دقيقتين. سنُعد لك حزمة استشارة ونعرضها في بوابتك."
+	                                  :ur "تقریباً 2 منٹ لگتے ہیں۔ ہم آپ کے لیے کنسلٹیشن پیک تیار کریں گے اور پورٹل پر ڈال دیں گے۔"
+	                                  "Takes ~2 minutes. We’ll prepare your Consultation Pack and add it to your portal.")
+	                    step-labels (case lang
+	                                  :ar ["1. الهدف" "2. التفاصيل" "3. التواصل"]
+	                                  :ur ["1. مقصد" "2. تفصیلات" "3. رابطہ"]
+	                                  ["1. Goal" "2. Details" "3. Contact"])
+	                    step-sub (case lang
+	                               :ar ["اختر ما تحتاجه" "تفاصيل أساسية" "أرسل وسيلة تواصل"]
+	                               :ur ["آپ کو کیا چاہیے" "بنیادی تفصیلات" "رابطہ بھیجیں"]
+	                               ["Choose what you need" "Key details" "Send a contact method"])
+	                    interest-title (case lang
+	                                     :ar "ما الذي تريد إنجازه؟"
+	                                     :ur "آپ کیا حاصل کرنا چاہتے ہیں؟"
+	                                     "What do you want to achieve?")
+	                    interest-note (case lang
+	                                    :ar "اختر الخيار الأقرب — يمكنك التعديل لاحقاً."
+	                                    :ur "قریب ترین آپشن منتخب کریں — بعد میں بدل سکتے ہیں۔"
+	                                    "Pick the closest option — we’ll refine it in the meeting.")
+	                    interest-opts [{:value "saudi-setup"
+	                                    :label (case lang
+	                                             :ar "تأسيس شركة في السعودية"
+	                                             :ur "سعودی عرب میں کمپنی سیٹ اپ"
+	                                             "Saudi business setup")
+	                                    :desc (case lang
+	                                            :ar "تأسيس وترخيص وتشغيل."
+	                                            :ur "سیٹ اپ، لائسنسنگ، اور آن بورڈنگ۔"
+	                                            "Setup, licensing, and onboarding.")}
+	                                   {:value "pro-ops"
+	                                    :label (case lang
+	                                             :ar "خدمات تشغيلية وإدارية"
+	                                             :ur "آپریشنز اور حکومتی رجسٹریشن"
+	                                             "Operations support")
+	                                    :desc (case lang
+	                                            :ar "بوابات، تسجيلات، وامتثال."
+	                                            :ur "رجسٹریشنز، پورٹلز، اور کمپلائنس۔"
+	                                            "Portals, registrations, and compliance.")}
+	                                   {:value "trademark"
+	                                    :label (case lang
+	                                             :ar "علامة تجارية / ملكية فكرية"
+	                                             :ur "ٹریڈ مارک / آئی پی"
+	                                             "Trademark / IP")
+	                                    :desc (case lang
+	                                            :ar "حماية العلامة والتسجيل."
+	                                            :ur "تحفظ اور رجسٹریشن۔"
+	                                            "Registration and protection.")}
+	                                   {:value "attestation"
+	                                    :label (case lang
+	                                             :ar "تصديق وتوثيق مستندات"
+	                                             :ur "اٹیسٹیشن / لیگلائزیشن"
+	                                             "Attestation & legalization")
+	                                    :desc (case lang
+	                                            :ar "مستندات للشركات والأفراد."
+	                                            :ur "کارپوریٹ/پرسنل دستاویزات۔"
+	                                            "Corporate and personal documents.")}
+	                                   {:value "other"
+	                                    :label (case lang :ar "أخرى / غير متأكد" :ur "دیگر / یقین نہیں" "Other / not sure")
+	                                    :desc (case lang :ar "سنحددها معاً." :ur "ہم مل کر طے کریں گے۔" "We’ll scope it together.")}]
+	                    goal-title (case lang
+	                                 :ar "وصف مختصر (اختياري)"
+	                                 :ur "مختصر وضاحت (اختیاری)"
+	                                 "Short context (optional)")
+	                    goal-placeholder (case lang
+	                                       :ar "مثال: تأسيس سريع ومتوافق + فتح حساب بنكي…"
+	                                       :ur "مثال: تیز اور کمپلائنٹ سیٹ اپ + بینک اکاؤنٹ…"
+	                                       "Example: fast compliant setup + bank account…")
+	                    details-title (case lang
+	                                    :ar "تفاصيل أساسية"
+	                                    :ur "بنیادی تفصیلات"
+	                                    "Key details")
+	                    docs-title (case lang :ar "جاهزية المستندات" :ur "دستاویزات کی حالت" "Document readiness")
+	                    docs-opts (case lang
+	                               :ar [["ready" "جاهز"] ["progress" "قيد التجهيز"] ["unsure" "غير متأكد"]]
+	                               :ur [["ready" "تیار"] ["progress" "جاری"] ["unsure" "یقین نہیں"]]
+	                               [["ready" "Ready"] ["progress" "In progress"] ["unsure" "Not sure"]])
+	                    contact-details-title (case lang
+	                                    :ar "طرق التواصل"
+	                                    :ur "رابطے کی تفصیل"
+	                                    "Contact details")
+	                    contact-note (case lang
+	                                   :ar "أضف وسيلة واحدة على الأقل."
+	                                   :ur "کم از کم ایک رابطہ طریقہ دیں۔"
+	                                   "Add at least one contact method.")
+	                    name-title (case lang :ar "الاسم" :ur "نام" "Name")
+	                    company-title (case lang :ar "اسم الشركة (اختياري)" :ur "کمپنی نام (اختیاری)" "Company (optional)")
+	                    reach-title (case lang :ar "أفضل طريقة للتواصل" :ur "رابطے کا بہتر طریقہ" "Best way to reach you")
+	                    reach-opts (case lang
+	                                :ar [["whatsapp" "واتساب"] ["phone" "هاتف"] ["email" "بريد إلكتروني"]]
+	                                :ur [["whatsapp" "واٹس ایپ"] ["phone" "فون"] ["email" "ای میل"]]
+	                                [["whatsapp" "WhatsApp"] ["phone" "Phone call"] ["email" "Email"]])
+	                    inputs-title (case lang
+	                                   :ar "احجز استشارة"
+	                                   :ur "مشاورت طے کریں"
+	                                   "Schedule a consultation")
+	                    contact-title (case lang
+	                                    :ar "طرق التواصل"
+	                                    :ur "رابطے کے طریقے"
+	                                    "Contact methods")]
+	                (public-page {:title (case lang
                                        :ar "تواصل معنا | دار الوصل"
                                        :ur "رابطہ | Dar El Wasl"
                                        "Contact | Dar El Wasl")
@@ -2755,73 +2846,251 @@
                               :base-path base-path
                               :lang lang
                               :path path
-                              :image-path "/logo.jpg"
-                              :contact contact}
-                             (str (hero-simple
-                                   page-title
-                                   strapline
-                                   nil
-                                   nil)
-                                  "<section id='consultation'><div class='section-title'><h2>" (escape-html form-title) "</h2></div>"
-	                                  (when sent?
-	                                    (str "<div class='notice notice--success'>"
+	                              :image-path "/logo.jpg"
+	                              :contact contact}
+	                             (str (hero-simple
+	                                   page-title
+	                                   strapline
+	                                   nil
+	                                   nil)
+	                                  "<section id='consultation'><div class='section-title'><h2>" (escape-html form-title) "</h2></div>"
+		                                  (when sent?
+		                                    (str "<div class='notice notice--success'>"
+		                                         (escape-html (case lang
+		                                                        :ar (if portal?
+		                                                              "تم استلام تفاصيلك. تم إرسال رابط البوابة الآمنة إلى بريدك الإلكتروني."
+		                                                              "تم استلام تفاصيلك. سنرد عليك بقائمة المتطلبات وخطوتك التالية.")
+		                                                        :ur (if portal?
+		                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم نے آپ کے ای میل پر محفوظ پورٹل لنک بھیج دیا ہے۔"
+		                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم آپ کو تقاضوں کی چیک لسٹ اور اگلا قدم بھیجیں گے۔")
+		                                                        (if portal?
+		                                                          "Your details were received. We emailed you a secure portal link."
+		                                                          "Your details were received. We’ll reply with your requirements checklist and next step.")))
+		                                         "</div>"))
+	                                  (when (and (not sent?) error?)
+	                                    (str "<div class='notice notice--error'>"
 	                                         (escape-html (case lang
-	                                                        :ar (if portal?
-	                                                              "تم استلام تفاصيلك. تم إرسال رابط البوابة الآمنة إلى بريدك الإلكتروني."
-	                                                              "تم استلام تفاصيلك. سنرد عليك بقائمة المتطلبات وخطوتك التالية.")
-	                                                        :ur (if portal?
-	                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم نے آپ کے ای میل پر محفوظ پورٹل لنک بھیج دیا ہے۔"
-	                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم آپ کو تقاضوں کی چیک لسٹ اور اگلا قدم بھیجیں گے۔")
-	                                                        (if portal?
-	                                                          "Your details were received. We emailed you a secure portal link."
-	                                                          "Your details were received. We’ll reply with your requirements checklist and next step.")))
+	                                                        :ar "يرجى إضافة الأنشطة وخيار خدمة ووسيلة تواصل واحدة على الأقل (البريد الإلكتروني أو الهاتف)."
+	                                                        :ur "براہ کرم سرگرمیاں، سروس آپشن، اور کم از کم ایک رابطہ طریقہ (ای میل یا فون) شامل کریں۔"
+	                                                        "Please include activities, a service option, and at least one contact method (email or phone)."))
 	                                         "</div>"))
-                                  (when (and (not sent?) error?)
-                                    (str "<div class='notice notice--error'>"
-                                         (escape-html (case lang
-                                                        :ar "يرجى إضافة الأنشطة وأحد وسائل التواصل (البريد الإلكتروني أو الهاتف)."
-                                                        :ur "براہ کرم سرگرمیاں اور رابطہ (ای میل یا فون) شامل کریں۔"
-                                                        "Please include activities and at least one contact method (email or phone)."))
-                                         "</div>"))
-                                  "<p class='muted'>" (escape-html form-note) "</p>"
-                                  "<form class='gate-form' method='post' action='" (escape-html (href "/contact")) "'>"
-                                  "<div class='form-grid'>"
-                                  "<label>" (escape-html (case lang :ar "الأنشطة" :ur "سرگرمیاں" "Activities"))
-                                  "<textarea rows='3' name='activities' placeholder='" (escape-html (case lang :ar "صف أنشطتك (1 إلى 3 أسطر)" :ur "اپنی سرگرمیاں بیان کریں (1 سے 3 لائنیں)" "Describe activities (1 to 3 lines)")) "'></textarea></label>"
-                                  "<label>" (escape-html (case lang :ar "الملكية" :ur "ملکیت" "Ownership"))
-                                  "<select name='ownership'>"
-                                  "<option>" (escape-html (case lang :ar "فرد" :ur "انفرادی" "Individual")) "</option>"
-                                  "<option>" (escape-html (case lang :ar "شركة أم" :ur "پیرنٹ کمپنی" "Parent company")) "</option>"
-                                  "<option>" (escape-html (case lang :ar "مواطن خليجي" :ur "GCC" "GCC")) "</option>"
-                                  "</select></label>"
-                                  "<label>" (escape-html (case lang :ar "الجنسية / الإقامة" :ur "قومیت / رہائش" "Nationality / Residency"))
-                                  "<select name='residency'>"
-                                  "<option>" (escape-html (case lang :ar "سعودي" :ur "سعودی" "Saudi")) "</option>"
-                                  "<option>" (escape-html (case lang :ar "مقيم" :ur "ریزیڈنٹ" "Resident")) "</option>"
-                                  "<option>" (escape-html (case lang :ar "غير مقيم" :ur "نان ریزیڈنٹ" "Non-resident")) "</option>"
-                                  "</select></label>"
-                                  "<label>" (escape-html (case lang :ar "شهر البدء المستهدف" :ur "ہدف آغاز کا مہینہ" "Target start month"))
-                                  "<input type='month' name='start_month'></label>"
-                                  "<label>" (escape-html (case lang :ar "البريد الإلكتروني" :ur "ای میل" "Email"))
-                                  "<input type='email' name='email' placeholder='name@example.com'></label>"
-                                  "<label>" (escape-html (case lang :ar "الهاتف / واتساب" :ur "فون / واٹس ایپ" "Phone / WhatsApp"))
-                                  "<input type='tel' name='phone' placeholder='" (escape-html phone-display) "'></label>"
-                                  "<label>" (escape-html (case lang :ar "اللغة المفضلة" :ur "ترجیحی زبان" "Preferred language"))
-                                  "<select name='lang'>"
-                                  "<option value='en'>English</option>"
-                                  "<option value='ar'>العربية</option>"
-                                  "<option value='ur'>اردو</option>"
-                                  "</select></label>"
-                                  "</div>"
-                                  "<div class='form-actions'>"
-                                  "<button class='cta primary' type='submit'>" (escape-html (case lang :ar "إرسال التفاصيل" :ur "تفصیلات بھیجیں" "Send details")) "</button>"
-                                  "<div class='muted'>" (escape-html (case lang :ar "سنرد عليك بقائمة متطلبات وخطوة تالية." :ur "ہم آپ کو چیک لسٹ اور اگلا قدم بھیجیں گے۔" "We respond with a checklist and next step.")) "</div>"
-                                  "</div></form></section>"
-                                  "<section><div class='section-title'><h2>" (escape-html inputs-title) "</h2></div>"
-                                  (bullet-list (case lang
-                                                 :ar ["الأنشطة (1 إلى 3 أسطر)"
-                                                      "الملكية (فرد / شركة أم / خليجي)"
-                                                      "شهر البدء المستهدف (الشهر كافٍ)"
+	                                  "<p class='muted'>" (escape-html form-note) "</p>"
+	                                  "<p class='note'>" (escape-html wizard-note) "</p>"
+
+	                                  "<form class='gate-form dw-wizard' id='consultation-wizard'"
+	                                  " data-msg-service='" (escape-html (case lang
+	                                                                  :ar "اختر خيار خدمة للمتابعة."
+	                                                                  :ur "جاری رکھنے کے لیے ایک سروس منتخب کریں۔"
+	                                                                  "Select one service option to continue.")) "'"
+	                                  " data-msg-activities='" (escape-html (case lang
+	                                                                     :ar "أضف وصف الأنشطة للمتابعة."
+	                                                                     :ur "جاری رکھنے کے لیے سرگرمیوں کی وضاحت لکھیں۔"
+	                                                                     "Add a short activities description to continue.")) "'"
+	                                  " data-msg-contact='" (escape-html (case lang
+	                                                                  :ar "أضف البريد الإلكتروني أو الهاتف للإرسال."
+	                                                                  :ur "سبمٹ کرنے کے لیے ای میل یا فون شامل کریں۔"
+	                                                                  "Add email or phone to submit.")) "'"
+	                                  " method='post' action='" (escape-html (href "/contact")) "'>"
+	                                  "<input type='hidden' name='flow_version' value='wizard-v1'/>"
+	                                  "<div class='dw-hp' aria-hidden='true'>"
+	                                  "<label>Website<input type='text' name='website' tabindex='-1' autocomplete='off'/></label>"
+	                                  "</div>"
+
+	                                  "<div class='dw-wizard-top'>"
+	                                  "<div class='dw-wizard-steps' role='list'>"
+	                                  (apply str
+	                                         (map-indexed
+	                                          (fn [idx label]
+	                                            (str "<button type='button' class='dw-wizard-step' data-step='" idx "'>"
+	                                                 "<div class='label'>" (escape-html label) "</div>"
+	                                                 "<div class='muted'>" (escape-html (nth step-sub idx)) "</div>"
+	                                                 "</button>"))
+	                                          step-labels))
+	                                  "</div>"
+	                                  "<div class='dw-wizard-progress' aria-hidden='true'>"
+	                                  "<div class='dw-progress'>"
+	                                  "<div class='dw-progress-seg'></div><div class='dw-progress-seg'></div><div class='dw-progress-seg'></div>"
+	                                  "</div></div>"
+	                                  "</div>"
+
+	                                  "<div class='split'>"
+	                                  "<div class='stack'>"
+
+	                                  "<div class='dw-wizard-pane' data-pane='0'>"
+	                                  "<div class='card'>"
+	                                  "<h3 style='margin-top:0;'>" (escape-html interest-title) "</h3>"
+	                                  "<p class='muted' style='margin-top:6px;'>" (escape-html interest-note) "</p>"
+	                                  "<div class='dw-chip-grid'>"
+	                                  (apply str
+	                                         (for [{:keys [value label desc]} interest-opts]
+	                                           (str "<label class='dw-chip'>"
+	                                                "<input type='radio' name='primary_interest' value='" (escape-html value) "'/>"
+	                                                "<span class='dw-chip__title'>" (escape-html label) "</span>"
+	                                                "<span class='dw-chip__desc'>" (escape-html desc) "</span>"
+	                                                "</label>")))
+	                                  "</div>"
+	                                  "<label style='margin-top:14px;'>" (escape-html goal-title)
+	                                  "<textarea rows='3' name='goal' placeholder='" (escape-html goal-placeholder) "'></textarea></label>"
+	                                  "</div>"
+	                                  "</div>"
+
+	                                  "<div class='dw-wizard-pane' data-pane='1'>"
+	                                  "<div class='card'>"
+	                                  "<h3 style='margin-top:0;'>" (escape-html details-title) "</h3>"
+	                                  "<div class='form-grid' style='margin-top:12px;'>"
+	                                  "<label>" (escape-html (case lang :ar "الأنشطة" :ur "سرگرمیاں" "Activities"))
+	                                  "<textarea rows='3' name='activities' required placeholder='" (escape-html (case lang :ar "صف أنشطتك (1 إلى 3 أسطر)" :ur "اپنی سرگرمیاں بیان کریں (1 سے 3 لائنیں)" "Describe activities (1 to 3 lines)")) "'></textarea></label>"
+	                                  "<label>" (escape-html (case lang :ar "الملكية" :ur "ملکیت" "Ownership"))
+	                                  "<select name='ownership'>"
+	                                  "<option value='individual'>" (escape-html (case lang :ar "فرد" :ur "انفرادی" "Individual")) "</option>"
+	                                  "<option value='parent'>" (escape-html (case lang :ar "شركة أم" :ur "پیرنٹ کمپنی" "Parent company")) "</option>"
+	                                  "<option value='gcc'>" (escape-html (case lang :ar "مواطن خليجي" :ur "GCC" "GCC")) "</option>"
+	                                  "</select></label>"
+	                                  "<label>" (escape-html (case lang :ar "الجنسية / الإقامة" :ur "قومیت / رہائش" "Nationality / Residency"))
+	                                  "<select name='residency'>"
+	                                  "<option value='saudi'>" (escape-html (case lang :ar "سعودي" :ur "سعودی" "Saudi")) "</option>"
+	                                  "<option value='resident'>" (escape-html (case lang :ar "مقيم" :ur "ریزیڈنٹ" "Resident")) "</option>"
+	                                  "<option value='non-resident'>" (escape-html (case lang :ar "غير مقيم" :ur "نان ریزیڈنٹ" "Non-resident")) "</option>"
+	                                  "</select></label>"
+	                                  "<label>" (escape-html (case lang :ar "شهر البدء المستهدف" :ur "ہدف آغاز کا مہینہ" "Target start month"))
+	                                  "<input type='month' name='start_month'></label>"
+	                                  "<label>" (escape-html docs-title)
+	                                  "<select name='docs_status'>"
+	                                  (apply str
+	                                         (for [[v l] docs-opts]
+	                                           (str "<option value='" (escape-html v) "'>" (escape-html l) "</option>")))
+	                                  "</select></label>"
+	                                  "<label>" (escape-html (case lang :ar "اللغة المفضلة" :ur "ترجیحی زبان" "Preferred language"))
+	                                  "<select name='preferred_lang'>"
+	                                  "<option value='en'" (when (or (= lang :en) (nil? lang)) " selected") ">English</option>"
+	                                  "<option value='ar'" (when (= lang :ar) " selected") ">العربية</option>"
+	                                  "<option value='ur'" (when (= lang :ur) " selected") ">اردو</option>"
+	                                  "</select></label>"
+	                                  "</div>"
+	                                  "</div>"
+	                                  "</div>"
+
+	                                  "<div class='dw-wizard-pane' data-pane='2'>"
+	                                  "<div class='card'>"
+	                                  "<h3 style='margin-top:0;'>" (escape-html contact-details-title) "</h3>"
+	                                  "<p class='muted' style='margin-top:6px;'>" (escape-html contact-note) "</p>"
+	                                  "<div class='form-grid' style='margin-top:12px;'>"
+	                                  "<label>" (escape-html name-title)
+	                                  "<input type='text' name='contact_name' placeholder='" (escape-html (case lang :ar "اسمك" :ur "آپ کا نام" "Your name")) "'></label>"
+	                                  "<label>" (escape-html company-title)
+	                                  "<input type='text' name='company_name' placeholder='" (escape-html (case lang :ar "اختياري" :ur "اختیاری" "Optional")) "'></label>"
+	                                  "<label>" (escape-html (case lang :ar "البريد الإلكتروني" :ur "ای میل" "Email"))
+	                                  "<input type='email' name='email' placeholder='name@example.com' inputmode='email'></label>"
+	                                  "<label>" (escape-html (case lang :ar "الهاتف / واتساب" :ur "فون / واٹس ایپ" "Phone / WhatsApp"))
+	                                  "<input type='tel' name='phone' placeholder='" (escape-html phone-display) "' inputmode='tel'></label>"
+	                                  "<label style='grid-column: 1 / -1;'>" (escape-html reach-title)
+	                                  "<div class='dw-radio-row'>"
+	                                  (apply str
+	                                         (for [[v l] reach-opts]
+	                                           (str "<label class='dw-radio'>"
+	                                                "<input type='radio' name='preferred_contact' value='" (escape-html v) "'" (when (= v "whatsapp") " checked") "/>"
+	                                                "<span>" (escape-html l) "</span>"
+	                                                "</label>")))
+	                                  "</div>"
+	                                  "</label>"
+	                                  "</div>"
+	                                  "</div>"
+	                                  "</div>"
+
+	                                  "<div class='dw-wizard-nav'>"
+	                                  "<button class='cta secondary' type='button' data-wizard='back'>" (escape-html (case lang :ar "رجوع" :ur "واپس" "Back")) "</button>"
+	                                  "<button class='cta primary' type='button' data-wizard='next'>" (escape-html (case lang :ar "التالي" :ur "اگلا" "Next")) "</button>"
+	                                  "<button class='cta primary' type='submit' data-wizard='submit'>" (escape-html (case lang :ar "إرسال التفاصيل" :ur "تفصیلات بھیجیں" "Send details")) "</button>"
+	                                  "<div class='muted' data-wizard='hint'></div>"
+	                                  "<div class='muted' style='flex-basis:100%;'>"
+	                                  (escape-html (case lang
+	                                                 :ar "سنرد عليك بقائمة متطلبات وخطوة تالية."
+	                                                 :ur "ہم آپ کو چیک لسٹ اور اگلا قدم بھیجیں گے۔"
+	                                                 "We respond with a checklist and next step."))
+	                                  "</div>"
+	                                  "</div>"
+
+	                                  "</div>" ; stack
+
+	                                  "<div class='card dw-wizard-aside'>"
+	                                  "<div class='pill'>" (escape-html (case lang :ar "ما الذي ستحصل عليه" :ur "آپ کو کیا ملے گا" "What you get")) "</div>"
+	                                  "<h3 style='margin:12px 0 6px;'>" (escape-html (case lang :ar "حزمة استشارة + بوابة آمنة" :ur "کنسلٹیشن پیک + محفوظ پورٹل" "Consultation Pack + secure portal")) "</h3>"
+	                                  "<p class='muted' style='margin:0;'>" (escape-html (case lang
+	                                                                                   :ar "بعد الإرسال، يتم إنشاء ملفك وإضافة مستند الاستشارة إلى بوابتك."
+	                                                                                   :ur "سبمٹ کے بعد آپ کی فائل بنے گی اور کنسلٹیشن ڈاکیومنٹ پورٹل میں آ جائے گا۔"
+	                                                                                   "After submit, we create your file and add the Consultation document to your portal.")) "</p>"
+	                                  "<div class='dw-aside-summary'>"
+	                                  "<div class='meta-sub'>" (escape-html (case lang :ar "ملخص" :ur "خلاصہ" "Preview")) "</div>"
+	                                  "<div class='meta' style='margin-top:8px;'>"
+	                                  "<div><span class='meta-sub'>" (escape-html (case lang :ar "الخدمة" :ur "سروس" "Service")) ":</span> <span data-sum='primary_interest'>—</span></div>"
+	                                  "<div><span class='meta-sub'>" (escape-html (case lang :ar "البدء" :ur "آغاز" "Start")) ":</span> <span data-sum='start_month'>—</span></div>"
+	                                  "<div><span class='meta-sub'>" (escape-html (case lang :ar "التواصل" :ur "رابطہ" "Contact")) ":</span> <span data-sum='contact'>—</span></div>"
+	                                  "</div></div>"
+	                                  "</div>"
+
+	                                  "</div>" ; split
+
+	                                  "</form>"
+
+	                                  "<script>(function(){try{document.documentElement.classList.add('js');}catch(e){};"
+	                                  "var root=document.getElementById('consultation-wizard');if(!root){return;}"
+	                                  "var stepBtns=[].slice.call(root.querySelectorAll('.dw-wizard-step'));"
+	                                  "var panes=[].slice.call(root.querySelectorAll('.dw-wizard-pane'));"
+	                                  "var segs=[].slice.call(root.querySelectorAll('.dw-wizard-progress .dw-progress-seg'));"
+	                                  "var nextBtn=root.querySelector('[data-wizard=next]');"
+	                                  "var submitBtn=root.querySelector('[data-wizard=submit]');"
+	                                  "var backBtns=[].slice.call(root.querySelectorAll('[data-wizard=back]'));"
+	                                  "var hint=root.querySelector('[data-wizard=hint]');"
+	                                  "var msgService=root.getAttribute('data-msg-service')||'Select one service option to continue.';"
+	                                  "var msgActivities=root.getAttribute('data-msg-activities')||'Add a short activities description to continue.';"
+	                                  "var msgContact=root.getAttribute('data-msg-contact')||'Add email or phone to submit.';"
+	                                  "var sumService=root.querySelector('[data-sum=primary_interest]');"
+	                                  "var sumStart=root.querySelector('[data-sum=start_month]');"
+	                                  "var sumContact=root.querySelector('[data-sum=contact]');"
+	                                  "var chips=[].slice.call(root.querySelectorAll('.dw-chip'));"
+	                                  "var i=0;"
+	                                  "function val(name){var el=root.querySelector('[name='+name+']');return el?String(el.value||'').trim():'';}"
+	                                  "function radio(name){var el=root.querySelector('input[name='+name+']:checked');return el?String(el.value||'').trim():'';}"
+	                                  "function syncChips(){chips.forEach(function(l){var inp=l.querySelector('input');l.classList.toggle('is-selected',!!(inp&&inp.checked));});}"
+	                                  "function setStep(n){i=Math.max(0,Math.min(2,n));"
+	                                  "panes.forEach(function(p,idx){p.style.display=(idx===i)?'block':'none';});"
+	                                  "stepBtns.forEach(function(b,idx){b.classList.toggle('is-on',idx===i);b.disabled=(idx>i);});"
+	                                  "segs.forEach(function(s,idx){s.classList.toggle('is-on',idx<=i);});"
+	                                  "if(nextBtn){nextBtn.style.display=(i===2)?'none':'inline-flex';}"
+	                                  "if(submitBtn){submitBtn.style.display=(i===2)?'inline-flex':'none';}"
+	                                  "backBtns.forEach(function(b){b.style.display=(i===0)?'none':'inline-flex';});"
+	                                  "if(hint){hint.textContent='';}"
+	                                  "syncChips();"
+	                                  "updateSummary();"
+	                                  "}"
+	                                  "function updateSummary(){"
+	                                  "if(sumService){var checked=root.querySelector('input[name=primary_interest]:checked');"
+	                                  "var t=(checked&&checked.closest)?checked.closest('label').querySelector('.dw-chip__title'):null;"
+	                                  "sumService.textContent=t?String(t.textContent||'').trim():(radio('primary_interest')||'—');}"
+	                                  "if(sumStart){sumStart.textContent=val('start_month')||'—';}"
+	                                  "if(sumContact){var e=val('email');var p=val('phone');sumContact.textContent=(p||e||'—');}"
+	                                  "}"
+	                                  "function need(msg){if(hint){hint.textContent=msg||'';}return false;}"
+	                                  "function validateStep(idx){"
+	                                  "if(idx===0){if(!radio('primary_interest')){return need(msgService);}return true;}"
+	                                  "if(idx===1){if(!val('activities')){return need(msgActivities);}return true;}"
+	                                  "if(idx===2){var e=val('email');var p=val('phone');if(!e&&!p){return need(msgContact);}return true;}"
+	                                  "return true;}"
+	                                  "if(nextBtn){nextBtn.addEventListener('click',function(){if(validateStep(i)){setStep(i+1);} });}"
+	                                  "backBtns.forEach(function(b){b.addEventListener('click',function(){setStep(i-1);});});"
+	                                  "stepBtns.forEach(function(b){b.addEventListener('click',function(){var n=parseInt(b.getAttribute('data-step')||'0',10);if(!isNaN(n)&&n<=i){setStep(n);} });});"
+	                                  "root.addEventListener('input',updateSummary);"
+	                                  "root.addEventListener('change',updateSummary);"
+	                                  "root.addEventListener('submit',function(e){if(!radio('primary_interest')||!val('activities')||(!val('email')&&!val('phone'))){e.preventDefault();setStep(!radio('primary_interest')?0:(!val('activities')?1:2));validateStep(i);} });"
+	                                  "setStep(0);"
+	                                  "})();</script>"
+	                                  "</section>"
+
+	                                  "<section><div class='section-title'><h2>" (escape-html inputs-title) "</h2></div>"
+	                                  (bullet-list (case lang
+	                                                 :ar ["الأنشطة (1 إلى 3 أسطر)"
+	                                                      "الملكية (فرد / شركة أم / خليجي)"
+	                                                      "شهر البدء المستهدف (الشهر كافٍ)"
                                                       "حالة الوثائق (جاهز / قيد التجهيز)"
                                                       "اللغة المفضلة (عربي/إنجليزي/أردو)"]
                                                  :ur ["سرگرمیاں (1 سے 3 لائنیں)"
