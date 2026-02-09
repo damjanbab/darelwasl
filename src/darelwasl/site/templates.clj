@@ -559,12 +559,12 @@
   (let [client (:client portal)
         service-cases (:service.cases portal)
         documents (:documents portal)
-        name (or (:client/name client) "Client")
+        client-name (or (:client/name client) "Client")
         meeting (:meeting portal)
         meeting-date (pretty-date (:date meeting))
         meeting-time (pretty-time (:time meeting))
         body (str "<section class='section-pad'>"
-                  "<h1>" (escape-html name) "</h1>"
+                  "<h1>" (escape-html client-name) "</h1>"
                   "<p class='muted'>Your status and meeting updates live here.</p>"
                   "<div class='card' style='margin:14px 0;'>"
                   "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
@@ -586,7 +586,7 @@
                          "<div style='margin-top:12px;display:grid;gap:10px;'>"
                          (apply str
                                 (for [d documents]
-                                  (let [doc-type (some-> (:document/type d) name (str/replace "-" " ") str/upper-case)
+                                  (let [doc-type (some-> (:document/type d) clojure.core/name (str/replace "-" " ") str/upper-case)
                                         issued (:document/issued-at d)
                                         ref (:entity/ref d)
                                         dl (when (and (not (str/blank? (str client-ref)))
@@ -629,14 +629,14 @@
                   "</section>")]
     {:status 200
      :headers {"Content-Type" "text/html; charset=utf-8"}
-     :body (public-page {:title (str "Client Portal | " name)
+     :body (public-page {:title (str "Client Portal | " client-name)
                          :description "Client portal."
                          :public-base-url public-base-url
                          :base-path base-path
                          :lang lang
                          :path path
                          :image-path "/logo.jpg"}
-	                        body)}))
+		                        body)}))
 
 (defn staff-consultation-form
   "Staff-only (magic link) consultation form used during the meeting. Submits a
