@@ -288,11 +288,9 @@
   (let [client-ref (some-> client-ref codec/url-decode str str/trim)
         token (some-> token codec/url-decode str str/trim)
         doc-ref (some-> doc-ref codec/url-decode str str/trim)]
-    (cond
-      (str/blank? client-ref) nil
-      (str/blank? token) nil
-      (str/blank? doc-ref) nil
-      :else
+    (when-not (or (str/blank? client-ref)
+                  (str/blank? token)
+                  (str/blank? doc-ref))
       (let [portal (service-cases/public-portal-read conn {:client-ref client-ref :token token})]
         (when (and (map? portal) (not (:error portal)))
           (let [db (d/db conn)
@@ -303,10 +301,11 @@
                                        :where [?d :entity/ref ?ref]
                                               [?d :document/workspace ?ws]]
                                      db doc-ref ws))
-                doc (when doc-eid (d/pull db [:document/type
-                                              {:document/client [:client/id]}
-                                              {:document/file [:file/id]}]
-                                          doc-eid))
+                doc (when doc-eid
+                      (d/pull db [:document/type
+                                 {:document/client [:client/id]}
+                                 {:document/file [:file/id]}]
+                              doc-eid))
                 ok? (= client-id (get-in doc [:document/client :client/id]))
                 file-id (get-in doc [:document/file :file/id])
                 file-res (when (and ok? file-id) (files/fetch-file conn file-id ws))
@@ -314,13 +313,11 @@
                 path (when (and (string? storage-path) (not (str/blank? storage-path)))
                        (.getPath (io/file storage-dir storage-path)))]
             (when (and ok? path (.exists (io/file path)))
-                  (let [filename (or name "document.pdf")
-                        disp (if download?
-                               "attachment"
-                               "inline")]
-                    (-> (resp/file-response path)
-                        (resp/content-type (or mime "application/pdf"))
-                        (resp/header "Content-Disposition" (str disp "; filename=\"" filename "\""))))))))))))
+              (let [filename (or name "document.pdf")
+                    disp (if download? "attachment" "inline")]
+                (-> (resp/file-response path)
+                    (resp/content-type (or mime "application/pdf"))
+                    (resp/header "Content-Disposition" (str disp "; filename=\"" filename "\"")))))))))))
 
 (defn- client-id-by-email
   [db workspace-id email]
