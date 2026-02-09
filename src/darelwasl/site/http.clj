@@ -718,10 +718,11 @@
 	                                          :query query
 	                                          :verification verification}))
 
-	              (and (= method :get)
+	              (and (or (= method :get) (= method :head))
 	                   (str/starts-with? path "/portal/")
 	                   (re-matches #"/portal/([^/]+)/([^/]+)/doc/([^/]+)" path))
 		              (let [[_ client-ref token doc-ref] (re-matches #"/portal/([^/]+)/([^/]+)/doc/([^/]+)" path)
+		                    head? (= method :head)
 		                    download? (= "1" (get query "download"))
 		                    storage-dir (get-in config [:files :storage-dir])
 		                    dl (when (and conn (string? storage-dir) (not (str/blank? storage-dir)))
@@ -730,7 +731,7 @@
 		                                                                              :doc-ref doc-ref
 		                                                                              :download? download?}))]
 		                (portal-security-headers
-		                 (or dl
+		                 (or (when dl (if head? (assoc dl :body nil) dl))
 		                     (templates/public-not-found {:public-base-url public-base-url
 		                                                  :base-path base-path
 		                                                  :lang lang
