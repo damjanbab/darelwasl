@@ -284,7 +284,7 @@
           c)))))
 
 (defn- portal-document-download-response
-  [conn storage-dir {:keys [client-ref token doc-ref]}]
+  [conn storage-dir {:keys [client-ref token doc-ref download?]}]
   (let [client-ref (some-> client-ref codec/url-decode str str/trim)
         token (some-> token codec/url-decode str str/trim)
         doc-ref (some-> doc-ref codec/url-decode str str/trim)]
@@ -314,9 +314,13 @@
                 path (when (and (string? storage-path) (not (str/blank? storage-path)))
                        (.getPath (io/file storage-dir storage-path)))]
             (when (and ok? path (.exists (io/file path)))
-                  (-> (resp/file-response path)
-                      (resp/content-type (or mime "application/pdf"))
-                      (resp/header "Content-Disposition" (str "attachment; filename=\"" (or name "document.pdf") "\""))))))))))
+                  (let [filename (or name "document.pdf")
+                        disp (if download?
+                               "attachment"
+                               "inline")]
+                    (-> (resp/file-response path)
+                        (resp/content-type (or mime "application/pdf"))
+                        (resp/header "Content-Disposition" (str disp "; filename=\"" filename "\""))))))))))))
 
 (defn- client-id-by-email
   [db workspace-id email]
@@ -720,17 +724,19 @@
 	              (and (= method :get)
 	                   (str/starts-with? path "/portal/")
 	                   (re-matches #"/portal/([^/]+)/([^/]+)/doc/([^/]+)" path))
-	              (let [[_ client-ref token doc-ref] (re-matches #"/portal/([^/]+)/([^/]+)/doc/([^/]+)" path)
-	                    storage-dir (get-in config [:files :storage-dir])
-	                    dl (when (and conn (string? storage-dir) (not (str/blank? storage-dir)))
-	                         (portal-document-download-response conn storage-dir {:client-ref client-ref
-	                                                                              :token token
-	                                                                              :doc-ref doc-ref}))]
-	                (portal-security-headers
-	                 (or dl
-	                     (templates/public-not-found {:public-base-url public-base-url
-	                                                  :base-path base-path
-	                                                  :lang lang
+		              (let [[_ client-ref token doc-ref] (re-matches #"/portal/([^/]+)/([^/]+)/doc/([^/]+)" path)
+		                    download? (= "1" (get query "download"))
+		                    storage-dir (get-in config [:files :storage-dir])
+		                    dl (when (and conn (string? storage-dir) (not (str/blank? storage-dir)))
+		                         (portal-document-download-response conn storage-dir {:client-ref client-ref
+		                                                                              :token token
+		                                                                              :doc-ref doc-ref
+		                                                                              :download? download?}))]
+		                (portal-security-headers
+		                 (or dl
+		                     (templates/public-not-found {:public-base-url public-base-url
+		                                                  :base-path base-path
+		                                                  :lang lang
 	                                                  :path path}))))
 
 	              (and (= method :get)

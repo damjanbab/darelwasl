@@ -16,6 +16,17 @@
 (def ^:private portal-time-fmt
   (java.time.format.DateTimeFormatter/ofPattern "h:mm a" java.util.Locale/US))
 
+(defn- pretty-instant
+  [iso]
+  (let [s (some-> iso str str/trim)]
+    (when-not (str/blank? s)
+      (try
+        (let [inst (java.time.Instant/parse s)
+              z (.atZone inst (java.time.ZoneId/of "Asia/Riyadh"))]
+          (str (.format portal-date-fmt (.toLocalDate z)) " · " (.format portal-time-fmt (.toLocalTime z))))
+        (catch Exception _
+          s)))))
+
 (defn- url-encode
   [s]
   (java.net.URLEncoder/encode (str s) "UTF-8"))
@@ -564,9 +575,16 @@
         meeting-date (pretty-date (:date meeting))
         meeting-time (pretty-time (:time meeting))
         body (str "<section class='section-pad'>"
-                  "<h1>" (escape-html client-name) "</h1>"
-                  "<p class='muted'>Your status and meeting updates live here.</p>"
-                  "<div class='card' style='margin:14px 0;'>"
+                  "<div class='portal-hero card'>"
+                  "<div class='portal-hero__top'>"
+                  "<div><div class='eyebrow'>Client portal</div><h1 class='portal-hero__title'>" (escape-html client-name) "</h1></div>"
+                  "<div class='pill'>Active</div>"
+                  "</div>"
+                  "<p class='muted' style='margin:6px 0 0;'>Your documents and updates appear here.</p>"
+                  "</div>"
+
+                  "<div class='portal-grid'>"
+                  "<div class='card'>"
                   "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
                   "<div><div class='eyebrow'>Meeting</div><h3 style='margin:6px 0;'>Consultation</h3></div>"
                   "</div>"
@@ -579,53 +597,65 @@
                   "</div>"
                   "</div>"
                   (when (seq documents)
-                    (str "<div class='card' style='margin:14px 0;'>"
+                    (str "<div class='card'>"
                          "<div class='eyebrow'>Documents</div>"
                          "<h3 style='margin:6px 0;'>Downloads</h3>"
                          "<div class='muted' style='margin-top:10px;'>Latest documents issued for your case.</div>"
-                         "<div style='margin-top:12px;display:grid;gap:10px;'>"
+                         "<div class='doc-list'>"
                          (apply str
                                 (for [d documents]
                                   (let [doc-type (some-> (:document/type d) clojure.core/name (str/replace "-" " ") str/upper-case)
-                                        issued (:document/issued-at d)
+                                        issued (pretty-instant (:document/issued-at d))
                                         ref (:entity/ref d)
                                         dl (when (and (not (str/blank? (str client-ref)))
                                                       (not (str/blank? (str token)))
                                                       (not (str/blank? (str ref))))
                                              (with-base base-path (str "/portal/" (str client-ref) "/" (str token) "/doc/" (url-encode (str ref)))))]
-                                    (str "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff;'>"
-                                         "<div>"
-                                         "<div style='font-weight:800;letter-spacing:0.6px;'>" (escape-html (or doc-type "DOCUMENT")) "</div>"
-                                         "<div class='muted' style='font-size:12px;margin-top:4px;'>" (escape-html (or issued "—")) "</div>"
+                                    (str "<div class='doc-row'>"
+                                         "<div class='doc-row__meta'>"
+                                         "<div class='doc-row__title'>" (escape-html (or doc-type "DOCUMENT")) "</div>"
+                                         "<div class='muted doc-row__sub'>" (escape-html (or issued "—")) "</div>"
                                          "</div>"
+                                         "<div class='doc-row__actions'>"
                                          (if dl
-                                           (str "<a class='cta secondary' href='" (escape-html dl) "' style='white-space:nowrap;'>Download</a>")
+                                           (str "<a class='cta secondary' target='_blank' rel='noopener noreferrer' href='" (escape-html dl) "' style='white-space:nowrap;'>Open</a>"
+                                                "<a class='cta primary' target='_blank' rel='noopener noreferrer' href='" (escape-html (str dl "?download=1")) "' style='white-space:nowrap;'>Download</a>")
                                            "<span class='muted'>—</span>")
+                                         "</div>"
                                          "</div>"))))
                          "</div>"
                          "</div>"))
+                  "</div>" ; portal-grid open
                   (if (seq service-cases)
-                    (apply str
-                           (for [c service-cases]
-                             (let [title (or (:service.case/title c) "Service")
-                                   max-phase (:service.case/public-max-phase c)
-                                   lifecycle (:service.case/lifecycle c)
-                                   status (lifecycle-label lifecycle)
-                                   next-actions (or (:public/next-actions c) [])]
-                               (str "<div class='card' style='margin:14px 0;'>"
-                                    "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
-                                    "<div><div class='eyebrow'>Case</div><h3 style='margin:6px 0;'>" (escape-html title) "</h3></div>"
-                                    "<div class='pill'>" (escape-html status) "</div>"
-                                    "</div>"
-                                    (progress-bar max-phase)
-                                    "<div class='muted' style='margin-top:10px;'>Current phase: " (escape-html (phase-label max-phase)) "</div>"
-                                    (when (seq next-actions)
-                                      (str "<div style='margin-top:10px;'><div class='label'>Next action</div>"
-                                           "<ul class='bullet-list'>"
-                                           (apply str (for [a next-actions] (str "<li>" (escape-html a) "</li>")))
-                                           "</ul></div>"))
-                                    "</div>"))))
-                    "<div class='card'><p>No active cases yet.</p><p class='muted'>Once we confirm your scope, your progress will appear here.</p></div>")
+                    (str "<div class='card' style='margin-top:14px;'>"
+                         "<div class='eyebrow'>Progress</div>"
+                         "<h3 style='margin:6px 0;'>Your case</h3>"
+                         (apply str
+                                (for [c service-cases]
+                                  (let [title (or (:service.case/title c) "Service")
+                                        max-phase (:service.case/public-max-phase c)
+                                        lifecycle (:service.case/lifecycle c)
+                                        status (lifecycle-label lifecycle)
+                                        next-actions (or (:public/next-actions c) [])]
+                                    (str "<div class='portal-case'>"
+                                         "<div class='portal-case__top'>"
+                                         "<div><div class='label'>" (escape-html title) "</div>"
+                                         "<div class='muted' style='font-size:13px;'>Current phase: " (escape-html (phase-label max-phase)) "</div></div>"
+                                         "<div class='pill'>" (escape-html status) "</div>"
+                                         "</div>"
+                                         (progress-bar max-phase)
+                                         (when (seq next-actions)
+                                           (str "<div style='margin-top:10px;'><div class='label'>Next action</div>"
+                                                "<ul class='bullet-list'>"
+                                                (apply str (for [a next-actions] (str "<li>" (escape-html a) "</li>")))
+                                                "</ul></div>"))
+                                         "</div>"))))
+                         "</div>")
+                    (str "<div class='card' style='margin-top:14px;'>"
+                         "<div class='eyebrow'>Progress</div>"
+                         "<h3 style='margin:6px 0;'>Getting started</h3>"
+                         "<p class='muted'>Once we confirm your scope, your progress will appear here.</p>"
+                         "</div>"))
                   "</section>")]
     {:status 200
      :headers {"Content-Type" "text/html; charset=utf-8"}

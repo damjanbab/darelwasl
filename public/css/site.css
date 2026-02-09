@@ -467,6 +467,125 @@ section .cta.secondary {
   padding: 24px;
 }
 
+.eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  color: var(--site-muted);
+}
+
+.portal-hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 25%, rgba(14, 165, 233, 0.14), transparent 58%),
+    radial-gradient(circle at 85% 0%, rgba(11, 120, 181, 0.12), transparent 52%),
+    #ffffff;
+}
+
+.portal-hero__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.portal-hero__title {
+  margin: 6px 0 0;
+  font-size: clamp(26px, 3.1vw, 42px);
+}
+
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.doc-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.doc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.doc-row__title {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-size: 13px;
+}
+
+.doc-row__meta {
+  min-width: 0;
+}
+
+.doc-row__sub {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.doc-row__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.doc-row__actions .cta {
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.portal-case {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #ffffff;
+}
+
+.portal-case__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.portal-case .dw-progress {
+  margin-top: 10px;
+}
+
+.portal-case .pill {
+  margin-top: 2px;
+}
+
+@media (max-width: 520px) {
+  .portal-hero__top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .doc-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .doc-row__actions {
+    justify-content: flex-start;
+  }
+}
+
 .dw-progress {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
