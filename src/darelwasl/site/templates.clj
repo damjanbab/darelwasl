@@ -10,6 +10,35 @@
    :phone-local "0579373003"
    :area-served "Saudi Arabia"})
 
+(def ^:private portal-date-fmt
+  (java.time.format.DateTimeFormatter/ofPattern "MMM d, yyyy" java.util.Locale/US))
+
+(def ^:private portal-time-fmt
+  (java.time.format.DateTimeFormatter/ofPattern "h:mm a" java.util.Locale/US))
+
+(defn- url-encode
+  [s]
+  (java.net.URLEncoder/encode (str s) "UTF-8"))
+
+(defn- pretty-date
+  [ymd]
+  (let [s (some-> ymd str str/trim)]
+    (when-not (str/blank? s)
+      (try
+        (.format portal-date-fmt (java.time.LocalDate/parse s))
+        (catch Exception _
+          s)))))
+
+(defn- pretty-time
+  [hm]
+  (let [s (some-> hm str str/trim)]
+    (when-not (str/blank? s)
+      (try
+        ;; HTML <input type=time> yields HH:mm
+        (.format portal-time-fmt (java.time.LocalTime/parse s))
+        (catch Exception _
+          s)))))
+
 (defn- normalize-base-path
   [base-path]
   (let [b (str/trim (str (or base-path "")))]
@@ -526,13 +555,55 @@
          "</div>")))
 
 (defn public-portal
-  [{:keys [public-base-url base-path lang path portal]}]
+  [{:keys [public-base-url base-path lang path query portal client-ref token]}]
   (let [client (:client portal)
         service-cases (:service.cases portal)
+        documents (:documents portal)
         name (or (:client/name client) "Client")
+        meeting (:meeting portal)
+        meeting-date (pretty-date (:date meeting))
+        meeting-time (pretty-time (:time meeting))
         body (str "<section class='section-pad'>"
                   "<h1>" (escape-html name) "</h1>"
-                  "<p class='muted'>Your documents and progress live here.</p>"
+                  "<p class='muted'>Your status and meeting updates live here.</p>"
+                  "<div class='card' style='margin:14px 0;'>"
+                  "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;'>"
+                  "<div><div class='eyebrow'>Meeting</div><h3 style='margin:6px 0;'>Consultation</h3></div>"
+                  "</div>"
+                  "<div class='muted' style='margin-top:10px;'>"
+                  (if (or meeting-date meeting-time)
+                    (str "Scheduled: "
+                         (escape-html (or meeting-date "—"))
+                         (when meeting-time (str " at " (escape-html meeting-time))))
+                    "Not scheduled yet. We will confirm the time with you.")
+                  "</div>"
+                  "</div>"
+                  (when (seq documents)
+                    (str "<div class='card' style='margin:14px 0;'>"
+                         "<div class='eyebrow'>Documents</div>"
+                         "<h3 style='margin:6px 0;'>Downloads</h3>"
+                         "<div class='muted' style='margin-top:10px;'>Latest documents issued for your case.</div>"
+                         "<div style='margin-top:12px;display:grid;gap:10px;'>"
+                         (apply str
+                                (for [d documents]
+                                  (let [doc-type (some-> (:document/type d) name (str/replace "-" " ") str/upper-case)
+                                        issued (:document/issued-at d)
+                                        ref (:entity/ref d)
+                                        dl (when (and (not (str/blank? (str client-ref)))
+                                                      (not (str/blank? (str token)))
+                                                      (not (str/blank? (str ref))))
+                                             (with-base base-path (str "/portal/" (str client-ref) "/" (str token) "/doc/" (url-encode (str ref)))))]
+                                    (str "<div style='display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fff;'>"
+                                         "<div>"
+                                         "<div style='font-weight:800;letter-spacing:0.6px;'>" (escape-html (or doc-type "DOCUMENT")) "</div>"
+                                         "<div class='muted' style='font-size:12px;margin-top:4px;'>" (escape-html (or issued "—")) "</div>"
+                                         "</div>"
+                                         (if dl
+                                           (str "<a class='cta secondary' href='" (escape-html dl) "' style='white-space:nowrap;'>Download</a>")
+                                           "<span class='muted'>—</span>")
+                                         "</div>"))))
+                         "</div>"
+                         "</div>"))
                   (if (seq service-cases)
                     (apply str
                            (for [c service-cases]
@@ -554,7 +625,7 @@
                                            (apply str (for [a next-actions] (str "<li>" (escape-html a) "</li>")))
                                            "</ul></div>"))
                                     "</div>"))))
-                    "<div class='card'><p>No active cases yet.</p></div>")
+                    "<div class='card'><p>No active cases yet.</p><p class='muted'>Once we confirm your scope, your progress will appear here.</p></div>")
                   "</section>")]
     {:status 200
      :headers {"Content-Type" "text/html; charset=utf-8"}
@@ -565,7 +636,163 @@
                          :lang lang
                          :path path
                          :image-path "/logo.jpg"}
-                        body)}))
+	                        body)}))
+
+(defn staff-consultation-form
+  "Staff-only (magic link) consultation form used during the meeting. Submits a
+  consultation report card to generate a proposal immediately."
+  [{:keys [public-base-url base-path lang path client task-id]}]
+  (let [name (or (:client/name client) "Client")
+        client-ref (:entity/ref client)
+        portal-token (:client/portal-token client)
+        portal-url (when (and (not (str/blank? (str client-ref)))
+                              (not (str/blank? (str portal-token))))
+                     (with-base base-path (str "/portal/" (str client-ref) "/" (str portal-token))))
+        action (with-base base-path path)]
+    {:status 200
+     :headers {"Content-Type" "text/html; charset=utf-8"
+               "Cache-Control" "no-store"}
+     :body
+     (public-page {:title "Consultation Form (Staff)"
+                   :description "Submit consultation inputs to generate a proposal."
+                   :public-base-url public-base-url
+                   :base-path base-path
+                   :lang lang
+                   :path path
+                   :image-path "/logo.jpg"}
+                  (str "<section class='section-pad'>"
+                       "<h1>Consultation Form</h1>"
+                       "<p class='muted'>Client: <strong>" (escape-html name) "</strong></p>"
+                       (when portal-url
+                         (str "<p style='margin-top:10px;'><a class='cta secondary' href='" (escape-html portal-url) "' target='_blank' rel='noreferrer'>Open client portal</a></p>"))
+                       "<div class='card' style='margin-top:14px;'>"
+                       "<div class='eyebrow'>Submit to generate proposal</div>"
+                       "<p class='muted' style='margin-top:8px;'>Fill this during the meeting. On submit, the system issues a proposal (services + payment plan) and it appears in the client portal immediately.</p>"
+                       "<form method='post' action='" (escape-html action) "' style='margin-top:12px;display:grid;gap:12px;max-width:860px;'>"
+                       "<input type='hidden' name='task_id' value='" (escape-html task-id) "'/>"
+
+                       "<label style='display:flex;gap:10px;align-items:center;'>"
+                       "<input type='checkbox' name='dead_lead' value='1'/>"
+                       "<span><strong>Dead lead</strong> (close client)</span>"
+                       "</label>"
+                       "<label>Dead lead reason (optional)<br/>"
+                       "<input name='dead_reason' placeholder='Reason…' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+
+                       "<div class='form-grid'>"
+                       "<label>Service<br/>"
+                       "<select name='service_id' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'>"
+                       "<option value='service/entrepreneur-license'>Entrepreneur License</option>"
+                       "<option value='service/general-investment-license'>General Investment License</option>"
+                       "<option value='service/gcc-national-license'>GCC National Registration</option>"
+                       "<option value='service/rhq-license'>RHQ License</option>"
+                       "<option value='service/pro-services'>PRO / Government Services</option>"
+                       "<option value='service/trademark-registration'>Trademark Registration</option>"
+                       "<option value='service/uk-company-formation'>UK Company Formation</option>"
+                       "<option value='service/us-company-formation'>USA Company Formation</option>"
+                       "<option value='service/attestation-pakistan'>Pakistan Attestation</option>"
+                       "<option value='service/attestation-india'>India Attestation</option>"
+                       "<option value='service/attestation-oman'>Oman Attestation</option>"
+                       "<option value='service/attestation-uae'>UAE Attestation</option>"
+                       "</select>"
+                       "</label>"
+                       "<label>Currency<br/>"
+                       "<input name='currency' value='SAR' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+                       "</div>"
+
+                       "<label>Objective (required)<br/>"
+                       "<textarea name='objective' rows='3' placeholder='What does success look like for the client?' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'></textarea>"
+                       "</label>"
+
+                       "<div class='form-grid'>"
+                       "<label>Pricing model (required)<br/>"
+                       "<select name='pricing_model' id='pricing_model' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'>"
+                       "<option value='fixed'>Fixed</option>"
+                       "<option value='range'>Range</option>"
+                       "<option value='custom'>Custom</option>"
+                       "</select>"
+                       "</label>"
+                       "<label id='fixed_wrap'>Fixed total<br/>"
+                       "<input name='fixed_total' placeholder='e.g. 50000' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+                       "<label id='range_min_wrap' style='display:none;'>Range min<br/>"
+                       "<input name='range_min' placeholder='e.g. 25000' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+                       "<label id='range_max_wrap' style='display:none;'>Range max<br/>"
+                       "<input name='range_max' placeholder='e.g. 50000' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+                       "</div>"
+
+                       "<label id='custom_wrap' style='display:none;'>Custom pricing notes (required for custom)<br/>"
+                       "<textarea name='custom_notes' rows='3' placeholder='Describe the pricing approach…' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'></textarea>"
+                       "</label>"
+
+                       "<div class='form-grid'>"
+                       "<label>Deposit (optional)<br/>"
+                       "<select name='deposit_type' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'>"
+                       "<option value='skip'>No deposit</option>"
+                       "<option value='amount'>Amount</option>"
+                       "<option value='percent'>Percent</option>"
+                       "</select>"
+                       "</label>"
+                       "<label>Deposit value<br/>"
+                       "<input name='deposit_value' placeholder='e.g. 25000 or 50' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'/>"
+                       "</label>"
+                       "</div>"
+
+                       "<div class='card' style='padding:12px 12px;background:#f8fafc;border:1px solid #e2e8f0;'>"
+                       "<div class='eyebrow'>Payment milestones (≥ 1 required)</div>"
+                       "<div id='milestones' style='display:grid;gap:10px;margin-top:10px;'></div>"
+                       "<button type='button' class='cta secondary' id='add_ms' style='width:max-content;'>Add milestone</button>"
+                       "</div>"
+
+                       "<label>Client-visible notes (optional)<br/>"
+                       "<textarea name='client_notes' rows='3' placeholder='Shown in proposal notes…' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'></textarea>"
+                       "</label>"
+
+                       "<label>Internal notes (optional)<br/>"
+                       "<textarea name='internal_notes' rows='3' placeholder='Internal only…' style='width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;'></textarea>"
+                       "</label>"
+
+                       "<button type='submit' class='cta primary' style='width:max-content;'>Submit and generate proposal</button>"
+                       "</form>"
+                       "</div>"
+
+                       "<script>"
+                       "(function(){"
+                       "var pricing=document.getElementById('pricing_model');"
+                       "var fixed=document.getElementById('fixed_wrap');"
+                       "var rmin=document.getElementById('range_min_wrap');"
+                       "var rmax=document.getElementById('range_max_wrap');"
+                       "var custom=document.getElementById('custom_wrap');"
+                       "function sync(){var v=pricing.value;"
+                       "fixed.style.display=(v==='fixed')?'block':'none';"
+                       "rmin.style.display=(v==='range')?'block':'none';"
+                       "rmax.style.display=(v==='range')?'block':'none';"
+                       "custom.style.display=(v==='custom')?'block':'none';}"
+                       "pricing.addEventListener('change',sync);sync();"
+                       "var ms=document.getElementById('milestones');"
+                       "function add(label,type,value){"
+                       "var row=document.createElement('div');"
+                       "row.style.display='grid';row.style.gridTemplateColumns='2fr 1fr 1fr auto';row.style.gap='10px';"
+                       "row.innerHTML="
+                       "'<input name=\"milestone_label\" placeholder=\"Milestone label\" style=\"padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;\"/>'+"
+                       "'<select name=\"milestone_type\" style=\"padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;\"><option value=\"amount\">Amount</option><option value=\"percent\">Percent</option></select>'+"
+                       "'<input name=\"milestone_value\" placeholder=\"Value\" style=\"padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;\"/>'+"
+                       "'<button type=\"button\" class=\"cta secondary\" style=\"padding:8px 10px;\">Remove</button>';"
+                       "row.querySelector('button').addEventListener('click',function(){row.remove();});"
+                       "if(label){row.querySelector('input[name=milestone_label]').value=label;}"
+                       "if(type){row.querySelector('select[name=milestone_type]').value=type;}"
+                       "if(value){row.querySelector('input[name=milestone_value]').value=value;}"
+                       "ms.appendChild(row);"
+                       "}"
+                       "document.getElementById('add_ms').addEventListener('click',function(){add('','amount','');});"
+                       ;; Strict: no default milestone values; keep 1 empty row present.
+                       "add('','amount','');"
+                       "})();"
+                       "</script>"
+                       "</section>")))}))
 
 (defn public-route
   [{:keys [public-base-url base-path lang path contact query]}]
@@ -2486,11 +2713,12 @@
         :headers {"Content-Type" "text/html; charset=utf-8"}
         :body (let [contact (merge public-defaults (or contact {}))
                     email (:email contact)
-                    phone (:phone contact)
-                    phone-display (or (:phone-display contact) phone)
-                    phone-local (:phone-local contact)
-                    sent? (= "1" (get (or query {}) "sent"))
-                    error? (= "1" (get (or query {}) "error"))
+	                    phone (:phone contact)
+	                    phone-display (or (:phone-display contact) phone)
+	                    phone-local (:phone-local contact)
+	                    sent? (= "1" (get (or query {}) "sent"))
+	                    portal? (= "1" (get (or query {}) "portal"))
+	                    error? (= "1" (get (or query {}) "error"))
                     page-title (case lang
                                  :ar "احجز استشارة"
                                  :ur "مشاورت طے کریں"
@@ -2535,13 +2763,19 @@
                                    nil
                                    nil)
                                   "<section id='consultation'><div class='section-title'><h2>" (escape-html form-title) "</h2></div>"
-                                  (when sent?
-                                    (str "<div class='notice notice--success'>"
-                                         (escape-html (case lang
-                                                        :ar "تم استلام تفاصيلك. سنرد عليك بقائمة المتطلبات وخطوتك التالية."
-                                                        :ur "آپ کی تفصیلات موصول ہو گئیں۔ ہم آپ کو تقاضوں کی چیک لسٹ اور اگلا قدم بھیجیں گے۔"
-                                                        "Your details were received. We’ll reply with your requirements checklist and next step."))
-                                         "</div>"))
+	                                  (when sent?
+	                                    (str "<div class='notice notice--success'>"
+	                                         (escape-html (case lang
+	                                                        :ar (if portal?
+	                                                              "تم استلام تفاصيلك. تم إرسال رابط البوابة الآمنة إلى بريدك الإلكتروني."
+	                                                              "تم استلام تفاصيلك. سنرد عليك بقائمة المتطلبات وخطوتك التالية.")
+	                                                        :ur (if portal?
+	                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم نے آپ کے ای میل پر محفوظ پورٹل لنک بھیج دیا ہے۔"
+	                                                              "آپ کی تفصیلات موصول ہو گئیں۔ ہم آپ کو تقاضوں کی چیک لسٹ اور اگلا قدم بھیجیں گے۔")
+	                                                        (if portal?
+	                                                          "Your details were received. We emailed you a secure portal link."
+	                                                          "Your details were received. We’ll reply with your requirements checklist and next step.")))
+	                                         "</div>"))
                                   (when (and (not sent?) error?)
                                     (str "<div class='notice notice--error'>"
                                          (escape-html (case lang

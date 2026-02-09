@@ -22,3 +22,5 @@ node_modules/
 !.secrets/README.md
 __pycache__/
 *.pyc
+tmp/
+proposal-sample.pdf

@@ -1036,7 +1036,8 @@
 
 (defn- emit-events
   [action-id actor domain-result]
-  (let [task (:task domain-result)]
+  (let [task (:task domain-result)
+        report-card (:report-card domain-result)]
     (cond
       (and (= action-id :cap/action/task-create) task) [(task-event :task/created actor task)]
       (and (= action-id :cap/action/task-update) task) [(task-event :task/updated actor task)]
@@ -1046,6 +1047,19 @@
       (and (= action-id :cap/action/task-set-due) task) [(task-event :task/due-changed actor task)]
       (and (= action-id :cap/action/task-set-tags) task) [(task-event :task/tags-changed actor task)]
       (and (= action-id :cap/action/task-archive) task) [(task-event :task/archived actor task)]
+      (and (= action-id :cap/action/report-card-submit) report-card)
+      [(events/new-event {:event/type :report-card/submitted
+                          :event/subject {:subject/type :subject.type/report-card
+                                          :subject/id (:report.card/id report-card)}
+                          :event/payload {:report.card/id (:report.card/id report-card)
+                                          :report.card/type (:report.card/type report-card)
+                                          :report.card/fields (:report.card/fields report-card)
+                                          :report.card/submitted-at (:report.card/submitted-at report-card)
+                                          :report.card/automation-key (:report.card/automation-key report-card)
+                                          :task/id (get-in report-card [:report.card/task :task/id])
+                                          :client/id (get-in report-card [:report.card/client :client/id])
+                                          :workspace/id (:report.card/workspace report-card)}
+                          :actor actor})]
       (and (= action-id :cap/action/task-delete) (:task domain-result))
       [(events/new-event {:event/type :task/deleted
                           :event/payload {:task/id (get-in domain-result [:task :task/id])}

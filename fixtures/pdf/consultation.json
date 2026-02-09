@@ -1,0 +1,54 @@
+{
+  "templateVersion": "pdf-v3-2026-02-07",
+  "issuedAt": "2026-02-09T10:00:00Z",
+  "company": {
+    "name": "Dar El Wasl",
+    "address": "Sari St, Ar Rawdah, Jeddah 23435",
+    "phone": "+966 57 937 3003",
+    "email": "info@darelwasl.com",
+    "currency": "SAR"
+  },
+  "client": {
+    "name": "Website lead · +966 50 000 0000",
+    "email": "client@example.com",
+    "phone": "+966 50 000 0000"
+  },
+  "consultationBrief": "{\"activities\":\"Software consultancy + local hiring\",\"ownership\":\"100% foreign ownership\",\"residency\":\"Non-resident\",\"startMonth\":\"Mar 2026\",\"preferredLang\":\"en\",\"email\":\"client@example.com\",\"phone\":\"+966 50 000 0000\",\"notes\":\"Goal: launch quickly with a compliant setup and a clear activation plan.\"}",
+  "sections": [
+    {
+      "type": "hero",
+      "title": "CONSULTATION",
+      "refLine": "Before your proposal",
+      "subtitle": "We confirm key inputs and finalize scope + milestones to issue your proposal today.",
+      "chips": [
+        "Confirm requirements",
+        "Agree milestones",
+        "Receive proposal"
+      ],
+      "backgroundSvg": "saudi-hero"
+    },
+    {
+      "type": "process-flow",
+      "title": "What happens today",
+      "steps": [
+        {
+          "label": "Confirm inputs",
+          "desc": "Activities, ownership, and required documents."
+        },
+        {
+          "label": "Agree scope",
+          "desc": "Objective, deliverables, and handover expectations."
+        },
+        {
+          "label": "Set milestones",
+          "desc": "Pricing model, deposit (optional), and milestones."
+        },
+        {
+          "label": "Issue proposal",
+          "desc": "Proposal is issued and available in the portal."
+        }
+      ]
+    }
+  ]
+}
+

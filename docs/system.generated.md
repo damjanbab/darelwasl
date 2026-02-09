@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `f34823fd414719460f7213bbd680d63667aa383cd6ec4fab8d517dd3b231c32a`
+- Catalog version: `7edfe52a49e02ba4d2c987babb3895a9a1760166a674df0100be75be1787e848`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -272,7 +272,8 @@ This file is auto-generated. Do not edit by hand.
 - default
 - site-premium
 
-### Automations (4)
+### Automations (5)
+- automation/report-card-onboarding
 - automation/task-telegram-notify-assigned
 - automation/task-telegram-notify-due
 - automation/task-telegram-notify-status

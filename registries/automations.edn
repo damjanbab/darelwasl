@@ -30,4 +30,12 @@
   :triggers [{:event/type :task/due-changed}]
   :handler :cap/automation.handler/task-telegram-notify
   :notes "Enqueues a Telegram notification for the task assignee when due date changes."}
+
+ {:id :cap/automation/report-card-onboarding
+  :title "Onboarding report card → proposal or close lead"
+  :version "v1"
+  :enabled true
+  :triggers [{:event/type :report-card/submitted}]
+  :handler :cap/automation.handler/report-card-onboarding
+  :notes "When an onboarding report card is submitted, either close the lead (dead lead) or upsert doc pack, issue a proposal, and create a delivery task."}
 ]

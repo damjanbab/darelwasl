@@ -143,6 +143,8 @@
    :doc.pack/currency
    :doc.pack/services-included
    :doc.pack/payment-plan
+   :doc.pack/consultation-brief
+   :doc.pack/sections
    :doc.pack/status-notes
    :doc.pack/updated-at
    :entity/ref])
@@ -317,6 +319,8 @@
             currency (normalize-text (or (param-value body :doc.pack/currency) (param-value body :currency)))
             services (normalize-text (param-value body :doc.pack/services-included))
             plan (normalize-text (param-value body :doc.pack/payment-plan))
+            consultation-brief (normalize-text (param-value body :doc.pack/consultation-brief))
+            sections (normalize-text (param-value body :doc.pack/sections))
             status-notes (normalize-text (param-value body :doc.pack/status-notes))
             address (normalize-text (param-value body :doc.pack/company-address))
             email (normalize-text (param-value body :doc.pack/company-email))
@@ -348,6 +352,8 @@
                            currency (assoc :doc.pack/currency currency)
                            services (assoc :doc.pack/services-included services)
                            plan (assoc :doc.pack/payment-plan plan)
+                           consultation-brief (assoc :doc.pack/consultation-brief consultation-brief)
+                           sections (assoc :doc.pack/sections sections)
                            status-notes (assoc :doc.pack/status-notes status-notes))
                     base (entity/with-ref db base)
                     tx-prov (prov/provenance actor)
@@ -960,12 +966,22 @@
                                 :doc.pack/currency "SAR"
                                 :doc.pack/services-included ""
                                 :doc.pack/payment-plan ""
+                                :doc.pack/consultation-brief ""
+                                :doc.pack/sections ""
                                 :doc.pack/status-notes ""})
                   invoices (invoices-for-client db ceid ws)
                   payments (payments-for-client db ceid ws)
                   base (merge (base-context doc-pack client)
                               {:docType (name type)})
                   subject (case type
+                            :consultation
+                            {:subject-type :client
+                             :subject-id client-id
+                             :domain-payload (assoc base
+                                                    :consultationBrief (or (:doc.pack/consultation-brief doc-pack) "")
+                                                    :sections (or (:doc.pack/sections doc-pack) ""))
+                             :filename (str "consultation-" (str/lower-case (str/replace (or (:client/name client) "client") #"[^a-z0-9]+" "-")) ".pdf")}
+
                             :proposal
                             (let [agreement-id-raw (param-value body :agreement/id)]
                               (if (nil? agreement-id-raw)

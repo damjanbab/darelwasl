@@ -1,6 +1,7 @@
 ;; Service case tracking (contract-driven steps) + public portal token utilities.
 (ns darelwasl.service-cases
-  (:require [clojure.string :as str]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [datomic.client.api :as d]
             [darelwasl.contracts :as contracts]
@@ -75,6 +76,18 @@
    :service.case.step/internal-label
    :service.case.step/updated-at
    :service.case.step/workspace])
+
+(def ^:private portal-document-pull
+  [:document/type
+   :document/issued-at
+   :entity/ref])
+
+(defn- present-document-lite
+  [doc]
+  (when (map? doc)
+    (-> doc
+        (update :document/issued-at format-inst)
+        (select-keys [:document/type :document/issued-at :entity/ref]))))
 
 (defn- present-step
   [step]
@@ -424,6 +437,30 @@
       (.append out ^String (str (nth token-alphabet (.nextInt r (count token-alphabet))))))
     (.toString out)))
 
+(defn- safe-read-edn-map
+  [raw]
+  (when (string? raw)
+    (try
+      (let [v (edn/read-string raw)]
+        (when (map? v) v))
+      (catch Exception _ nil))))
+
+(defn- latest-onboarding-report-card-fields
+  [db client-eid ws]
+  (let [rows (d/q '[:find ?t ?fields
+                    :in $ ?c ?ws
+                    :where [?r :report.card/client ?c]
+                           [?r :report.card/workspace ?ws]
+                           [?r :report.card/type :report.card.type/onboarding]
+                           [?r :report.card/submitted-at ?t]
+                           [?r :report.card/fields ?fields]]
+                  db client-eid ws)
+        [t fields] (last (sort-by first rows))
+        fields-map (safe-read-edn-map fields)]
+    (when (and t fields-map)
+      {:submitted-at t
+       :fields fields-map})))
+
 (defn ensure-client-portal-token!
   [conn client-id workspace]
   (or (ensure-conn conn)
@@ -459,6 +496,47 @@
                     (log/warn e "Failed to issue client portal token")
                     {:error (error 500 "Failed to issue portal token")})))))))))
 
+(defn ensure-client-staff-magic-token!
+  [conn client-id workspace]
+  (or (ensure-conn conn)
+      (let [db0 (d/db conn)
+            ws (workspace-id workspace)
+            {cid :value err :error} (resolve-client-id db0 client-id)]
+        (cond
+          err {:error (error 400 err)}
+          (nil? cid) {:error (error 400 "client/id is required")}
+          :else
+          (let [eid (ffirst (d/q '[:find ?e
+                                   :in $ ?id ?ws
+                                   :where [?e :client/id ?id]
+                                          [?e :client/workspace ?ws]]
+                                 db0 cid ws))
+                client (when eid (d/pull db0 [:client/id
+                                              :entity/ref
+                                              :client/staff-magic-token
+                                              :client/staff-magic-token-created-at]
+                                         eid))]
+            (cond
+              (nil? eid) {:error (error 404 "Client not found")}
+              (not (str/blank? (str (:client/staff-magic-token client))))
+              {:client/id cid
+               :client/ref (:entity/ref client)
+               :staff/token (:client/staff-magic-token client)
+               :staff/token-created-at (:client/staff-magic-token-created-at client)}
+              :else
+              (let [token (random-token)
+                    now (now-inst)]
+                (try
+                  (db/transact! conn {:tx-data [[:db/add eid :client/staff-magic-token token]
+                                                [:db/add eid :client/staff-magic-token-created-at now]]})
+                  {:client/id cid
+                   :client/ref (:entity/ref client)
+                   :staff/token token
+                   :staff/token-created-at now}
+                  (catch Exception e
+                    (log/warn e "Failed to issue staff magic token")
+                    {:error (error 500 "Failed to issue staff token")})))))))))
+
 (defn portal-link
   [state params actor]
   (let [conn (get-in state [:db :conn])
@@ -489,12 +567,17 @@
           (str/blank? client-ref) (error 400 "Missing client ref")
           (str/blank? token) (error 400 "Missing token")
           :else
-          (let [client-id (entity/lookup-id-by-ref db0 :client/id client-ref)
-                client (when client-id
-                         (ffirst (d/q '[:find (pull ?c [:client/id :client/name :entity/ref :client/portal-token :client/workspace])
-                                        :in $ ?id
-                                        :where [?c :client/id ?id]]
-                                      db0 client-id)))
+	          (let [client-id (entity/lookup-id-by-ref db0 :client/id client-ref)
+	                [client-eid client] (when client-id
+	                                      (first (d/q '[:find ?c (pull ?c [:client/id
+	                                                                    :client/name
+	                                                                    :entity/ref
+	                                                                    :client/portal-token
+	                                                                    :client/portal-token-created-at
+	                                                                    :client/workspace])
+	                                                      :in $ ?id
+	                                                      :where [?c :client/id ?id]]
+	                                                    db0 client-id)))
                 ok? (= token (:client/portal-token client))
                 ws (:client/workspace client)]
             (if-not (and client ok?)
@@ -530,10 +613,30 @@
                                                      (map str)
                                                      (map str/trim)
                                                      (remove str/blank?)
-                                                     distinct
-                                                     vec)])))
+                                                      distinct
+                                                      vec)])))
                     items (mapv (fn [c]
                                   (assoc c :public/next-actions (get next-actions (:service.case/id c) [])))
                                 items0)]
-                {:client (select-keys client [:client/id :client/name :entity/ref])
-                 :service.cases items})))))))
+                (let [docs (when (and client-eid ws)
+                             (->> (d/q '[:find ?d ?issued
+                                         :in $ ?c ?ws
+                                         :where [?d :document/client ?c]
+                                                [?d :document/workspace ?ws]
+                                                [?d :document/issued-at ?issued]]
+                                       db0 client-eid ws)
+                                  (sort-by second #(compare %2 %1))
+                                  (map first)
+                                  (map #(d/pull db0 portal-document-pull %))
+                                  (remove nil?)
+                                  (map present-document-lite)
+                                  vec))]
+                (let [{:keys [submitted-at fields]} (or (latest-onboarding-report-card-fields db0 [:client/id client-id] ws) {})]
+	                  {:client (select-keys client [:client/id :client/name :entity/ref :client/workspace :client/portal-token-created-at])
+	                   :meeting (when (map? fields)
+	                              {:submitted-at submitted-at
+	                               :date (some-> (get fields :meeting/date) str str/trim not-empty)
+	                               :time (some-> (get fields :meeting/time) str str/trim not-empty)})
+	                   :documents (or docs [])
+	                   :service.cases items}))))))))
+)

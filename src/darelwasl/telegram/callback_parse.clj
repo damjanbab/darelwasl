@@ -253,6 +253,24 @@
                    :task-id (nth parts 2 nil)}
           "cancel" {:type :rc/cancel}
           "back" {:type :rc/back}
+          "lead-status" {:type :rc/lead-status
+                         :value (nth parts 2 nil)}
+          "pricing" {:type :rc/pricing-model
+                     :value (nth parts 2 nil)}
+          "deposit" {:type :rc/deposit
+                     :value (nth parts 2 nil)}
+          "milestones" (let [action (nth parts 2 nil)
+                             raw-idx (nth parts 3 nil)
+                             idx (when (and raw-idx (re-matches #"\d+" raw-idx))
+                                   (try (Integer/parseInt raw-idx) (catch Exception _ nil)))]
+                         (cond-> {:type :rc/milestones
+                                  :value action}
+                           (some? idx) (assoc :index idx)))
+          "milestone-type" {:type :rc/milestone-type
+                            :value (nth parts 2 nil)}
+          "client-notes" (case (nth parts 2 nil)
+                           "skip" {:type :rc/client-notes-skip}
+                           nil)
           "contacted" {:type :rc/contacted
                        :value (nth parts 2 nil)}
           "schedule" (case (nth parts 2 nil)
@@ -266,6 +284,9 @@
           "notes" (case (nth parts 2 nil)
                     "skip" {:type :rc/notes-skip}
                     nil)
+          "dead-lead-reason" (case (nth parts 2 nil)
+                               "skip" {:type :rc/dead-lead-reason-skip}
+                               nil)
           "submit" {:type :rc/submit}
           nil)
         "filter"

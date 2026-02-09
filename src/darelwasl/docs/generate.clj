@@ -86,6 +86,14 @@
 
 (defn -main
   [& _args]
-  (let [catalog (catalog-gen/write-catalog! catalog-path)]
-    (write-system-generated! system-generated-path catalog)
-    (println "Generated" system-generated-path "and" catalog-path)))
+  (try
+    (let [catalog (catalog-gen/write-catalog! catalog-path)]
+      (write-system-generated! system-generated-path catalog)
+      (println "Generated" system-generated-path "and" catalog-path)
+      (shutdown-agents)
+      (System/exit 0))
+    (catch Throwable t
+      (binding [*out* *err*]
+        (println "Failed to generate docs:" (.getMessage t)))
+      (shutdown-agents)
+      (System/exit 1))))

@@ -261,6 +261,7 @@
   :enums {:task/status [:todo :in-progress :pending :done]
           :task/priority [:low :medium :high]
           :task/report-card-type [:report.card.type/onboarding
+                                  :report.card.type/consultation
                                   :report.card.type/proposal-response]}
   :invariants ["Title non-empty" "Status in enum" "Priority in enum" "Client required" "Tags reference existing tag entities" "Entity type set to :entity.type/task" "Automation key unique when present"]
   :history {:strategy :overwrite}
@@ -321,7 +322,16 @@
    {:ident :client/portal-token-created-at
     :type :db.type/instant
     :cardinality :db.cardinality/one
-    :doc "Timestamp when the current portal token was issued"}]
+    :doc "Timestamp when the current portal token was issued"}
+   {:ident :client/staff-magic-token
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Opaque token granting staff-only access to meeting forms (optional; rotate to revoke)"}
+   {:ident :client/staff-magic-token-created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Timestamp when the current staff token was issued"}]
   :enums {:client/status [:lead :active :waiting :closed]
           :client/channel [:whatsapp :phone :email]}
   :invariants ["Client name required"
@@ -609,6 +619,14 @@
     :type :db.type/string
     :cardinality :db.cardinality/one
     :doc "Payment plan notes (text or markdown)"}
+   {:ident :doc.pack/consultation-brief
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Consultation worksheet context (JSON) used to generate consultation documents"}
+   {:ident :doc.pack/sections
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Document sections / infographic layout (JSON) for proposals and reports"}
    {:ident :doc.pack/status-notes
     :type :db.type/string
     :cardinality :db.cardinality/one
@@ -2091,6 +2109,7 @@
     :cardinality :db.cardinality/one
     :doc "Workspace/tenant scope"}]
   :enums {:report.card/type [:report.card.type/onboarding
+                             :report.card.type/consultation
                              :report.card.type/proposal-response]}
   :invariants ["Type required"
                "Client required"
