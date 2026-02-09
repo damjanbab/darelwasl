@@ -3052,6 +3052,8 @@
 	                                  "function val(name){var el=root.querySelector('[name='+name+']');return el?String(el.value||'').trim():'';}"
 	                                  "function radio(name){var el=root.querySelector('input[name='+name+']:checked');return el?String(el.value||'').trim():'';}"
 	                                  "function syncChips(){chips.forEach(function(l){var inp=l.querySelector('input');l.classList.toggle('is-selected',!!(inp&&inp.checked));});}"
+	                                  ;; Ensure chip selection works reliably across browsers by explicitly setting the radio.
+	                                  "chips.forEach(function(l){l.addEventListener('click',function(){var inp=l.querySelector('input');if(inp){inp.checked=true;try{inp.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}}});});"
 	                                  "function setStep(n){i=Math.max(0,Math.min(2,n));"
 	                                  "panes.forEach(function(p,idx){p.style.display=(idx===i)?'block':'none';});"
 	                                  "stepBtns.forEach(function(b,idx){b.classList.toggle('is-on',idx===i);b.disabled=(idx>i);});"
