@@ -464,30 +464,30 @@
                       portal-url (when (and token client-ref)
                                    (str (request-public-base-url request)
                                         (with-base base-path (str "/portal/" client-ref "/" token))))]
-                  ;; Store consultation brief + sections used by the consultation PDF.
-                  (let [brief (json/write-str {:activities activities
-                                               :ownership ownership
-                                               :residency residency
-                                               :startMonth start-month
-                                               :preferredLang preferred-lang
-                                               :email email
-                                               :phone phone})
-                        sections (json/write-str [{:type "hero"
-                                                  :title "CONSULTATION"
-                                                  :refLine "Before your proposal"
-                                                  :subtitle "We confirm key inputs and finalize scope + milestones to issue your proposal today."
-                                                  :chips ["Confirm requirements" "Agree milestones" "Receive proposal"]
-                                                  :backgroundSvg "saudi-hero"}
-                                                 {:type "process-flow"
-                                                  :title "What happens today"
-                                                  :steps [{:label "Confirm inputs" :desc "Activities, ownership, and required documents."}
-                                                          {:label "Agree scope" :desc "Objective, deliverables, and handover expectations."}
-                                                          {:label "Set milestones" :desc "Pricing model, deposit (optional), and milestones."}
-                                                          {:label "Issue proposal" :desc "Proposal is issued and available in the portal."}]}])
-                        actor (system-actor ws)]
-                    (actions/execute! state {:action/id :cap/action/doc-pack-upsert
-                                             :actor actor
-                                             :input {:client/id cid
+	                  ;; Store consultation brief + sections used by the consultation PDF.
+	                  (let [brief (json/write-str {:activities activities
+	                                               :ownership ownership
+	                                               :residency residency
+	                                               :startMonth start-month
+	                                               :preferredLang preferred-lang
+	                                               :email email
+	                                               :phone phone})
+	                        sections (json/write-str [{:type "hero"
+	                                                  :title "CONSULTATION PACK"
+	                                                  :refLine "Before your proposal"
+	                                                  :subtitle "A focused meeting to align scope and milestones. Your proposal is issued to your portal today."
+	                                                  :chips ["Clear scope" "Transparent fees" "Proposal today"]
+	                                                  :backgroundSvg "saudi-hero"}
+	                                                 {:type "icon-grid"
+	                                                  :title "What we’ll cover"
+	                                                  :items [{:icon "checklist" :label "Your goals" :desc "Clarify your objectives and setup preferences."}
+	                                                          {:icon "documents" :label "Key details" :desc "Activities, ownership profile, and timeline."}
+	                                                          {:icon "process" :label "Scope" :desc "Services included and expected deliverables."}
+	                                                          {:icon "process" :label "Fees & milestones" :desc "Agree fees and the payment schedule."}]}])
+	                        actor (system-actor ws)]
+	                    (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+	                                             :actor actor
+	                                             :input {:client/id cid
                                                      :doc.pack/company-name "Dar El Wasl"
                                                      :doc.pack/consultation-brief brief
                                                      :doc.pack/sections sections}})

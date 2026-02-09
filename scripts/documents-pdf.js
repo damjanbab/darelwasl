@@ -304,6 +304,7 @@ function baseStyles() {
       position: relative;
       overflow: hidden;
     }
+    .dw-step .n { font-variant-numeric: tabular-nums; }
     .dw-step.is-on {
       color: var(--accent);
       border-color: rgba(31, 33, 71, 0.18);
@@ -741,11 +742,45 @@ function renderSections(sections, input) {
 }
 
 function renderProgressStepper(activeStep) {
-  const steps = ["Consultation", "Proposal", "Agreement", "Execution", "Handover"];
+  // Client-facing progress indicator: keeps monotonic "game" feel without exposing internal process terms.
+  const steps = ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"];
   const n = typeof activeStep === "number" && Number.isFinite(activeStep) ? activeStep : null;
   return `
     <div class="dw-stepper" aria-label="Progress">
-      ${steps.map((s, idx) => `<div class="dw-step ${n !== null && idx <= n ? "is-on" : ""}">${escapeHtml(s)}</div>`).join("\n")}
+      ${steps.map((s, idx) => `<div class="dw-step ${n !== null && idx <= n ? "is-on" : ""}"><span class="n">${escapeHtml(s)}</span></div>`).join("\n")}
+    </div>
+  `;
+}
+
+function renderWorksheetRow(label, value) {
+  const v = present(value);
+  const blank = `<span style="display:inline-block;min-width:240px;border-bottom:1px dashed rgba(148,163,184,0.9);height:14px;"></span>`;
+  return `
+    <div class="kv-row">
+      <div class="kv-key">${escapeHtml(label)}</div>
+      <div class="kv-val">${v ? escapeHtml(v) : blank}</div>
+    </div>
+  `;
+}
+
+function renderConsultationWorksheet(raw) {
+  const parsed = tryParseJson(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
+
+  return `
+    <div class="section">
+      <p class="section-title">Proposal Inputs (to confirm)</p>
+      <div class="panel">
+        <div class="kv">
+          ${renderWorksheetRow("Primary service", null)}
+          ${renderWorksheetRow("Objective", null)}
+          ${renderWorksheetRow("Fee model", null)}
+          ${renderWorksheetRow("Payment milestones", null)}
+          ${renderWorksheetRow("Target start", parsed.startMonth)}
+          ${renderWorksheetRow("Preferred language", parsed.preferredLang)}
+        </div>
+      </div>
+      <p class="meta-line">Final values will appear in your Proposal document in the portal.</p>
     </div>
   `;
 }
@@ -806,32 +841,14 @@ function consultationBody(input) {
               </div>
               <div class="callout">
                 <strong>Today’s consultation</strong><br/>
-                We’ll confirm key details, align on scope and payment milestones, and then issue your proposal.
+                We’ll confirm key details and align on scope and milestones. Your proposal is then issued to your portal.
               </div>
             </div>
           </div>`
     }
 
     ${renderConsultationBrief(input.consultationBrief)}
-
-    <div class="section">
-      <p class="section-title">Agenda</p>
-      <div class="panel">
-        <ul class="list" style="margin:0;">
-          <li>Confirm your request summary and contact details.</li>
-          <li>Agree the services included in your proposal.</li>
-          <li>Agree fees and payment milestones.</li>
-          <li>Confirm next steps and handover expectations.</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="section">
-      <p class="section-title">Notes & Next Steps</p>
-      <div class="note-box">
-        <p class="hint">Use this space to capture decisions, milestones, and next steps discussed in the meeting.</p>
-      </div>
-    </div>
+    ${renderConsultationWorksheet(input.consultationBrief)}
 
     <div class="section">
       <p class="section-title">Prepared By</p>

@@ -13,42 +13,45 @@
     "email": "client@example.com",
     "phone": "+966 50 000 0000"
   },
-  "consultationBrief": "{\"activities\":\"Software consultancy + local hiring\",\"ownership\":\"100% foreign ownership\",\"residency\":\"Non-resident\",\"startMonth\":\"Mar 2026\",\"preferredLang\":\"en\",\"email\":\"client@example.com\",\"phone\":\"+966 50 000 0000\",\"notes\":\"Goal: launch quickly with a compliant setup and a clear activation plan.\"}",
+  "consultationBrief": "{\"activities\":\"Software consultancy + local hiring\",\"ownership\":\"100% foreign ownership\",\"residency\":\"Non-resident\",\"startMonth\":\"Mar 2026\",\"preferredLang\":\"en\",\"email\":\"client@example.com\",\"phone\":\"+966 50 000 0000\"}",
   "sections": [
     {
       "type": "hero",
-      "title": "CONSULTATION",
+      "title": "CONSULTATION PACK",
       "refLine": "Before your proposal",
-      "subtitle": "We confirm key inputs and finalize scope + milestones to issue your proposal today.",
+      "subtitle": "A focused meeting to align scope and milestones. Your proposal is issued to your portal today.",
       "chips": [
-        "Confirm requirements",
-        "Agree milestones",
-        "Receive proposal"
+        "Clear scope",
+        "Transparent fees",
+        "Proposal today"
       ],
       "backgroundSvg": "saudi-hero"
     },
     {
-      "type": "process-flow",
-      "title": "What happens today",
-      "steps": [
+      "type": "icon-grid",
+      "title": "What we’ll cover",
+      "items": [
         {
-          "label": "Confirm inputs",
-          "desc": "Activities, ownership, and required documents."
+          "icon": "checklist",
+          "label": "Your goals",
+          "desc": "Clarify your objectives and setup preferences."
         },
         {
-          "label": "Agree scope",
-          "desc": "Objective, deliverables, and handover expectations."
+          "icon": "documents",
+          "label": "Key details",
+          "desc": "Activities, ownership profile, and timeline."
         },
         {
-          "label": "Set milestones",
-          "desc": "Pricing model, deposit (optional), and milestones."
+          "icon": "process",
+          "label": "Scope",
+          "desc": "Services included and expected deliverables."
         },
         {
-          "label": "Issue proposal",
-          "desc": "Proposal is issued and available in the portal."
+          "icon": "process",
+          "label": "Fees & milestones",
+          "desc": "Agree fees and the payment schedule."
         }
       ]
     }
   ]
 }
-
