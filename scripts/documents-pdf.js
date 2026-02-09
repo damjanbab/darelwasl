@@ -460,6 +460,34 @@ function baseStyles() {
     .ms-legend-row .l { color: var(--ink); font-weight: 700; }
     .ms-legend-row .v { font-variant-numeric: tabular-nums; }
 
+    .note-box {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      min-height: 160px;
+      position: relative;
+      overflow: hidden;
+    }
+    .note-box::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 20px,
+        rgba(148, 163, 184, 0.35) 21px
+      );
+      pointer-events: none;
+    }
+    .note-box .hint {
+      position: relative;
+      color: rgba(71, 85, 105, 0.85);
+      font-size: 11px;
+      margin: 0 0 10px;
+    }
+
     .footer {
       margin-top: 22px;
       padding-top: 12px;
@@ -737,7 +765,7 @@ function renderConsultationBrief(raw) {
 
   return `
     <div class="section">
-      <p class="section-title">Lead Context</p>
+      <p class="section-title">Consultation Summary</p>
       <div class="panel">
         <div class="kv">
           ${renderBlock("Activities", activities)}
@@ -777,8 +805,8 @@ function consultationBody(input) {
                 ${escapeHtml(issuedAt)}
               </div>
               <div class="callout">
-                <strong>How to use</strong><br/>
-                This document guides the consultation. We confirm details, capture requirements, and finalize scope + payment milestones to issue a proposal immediately.
+                <strong>Today’s consultation</strong><br/>
+                We’ll confirm key details, align on scope and payment milestones, and then issue your proposal.
               </div>
             </div>
           </div>`
@@ -787,20 +815,22 @@ function consultationBody(input) {
     ${renderConsultationBrief(input.consultationBrief)}
 
     <div class="section">
-      <p class="section-title">Meeting Checklist</p>
-      <ul class="list">
-        <li>Confirm contact details and preferred language.</li>
-        <li>Confirm activities and ownership profile.</li>
-        <li>Confirm the primary service required.</li>
-        <li>Confirm objective and delivery expectations.</li>
-        <li>Agree the pricing model and payment milestones.</li>
-        <li>Confirm documents the client can provide now vs later.</li>
-      </ul>
+      <p class="section-title">Agenda</p>
+      <div class="panel">
+        <ul class="list" style="margin:0;">
+          <li>Confirm your request summary and contact details.</li>
+          <li>Agree the services included in your proposal.</li>
+          <li>Agree fees and payment milestones.</li>
+          <li>Confirm next steps and handover expectations.</li>
+        </ul>
+      </div>
     </div>
 
     <div class="section">
-      <p class="section-title">Notes (write during meeting)</p>
-      <div class="prose">Write key decisions here (scope, pricing, timeline expectations, and next steps).</div>
+      <p class="section-title">Notes & Next Steps</p>
+      <div class="note-box">
+        <p class="hint">Use this space to capture decisions, milestones, and next steps discussed in the meeting.</p>
+      </div>
     </div>
 
     <div class="section">
