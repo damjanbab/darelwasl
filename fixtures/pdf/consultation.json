@@ -21,38 +21,12 @@
       "refLine": "Before your proposal",
       "subtitle": "A focused meeting to align scope and milestones. Your proposal is issued to your portal today.",
       "chips": [
-        "Saudi setup",
+        "Business setup",
         "Clear scope",
         "Transparent fees",
         "Proposal today"
       ],
       "backgroundSvg": "saudi-hero"
-    },
-    {
-      "type": "icon-grid",
-      "title": "What we’ll cover",
-      "items": [
-        {
-          "icon": "checklist",
-          "label": "Your goals",
-          "desc": "Clarify your objectives and setup preferences."
-        },
-        {
-          "icon": "documents",
-          "label": "Key details",
-          "desc": "Activities, ownership profile, and timeline."
-        },
-        {
-          "icon": "process",
-          "label": "Scope",
-          "desc": "Services included and expected deliverables."
-        },
-        {
-          "icon": "process",
-          "label": "Fees & milestones",
-          "desc": "Agree fees and the payment schedule."
-        }
-      ]
     }
   ]
 }

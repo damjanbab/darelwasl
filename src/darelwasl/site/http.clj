@@ -507,41 +507,35 @@
                                    (str (request-public-base-url request)
                                         (with-base base-path (str "/portal/" client-ref "/" token))))]
 		                  ;; Store consultation brief + sections used by the consultation PDF.
-		                  (let [brief (json/write-str {:contactName contact-name
-		                                               :companyName company-name
-		                                               :primaryInterest primary-interest
-		                                               :goal goal
-		                                               :activities activities
-		                                               :ownership ownership
-		                                               :residency residency
-		                                               :startMonth start-month
-		                                               :docsStatus docs-status
-		                                               :preferredLang preferred-lang
-		                                               :preferredContact preferred-contact
-		                                               :email email
-		                                               :phone phone})
-		                        service-chip (case primary-interest
-		                                       "saudi-setup" "Saudi setup"
-		                                       "pro-ops" "Operations"
-		                                       "trademark" "Trademark"
-		                                       "attestation" "Attestation"
-		                                       "Tailored")
-		                        sections (json/write-str [{:type "hero"
-		                                                  :title "CONSULTATION PACK"
-		                                                  :refLine "Before your proposal"
-		                                                  :subtitle "A focused meeting to align scope and milestones. Your proposal is issued to your portal today."
-		                                                  :chips [service-chip "Clear scope" "Transparent fees" "Proposal today"]
-		                                                  :backgroundSvg "saudi-hero"}
-		                                                 {:type "icon-grid"
-		                                                  :title "What we’ll cover"
-		                                                  :items [{:icon "checklist" :label "Your goals" :desc "Clarify your objectives and setup preferences."}
-		                                                          {:icon "documents" :label "Key details" :desc "Activities, ownership profile, and timeline."}
-		                                                          {:icon "process" :label "Scope" :desc "Services included and expected deliverables."}
-		                                                          {:icon "process" :label "Fees & milestones" :desc "Agree fees and the payment schedule."}]}])
-		                        actor (system-actor ws)]
-	                    (actions/execute! state {:action/id :cap/action/doc-pack-upsert
-	                                             :actor actor
-	                                             :input {:client/id cid
+			                  (let [brief (json/write-str {:contactName contact-name
+			                                               :companyName company-name
+			                                               :primaryInterest primary-interest
+			                                               :goal goal
+			                                               :activities activities
+			                                               :ownership ownership
+			                                               :residency residency
+			                                               :startMonth start-month
+			                                               :docsStatus docs-status
+			                                               :preferredLang preferred-lang
+			                                               :preferredContact preferred-contact
+			                                               :email email
+			                                               :phone phone})
+			                        service-chip (case primary-interest
+			                                       "saudi-setup" "Business setup"
+			                                       "pro-ops" "PRO & compliance"
+			                                       "trademark" "Trademark"
+			                                       "attestation" "Attestation"
+			                                       "Tailored")
+			                        sections (json/write-str [{:type "hero"
+			                                                  :title "CONSULTATION PACK"
+			                                                  :refLine "Before your proposal"
+			                                                  :subtitle "A focused meeting to align scope and milestones. Your proposal is issued today."
+			                                                  :chips [service-chip "Clear scope" "Transparent fees" "Proposal today"]
+			                                                  :backgroundSvg "saudi-hero"}])
+			                        actor (system-actor ws)]
+		                    (actions/execute! state {:action/id :cap/action/doc-pack-upsert
+		                                             :actor actor
+		                                             :input {:client/id cid
                                                      :doc.pack/company-name "Dar El Wasl"
                                                      :doc.pack/consultation-brief brief
                                                      :doc.pack/sections sections}})

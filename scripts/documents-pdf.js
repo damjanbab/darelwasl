@@ -173,6 +173,7 @@ function baseStyles() {
       --accent-3: #0ea5e9;
       --accent-soft: rgba(31, 33, 71, 0.12);
       --logo-width: 320px;
+      --success: #16a34a;
     }
 
     * { box-sizing: border-box; }
@@ -477,6 +478,49 @@ function baseStyles() {
     .ms-legend-row .l { color: var(--ink); font-weight: 700; }
     .ms-legend-row .v { font-variant-numeric: tabular-nums; }
 
+    .meter {
+      margin-top: 10px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .meter-seg {
+      height: 10px;
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      background: rgba(71, 85, 105, 0.16);
+    }
+    .meter-seg.is-on {
+      background: linear-gradient(90deg, rgba(14, 165, 233, 0.85), rgba(11, 120, 181, 0.85));
+      border-color: rgba(14, 165, 233, 0.35);
+    }
+    .meter-label {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .about {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .about-line {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 10px;
+      align-items: start;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.4;
+    }
+    .about-line strong { color: var(--ink); }
+
     .note-box {
       background: #fff;
       border: 1px solid var(--border);
@@ -759,11 +803,132 @@ function renderSections(sections, input) {
 
 function renderProgressStepper(activeStep) {
   // Client-facing progress indicator: keeps monotonic "game" feel without exposing internal process terms.
-  const steps = ["Step 1", "Step 2", "Step 3", "Step 4", "Step 5"];
+  const steps = ["Consultation", "Proposal", "Agreement", "Execution", "Handover"];
   const n = typeof activeStep === "number" && Number.isFinite(activeStep) ? activeStep : null;
   return `
     <div class="dw-stepper" aria-label="Progress">
       ${steps.map((s, idx) => `<div class="dw-step ${n !== null && idx <= n ? "is-on" : ""}"><span class="n">${escapeHtml(s)}</span></div>`).join("\n")}
+    </div>
+  `;
+}
+
+function docsMeterRank(v) {
+  const s = present(v);
+  if (!s) return 1;
+  if (s === "ready") return 3;
+  if (s === "progress") return 2;
+  return 1;
+}
+
+function renderReadinessMeter(v) {
+  const rank = docsMeterRank(v);
+  const label = labelDocsStatus(v) || "We’ll guide you";
+  return `
+    <div>
+      <div class="meter" aria-label="Document readiness">
+        ${[0, 1, 2].map((i) => `<div class="meter-seg ${i < rank ? "is-on" : ""}"></div>`).join("")}
+      </div>
+      <div class="meter-label"><strong>Document readiness:</strong> ${escapeHtml(label)}</div>
+    </div>
+  `;
+}
+
+function renderConsultationSnapshot(raw) {
+  const parsed = tryParseJson(raw) || {};
+  const primaryInterest = labelPrimaryInterest(parsed.primaryInterest) || "To be confirmed today";
+  const activities = present(parsed.activities) || "To be confirmed today";
+  const ownership = labelOwnership(parsed.ownership) || "To be confirmed today";
+  const residency = labelResidency(parsed.residency) || "To be confirmed today";
+  const startMonth = formatMonthValue(parsed.startMonth) || "To be confirmed today";
+  const preferredLang = labelLang(parsed.preferredLang) || "To be confirmed today";
+
+  const profile = `${ownership} · ${residency}`;
+  const timing = `${startMonth} · ${preferredLang}`;
+
+  return `
+    <div class="infographic">
+      <p class="section-title">Your Setup Snapshot</p>
+      <div class="panel">
+        <div class="summary-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="card"><p class="label">Primary focus</p><p class="value" style="font-size:14px;">${escapeHtml(primaryInterest)}</p></div>
+          <div class="card"><p class="label">Timing & language</p><p class="value" style="font-size:14px;">${escapeHtml(timing)}</p></div>
+          <div class="card"><p class="label">Activities</p><p class="value" style="font-size:14px;">${escapeHtml(activities)}</p></div>
+          <div class="card"><p class="label">Profile</p><p class="value" style="font-size:14px;">${escapeHtml(profile)}</p></div>
+        </div>
+        <div style="margin-top:10px;">
+          ${renderReadinessMeter(parsed.docsStatus)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderConsultationTodayFlow() {
+  const section = {
+    title: "What happens today",
+    steps: [
+      { label: "Confirm inputs", desc: "We validate your summary, ownership profile, and timeline." },
+      { label: "Agree scope", desc: "We align on deliverables and boundaries." },
+      { label: "Set milestones", desc: "We agree fees and the payment schedule." },
+      { label: "Issue proposal", desc: "Your official proposal is issued to your portal today." },
+    ],
+    note: "This pack helps confirm the inputs needed to issue a precise proposal.",
+  };
+  return renderProcessFlowSection(section);
+}
+
+function renderConsultationDeliverables() {
+  return renderIconGridSection({
+    title: "What you receive today",
+    items: [
+      { icon: "documents", label: "Official proposal", desc: "Scope and milestones in a clean, shareable PDF." },
+      { icon: "process", label: "Clear next steps", desc: "A simple path forward with a monotonic progress feel." },
+      { icon: "shield", label: "Secure portal", desc: "Your documents and updates live in a private portal link." },
+    ],
+  });
+}
+
+function renderConsultationBringChecklist() {
+  const bullets = [
+    "ID/passport copy (if available).",
+    "Ownership details (if applicable).",
+    "A short description of your activities/services.",
+    "Your target timeline (when you want to start).",
+    "Hiring plans (if relevant).",
+    "Preferred communication channel (email/WhatsApp).",
+  ];
+  return `
+    <div class="infographic">
+      <p class="section-title">Prepare (if available)</p>
+      <ul class="list">${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("\n")}</ul>
+      <p class="meta-line">No stress if you don’t have everything today — the goal is to map the path and issue your proposal.</p>
+    </div>
+  `;
+}
+
+function renderConsultationAbout() {
+  const lines = [
+    { icon: "badge", title: "Premium execution", text: "We run your setup through tasks, documents, and a clear activation plan." },
+    { icon: "shield", title: "Transparent delivery", text: "You see progress and official documents as they’re issued — no ambiguity." },
+    { icon: "process", title: "Built for speed", text: "Today’s meeting finalizes scope and milestones so the proposal can be issued immediately." },
+  ];
+
+  return `
+    <div class="infographic">
+      <p class="section-title">Why Dar El Wasl</p>
+      <div class="about">
+        ${lines
+          .map((l) => {
+            const svg = l.icon ? loadPublicSvg(l.icon) : null;
+            return `
+              <div class="about-line">
+                <div class="icon" aria-hidden="true" style="width:26px;height:26px;border-radius:10px;">${svg ? svg : ""}</div>
+                <div><strong>${escapeHtml(l.title)}</strong><br/>${escapeHtml(l.text)}</div>
+              </div>
+            `;
+          })
+          .join("\n")}
+      </div>
     </div>
   `;
 }
@@ -920,16 +1085,14 @@ function renderConsultationBrief(raw) {
 function consultationBody(input) {
   const sections = normalizeSections(input && input.sections);
   const hasCover = sections.length && present(sections[0] && sections[0].type) === "hero";
-  const title = present(input && input.consultationTitle) || "CONSULTATION WORKSHEET";
 
   const client = input.client || {};
-  const company = input.company || {};
-  const companyName = present(company.name) || "Dar El Wasl";
   const issuedAt = formatDateValue(present(input && (input.issuedAt || input.generatedAt)) || new Date().toISOString());
+  const coverSection = hasCover ? sections[0] : null;
 
   return `
     ${renderProgressStepper(0)}
-    ${sections.length ? renderSections(sections, input) : ""}
+    ${coverSection ? `${renderHeroSection(coverSection, input)}<div class="page-break"></div>` : ""}
 
     ${
       hasCover
@@ -937,7 +1100,6 @@ function consultationBody(input) {
         : `<div class="section">
             <div class="two-col">
               <div class="callout">
-                <strong>${escapeHtml(title)}</strong><br/>
                 Prepared for: ${escapeHtml(client.name || "—")}<br/>
                 ${escapeHtml(issuedAt)}
               </div>
@@ -949,18 +1111,10 @@ function consultationBody(input) {
           </div>`
     }
 
-    ${renderConsultationBrief(input.consultationBrief)}
-    ${renderConsultationWorksheet(input.consultationBrief)}
-
-    <div class="section">
-      <p class="section-title">Prepared By</p>
-      <div class="panel">
-        <div class="kv">
-          ${renderBlock("Company", companyName)}
-          ${renderBlock("Client", present(client.name) || "—")}
-        </div>
-      </div>
-    </div>
+    ${renderConsultationTodayFlow()}
+    ${renderConsultationSnapshot(input.consultationBrief)}
+    ${renderConsultationDeliverables()}
+    ${renderConsultationBringChecklist()}
   `;
 }
 
@@ -1558,7 +1712,7 @@ function buildHtml(type, input, { logoSvg, qrDataUrl }) {
     }
     body = proposalBody(input);
   } else if (type === "consultation") {
-    title = "CONSULTATION";
+    title = "CONSULTATION PACK";
     metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
     const sections = normalizeSections(input && input.sections);
     hideTitleBlock = sections.length && present(sections[0] && sections[0].type) === "hero";
