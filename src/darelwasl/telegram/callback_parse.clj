@@ -70,6 +70,7 @@
                                   nil)
                         "terms" (case (nth parts 3 nil)
                                   "system-v1" {:type :docs/agreement-terms-system-v1}
+                                  "system-v2" {:type :docs/agreement-terms-system-v2}
                                   "custom" {:type :docs/agreement-terms-custom}
                                   nil)
                         "accept" (case (nth parts 3 nil)

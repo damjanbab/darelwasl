@@ -15,14 +15,14 @@
   },
   "agreement": {
     "agreement/number": "A-0001",
-    "agreement/title": "Dar El Wasl Service Agreement — System v1",
+    "agreement/title": "Dar El Wasl Service Agreement (Saudi Arabia Courts) — System v2",
     "agreement/effective-at": "2026-02-10",
     "agreement/client-company": "Example Co",
     "agreement/client-representative": "Client Representative",
     "agreement/our-representative": "Dar El Wasl",
     "agreement/our-recipient": "Dar El Wasl",
     "agreement/delivery-channels": ["email", "whatsapp"],
-    "agreement/terms": "DAR EL WASL — SERVICE AGREEMENT (SYSTEM v1)\n\nThis Agreement sets the ground rules for how Dar El Wasl delivers services through a tracked, document-based workflow.\n\n2) Documents and scope\n• The official Proposal (PDF) defines the agreed scope, deliverables, and payment schedule.\n• Any scope change must be confirmed in writing before execution.\n\n3) Delivery model (tracked execution)\n• Delivery is managed through tasks, documents, and status updates.\n\n5) Fees, payment plan, and invoicing\n• Fees and milestones are defined in the Proposal payment schedule.\n• Overdue payments may pause work.\n• All payments are recorded through official receipts.\n\n— End of sample terms —\n"
+    "agreement/terms": "DAR EL WASL — SERVICE AGREEMENT (SYSTEM v2)\nGoverning law and jurisdiction: Kingdom of Saudi Arabia (Saudi courts).\n\n2) Documents and order of precedence\n• The official Proposal (PDF) defines the agreed scope, deliverables, service title, and payment schedule.\n• If there is any conflict: Proposal controls deliverables/payment plan; Agreement controls delivery terms.\n\n3) Scope of services\n• Services may include MISA licensing, Ministry of Commerce CR issuance, ZATCA, GOSI, Qiwa, Muqeem, Mudad, SPL, and related authority submissions.\n\n5) Fees, payment plan, invoices, and receipts\n• Overdue payments may pause work; all payments are recorded through official receipts.\n\n6) Government/external fees and VAT\n• External fees excluded unless stated; VAT applies if required by Saudi law.\n\n11) Limitation of liability\n• Liability capped at total service fees paid under the Proposal.\n\n— End of sample terms —\n"
   },
   "planItems": [
     {
@@ -51,4 +51,3 @@
     }
   ]
 }
-
