@@ -1,9 +1,10 @@
 (ns darelwasl.site.http
   (:require [clojure.java.io :as io]
-            [clojure.data.json :as json]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [datomic.client.api :as d]
+           [clojure.data.json :as json]
+           [clojure.java.shell :as sh]
+           [clojure.string :as str]
+           [clojure.tools.logging :as log]
+           [datomic.client.api :as d]
             [darelwasl.actions :as actions]
             [darelwasl.content :as content]
             [darelwasl.documents :as documents]
@@ -623,6 +624,76 @@
     (resp/header response "Cache-Control" "no-cache")
     response))
 
+(defn- bytes->hex
+  [^bytes bs]
+  (apply str (map (fn [b] (format "%02x" (bit-and (int b) 0xff))) bs)))
+
+(defn- sha256-hex
+  [^String s]
+  (let [md (java.security.MessageDigest/getInstance "SHA-256")]
+    (.update md (.getBytes (or s "") "UTF-8"))
+    (bytes->hex (.digest md))))
+
+(defn- ensure-company-profile-pdf!
+  "Returns {:pdf <java.io.File> :etag <string>} or {:error <string>}."
+  []
+  (try
+    (let [input-file (io/file "fixtures/pdf/company-profile.json")]
+      (if-not (.exists input-file)
+        {:error "Missing fixtures/pdf/company-profile.json"}
+        (let [payload (slurp input-file)
+              hash (sha256-hex payload)
+              etag (str "\"" hash "\"")
+              cache-dir (io/file "data/site-cache")
+              out-file (io/file cache-dir (str "company-profile-" hash ".pdf"))
+              tmp-file (io/file cache-dir (str "company-profile-" hash ".tmp.pdf"))]
+          (.mkdirs cache-dir)
+          (when-not (.exists out-file)
+            (when (.exists tmp-file) (.delete tmp-file))
+            (let [res (sh/sh "node" "scripts/documents-pdf.js"
+                             "--type" "company-profile"
+                             "--input" (.getPath input-file)
+                             "--out" (.getPath tmp-file))]
+              (when-not (zero? (:exit res))
+                (log/error "Company profile PDF render failed"
+                           {:exit (:exit res)
+                            :out (:out res)
+                            :err (:err res)})
+                (when (.exists tmp-file) (.delete tmp-file))
+                (throw (ex-info "company-profile render failed" res)))
+              (when-not (.renameTo tmp-file out-file)
+                (throw (ex-info "Failed to finalize company-profile PDF" {:tmp (.getPath tmp-file)
+                                                                          :out (.getPath out-file)})))))
+          {:pdf out-file
+           :etag etag})))
+    (catch Exception e
+      (log/error e "Failed to prepare company profile PDF")
+      {:error "Failed to prepare company profile PDF"})))
+
+(defn- company-profile-pdf-response
+  [request {:keys [download?]}]
+  (let [{:keys [pdf etag error]} (ensure-company-profile-pdf!)
+        if-none-match (some-> (get-in request [:headers "if-none-match"]) str str/trim)]
+    (cond
+      error
+      {:status 500
+       :headers {"Content-Type" "text/plain; charset=utf-8"}
+       :body error}
+
+      (and etag (not (str/blank? if-none-match)) (= etag if-none-match))
+      {:status 304
+       :headers {"ETag" etag
+                 "Cache-Control" "no-cache"}}
+
+      :else
+      (let [disp (if download? "attachment" "inline")
+            filename "DarElWasl-CompanyProfile.pdf"]
+        (-> (resp/file-response (.getPath ^java.io.File pdf))
+            (resp/content-type "application/pdf")
+            (resp/header "ETag" etag)
+            (resp/header "Cache-Control" "no-cache")
+            (resp/header "Content-Disposition" (str disp "; filename=\"" filename "\"")))))))
+
 (defn- request-public-base-url
   "Derives the public base URL from reverse-proxy headers."
   [request]
@@ -677,6 +748,15 @@
               {:status 200
                :headers {"Content-Type" "text/plain; charset=utf-8"}
                :body "ok"}
+
+              (and (or (= method :get) (= method :head))
+                   (= path "/company-profile.pdf"))
+              (let [head? (= method :head)
+                    download? (contains? #{"1" "true" "yes"} (some-> (get query "download") str str/lower-case))
+                    res (company-profile-pdf-response request {:download? download?})]
+                (if head?
+                  (assoc res :body nil)
+                  res))
 
 	              (and (= method :get)
 	                   (or (= path "/verify")

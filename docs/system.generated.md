@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `7edfe52a49e02ba4d2c987babb3895a9a1760166a674df0100be75be1787e848`
+- Catalog version: `db45a254a7f11603a8b13c363e7f3ea27e570ac2dce64b27c8a35d8747838f2b`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -451,6 +451,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.account-statement
 - darelwasl.actions
 - darelwasl.agent-control.gc
+- darelwasl.agreement-templates
 - darelwasl.agreements
 - darelwasl.app
 - darelwasl.auth

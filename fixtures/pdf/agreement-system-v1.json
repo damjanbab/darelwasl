@@ -1,0 +1,54 @@
+{
+  "templateVersion": "pdf-v3-2026-02-07",
+  "issuedAt": "2026-02-10T10:00:00Z",
+  "company": {
+    "name": "Dar El Wasl",
+    "address": "Sari St, Ar Rawdah, Jeddah 23435",
+    "phone": "+966 57 937 3003",
+    "email": "info@darelwasl.com",
+    "currency": "SAR"
+  },
+  "client": {
+    "name": "Client Name",
+    "email": "client@example.com",
+    "phone": "+966 50 000 0000"
+  },
+  "agreement": {
+    "agreement/number": "A-0001",
+    "agreement/title": "Dar El Wasl Service Agreement — System v1",
+    "agreement/effective-at": "2026-02-10",
+    "agreement/client-company": "Example Co",
+    "agreement/client-representative": "Client Representative",
+    "agreement/our-representative": "Dar El Wasl",
+    "agreement/our-recipient": "Dar El Wasl",
+    "agreement/delivery-channels": ["email", "whatsapp"],
+    "agreement/terms": "DAR EL WASL — SERVICE AGREEMENT (SYSTEM v1)\n\nThis Agreement sets the ground rules for how Dar El Wasl delivers services through a tracked, document-based workflow.\n\n2) Documents and scope\n• The official Proposal (PDF) defines the agreed scope, deliverables, and payment schedule.\n• Any scope change must be confirmed in writing before execution.\n\n3) Delivery model (tracked execution)\n• Delivery is managed through tasks, documents, and status updates.\n\n5) Fees, payment plan, and invoicing\n• Fees and milestones are defined in the Proposal payment schedule.\n• Overdue payments may pause work.\n• All payments are recorded through official receipts.\n\n— End of sample terms —\n"
+  },
+  "planItems": [
+    {
+      "plan.item/index": 1,
+      "plan.item/label": "Deposit to start execution",
+      "plan.item/due-at": "2026-02-10T10:00:00Z",
+      "plan.item/kind": "deposit",
+      "plan.item/amount": 25000,
+      "plan.item/currency": "SAR"
+    },
+    {
+      "plan.item/index": 2,
+      "plan.item/label": "On submission completion",
+      "plan.item/due-at": "2026-03-01",
+      "plan.item/kind": "milestone",
+      "plan.item/amount": 12500,
+      "plan.item/currency": "SAR"
+    },
+    {
+      "plan.item/index": 3,
+      "plan.item/label": "On final handover",
+      "plan.item/due-at": "2026-03-10",
+      "plan.item/kind": "milestone",
+      "plan.item/amount": 12500,
+      "plan.item/currency": "SAR"
+    }
+  ]
+}
+

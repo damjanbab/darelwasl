@@ -266,18 +266,24 @@
                                 :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
             (do
               (save-docs-session! chat-id (-> session
-                                              (assoc :stage :docs/agreement-terms)
+                                              (assoc :stage :docs/agreement-terms-source)
                                               (assoc :draft {:agreement/title trimmed})))
               (send-message! cfg {:chat-id chat-id
-                                  :text "Send agreement terms (free-form)."
-                                  :message-key (str "docs-agreement-terms-" (System/currentTimeMillis))
-                                  :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})))
+                                  :text "Choose agreement terms:"
+                                  :message-key (str "docs-agreement-terms-source-" (System/currentTimeMillis))
+                                  :reply-markup (docs-agreement-terms-source-inline-keyboard)})))
 
-          :docs/agreement-terms
+          :docs/agreement-terms-source
+          (send-message! cfg {:chat-id chat-id
+                              :text "Use the buttons below to choose agreement terms."
+                              :message-key (str "docs-agreement-terms-source-click-" (System/currentTimeMillis))
+                              :reply-markup (docs-agreement-terms-source-inline-keyboard)})
+
+          :docs/agreement-terms-custom
           (if (str/blank? trimmed)
             (send-message! cfg {:chat-id chat-id
                                 :text "Send agreement terms."
-                                :message-key (str "docs-agreement-terms-empty-" (System/currentTimeMillis))
+                                :message-key (str "docs-agreement-terms-custom-empty-" (System/currentTimeMillis))
                                 :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})
             (do
               (save-docs-session! chat-id (-> session

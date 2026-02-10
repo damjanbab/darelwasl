@@ -1,0 +1,137 @@
+{
+  "templateVersion": "pdf-v3-2026-02-07",
+  "issuedAt": "2026-02-09T10:00:00Z",
+  "company": {
+    "name": "Dar El Wasl",
+    "address": "Sari St, Ar Rawdah, Jeddah 23435",
+    "phone": "+966 57 937 3003",
+    "email": "info@darelwasl.com",
+    "currency": "SAR"
+  },
+  "sections": [
+    {
+      "type": "hero",
+      "title": "COMPANY PROFILE",
+      "refLine": "Dar El Wasl",
+      "subtitle": "Business setup & residency solutions in Saudi Arabia — delivered with clear scope, tracked execution, and premium client documentation.",
+      "layout": "inline",
+      "kv": [
+        {
+          "k": "Contact",
+          "v": ["info@darelwasl.com", "+966 57 937 3003", "www.darelwasl.com"]
+        },
+        {
+          "k": "What you receive",
+          "v": ["Clear scope", "Tracked execution", "Premium documents + portal"]
+        }
+      ],
+      "chips": [
+        "Business setup & licensing",
+        "PRO / Government services",
+        "International formation",
+        "Compliance & activation support"
+      ],
+      "backgroundSvg": "saudi-hero"
+    },
+    {
+      "type": "icon-grid",
+      "title": "What clients get",
+      "items": [
+        {
+          "icon": "checklist",
+          "label": "Requirements checklist",
+          "desc": "A written, case-specific list of documents and next steps."
+        },
+        {
+          "icon": "documents",
+          "label": "Submission-ready document pack",
+          "desc": "We prepare drafts and keep your pack ready for filing and review cycles."
+        },
+        {
+          "icon": "process",
+          "label": "Milestones + payment plan",
+          "desc": "A clear plan aligned to delivery, with receipts/invoices issued as needed."
+        },
+        {
+          "icon": "process",
+          "label": "Status updates",
+          "desc": "Progress visibility with next actions, without overwhelming internal details."
+        },
+        {
+          "icon": "documents",
+          "label": "Portal access",
+          "desc": "Your documents and updates live in one place for easy download."
+        },
+        {
+          "icon": "checklist",
+          "label": "Completion handover",
+          "desc": "A clean handover with guidance on what comes next."
+        }
+      ],
+      "pageBreakAfter": true
+    },
+    {
+      "type": "process-flow",
+      "title": "How We Deliver",
+      "steps": [
+        {
+          "label": "Consultation",
+          "desc": "Confirm inputs, scope, and milestones."
+        },
+        {
+          "label": "Proposal",
+          "desc": "Issue a clear scope with a payment plan."
+        },
+        {
+          "label": "Agreement",
+          "desc": "Lock terms and delivery channels."
+        },
+        {
+          "label": "Execution",
+          "desc": "Deliver the work through tracked steps and status updates."
+        },
+        {
+          "label": "Handover",
+          "desc": "Completion handover with next-step guidance."
+        }
+      ],
+      "note": "This is a simplified client view designed to feel consistently progressive."
+    },
+    {
+      "type": "icon-grid",
+      "title": "Service map",
+      "items": [
+        {
+          "icon": "documents",
+          "label": "Saudi business setup & licensing",
+          "desc": "Setup routes, licensing support, and activation planning."
+        },
+        {
+          "icon": "process",
+          "label": "PRO / GRO services",
+          "desc": "Registrations, portal tasks, renewals, and compliance follow-ups."
+        },
+        {
+          "icon": "documents",
+          "label": "International formation",
+          "desc": "UK / USA company formation to support structuring."
+        },
+        {
+          "icon": "checklist",
+          "label": "Trademark & IP",
+          "desc": "Trademark registration and protection guidance on request."
+        },
+        {
+          "icon": "process",
+          "label": "Attestation & legalization",
+          "desc": "Attestation, translation, and legalization for documents."
+        },
+        {
+          "icon": "checklist",
+          "label": "Residency solutions",
+          "desc": "Investor and premium residency pathways where applicable."
+        }
+      ]
+    }
+  ]
+}

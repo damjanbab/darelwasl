@@ -2,14 +2,16 @@
 
 /**
  * Render PDFs for:
+ * - company-profile
  * - proposal
+ * - consultation
  * - invoice
  * - receipt
  * - status-report
  * - agreement
  *
  * Usage:
- *   node scripts/documents-pdf.js --type proposal --input <input.json> --out <out.pdf>
+ *   node scripts/documents-pdf.js --type company-profile --input <input.json> --out <out.pdf>
  */
 
 const fs = require("fs");
@@ -207,7 +209,7 @@ function baseStyles() {
       white-space: pre-line;
     }
 
-    .section { margin-top: 18px; }
+    .section { margin-top: 18px; break-inside: avoid; page-break-inside: avoid; }
     .section-title {
       font-size: 12px;
       text-transform: uppercase;
@@ -221,9 +223,11 @@ function baseStyles() {
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 14px 16px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; break-inside: avoid; page-break-inside: avoid; }
     .callout {
       background: #fff;
       border: 1px solid var(--border);
@@ -233,6 +237,8 @@ function baseStyles() {
       color: var(--ink);
       font-size: 12px;
       line-height: 1.45;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .callout strong { font-weight: 800; }
 
@@ -329,7 +335,7 @@ function baseStyles() {
     }
 
     /* Infographics (proposal sections) */
-    .infographic { margin-top: 18px; }
+    .infographic { margin-top: 18px; break-inside: avoid; page-break-inside: avoid; }
 
     .cover {
       position: relative;
@@ -339,6 +345,12 @@ function baseStyles() {
       background: linear-gradient(135deg, rgba(31, 33, 71, 0.06), rgba(14, 165, 233, 0.06));
       overflow: hidden;
       min-height: 540px;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .cover.cover--inline {
+      min-height: auto;
+      padding: 18px 18px 16px;
     }
     .cover::before {
       content: "";
@@ -363,9 +375,14 @@ function baseStyles() {
     .cover.has-bg::after { background-image: var(--cover-bg); }
 
     .cover-body { position: relative; z-index: 1; display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
+    .cover.cover--inline .cover-body { grid-template-rows: auto auto; height: auto; }
+
     .cover-title { margin: 6px 0 0; font-size: 40px; letter-spacing: 1.2px; font-weight: 900; color: var(--accent); }
+    .cover.cover--inline .cover-title { font-size: 30px; letter-spacing: 1px; }
     .cover-subtitle { margin: 10px 0 0; font-size: 14px; color: var(--muted); line-height: 1.5; max-width: 520px; }
+    .cover.cover--inline .cover-subtitle { margin-top: 8px; max-width: 640px; }
     .cover-chip-row { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+    .cover.cover--inline .cover-chip-row { margin-top: 10px; }
     .chip {
       background: #fff;
       border: 1px solid var(--border);
@@ -378,6 +395,7 @@ function baseStyles() {
       letter-spacing: 0.3px;
     }
     .cover-kv { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cover.cover--inline .cover-kv { margin-top: 14px; }
     .kv-card {
       background: rgba(255,255,255,0.9);
       border: 1px solid var(--border);
@@ -387,7 +405,7 @@ function baseStyles() {
     .kv-card .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.9px; margin: 0; }
     .kv-card .v { margin: 8px 0 0; font-size: 14px; font-weight: 800; color: var(--ink); }
 
-    .icon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .icon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; break-inside: avoid; page-break-inside: avoid; }
     .icon-tile {
       background: #fff;
       border: 1px solid var(--border);
@@ -398,6 +416,8 @@ function baseStyles() {
       gap: 10px;
       align-items: start;
       min-height: 82px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .icon {
       width: 34px;
@@ -418,6 +438,8 @@ function baseStyles() {
       grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       align-items: stretch;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .flow-step {
       background: #fff;
@@ -426,6 +448,8 @@ function baseStyles() {
       padding: 12px 12px;
       position: relative;
       min-height: 92px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .flow-step:not(:last-child)::after {
       content: "";
@@ -673,6 +697,9 @@ function deriveHighlights(input) {
 }
 
 function renderHeroSection(section, input) {
+  const layout = present(section.layout) || "cover";
+  const inline = layout === "inline" || layout === "compact" || layout === "header";
+
   const title = present(section.title) || "BUSINESS SETUP PROPOSAL";
   const subtitle = present(section.subtitle) || "Prepared for your business setup and compliance journey in Saudi Arabia.";
   const chips = Array.isArray(section.chips) ? section.chips.map(present).filter(Boolean) : deriveHighlights(input);
@@ -691,9 +718,37 @@ function renderHeroSection(section, input) {
   const refLine = present(section.refLine) || "Premium proposal · Task-based execution · Clear milestones";
   const issuedAt = formatDateValue(present(input && (input.issuedAt || input.generatedAt)) || new Date().toISOString());
 
+  const kv = Array.isArray(section.kv) ? section.kv : null;
+  const hideKv = section && section.hideKv === true;
+  const kvHtml =
+    hideKv
+      ? ""
+      : kv && kv.length
+      ? `<div class="cover-kv">
+          ${kv
+            .slice(0, 2)
+            .map((card) => {
+              const k = present(card && card.k) || "—";
+              const v = card && card.v;
+              const lines = Array.isArray(v) ? v.map(present).filter(Boolean) : [present(v)].filter(Boolean);
+              return `<div class="kv-card"><p class="k">${escapeHtml(k)}</p><p class="v">${lines.length ? lines.map(escapeHtml).join("<br/>") : "—"}</p></div>`;
+            })
+            .join("")}
+        </div>`
+      : `<div class="cover-kv">
+          <div class="kv-card">
+            <p class="k">Prepared For</p>
+            <p class="v">${escapeHtml(clientName)}${clientEmail ? `<br/>${escapeHtml(clientEmail)}` : ""}${clientPhone ? `<br/>${escapeHtml(clientPhone)}` : ""}</p>
+          </div>
+          <div class="kv-card">
+            <p class="k">Prepared By</p>
+            <p class="v">${escapeHtml(companyName)}${companyEmail ? `<br/>${escapeHtml(companyEmail)}` : ""}${companyPhone ? `<br/>${escapeHtml(companyPhone)}` : ""}<br/>${escapeHtml(issuedAt)}</p>
+          </div>
+        </div>`;
+
   return `
     <div class="infographic">
-      <div class="cover ${bgUrl ? "has-bg" : ""}" style="${bgUrl ? `--cover-bg:${bgUrl};` : ""}">
+      <div class="cover ${inline ? "cover--inline" : ""} ${bgUrl ? "has-bg" : ""}" style="${bgUrl ? `--cover-bg:${bgUrl};` : ""}">
         <div class="cover-body">
           <div>
             <div class="meta-line"><strong>${escapeHtml(companyName)}</strong> · ${escapeHtml(refLine)}</div>
@@ -702,18 +757,8 @@ function renderHeroSection(section, input) {
             ${chips && chips.length ? `<div class="cover-chip-row">${chips.map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join("")}</div>` : ""}
           </div>
 
-          <div></div>
-
-          <div class="cover-kv">
-            <div class="kv-card">
-              <p class="k">Prepared For</p>
-              <p class="v">${escapeHtml(clientName)}${clientEmail ? `<br/>${escapeHtml(clientEmail)}` : ""}${clientPhone ? `<br/>${escapeHtml(clientPhone)}` : ""}</p>
-            </div>
-            <div class="kv-card">
-              <p class="k">Prepared By</p>
-              <p class="v">${escapeHtml(companyName)}${companyEmail ? `<br/>${escapeHtml(companyEmail)}` : ""}${companyPhone ? `<br/>${escapeHtml(companyPhone)}` : ""}<br/>${escapeHtml(issuedAt)}</p>
-            </div>
-          </div>
+          ${inline ? "" : `<div></div>`}
+          ${kvHtml}
         </div>
       </div>
     </div>
@@ -795,7 +840,7 @@ function renderSections(sections, input) {
           : type === "process-flow"
           ? renderProcessFlowSection(s)
           : "";
-      const breakAfter = s && (s.pageBreakAfter === true || (type === "hero" && idx === 0));
+      const breakAfter = s && s.pageBreakAfter === true;
       return `${html}${breakAfter && idx !== items.length - 1 ? `<div class="page-break"></div>` : ""}`;
     })
     .join("\n");
@@ -1092,7 +1137,11 @@ function consultationBody(input) {
 
   return `
     ${renderProgressStepper(0)}
-    ${coverSection ? `${renderHeroSection(coverSection, input)}<div class="page-break"></div>` : ""}
+    ${
+      coverSection
+        ? `${renderHeroSection(coverSection, input)}${coverSection.pageBreakAfter ? `<div class="page-break"></div>` : ""}`
+        : ""
+    }
 
     ${
       hasCover
@@ -1112,9 +1161,16 @@ function consultationBody(input) {
     }
 
     ${renderConsultationTodayFlow()}
-    ${renderConsultationSnapshot(input.consultationBrief)}
     ${renderConsultationDeliverables()}
+    <div class="page-break"></div>
+    ${renderConsultationSnapshot(input.consultationBrief)}
     ${renderConsultationBringChecklist()}
+  `;
+}
+
+function companyProfileBody(input) {
+  return `
+    ${renderSections(input && input.sections, input)}
   `;
 }
 
@@ -1201,6 +1257,13 @@ function renderPaymentPlan(raw, fallbackCurrency) {
     .join("\n");
 
   const graphic = renderPaymentScheduleGraphic({ milestones, pricingModel, pricing, currency });
+  const cleanedMilestones = Array.isArray(milestones)
+    ? milestones
+        .map((m) => ({ type: present(m && m.type), value: safeNumber(m && m.value) }))
+        .filter((m) => m.type && (m.value !== null || m.value === 0))
+    : [];
+  const allPercent = cleanedMilestones.length && cleanedMilestones.every((m) => m.type === "percent");
+  const canOmitTable = Boolean(graphic) && allPercent && cleanedMilestones.length <= 6;
 
   return `
     <div class="section">
@@ -1222,14 +1285,18 @@ function renderPaymentPlan(raw, fallbackCurrency) {
     <div class="section">
       <p class="section-title">Payment Schedule</p>
       ${graphic}
-      <table>
-        <thead>
-          <tr><th>Milestone</th><th style="text-align:right">Amount</th></tr>
-        </thead>
-        <tbody>
-          ${milestones.length ? msRows : `<tr><td>—</td><td class="cell-amt">—</td></tr>`}
-        </tbody>
-      </table>
+      ${
+        canOmitTable
+          ? ""
+          : `<table>
+              <thead>
+                <tr><th>Milestone</th><th style="text-align:right">Amount</th></tr>
+              </thead>
+              <tbody>
+                ${milestones.length ? msRows : `<tr><td>—</td><td class="cell-amt">—</td></tr>`}
+              </tbody>
+            </table>`
+      }
       ${
         Number.isFinite(Number(validityDays)) && Number(validityDays) > 0
           ? `<p class="meta-line"><strong>Validity:</strong> ${escapeHtml(String(validityDays))} days from issue date.</p>`
@@ -1325,27 +1392,132 @@ function proposalBody(input) {
   const currency = present(company.currency) || "SAR";
   const sections = normalizeSections(input && input.sections);
 
+  function parseServicesIncluded(raw) {
+    const parsed = tryParseJson(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed;
+  }
+
+  function parseTimeline(tl) {
+    if (!tl || typeof tl !== "object" || Array.isArray(tl)) return null;
+    const startMonth = present(tl.startMonth || tl.start || tl["start-month"]);
+    const endMonth = present(tl.endMonth || tl.end || tl["end-month"]);
+    const startLabel = startMonth ? formatMonthValue(startMonth) : null;
+    const endLabel = endMonth ? formatMonthValue(endMonth) : null;
+    if (startLabel && endLabel && startLabel !== "—" && endLabel !== "—") return `${startLabel} – ${endLabel}`;
+    if (startLabel && startLabel !== "—") return startLabel;
+    return null;
+  }
+
+  function renderProposalDealSnapshot({ serviceTitle, objective, timelineLabel }) {
+    const cards = [
+      { label: "Primary service", value: serviceTitle || "—" },
+      { label: "Timeline", value: timelineLabel || "To be confirmed" },
+      { label: "Objective", value: objective || "—" },
+      { label: "Delivery model", value: "Tracked execution + portal updates" },
+    ];
+
+    return `
+      <div class="infographic">
+        <p class="section-title">Scope at a glance</p>
+        <div class="panel">
+          <div class="summary-grid" style="grid-template-columns: repeat(2, 1fr);">
+            ${cards
+              .map(
+                (c) => `
+                  <div class="card">
+                    <p class="label">${escapeHtml(c.label)}</p>
+                    <p class="value" style="font-size:14px;line-height:1.25;">${escapeHtml(c.value)}</p>
+                  </div>
+                `,
+              )
+              .join("\n")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderBulletSection(title, items) {
+    const cleaned = Array.isArray(items) ? items.map(present).filter(Boolean) : [];
+    return `
+      <div class="section">
+        <p class="section-title">${escapeHtml(title)}</p>
+        ${
+          cleaned.length
+            ? `<ul class="list">${cleaned.map((it) => `<li>${escapeHtml(it)}</li>`).join("\n")}</ul>`
+            : `<div class="prose">—</div>`
+        }
+      </div>
+    `;
+  }
+
+  function renderProposalAssumptions() {
+    const bullets = [
+      "Third-party / external fees are excluded unless explicitly stated.",
+      "Timelines depend on client responsiveness and external review cycles.",
+      "Any material scope change will be confirmed before execution.",
+    ];
+    return `
+      <div class="section">
+        <p class="section-title">Assumptions</p>
+        <ul class="list">${bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("\n")}</ul>
+      </div>
+    `;
+  }
+
+  function renderProposalNextSteps() {
+    const steps = [
+      "Confirm proposal scope and milestones.",
+      "Sign the agreement to lock delivery terms.",
+      "Pay the deposit (if applicable) to start execution.",
+    ];
+    return `
+      <div class="section">
+        <p class="section-title">Next steps</p>
+        <div class="callout">
+          <strong>To start execution</strong><br/>
+          <ul style="margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.45;">
+            ${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("\n")}
+          </ul>
+        </div>
+      </div>
+    `;
+  }
+
+  const services = parseServicesIncluded(input.servicesIncluded);
+  const serviceTitle = present(services && services.service && services.service.title) || present(services && services.serviceTitle);
+  const objective = present(services && services.objective);
+  const deliverables = Array.isArray(services && services.deliverables) ? services.deliverables : [];
+  const requirements = Array.isArray(services && services.requirements) ? services.requirements : [];
+  const timelineLabel = parseTimeline(input.timeline || services.timeline) || formatMonthValue(services.startMonth) || null;
+
   return `
     ${renderProgressStepper(1)}
     ${sections.length ? renderSections(sections, input) : ""}
 
-    <div class="section">
-      <div class="two-col">
-        <div class="callout">
-          <strong>Prepared for</strong><br/>
-          ${escapeHtml(client.name || "—")}<br/>
-          ${client.email ? escapeHtml(client.email) : ""}${client.email && client.phone ? "<br/>" : ""}${client.phone ? escapeHtml(client.phone) : ""}
-        </div>
-        <div class="callout">
-          <strong>Summary</strong><br/>
-          Services and payment schedule as agreed during consultation.
-        </div>
-      </div>
-    </div>
+    ${renderProposalDealSnapshot({ serviceTitle, objective, timelineLabel })}
 
-    ${renderServicesIncluded(input.servicesIncluded)}
+    ${renderBulletSection("Included deliverables", deliverables)}
 
     ${renderPaymentPlan(input.paymentPlan, currency)}
+
+    ${renderProcessFlowSection({
+      title: "Delivery phases",
+      steps: [
+        { label: "Confirm", desc: "We confirm scope, timeline, and required information." },
+        { label: "Prepare", desc: "We prepare drafts and assemble a submission-ready pack." },
+        { label: "Review cycles", desc: "We handle questions, corrections, and iterations as needed." },
+        { label: "Complete", desc: "We finalize deliverables and hand over next steps." },
+      ],
+      note: "This is a simplified client view designed to feel consistently progressive.",
+    })}
+
+    ${renderBulletSection("Client responsibilities", requirements)}
+
+    ${renderProposalAssumptions()}
+
+    ${renderProposalNextSteps()}
   `;
 }
 
@@ -1701,9 +1873,17 @@ function buildHtml(type, input, { logoSvg, qrDataUrl }) {
   let body = "";
   let hideTitleBlock = false;
 
-  if (type === "proposal") {
+  if (type === "company-profile") {
+    title = "COMPANY PROFILE";
+    metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
+    const sections = normalizeSections(input && input.sections);
+    hideTitleBlock = sections.length && present(sections[0] && sections[0].type) === "hero";
+    body = companyProfileBody(input);
+  } else if (type === "proposal") {
     title = "PROPOSAL";
     metaLines = [`<strong>Date:</strong> ${escapeHtml(issuedAt)}`];
+    const sections = normalizeSections(input && input.sections);
+    hideTitleBlock = sections.length && present(sections[0] && sections[0].type) === "hero";
     if (input && input.agreement) {
       const agreementNo = pick(input.agreement, ["agreement/number", "number"]);
       const agreementTitle = pick(input.agreement, ["agreement/title", "title"]);
@@ -1788,7 +1968,7 @@ async function run() {
   const inputPath = args.input;
   const outPath = args.out;
   if (!type || !inputPath || !outPath) {
-    throw new Error("Usage: documents-pdf.js --type <consultation|proposal|invoice|receipt|status-report|agreement> --input <input.json> --out <out.pdf>");
+    throw new Error("Usage: documents-pdf.js --type <company-profile|consultation|proposal|invoice|receipt|status-report|agreement> --input <input.json> --out <out.pdf>");
   }
 
   const input = JSON.parse(fs.readFileSync(inputPath, "utf8"));

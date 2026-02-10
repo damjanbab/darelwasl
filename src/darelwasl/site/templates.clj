@@ -567,13 +567,17 @@
 
 (defn public-portal
   [{:keys [public-base-url base-path lang path query portal client-ref token]}]
-  (let [client (:client portal)
+  (let [spec (lang-spec lang)
+        prefix (:prefix spec)
+        client (:client portal)
         service-cases (:service.cases portal)
         documents (:documents portal)
         client-name (or (:client/name client) "Client")
         meeting (:meeting portal)
         meeting-date (pretty-date (:date meeting))
         meeting-time (pretty-time (:time meeting))
+        company-profile-url (with-base base-path (str prefix "/company-profile"))
+        company-profile-pdf (with-base base-path "/company-profile.pdf")
         body (str "<section class='section-pad'>"
                   "<div class='portal-hero card'>"
                   "<div class='portal-hero__top'>"
@@ -594,6 +598,15 @@
                          (escape-html (or meeting-date "—"))
                          (when meeting-time (str " at " (escape-html meeting-time))))
                     "Not scheduled yet. We will confirm the time with you.")
+                  "</div>"
+                  "</div>"
+                  "<div class='card'>"
+                  "<div class='eyebrow'>Resources</div>"
+                  "<h3 style='margin:6px 0;'>Company profile</h3>"
+                  "<div class='muted' style='margin-top:10px;'>Learn about Dar El Wasl services and our delivery approach.</div>"
+                  "<div style='display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;'>"
+                  "<a class='cta secondary' target='_blank' rel='noopener noreferrer' href='" (escape-html company-profile-url) "'>Open</a>"
+                  "<a class='cta primary' target='_blank' rel='noopener noreferrer' href='" (escape-html (str company-profile-pdf "?download=1")) "'>Download PDF</a>"
                   "</div>"
                   "</div>"
                   (when (seq documents)
@@ -821,8 +834,176 @@
                        ;; Strict: no default milestone values; keep 1 empty row present.
                        "add('','amount','');"
                        "})();"
-                       "</script>"
-                       "</section>"))}))
+	                       "</script>"
+	                       "</section>"))}))
+
+(defn- public-company-profile
+  [{:keys [public-base-url base-path lang path contact]}]
+  (let [spec (lang-spec lang)
+        prefix (:prefix spec)
+        href (fn [p]
+               (let [p' (str (or p ""))]
+                 (with-base base-path
+                   (if (or (str/starts-with? p' "/css/")
+                           (str/starts-with? p' "/images/")
+                           (str/starts-with? p' "/js/")
+                           (str/starts-with? p' "/logo."))
+                     p'
+                     (str prefix p')))))
+        headline (case lang
+                   :ar "الملف التعريفي للشركة"
+                   :ur "کمپنی پروفائل"
+                   "Company Profile")
+        strapline (case lang
+                    :ar "من نحن وماذا نقدم — نظرة واضحة على خدماتنا وطريقة التنفيذ."
+                    :ur "ہم کون ہیں اور کیا کرتے ہیں — ہماری خدمات اور طریقۂ کار کی واضح جھلک۔"
+                    "Who we are and what we deliver — a clear view of our services and execution approach.")
+        download-label (case lang
+                         :ar "تحميل PDF"
+                         :ur "PDF ڈاؤن لوڈ کریں"
+                         "Download PDF")
+        view-services (case lang
+                       :ar "عرض الخدمات"
+                       :ur "سروسز دیکھیں"
+                       "View services")
+        cta (case lang
+              :ar "احجز استشارة"
+              :ur "مشاورت طے کریں"
+              "Schedule a consultation")
+        pdf-url (with-base base-path "/company-profile.pdf")
+        pdf-download (str pdf-url "?download=1")]
+    {:status 200
+     :headers {"Content-Type" "text/html; charset=utf-8"}
+     :body
+     (public-page {:title (str headline " | Dar El Wasl")
+                   :description strapline
+                   :public-base-url public-base-url
+                   :base-path base-path
+                   :lang lang
+                   :path path
+                   :image-path "/logo.jpg"
+                   :contact contact}
+                  (str (hero-split {:headline-html (escape-html headline)
+                                    :strapline strapline
+                                    :primary {:label download-label :href pdf-download}
+                                    :secondary {:label view-services :href "#services"}
+                                    :image "/images/saudi-business.png"
+                                    :alt "Company profile"})
+
+                       "<section id='services'>"
+                       "<div class='section-title'><h2>"
+                       (escape-html (case lang :ar "مجالات الخدمة" :ur "سروس کیٹیگریز" "Service categories"))
+                       "</h2></div>"
+                       "<div class='card-grid'>"
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-globe) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "السعودية" :ur "سعودی عرب" "Saudi Arabia")) "</div>"
+                       "<h3>" (escape-html (case lang :ar "تأسيس وترخيص الشركات" :ur "بزنس سیٹ اپ اور لائسنسنگ" "Business setup & licensing")) "</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "مساعدة شاملة من اختيار المسار الصحيح حتى إصدار الوثائق الأساسية."
+                                                    :ur "صحیح راستہ منتخب کرنے سے لے کر بنیادی ڈاکس کے اجرا تک اینڈ ٹو اینڈ مدد۔"
+                                                    "End-to-end support from choosing the right path to issuance-ready outputs.")) "</p>"
+                       "</div>"
+
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-mountain) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "خدمات حكومية" :ur "سرکاری سروسز" "Government services")) "</div>"
+                       "<h3>PRO / GRO</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "منصات حكومية، تجديدات، تفعيل بوابات العمالة، والمتطلبات المستمرة."
+                                                    :ur "حکومتی پورٹلز، رینیولز، لیبر پورٹل ایکٹیویشن، اور جاری کمپلائنس۔"
+                                                    "Portals, renewals, activation steps, and ongoing compliance tasks.")) "</p>"
+                       "</div>"
+
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-hex) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "عالمي" :ur "عالمی" "International")) "</div>"
+                       "<h3>" (escape-html (case lang :ar "تأسيس شركات دولي" :ur "انٹرنیشنل کمپنی فارمیشن" "Company formation (UK/USA)")) "</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "تأسيس شركات خارجية لدعم توسعك الدولي ومتطلبات الهياكل."
+                                                    :ur "آپ کے عالمی ایکسپینشن اور اسٹرکچرنگ کے لیے اوورسیز فارمیشن۔"
+                                                    "Overseas formation to support expansion and structuring needs.")) "</p>"
+                       "</div>"
+
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-globe) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "ملكية فكرية" :ur "آئی پی" "IP")) "</div>"
+                       "<h3>" (escape-html (case lang :ar "العلامات التجارية" :ur "ٹریڈ مارک" "Trademark & IP")) "</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "تسجيل العلامة التجارية وإرشادات الحماية حسب الطلب."
+                                                    :ur "ٹریڈ مارک رجسٹریشن اور پروٹیکشن گائیڈنس حسب ضرورت۔"
+                                                    "Trademark registration and protection guidance on request.")) "</p>"
+                       "</div>"
+
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-mountain) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "وثائق" :ur "دستاویزات" "Documents")) "</div>"
+                       "<h3>" (escape-html (case lang :ar "تصديق وتوثيق" :ur "اٹیسٹیشن اور لیگلائزیشن" "Attestation & legalization")) "</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "تصديقات وترجمات وتوثيق لملفات الشركات والأفراد."
+                                                    :ur "کمپنی/پرسنل ڈاکس کے لیے اٹیسٹیشن، ترجمہ، اور لیگلائزیشن۔"
+                                                    "Attestation, translation, and legalization for corporate and personal files.")) "</p>"
+                       "</div>"
+
+                       "<div class='card card--icon'>"
+                       "<div class='card-icon'>" (icon-hex) "</div>"
+                       "<div class='eyebrow'>" (escape-html (case lang :ar "إقامة" :ur "ریذیڈنسی" "Residency")) "</div>"
+                       "<h3>" (escape-html (case lang :ar "حلول الإقامة" :ur "ریذیڈنسی سلوشنز" "Residency solutions")) "</h3>"
+                       "<p class='muted'>" (escape-html (case lang
+                                                    :ar "حلول إقامة متميزة للمستثمرين حسب الخيارات المتاحة."
+                                                    :ur "سرمایہ کاروں کے لیے پریمیئم ریذیڈنسی آپشنز جہاں دستیاب ہوں۔"
+                                                    "Investor and premium residency pathways where applicable.")) "</p>"
+                       "</div>"
+                       "</div>"
+                       "</section>"
+
+                       "<section>"
+                       "<div class='section-title'><h2>"
+                       (escape-html (case lang :ar "كيف نعمل" :ur "ہم کیسے کام کرتے ہیں" "How we work"))
+                       "</h2></div>"
+                       "<div class='steps steps--light'>"
+                       (apply str
+                              (map-indexed
+                               (fn [idx {:keys [t p]}]
+                                 (str "<div class='step'>"
+                                      "<div class='step-index'>" (inc idx) "</div>"
+                                      "<div><div class='label'>" (escape-html t) "</div>"
+                                      "<div class='muted'>" (escape-html p) "</div></div>"
+                                      "</div>"))
+                               (case lang
+                                 :ar [{:t "استشارة" :p "نجمع الإدخالات ونؤكد النطاق ثم نحدد خطة واضحة."}
+                                      {:t "عرض سعر" :p "نصدر عرضًا يشمل الخدمات وجدول الدفع."}
+                                      {:t "اتفاقية" :p "نثبت الشروط ونحدد قنوات التواصل."}
+                                      {:t "تنفيذ" :p "ننفذ الخطوات وندير الدورات حتى اكتمالها."}
+                                      {:t "تسليم" :p "نسلمك المخرجات وخطة التشغيل التالية."}]
+                                 :ur [{:t "مشاورت" :p "ان پٹس کنفرم کرتے ہیں اور واضح پلان بناتے ہیں۔"}
+                                      {:t "پروپوزل" :p "سروسز اور پیمنٹ پلان کے ساتھ واضح پروپوزل جاری کرتے ہیں۔"}
+                                      {:t "ایگریمنٹ" :p "شرائط اور کمیونیکیشن چینلز فائنل کرتے ہیں۔"}
+                                      {:t "ایگزیکیوشن" :p "اسٹیپس مکمل کرتے ہیں اور فیڈبیک سائیکلز ہینڈل کرتے ہیں۔"}
+                                      {:t "ہینڈ اوور" :p "فائنل ڈلیوریبلز اور اگلے قدم کی گائیڈنس دیتے ہیں۔"}]
+                                 [{:t "Consultation" :p "Confirm inputs, scope, and milestones."}
+                                  {:t "Proposal" :p "Issue a clear scope with a payment plan."}
+                                  {:t "Agreement" :p "Lock terms and delivery channels."}
+                                  {:t "Execution" :p "Deliver the work through tracked steps."}
+                                  {:t "Handover" :p "Completion handover with next-step guidance."}]))))
+                       "</div>"
+                       "</section>"
+
+                       "<section class='footer-cta'>"
+                       "<div class='inner'>"
+                       "<div>"
+                       "<h2 style='margin:0 0 8px;'>" (escape-html (case lang :ar "هل تريد عرض سعر؟" :ur "پروپوزل چاہیے؟" "Want a proposal?")) "</h2>"
+                       "<p style='margin:0;opacity:.9;max-width:560px;'>" (escape-html (case lang
+                                                                                  :ar "احجز استشارة وسنعود إليك بقائمة متطلبات ونطاق واضح."
+                                                                                  :ur "مشاورت طے کریں — ہم تقاضوں کی چیک لسٹ اور واضح اسکوپ واپس دیں گے۔"
+                                                                                  "Schedule a consultation and we’ll reply with your requirements checklist and a clear scope.")) "</p>"
+                       "</div>"
+                       "<div class='actions'>"
+                       "<a class='cta primary' href='" (escape-html (href "/contact#consultation")) "'>" (escape-html cta) "</a>"
+                       "<a class='cta secondary' href='" (escape-html pdf-download) "'>" (escape-html download-label) "</a>"
+                       "</div>"
+                       "</div>"
+                       "</section>")}))
 
 (defn public-route
   [{:keys [public-base-url base-path lang path contact query]}]
@@ -2599,6 +2780,13 @@
                                 (escape-html (case lang :ar "احجز استشارة" :ur "مشاورت طے کریں" "Schedule a consultation"))
                                 "</a>"
                                 "</section>")))}
+
+       "/company-profile"
+       (public-company-profile {:public-base-url public-base-url
+                                :base-path base-path
+                                :lang lang
+                                :path path
+                                :contact contact})
 
        "/about"
        {:status 200
