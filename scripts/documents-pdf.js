@@ -119,6 +119,85 @@ function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+function inlineFormat(text) {
+  const escaped = escapeHtml(text || "");
+  const bolded = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const coded = bolded.replace(/`(.+?)`/g, '<span class="mono">$1</span>');
+  return coded;
+}
+
+function termsToHtml(raw) {
+  const lines = String(raw || "").split(/\r?\n/);
+  const out = [];
+  let inList = false;
+  let paragraph = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    out.push(`<p>${inlineFormat(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  }
+
+  function closeList() {
+    if (!inList) return;
+    out.push("</ul>");
+    inList = false;
+  }
+
+  for (const line of lines) {
+    const trimmed = String(line || "").trimEnd();
+    const t = trimmed.trim();
+    if (!t) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+
+    if (t.startsWith("# ")) {
+      flushParagraph();
+      closeList();
+      out.push(`<h2>${inlineFormat(t.slice(2).trim())}</h2>`);
+      continue;
+    }
+    if (t.startsWith("## ")) {
+      flushParagraph();
+      closeList();
+      out.push(`<h3>${inlineFormat(t.slice(3).trim())}</h3>`);
+      continue;
+    }
+    if (t.startsWith("### ")) {
+      flushParagraph();
+      closeList();
+      out.push(`<h4>${inlineFormat(t.slice(4).trim())}</h4>`);
+      continue;
+    }
+
+    if (/^[-•]\s+/.test(t)) {
+      flushParagraph();
+      if (!inList) {
+        out.push("<ul>");
+        inList = true;
+      }
+      out.push(`<li>${inlineFormat(t.replace(/^[-•]\s+/, ""))}</li>`);
+      continue;
+    }
+
+    // Simple numbered items (render as paragraph, keep the number visible)
+    if (/^\d+[\)\.]\s+/.test(t)) {
+      flushParagraph();
+      closeList();
+      out.push(`<p class="clause">${inlineFormat(t)}</p>`);
+      continue;
+    }
+
+    paragraph.push(t);
+  }
+
+  flushParagraph();
+  closeList();
+  return out.join("\n");
+}
+
 function safeNumber(v) {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   const s = present(v);
@@ -291,6 +370,53 @@ function baseStyles() {
       line-height: 1.45;
       white-space: pre-wrap;
     }
+
+    .contract-terms {
+      margin-top: 10px;
+      padding: 14px 16px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .contract-terms h2 {
+      margin: 0 0 10px;
+      font-size: 16px;
+      letter-spacing: 0.6px;
+    }
+    .contract-terms h3 {
+      margin: 14px 0 6px;
+      font-size: 13px;
+    }
+    .contract-terms h4 {
+      margin: 12px 0 6px;
+      font-size: 12px;
+    }
+    .contract-terms p { margin: 0 0 8px; }
+    .contract-terms p.clause { margin: 0 0 8px; font-weight: 600; }
+    .contract-terms ul {
+      margin: 0 0 10px;
+      padding-left: 18px;
+    }
+    .contract-terms li { margin: 4px 0; }
+
+    .signature-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .sig {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+    .sig-title { margin: 0 0 8px; font-weight: 800; letter-spacing: 0.4px; }
+    .sig-line { margin: 6px 0; color: var(--muted); }
+    .sig-line strong { color: var(--ink); }
 
     .list {
       margin: 10px 0 0;
@@ -1816,7 +1942,27 @@ function agreementBody(input) {
 
     <div class="section">
       <p class="section-title">Terms</p>
-      <div class="prose">${escapeHtml(present(pick(agreement, ["agreement/terms", "terms"])) || "—")}</div>
+      <div class="contract-terms">${termsToHtml(present(pick(agreement, ["agreement/terms", "terms"])) || "")}</div>
+    </div>
+
+    <div class="section">
+      <p class="section-title">Signatures</p>
+      <div class="signature-grid">
+        <div class="sig">
+          <p class="sig-title">For Dar El Wasl</p>
+          <p class="sig-line"><strong>Name:</strong> ${escapeHtml(present(pick(agreement, ["agreement/our-representative", "our-representative", "ourRepresentative"])) || "—")}</p>
+          <p class="sig-line"><strong>Title:</strong> ____________________</p>
+          <p class="sig-line"><strong>Signature:</strong> ____________________</p>
+          <p class="sig-line"><strong>Date:</strong> ____________________</p>
+        </div>
+        <div class="sig">
+          <p class="sig-title">For the Client</p>
+          <p class="sig-line"><strong>Name:</strong> ${escapeHtml(present(pick(agreement, ["agreement/client-representative", "client-representative", "clientRepresentative"])) || (input.client || {}).name || "—")}</p>
+          <p class="sig-line"><strong>Title:</strong> ____________________</p>
+          <p class="sig-line"><strong>Signature:</strong> ____________________</p>
+          <p class="sig-line"><strong>Date:</strong> ____________________</p>
+        </div>
+      </div>
     </div>
 
     <div class="section">
