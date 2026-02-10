@@ -17,78 +17,20 @@
     {
       "type": "hero",
       "title": "PROPOSAL",
-      "refLine": "Business Setup & Licensing",
-      "subtitle": "A tailored scope, payment plan, and delivery process for your request.",
+      "refLine": "Your scope and payment plan",
+      "subtitle": "Scope and payment plan agreed during consultation.",
       "chips": [
-        "Requirements checklist and document tracking",
-        "Submission readiness support",
-        "Task-based execution with status updates"
+        "Clear scope",
+        "Transparent fees",
+        "Tracked execution"
       ],
       "backgroundSvg": "saudi-hero",
-      "pageBreakAfter": true
-    },
-    {
-      "type": "icon-grid",
-      "title": "What You Receive",
-      "items": [
-        {
-          "icon": "checklist",
-          "label": "Requirements Checklist",
-          "desc": "We identify required documents and track what’s missing."
-        },
-        {
-          "icon": "documents",
-          "label": "Document Pack",
-          "desc": "We prepare drafts and keep your file submission-ready."
-        },
-        {
-          "icon": "process",
-          "label": "Submission & Follow-up",
-          "desc": "We manage progress and handle review feedback cycles."
-        },
-        {
-          "icon": "process",
-          "label": "Progress Updates",
-          "desc": "Clear status updates and next steps throughout delivery."
-        },
-        {
-          "icon": "documents",
-          "label": "Handover",
-          "desc": "Completion handover with guidance on what comes next."
-        },
-        {
-          "icon": "checklist",
-          "label": "Controls & Audit Trail",
-          "desc": "A task-based process with notes and milestones."
-        }
-      ],
-      "pageBreakAfter": true
-    },
-    {
-      "type": "process-flow",
-      "title": "Delivery Phases",
-      "steps": [
-        {
-          "label": "Intake & Requirements",
-          "desc": "Confirm scope and collect required information."
-        },
-        {
-          "label": "Preparation",
-          "desc": "Draft documents and assemble a submission-ready pack."
-        },
-        {
-          "label": "Review Cycles",
-          "desc": "Handle questions, corrections, and iterations as needed."
-        },
-        {
-          "label": "Completion & Handover",
-          "desc": "Finalize deliverables and hand over next steps."
-        }
-      ],
-      "note": "This is a simplified client view. Actual dependencies may vary by case."
+      "layout": "inline"
     }
   ],
-  "servicesIncluded": "{\"objective\":\"Set up your business with a compliant, submission-ready package and clear handover.\",\"service\":{\"id\":\"service/entrepreneur-license\",\"title\":\"Entrepreneur License\"},\"deliverables\":[\"Requirements checklist and document tracking\",\"Submission readiness support\",\"Task-based execution with status updates\",\"Handover and next steps\"],\"requirements\":[\"Client identification details\",\"Scope confirmation\",\"Documents required for filings (as applicable)\"],\"clientNotes\":\"\"}",
-  "paymentPlan": "{\"currency\":\"SAR\",\"validityDays\":15,\"pricing\":{\"model\":\"range\",\"currency\":\"SAR\",\"min\":25000,\"max\":50000},\"deposit\":{\"type\":\"percent\",\"value\":50},\"milestones\":[{\"label\":\"Upfront deposit\",\"type\":\"percent\",\"value\":50},{\"label\":\"On submission completion\",\"type\":\"percent\",\"value\":25},{\"label\":\"On final handover\",\"type\":\"percent\",\"value\":25}]}"
+  "timeline": {
+    "startMonth": "2026-03"
+  },
+  "servicesIncluded": "{\"objective\":\"Set up your business with a compliant, submission-ready package and clear handover.\",\"service\":{\"id\":\"service/entrepreneur-license\",\"title\":\"Entrepreneur License\"},\"deliverables\":[\"Scope confirmation and requirements checklist\",\"Document pack preparation (submission-ready)\",\"Review-cycle support and corrections handling\",\"Tracked execution with status updates\",\"Completion handover with next steps\"],\"requirements\":[\"Client identification details\",\"Scope confirmation\",\"Required documents for filings (as applicable)\"],\"clientNotes\":\"\"}",
+  "paymentPlan": "{\"currency\":\"SAR\",\"validityDays\":15,\"pricing\":{\"model\":\"range\",\"currency\":\"SAR\",\"min\":25000,\"max\":50000},\"deposit\":{\"type\":\"percent\",\"value\":50},\"milestones\":[{\"label\":\"Deposit to start execution\",\"type\":\"percent\",\"value\":50},{\"label\":\"On submission completion\",\"type\":\"percent\",\"value\":25},{\"label\":\"On final handover\",\"type\":\"percent\",\"value\":25}]}"
 }
-

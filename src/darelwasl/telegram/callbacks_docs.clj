@@ -617,6 +617,42 @@
 
 (defmethod
  handle-callback-dispatch
+ :docs/agreement-terms-system-v1
+ [ctx]
+ (let [{:keys [chat-id message-id chat-user cfg]} ctx
+       session (get-docs-session! chat-id)]
+   (if-not (and chat-user session (= :docs/agreement-terms-source (:stage session)))
+     (send-message! cfg {:chat-id chat-id
+                         :text "Start from Docs → Create agreement."
+                         :message-key (str "docs-agreement-terms-system-v1-missing-" (System/currentTimeMillis))})
+     (do
+       (save-docs-session! chat-id (-> session
+                                       (assoc :stage :docs/agreement-client-company)
+                                       (assoc-in [:draft :agreement/terms] (agreement-templates/terms :agreement.template/system-v1))))
+       (edit-message! cfg {:chat-id chat-id
+                           :message-id message-id
+                           :text "Client company/legal name (optional). Send it, or tap Skip."
+                           :reply-markup (docs-agreement-party-inline-keyboard :client-company)})))))
+
+(defmethod
+ handle-callback-dispatch
+ :docs/agreement-terms-custom
+ [ctx]
+ (let [{:keys [chat-id message-id chat-user cfg]} ctx
+       session (get-docs-session! chat-id)]
+   (if-not (and chat-user session (= :docs/agreement-terms-source (:stage session)))
+     (send-message! cfg {:chat-id chat-id
+                         :text "Start from Docs → Create agreement."
+                         :message-key (str "docs-agreement-terms-custom-missing-" (System/currentTimeMillis))})
+     (do
+       (save-docs-session! chat-id (assoc session :stage :docs/agreement-terms-custom))
+       (edit-message! cfg {:chat-id chat-id
+                           :message-id message-id
+                           :text "Send agreement terms (free-form)."
+                           :reply-markup {:inline_keyboard [[(inline-button "Cancel" "docs:agreements:menu")]]}})))))
+
+(defmethod
+ handle-callback-dispatch
  :docs/agreements-accept
  [ctx]
  (let
@@ -4510,4 +4546,3 @@
       :message-id message-id,
       :text "Skipped.",
       :reply-markup (docs-menu-inline-keyboard)})))))
-

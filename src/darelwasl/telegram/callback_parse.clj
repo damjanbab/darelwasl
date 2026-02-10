@@ -68,6 +68,10 @@
                                   "skip" {:type :docs/agreement-party-skip
                                           :field (nth parts 4 nil)}
                                   nil)
+                        "terms" (case (nth parts 3 nil)
+                                  "system-v1" {:type :docs/agreement-terms-system-v1}
+                                  "custom" {:type :docs/agreement-terms-custom}
+                                  nil)
                         "accept" (case (nth parts 3 nil)
                                    "by" (case (nth parts 4 nil)
                                           "skip" {:type :docs/agreement-accept-by-skip

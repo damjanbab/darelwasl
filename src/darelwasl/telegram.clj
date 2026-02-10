@@ -11,6 +11,7 @@
             [darelwasl.files :as files]
             [darelwasl.outbox :as outbox]
             [darelwasl.events :as events]
+            [darelwasl.agreement-templates :as agreement-templates]
             [darelwasl.users :as users]
             [darelwasl.tasks :as tasks]
             [darelwasl.provenance :as prov])

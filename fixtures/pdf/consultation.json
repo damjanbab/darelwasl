@@ -20,6 +20,7 @@
       "title": "CONSULTATION PACK",
       "refLine": "Before your proposal",
       "subtitle": "A focused meeting to align scope and milestones. Your proposal is issued to your portal today.",
+      "layout": "inline",
       "chips": [
         "Business setup",
         "Clear scope",

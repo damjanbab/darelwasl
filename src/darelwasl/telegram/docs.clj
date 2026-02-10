@@ -13,6 +13,7 @@
          docs-agreements-menu-inline-keyboard
          docs-agreement-actions-inline-keyboard
          docs-agreement-party-inline-keyboard
+         docs-agreement-terms-source-inline-keyboard
          docs-agreement-accept-by-inline-keyboard
          docs-agreement-accept-channels-inline-keyboard
          docs-plan-items-inline-keyboard
@@ -538,6 +539,13 @@
   {:inline_keyboard
    [[(inline-button "Skip" (str "docs:agreement:party:skip:" (name field)))
      (inline-button "Cancel" "docs:agreements:menu")]]})
+
+(defn- docs-agreement-terms-source-inline-keyboard
+  []
+  {:inline_keyboard
+   [[(inline-button "Use System Agreement v1" "docs:agreement:terms:system-v1")]
+    [(inline-button "Custom (paste terms)" "docs:agreement:terms:custom")]
+    [(inline-button "Cancel" "docs:agreements:menu")]]})
 
 (defn- docs-agreement-accept-by-inline-keyboard
   [agreement-id]
