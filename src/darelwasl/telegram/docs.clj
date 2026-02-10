@@ -543,7 +543,7 @@
 (defn- docs-agreement-terms-source-inline-keyboard
   []
   {:inline_keyboard
-   [[(inline-button "Use System Agreement v1" "docs:agreement:terms:system-v1")]
+   [[(inline-button "Use System Agreement (KSA v2)" "docs:agreement:terms:system-v2")]
     [(inline-button "Custom (paste terms)" "docs:agreement:terms:custom")]
     [(inline-button "Cancel" "docs:agreements:menu")]]})
 
