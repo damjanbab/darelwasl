@@ -5,7 +5,7 @@ work/playbook: work/isolate-pr
 work/summary: Lab UI: professional design, history scroll, codex exchange, auto artifacts
 work/branch: work/20260215-201345-lab-ui-professional-design-history-scroll-codex-
 work/worktree: /opt/darelwasl/target/worktrees/20260215-201345-lab-ui-professional-design-history-scroll-codex-
-work/base: park/20260215-201350
+work/base: main
 work/created_at: 2026-02-15T20:13:45Z
 work/updated_at: 2026-02-15T20:28:57Z
 
