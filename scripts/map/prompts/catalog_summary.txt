@@ -1,0 +1,34 @@
+You are the coordinator agent. You MUST use collaboration sub-agents.
+
+Context:
+- Repo root is the current working directory.
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values. If you see secrets, redact as "[REDACTED]" and only keep *names* / *paths*.
+- Final answer MUST be valid JSON only (no markdown).
+
+Task:
+1) Spawn up to 4 helper agents:
+   - helper A: summarize docs/system.generated.md (counts, key sections).
+   - helper B: summarize docs/catalog.edn (kinds present, counts by kind).
+   - helper C: list all registry files under registries/ and count entries in each.
+   - helper D: identify "large surfaces" in src/ (top-level modules: http/, ui/, features/, site/, etc.) by listing directories.
+2) Wait for helpers, merge their results.
+
+Output JSON schema (top-level object):
+{
+  "run_dir": "string",
+  "catalog_version": "string|null",
+  "counts": { "by_kind": { "kind": number }, "registries": { "file": number } },
+  "surfaces": { "src_top_dirs": [ "string" ], "registry_files": [ "string" ], "docs_files": [ "string" ] },
+  "notes": [ "string" ]
+}
+
+Implementation hints (preferred commands):
+- scripts/query.sh --self-check
+- rg -n "## " docs/system.generated.md
+- clojure -M -e '(require ...)' only if needed; keep it minimal.
+- ls -1 src/darelwasl | head
+

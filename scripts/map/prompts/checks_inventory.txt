@@ -1,0 +1,30 @@
+You are the coordinator agent. You MUST use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Final answer MUST be valid JSON only.
+
+Task:
+Map the verification/check surfaces and entrypoints.
+
+1) Spawn up to 3 helpers:
+   - helper A: parse scripts/checks.sh usage + case targets; list each target and which functions it runs.
+   - helper B: list scripts/ files (tracked) and identify likely entrypoints (generate-docs.sh, preview tooling, agent runner).
+   - helper C: scan policies/ and agents/ for governance rules related to checks/docs.
+2) Merge.
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "checks": [
+    { "target": "string", "runs": [ "string" ], "notes": "string|null" }
+  ],
+  "scripts": [ "string" ],
+  "policies": [ "string" ],
+  "agents": [ "string" ],
+  "notes": [ "string" ]
+}
+

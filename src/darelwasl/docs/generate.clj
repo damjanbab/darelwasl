@@ -64,13 +64,25 @@
         routes (list-routes entries)
         envs (list-envs entries)
         scripts (list-by-kind entries :script)
-        namespaces (list-by-kind entries :namespace)]
+        namespaces (list-by-kind entries :namespace)
+        query-section (str "## Querying the Codebase (protocol)\n\n"
+                           "Start with the generated catalog, then narrow to source files.\n\n"
+                           "- Inventory snapshot: `docs/system.generated.md`\n"
+                           "- Machine-readable catalog: `docs/catalog.edn`\n"
+                           "- Query tool (catalog-backed): `scripts/query.sh`\n\n"
+                           "Common queries:\n\n"
+                           "- Find anything by keyword: `scripts/query.sh TERM`\n"
+                           "- Filter by kind: `scripts/query.sh --kind action TERM`\n"
+                           "- Exact lookup by catalog id: `scripts/query.sh id action/action/auth-login`\n"
+                           "- Exact lookup by registry id: `scripts/query.sh registry-id :cap/action/auth-login`\n"
+                           "- Show only file paths: `scripts/query.sh --paths TERM`\n\n")]
     (str "# System Inventory (generated)\n\n"
          "This file is auto-generated. Do not edit by hand.\n\n"
          "- Catalog version: `" (:version catalog) "`\n"
          "- Catalog file: `" catalog-path "`\n\n"
          "## Registry Summary\n\n"
          registry-section
+         query-section
          "## Routes\n\n"
          (bullet-list routes)
          "\n## Config Env Vars (from config.clj)\n\n"

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `db45a254a7f11603a8b13c363e7f3ea27e570ac2dce64b27c8a35d8747838f2b`
+- Catalog version: `f6c30cac274487124f746d1510710798f4ba0e16615230e0da3825a73e031e4d`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -279,6 +279,22 @@ This file is auto-generated. Do not edit by hand.
 - automation/task-telegram-notify-status
 - automation/telegram-onboarding-task
 
+## Querying the Codebase (protocol)
+
+Start with the generated catalog, then narrow to source files.
+
+- Inventory snapshot: `docs/system.generated.md`
+- Machine-readable catalog: `docs/catalog.edn`
+- Query tool (catalog-backed): `scripts/query.sh`
+
+Common queries:
+
+- Find anything by keyword: `scripts/query.sh TERM`
+- Filter by kind: `scripts/query.sh --kind action TERM`
+- Exact lookup by catalog id: `scripts/query.sh id action/action/auth-login`
+- Exact lookup by registry id: `scripts/query.sh registry-id :cap/action/auth-login`
+- Show only file paths: `scripts/query.sh --paths TERM`
+
 ## Routes
 
 - /+$
@@ -433,6 +449,7 @@ This file is auto-generated. Do not edit by hand.
 - plan.schema.json
 - preview
 - promote-live.sh
+- query.sh
 - run-service.sh
 - site-screenshot.js
 - spec.schema.json
@@ -529,6 +546,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.state
 - darelwasl.tasks
 - darelwasl.telegram
+- darelwasl.tools.query
 - darelwasl.ui.components
 - darelwasl.ui.entity
 - darelwasl.ui.shell

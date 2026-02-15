@@ -1,0 +1,32 @@
+You are the coordinator agent. Do NOT use collaboration sub-agents.
+
+Context:
+- Repo root is the current working directory.
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values. If you see secrets, redact as "[REDACTED]" and only keep names/paths.
+- Final answer MUST be valid JSON only (no markdown, no prose outside JSON).
+
+Task:
+Produce a compact catalog + inventory summary using local commands only.
+
+Required steps (recommended commands):
+1) Read catalog version + counts by kind from docs/catalog.edn:
+   - `clojure -M -e '(require (quote [clojure.edn :as edn])) (let [m (edn/read-string (slurp \"docs/catalog.edn\")) ks (frequencies (map :kind (:entries m)))] (prn {:version (:version m) :entries (count (:entries m)) :kinds (into (sorted-map) (map (fn [[k v]] [(str k) v]) ks))}))'`
+2) List registries files + entry counts (top-level forms) deterministically:
+   - `clojure -M -e '(require (quote [clojure.edn :as edn]) (quote [clojure.java.io :as io])) (defn read1 [p] (with-open [r (java.io.PushbackReader. (io/reader p))] (edn/read {:eof nil} r))) (doseq [p (sort (map #(.getPath %) (filter #(.isFile %) (file-seq (io/file \"registries\")))))] (let [v (read1 p) n (cond (sequential? v) (count v) (map? v) (count v) :else nil)] (println p \"\\t\" (or n -1))))'`
+3) Extract top-level src/darelwasl directories:
+   - `find src/darelwasl -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort`
+4) Confirm docs files exist: docs/system.generated.md and docs/catalog.edn.
+
+Output JSON schema (top-level object):
+{
+  "run_dir": "string",
+  "catalog_version": "string|null",
+  "counts": { "by_kind": { "kind": number }, "registries": { "file": number } },
+  "surfaces": { "src_top_dirs": [ "string" ], "registry_files": [ "string" ], "docs_files": [ "string" ] },
+  "notes": [ "string" ]
+}
+

@@ -1,0 +1,40 @@
+You are the coordinator agent. You MUST use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values (names/paths only).
+- Final answer MUST be valid JSON only.
+
+Task:
+Compute cross-reference edges between registry capabilities based on registry data (registries/*.edn).
+
+You MUST NOT install anything (no pip, no npm installs). Use repo tooling only.
+
+1) Spawn 1 helper agent whose only job is to run this deterministic extractor (summary output only):
+   - `DARELWASL_MAP_RUN_DIR={{RUN_DIR}} clojure -M scripts/map/xref.clj --summary --sample 25`
+2) Wait for the helper.
+3) Your final output MUST be exactly the JSON object produced by that command (no extra keys, no extra text).
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "mode": "string",
+  "edge_counts": { "total": number, "by_type": { "string": number } },
+  "hubs": {
+    "top_from": [ { "id": "string", "count": number } ],
+    "top_to": [ { "id": "string", "count": number } ]
+  },
+  "edges_sample": [
+    { "from": "string", "to": "string", "type": "string", "source": "string" }
+  ],
+  "regenerate": { "full_command": "string", "summary_command": "string" },
+  "notes": [ "string" ]
+}
+
+Edge encoding rules:
+- Use strings for ids (e.g. ":cap/action/auth-login").
+- For file references, "to" can be a path like "policies/docs-are-output.md" with type "policy/file".
+- "source" should be the registry file path that provided the relationship.

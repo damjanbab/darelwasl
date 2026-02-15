@@ -74,6 +74,11 @@
           (or (str/ends-with? name ".md")
               (str/ends-with? name ".markdown"))))))
 
+(defn- zip-filename?
+  [filename]
+  (boolean
+   (some-> filename str/lower-case str/trim (str/ends-with? ".zip"))))
+
 (defn- markdown-mime?
   [mime]
   (contains? #{"text/markdown" "text/x-markdown"} mime))
@@ -83,6 +88,11 @@
   (cond
     (and mime (str/starts-with? mime "image/")) :file.type/image
     (= mime "application/pdf") :file.type/pdf
+    (or (= mime "application/zip")
+        (= mime "application/x-zip-compressed")
+        (and (= mime "application/octet-stream")
+             (zip-filename? filename)))
+    :file.type/zip
     (or (markdown-mime? mime)
         (and (= mime "text/plain") (markdown-filename? filename)))
     :file.type/markdown
@@ -235,7 +245,7 @@
         (cond
           (nil? upload) (error 400 "File is required")
           (nil? tempfile) (error 400 "Upload missing file data")
-          (nil? ftype) (error 400 "Only images, PDFs, and Markdown are supported"
+          (nil? ftype) (error 400 "Only images, PDFs, Markdown, and ZIP files are supported"
                                {:mime mime
                                 :filename filename})
           :else
@@ -244,7 +254,14 @@
                                                                                  :allow-blank? false})
                 base-slug (or slug-val filename "file")
                 final-slug (unique-slug db base-slug)
-                root (ensure-storage-dir storage-dir)]
+                root (ensure-storage-dir storage-dir)
+                mime (if (and (= ftype :file.type/zip)
+                              (zip-filename? filename)
+                              (contains? #{"application/octet-stream"
+                                           "application/x-zip-compressed"}
+                                         mime))
+                       "application/zip"
+                       mime)]
             (cond
               slug-err (error 400 slug-err)
               (:error root) {:error (:error root)}
