@@ -1,9 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Current checkout root (works from main checkout or a linked worktree).
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if git -C "$SCRIPT_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
+  ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+fi
+
+# Shared/common root (where the git common dir lives). Use this for placing worktrees in a stable location.
+COMMON_ROOT="$ROOT"
+if git -C "$SCRIPT_DIR" rev-parse --git-common-dir >/dev/null 2>&1; then
+  common_dir="$(git -C "$SCRIPT_DIR" rev-parse --git-common-dir)"
+  if [[ "$common_dir" = /* ]]; then
+    common_abs="$common_dir"
+  else
+    common_abs="$(cd "$SCRIPT_DIR/$common_dir" && pwd)"
+  fi
+  COMMON_ROOT="$(cd "$common_abs/.." && pwd)"
+fi
+
+# Work items are committed, so default to the current checkout.
 WORK_DIR="${WORK_DIR:-$ROOT/docs/work}"
-WORKTREES_DIR="${WORKTREES_DIR:-$ROOT/target/worktrees}"
+
+# Worktrees should live in one shared place (common root).
+WORKTREES_DIR="${WORKTREES_DIR:-$COMMON_ROOT/target/worktrees}"
 BASE_BRANCH_DEFAULT="${BASE_BRANCH_DEFAULT:-main}"
 
 usage() {

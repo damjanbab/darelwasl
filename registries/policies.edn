@@ -81,5 +81,13 @@
   :policy-path "policies/ops-governance-changes.md"
   :enforces [:ops :governance]}
 
+ {:id :cap/policy/lab-artifacts-to-outbox
+  :title "Lab artifacts to outbox"
+  :version "v1"
+  :policy-path "policies/lab-artifacts-to-outbox.md"
+  :enforces [:lab :artifacts :outbox]
+  :proofs {:commands ["node --check scripts/documents-pdf.js"
+                      "node --check scripts/account-statement-pdf.js"]}}
+
  ;; Intentionally no policy-first placeholder procedures here.
 ]

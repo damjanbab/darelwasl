@@ -17,7 +17,7 @@ Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) s
 
 These are the local services Caddy proxies to:
 
-- `127.0.0.1:7682` — terminal session picker UI (`/usr/local/lib/dw-webterm-ui/server.py`)
+- `127.0.0.1:7682` — terminal session picker UI (installed at `/usr/local/lib/dw-webterm-ui/server.py`; source-of-truth is `ops/webterm-ui/server.py`)
 - `127.0.0.1:7683` — `ttyd` (started by `darelwasl-ttyd.service`, base-path `/xterm`)
 - `127.0.0.1:7681` — ShellInABox (started by `darelwasl-webterm.service`)
 
@@ -41,8 +41,11 @@ The picker UI (`127.0.0.1:7682`) supports:
 - Lab helpers:
   - `GET /lab` — lab UI page
   - `POST /api/lab/upload` — upload a file to the lab inbox
+  - `POST /api/lab/paste` — save clipboard text as a file (inbox or outbox)
+  - `GET /api/lab/inbox` — list inbox files (list only; no download)
   - `GET /api/lab/outbox` — list downloadable outbox files
   - `GET /api/lab/outbox/download?name=...` — download a single outbox file (no browsing)
+  - `GET /api/lab/history?lines=N` — capture tmux scrollback for the lab session
 
 ## Configuration knobs
 
@@ -58,6 +61,19 @@ Shared configuration is read from `/etc/darelwasl/webterm.env` (used by the syst
 
 Optional:
 - `DW_DEFAULT_TMUX_SESSION` (consumed by `/usr/local/bin/dw-codex-term` when no session arg is provided)
+- `DW_LAB_HISTORY_LINES` (default `20000`; UI default for history capture)
+- `DW_TMUX_HISTORY_LIMIT` (default `50000`; tmux history-limit for newly created sessions)
+
+## Deploying UI changes
+
+The webterm UI server is installed outside the repo, so treat the repo as the source of truth and deploy with:
+
+```bash
+scripts/webterm-ui.sh diff
+scripts/webterm-ui.sh install
+scripts/webterm-ui.sh restart
+scripts/webterm-ui.sh smoke
+```
 
 ## Quick checks
 
