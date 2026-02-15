@@ -344,12 +344,30 @@ cmd_pr() {
   [ -n "$branch" ] || die "Work item has no branch yet. Run: scripts/work.sh start $id"
   [ -n "$base" ] || base="$BASE_BRANCH_DEFAULT"
 
+  local remote repo compare_url
+  remote="$(cd "$wt" && git remote get-url origin 2>/dev/null || true)"
+  repo=""
+  if [[ "$remote" =~ ^git@github\.com:(.+)\.git$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^git@github\.com:(.+)$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^https://github\.com/(.+)\.git$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^https://github\.com/(.+)$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  fi
+  compare_url=""
+  if [ -n "$repo" ]; then
+    compare_url="https://github.com/${repo}/compare/${base}...${branch}?expand=1"
+  fi
+
   cat <<EOF
 Push:
   (cd $wt && git push -u origin $branch)
 
 PR:
   gh pr create --fill --base $base --head $branch
+  ${compare_url:-"(open a PR via the GitHub UI for base=$base head=$branch)"}
 
 Title suggestion:
   $summary
