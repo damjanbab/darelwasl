@@ -4,8 +4,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 PREFIX="${DW_TMUX_PREFIX:-codex}"
-LAB_N="${DW_LAB_SESSION:-7}"
+LAB_STABLE_N="${DW_LAB_SESSION_STABLE:-${DW_LAB_SESSION:-7}}"
+LAB_CANARY_N="${DW_LAB_SESSION_CANARY:-$((LAB_STABLE_N + 1))}"
+LAB_N="${DW_LAB_SESSION:-$LAB_STABLE_N}"
 LAB_DIR="${DW_LAB_DIR:-$ROOT/tmp/lab}"
+
+if [[ "${1:-}" == "--stable" ]]; then
+  LAB_N="$LAB_STABLE_N"
+  shift
+elif [[ "${1:-}" == "--canary" ]]; then
+  LAB_N="$LAB_CANARY_N"
+  shift
+elif [[ "${1:-}" == "--session" || "${1:-}" == "-s" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "missing session number after $1" >&2
+    exit 2
+  fi
+  LAB_N="${2}"
+  shift 2
+fi
+
 SESSION_NAME="${PREFIX}${LAB_N}"
 ROOT_DIR="${LAB_DIR}/${SESSION_NAME}"
 INBOX_DIR="${ROOT_DIR}/inbox"
@@ -19,7 +37,12 @@ usage() {
   cat <<EOF
 Usage: scripts/lab.sh <cmd> [args...]
 
-Lab session: $SESSION_NAME
+Lab session: $SESSION_NAME (stable=${PREFIX}${LAB_STABLE_N}, canary=${PREFIX}${LAB_CANARY_N})
+
+Session selection:
+  --stable             Use stable lab session
+  --canary             Use canary lab session
+  --session N          Use explicit lab session number
 
 Commands:
   paths                 Print inbox/outbox paths
@@ -104,4 +127,3 @@ case "$cmd" in
     exit 2
     ;;
 esac
-

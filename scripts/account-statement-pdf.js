@@ -24,7 +24,7 @@ function isTruthyEnv(v) {
 
 function labSessionName() {
   const prefix = String(process.env.DW_TMUX_PREFIX || "codex").trim() || "codex";
-  const n = String(process.env.DW_LAB_SESSION || "7").trim() || "7";
+  const n = String(process.env.DW_LAB_SESSION || process.env.DW_LAB_SESSION_STABLE || "7").trim() || "7";
   return `${prefix}${n}`;
 }
 

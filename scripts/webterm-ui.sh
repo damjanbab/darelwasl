@@ -7,6 +7,8 @@ SRC="$ROOT/ops/webterm-ui/server.py"
 DST="${DW_WEBTERM_UI_DST:-/usr/local/lib/dw-webterm-ui/server.py}"
 SERVICE="${DW_WEBTERM_UI_SERVICE:-darelwasl-webterm-ui}"
 LISTEN="${DW_WEBTERM_UI_LISTEN:-http://127.0.0.1:7682}"
+LAB_STABLE_N="${DW_LAB_SESSION_STABLE:-${DW_LAB_SESSION:-7}}"
+LAB_CANARY_N="${DW_LAB_SESSION_CANARY:-$((LAB_STABLE_N + 1))}"
 
 usage() {
   cat <<EOF
@@ -54,9 +56,12 @@ case "$cmd" in
     ;;
   smoke)
     curl -fsS "$LISTEN/api/sessions" >/dev/null && echo "sessions ok"
-    curl -fsS "$LISTEN/lab" >/dev/null && echo "lab ok"
-    curl -fsS "$LISTEN/api/lab/outbox" >/dev/null && echo "outbox ok"
-    curl -fsS "$LISTEN/api/lab/history?lines=200" >/dev/null && echo "history ok"
+    curl -fsS "$LISTEN/lab?session=$LAB_STABLE_N" >/dev/null && echo "lab stable ok"
+    curl -fsS "$LISTEN/api/lab/outbox?session=$LAB_STABLE_N" >/dev/null && echo "outbox stable ok"
+    curl -fsS "$LISTEN/api/lab/history?lines=200&session=$LAB_STABLE_N" >/dev/null && echo "history stable ok"
+    curl -fsS "$LISTEN/lab?session=$LAB_CANARY_N" >/dev/null && echo "lab canary ok"
+    curl -fsS "$LISTEN/api/lab/outbox?session=$LAB_CANARY_N" >/dev/null && echo "outbox canary ok"
+    curl -fsS "$LISTEN/api/lab/history?lines=200&session=$LAB_CANARY_N" >/dev/null && echo "history canary ok"
     ;;
   ""|-h|--help|help)
     usage
@@ -67,4 +72,3 @@ case "$cmd" in
     exit 2
     ;;
 esac
-

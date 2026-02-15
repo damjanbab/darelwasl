@@ -11,8 +11,10 @@ When working in the Lab (`code.haloeddepth.com/lab`), artifacts that are meant t
   - `DW_LAB_AUTO_OUTBOX=1`
 - Auto-publish uses the standard Lab paths:
   - `DW_LAB_DIR` (default: `tmp/lab`)
-  - `DW_TMUX_PREFIX` + `DW_LAB_SESSION` (default: `codex7`)
-  - Outbox directory becomes: `<DW_LAB_DIR>/<DW_TMUX_PREFIX><DW_LAB_SESSION>/outbox/`
+  - `DW_TMUX_PREFIX` + Lab session number
+    - Prefer: `DW_LAB_SESSION` (explicit target for a single run)
+    - Else: `DW_LAB_SESSION_STABLE` (default: `7`)
+  - Outbox directory becomes: `<DW_LAB_DIR>/<DW_TMUX_PREFIX><N>/outbox/`
 
 ## Supported generators
 
@@ -25,4 +27,3 @@ If you add a new PDF generator, it must follow the same convention.
 
 - `node --check scripts/documents-pdf.js`
 - `node --check scripts/account-statement-pdf.js`
-

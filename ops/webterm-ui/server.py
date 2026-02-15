@@ -24,7 +24,8 @@ PREFIX = os.environ.get("DW_TMUX_PREFIX", "codex")
 COUNT = int(os.environ.get("DW_TERMINAL_COUNT", "32"))
 WORKDIR = os.environ.get("DW_WORKDIR", "/opt/darelwasl")
 
-LAB_SESSION = int(os.environ.get("DW_LAB_SESSION", "7"))
+LAB_STABLE_SESSION = int(os.environ.get("DW_LAB_SESSION_STABLE", os.environ.get("DW_LAB_SESSION", "7")))
+LAB_CANARY_SESSION = int(os.environ.get("DW_LAB_SESSION_CANARY", str(LAB_STABLE_SESSION + 1)))
 LAB_DIR = os.environ.get("DW_LAB_DIR", "/opt/darelwasl/tmp/lab")
 LAB_MAX_UPLOAD_BYTES = int(os.environ.get("DW_LAB_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
 LAB_DEFAULT_HISTORY_LINES = int(os.environ.get("DW_LAB_HISTORY_LINES", "20000"))
@@ -90,25 +91,63 @@ def xterm_url(n: int) -> str:
     return f"/xterm/?arg={session_name(n)}"
 
 
-def _lab_session_name() -> str:
-    return session_name(LAB_SESSION)
+def _clamp_session(n: int) -> int:
+    if n < 1:
+        return 1
+    if n > COUNT:
+        return COUNT
+    return n
 
 
-def _lab_root() -> str:
-    return os.path.join(LAB_DIR, _lab_session_name())
+def _cookie_value(headers, name: str) -> str | None:
+    cookie = headers.get("Cookie") or headers.get("cookie") or ""
+    if not cookie:
+        return None
+    for part in cookie.split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        k, v = part.split("=", 1)
+        if k.strip() == name:
+            return v.strip()
+    return None
 
 
-def _lab_inbox_dir() -> str:
-    return os.path.join(_lab_root(), "inbox")
+def _lab_session_from_request(*, handler: BaseHTTPRequestHandler, qs: dict) -> int:
+    raw = (qs.get("session") or [""])[0]
+    if raw:
+        try:
+            return _clamp_session(int(raw))
+        except Exception:
+            return LAB_STABLE_SESSION
+    c = _cookie_value(handler.headers, "dw_lab_session")
+    if c:
+        try:
+            return _clamp_session(int(c))
+        except Exception:
+            return LAB_STABLE_SESSION
+    return LAB_STABLE_SESSION
 
 
-def _lab_outbox_dir() -> str:
-    return os.path.join(_lab_root(), "outbox")
+def _lab_session_name(n: int) -> str:
+    return session_name(n)
 
 
-def ensure_lab_dirs() -> None:
-    os.makedirs(_lab_inbox_dir(), exist_ok=True)
-    os.makedirs(_lab_outbox_dir(), exist_ok=True)
+def _lab_root(n: int) -> str:
+    return os.path.join(LAB_DIR, _lab_session_name(n))
+
+
+def _lab_inbox_dir(n: int) -> str:
+    return os.path.join(_lab_root(n), "inbox")
+
+
+def _lab_outbox_dir(n: int) -> str:
+    return os.path.join(_lab_root(n), "outbox")
+
+
+def ensure_lab_dirs(n: int) -> None:
+    os.makedirs(_lab_inbox_dir(n), exist_ok=True)
+    os.makedirs(_lab_outbox_dir(n), exist_ok=True)
 
 
 def _safe_name(name: str | None, default: str) -> str:
@@ -141,7 +180,7 @@ def _unique_path(directory: str, filename: str) -> str:
     return os.path.join(directory, candidate)
 
 
-def _require_outbox_path(name: str) -> str | None:
+def _require_outbox_path(n: int, name: str) -> str | None:
     if not name:
         return None
     if name != os.path.basename(name):
@@ -150,8 +189,8 @@ def _require_outbox_path(name: str) -> str | None:
         return None
     if os.sep in name or (os.altsep and os.altsep in name):
         return None
-    ensure_lab_dirs()
-    outbox = os.path.realpath(_lab_outbox_dir())
+    ensure_lab_dirs(n)
+    outbox = os.path.realpath(_lab_outbox_dir(n))
     path = os.path.realpath(os.path.join(outbox, name))
     try:
         if os.path.commonpath([outbox, path]) != outbox:
@@ -162,7 +201,6 @@ def _require_outbox_path(name: str) -> str | None:
 
 
 def _list_dir_files(directory: str) -> list[dict]:
-    ensure_lab_dirs()
     items: list[dict] = []
     for name in os.listdir(directory):
         path = os.path.join(directory, name)
@@ -212,13 +250,18 @@ def _now_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def lab_page(message: str | None = None) -> bytes:
-    ensure_session(LAB_SESSION)
-    ensure_lab_dirs()
+def lab_page(*, sess: int, message: str | None = None) -> bytes:
+    ensure_session(LAB_STABLE_SESSION)
+    ensure_lab_dirs(LAB_STABLE_SESSION)
+    if LAB_CANARY_SESSION != LAB_STABLE_SESSION:
+        ensure_session(LAB_CANARY_SESSION)
+        ensure_lab_dirs(LAB_CANARY_SESSION)
+
+    ensure_session(sess)
+    ensure_lab_dirs(sess)
 
     msg_html = f"<div class='toast ok'>{html.escape(message)}</div>" if message else ""
-    sess = LAB_SESSION
-    sname = _lab_session_name()
+    sname = _lab_session_name(sess)
     iframe_src = xterm_url(sess)
 
     body = f"""<!doctype html>
@@ -315,14 +358,16 @@ def lab_page(message: str | None = None) -> bytes:
     <div class="topbar">
       <div class="title">
         <h1>Lab</h1>
-        <span class="chip">session {sess}</span>
-        <span class="chip"><code>{html.escape(sname)}</code></span>
+        <span class="chip">stable {LAB_STABLE_SESSION}</span>
+        <span class="chip">canary {LAB_CANARY_SESSION}</span>
+        <span class="chip">active <span id="active-session">{sess}</span></span>
+        <span class="chip"><code id="active-tmux">{html.escape(sname)}</code></span>
       </div>
-      <span class="muted">Upload → inbox · Download ← outbox · History via tmux</span>
+      <span class="muted">Upload → inbox · Download ← outbox · History via tmux · Canary-safe upgrades</span>
       <span class="spacer"></span>
       <a class="btn" href="/" rel="noreferrer">Terminals</a>
-      <a class="btn" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
-      <a class="btn primary" href="/codex?n={sess}" target="_blank" rel="noreferrer">Start codex</a>
+      <a class="btn" id="open-terminal" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
+      <a class="btn primary" id="start-codex" href="/codex?n={sess}" target="_blank" rel="noreferrer">Start codex</a>
     </div>
 
     {msg_html}
@@ -332,14 +377,14 @@ def lab_page(message: str | None = None) -> bytes:
         <div class="hd">
           <div>
             <h2>Terminal</h2>
-            <div class="sub">This is the live ttyd terminal attached to tmux <code>{html.escape(sname)}</code>.</div>
+            <div class="sub">This is the live ttyd terminal attached to tmux <code id="active-tmux-sub">{html.escape(sname)}</code>.</div>
           </div>
         </div>
         <div class="bd">
-          <iframe src="{iframe_src}" title="terminal"></iframe>
+          <iframe id="term" src="{iframe_src}" title="terminal"></iframe>
           <div class="kvs" style="margin-top: 10px;">
-            <div class="kv"><span>inbox</span><b><code>tmp/lab/{html.escape(sname)}/inbox</code></b></div>
-            <div class="kv"><span>outbox</span><b><code>tmp/lab/{html.escape(sname)}/outbox</code></b></div>
+            <div class="kv"><span>inbox</span><b><code>tmp/lab/<span id="active-tmux-path">{html.escape(sname)}</span>/inbox</code></b></div>
+            <div class="kv"><span>outbox</span><b><code>tmp/lab/<span id="active-tmux-path2">{html.escape(sname)}</span>/outbox</code></b></div>
           </div>
         </div>
       </div>
@@ -351,6 +396,8 @@ def lab_page(message: str | None = None) -> bytes:
             <div class="sub">Files + clipboard snippets + history viewer.</div>
           </div>
           <div class="row">
+            <button class="btn" id="use-stable" type="button">Use stable</button>
+            <button class="btn" id="use-canary" type="button">Use canary</button>
             <button class="btn" id="refresh-all" type="button">Refresh</button>
           </div>
         </div>
@@ -434,12 +481,42 @@ def lab_page(message: str | None = None) -> bytes:
       return await resp.json();
     }}
 
+    const TMUX_PREFIX = {json.dumps(PREFIX)};
+    const STABLE_SESSION = {LAB_STABLE_SESSION};
+    const CANARY_SESSION = {LAB_CANARY_SESSION};
+    let activeSession = STABLE_SESSION;
+
+    function tmuxName(n) {{
+      return TMUX_PREFIX + String(n);
+    }}
+
+	    function setActiveSession(n) {{
+	      const nn = Number(n);
+	      if (!Number.isFinite(nn) || nn < 1 || nn > {COUNT}) return;
+	      activeSession = nn;
+	      document.cookie = "dw_lab_session=" + encodeURIComponent(String(nn)) + "; Path=/; Max-Age=31536000; SameSite=Lax";
+	      const tn = tmuxName(nn);
+	      document.getElementById("active-session").textContent = String(nn);
+	      document.getElementById("active-tmux").textContent = tn;
+	      document.getElementById("active-tmux-sub").textContent = tn;
+	      document.getElementById("active-tmux-path").textContent = tn;
+      document.getElementById("active-tmux-path2").textContent = tn;
+      document.getElementById("term").src = "/xterm/?arg=" + encodeURIComponent(tn);
+      document.getElementById("open-terminal").href = "/xterm/?arg=" + encodeURIComponent(tn);
+      document.getElementById("start-codex").href = "/codex?n=" + encodeURIComponent(String(nn));
+    }}
+
+    function apiUrl(path) {{
+      const sep = path.includes("?") ? "&" : "?";
+      return path + sep + "session=" + encodeURIComponent(String(activeSession));
+    }}
+
     async function loadInbox() {{
       const status = document.getElementById("inbox-status");
       const list = document.getElementById("inbox");
       status.textContent = "Loading…";
       list.innerHTML = "";
-      const data = await jget("/api/lab/inbox");
+      const data = await jget(apiUrl("/api/lab/inbox"));
       const items = (data.inbox || []);
       status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
       for (const it of items) {{
@@ -454,31 +531,31 @@ def lab_page(message: str | None = None) -> bytes:
       const list = document.getElementById("outbox");
       status.textContent = "Loading…";
       list.innerHTML = "";
-      const data = await jget("/api/lab/outbox");
+      const data = await jget(apiUrl("/api/lab/outbox"));
       const items = (data.outbox || []);
       status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
       for (const it of items) {{
         const li = document.createElement("li");
         const a = document.createElement("a");
         a.textContent = it.name + " (" + fmtKB(it.size_bytes) + ")";
-        a.href = "/api/lab/outbox/download?name=" + encodeURIComponent(it.name);
+        a.href = apiUrl("/api/lab/outbox/download?name=" + encodeURIComponent(it.name));
         a.rel = "noreferrer";
         li.appendChild(a);
         list.appendChild(li);
       }}
     }}
 
-    async function pasteTo(dir) {{
-      const name = document.getElementById("paste-name").value || "";
-      const content = document.getElementById("paste-content").value || "";
-      const status = document.getElementById("paste-status");
-      status.textContent = "Saving…";
-      try {{
-        const resp = await fetch("/api/lab/paste", {{
-          method: "POST",
-          headers: {{"Content-Type": "application/json"}},
-          body: JSON.stringify({{dir, name, content}})
-        }});
+	    async function pasteTo(dir) {{
+	      const name = document.getElementById("paste-name").value || "";
+	      const content = document.getElementById("paste-content").value || "";
+	      const status = document.getElementById("paste-status");
+	      status.textContent = "Saving…";
+	      try {{
+	        const resp = await fetch(apiUrl("/api/lab/paste"), {{
+	          method: "POST",
+	          headers: {{"Content-Type": "application/json"}},
+	          body: JSON.stringify({{dir, name, content}})
+	        }});
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
         status.textContent = "Saved: " + data.name;
@@ -488,33 +565,33 @@ def lab_page(message: str | None = None) -> bytes:
       }}
     }}
 
-    async function loadHistory() {{
-      const box = document.getElementById("history");
-      const err = document.getElementById("hist-error");
-      err.innerHTML = "";
-      box.textContent = "(capturing…)";
-      const lines = Number(document.getElementById("hist-lines").value || "{LAB_DEFAULT_HISTORY_LINES}") || {LAB_DEFAULT_HISTORY_LINES};
-      try {{
-        const data = await jget("/api/lab/history?lines=" + encodeURIComponent(lines));
-        const text = (data.text || "");
-        box.textContent = text || "(empty)";
-        box.scrollTop = box.scrollHeight;
-      }} catch (e) {{
+	    async function loadHistory() {{
+	      const box = document.getElementById("history");
+	      const err = document.getElementById("hist-error");
+	      err.innerHTML = "";
+	      box.textContent = "(capturing…)";
+	      const lines = Number(document.getElementById("hist-lines").value || "{LAB_DEFAULT_HISTORY_LINES}") || {LAB_DEFAULT_HISTORY_LINES};
+	      try {{
+	        const data = await jget(apiUrl("/api/lab/history?lines=" + encodeURIComponent(lines)));
+	        const text = (data.text || "");
+	        box.textContent = text || "(empty)";
+	        box.scrollTop = box.scrollHeight;
+	      }} catch (e) {{
         box.textContent = "";
         err.innerHTML = "<div class='err'>Failed to capture history: " + (e && e.message ? e.message : String(e)) + "</div>";
       }}
     }}
 
-    async function saveHistoryToOutbox() {{
-      const lines = Number(document.getElementById("hist-lines").value || "{LAB_DEFAULT_HISTORY_LINES}") || {LAB_DEFAULT_HISTORY_LINES};
-      const data = await jget("/api/lab/history?lines=" + encodeURIComponent(lines));
-      const stamp = (data.captured_at || "").replaceAll(":", "").replaceAll("-", "");
-      const filename = "lab-history-{html.escape(sname)}-" + (stamp || "capture") + ".txt";
-      const resp = await fetch("/api/lab/paste", {{
-        method: "POST",
-        headers: {{"Content-Type": "application/json"}},
-        body: JSON.stringify({{dir: "outbox", name: filename, content: data.text || ""}})
-      }});
+	    async function saveHistoryToOutbox() {{
+	      const lines = Number(document.getElementById("hist-lines").value || "{LAB_DEFAULT_HISTORY_LINES}") || {LAB_DEFAULT_HISTORY_LINES};
+	      const data = await jget(apiUrl("/api/lab/history?lines=" + encodeURIComponent(lines)));
+	      const stamp = (data.captured_at || "").replaceAll(":", "").replaceAll("-", "");
+	      const filename = "lab-history-" + tmuxName(activeSession) + "-" + (stamp || "capture") + ".txt";
+	      const resp = await fetch(apiUrl("/api/lab/paste"), {{
+	        method: "POST",
+	        headers: {{"Content-Type": "application/json"}},
+	        body: JSON.stringify({{dir: "outbox", name: filename, content: data.text || ""}})
+	      }});
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       await loadOutbox();
     }}
@@ -523,17 +600,33 @@ def lab_page(message: str | None = None) -> bytes:
       await Promise.all([loadInbox(), loadOutbox()]);
     }}
 
-    document.getElementById("refresh-all").addEventListener("click", refreshAll);
-    document.getElementById("paste-inbox").addEventListener("click", () => pasteTo("inbox"));
-    document.getElementById("paste-outbox").addEventListener("click", () => pasteTo("outbox"));
-    document.getElementById("hist-refresh").addEventListener("click", loadHistory);
-    document.getElementById("hist-save-outbox").addEventListener("click", saveHistoryToOutbox);
+	    document.getElementById("refresh-all").addEventListener("click", refreshAll);
+	    document.getElementById("paste-inbox").addEventListener("click", () => pasteTo("inbox"));
+	    document.getElementById("paste-outbox").addEventListener("click", () => pasteTo("outbox"));
+	    document.getElementById("hist-refresh").addEventListener("click", loadHistory);
+	    document.getElementById("hist-save-outbox").addEventListener("click", saveHistoryToOutbox);
+	    document.getElementById("use-stable").addEventListener("click", async () => {{
+	      setActiveSession(STABLE_SESSION);
+	      await refreshAll();
+	      await loadHistory();
+	    }});
+	    document.getElementById("use-canary").addEventListener("click", async () => {{
+	      setActiveSession(CANARY_SESSION);
+	      await refreshAll();
+	      await loadHistory();
+	    }});
 
-    (async () => {{
-      await refreshAll();
-      await loadHistory();
-    }})();
-  </script>
+	    (async () => {{
+	      const c = (document.cookie || "").split(";").map(s => s.trim()).find(s => s.startsWith("dw_lab_session="));
+	      if (c) {{
+	        const v = c.split("=", 2)[1] || "";
+	        const n = Number(v);
+	        if (Number.isFinite(n)) setActiveSession(n);
+	      }}
+	      await refreshAll();
+	      await loadHistory();
+	    }})();
+	  </script>
 </body>
 </html>"""
     return body.encode("utf-8")
@@ -590,10 +683,13 @@ def html_page(message: str | None = None) -> bytes:
         name = session_name(n)
         exists = name in sessions
         status = "running" if exists else "empty"
-        is_lab = n == LAB_SESSION
-        lab_marker = " (lab)" if is_lab else ""
-        lab_link = f" | <a href=\"/lab\" target=\"_blank\" rel=\"noreferrer\">lab</a>" if is_lab else ""
-        row_style = " style=\"background:#fffbe6\"" if is_lab else ""
+        is_stable = n == LAB_STABLE_SESSION
+        is_canary = n == LAB_CANARY_SESSION
+        lab_marker = " (lab stable)" if is_stable else (" (lab canary)" if is_canary else "")
+        lab_link = (
+            f" | <a href=\"/lab?session={n}\" target=\"_blank\" rel=\"noreferrer\">lab</a>" if (is_stable or is_canary) else ""
+        )
+        row_style = " style=\"background:#fffbe6\"" if is_stable else (" style=\"background:#e6f4ff\"" if is_canary else "")
         rows.append(
             f"<tr{row_style}>"
             f"<td>{n}</td>"
@@ -632,7 +728,8 @@ def html_page(message: str | None = None) -> bytes:
   {msg_html}
   <div class=\"bar\">
     <a href=\"/new\">New terminal (next free)</a>
-    <a href=\"/lab\" target=\"_blank\" rel=\"noreferrer\">Lab (session {LAB_SESSION})</a>
+    <a href=\"/lab?session={LAB_STABLE_SESSION}\" target=\"_blank\" rel=\"noreferrer\">Lab (stable {LAB_STABLE_SESSION})</a>
+    <a href=\"/lab?session={LAB_CANARY_SESSION}\" target=\"_blank\" rel=\"noreferrer\">Lab (canary {LAB_CANARY_SESSION})</a>
     <a href=\"/\">Refresh</a>
   </div>
   <p><b>Open</b> uses ttyd (xterm.js; good copy/paste + scrolling). <b>legacy</b> is the old shellinabox terminal.</p>
@@ -648,10 +745,19 @@ def html_page(message: str | None = None) -> bytes:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, body: bytes, content_type: str = "text/html; charset=utf-8") -> None:
+    def _send(
+        self,
+        status: int,
+        body: bytes,
+        content_type: str = "text/html; charset=utf-8",
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -680,8 +786,10 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             if parsed.path == "/lab":
-                body = lab_page(None)
-                return self._send(200, body)
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                body = lab_page(sess=sess, message=None)
+                cookie = f"dw_lab_session={sess}; Path=/; Max-Age=31536000; SameSite=Lax"
+                return self._send(200, body, extra_headers={"Set-Cookie": cookie})
 
             if parsed.path == "/api/sessions":
                 sessions = list_sessions()
@@ -727,40 +835,48 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, body)
 
             if parsed.path == "/api/lab/inbox":
-                ensure_lab_dirs()
-                return self._send_json(
-                    200,
-                    {"lab_session": LAB_SESSION, "tmux_session": _lab_session_name(), "inbox": _list_dir_files(_lab_inbox_dir())},
-                )
-
-            if parsed.path == "/api/lab/outbox":
-                ensure_lab_dirs()
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                ensure_lab_dirs(sess)
                 return self._send_json(
                     200,
                     {
-                        "lab_session": LAB_SESSION,
-                        "tmux_session": _lab_session_name(),
-                        "outbox": _list_dir_files(_lab_outbox_dir()),
+                        "lab_session": sess,
+                        "tmux_session": _lab_session_name(sess),
+                        "inbox": _list_dir_files(_lab_inbox_dir(sess)),
+                    },
+                )
+
+            if parsed.path == "/api/lab/outbox":
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                ensure_lab_dirs(sess)
+                return self._send_json(
+                    200,
+                    {
+                        "lab_session": sess,
+                        "tmux_session": _lab_session_name(sess),
+                        "outbox": _list_dir_files(_lab_outbox_dir(sess)),
                     },
                 )
 
             if parsed.path == "/api/lab/outbox/download":
+                sess = _lab_session_from_request(handler=self, qs=qs)
                 name = (qs.get("name") or [""])[0]
-                path = _require_outbox_path(name)
+                path = _require_outbox_path(sess, name)
                 if not path or not os.path.exists(path) or not os.path.isfile(path):
                     return self._send(404, b"not found\n", "text/plain; charset=utf-8")
                 download_name = _safe_name(name, default="download")
                 return self._send_file(200, path, "application/octet-stream", download_name)
 
             if parsed.path == "/api/lab/history":
-                ensure_session(LAB_SESSION)
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                ensure_session(sess)
                 lines = int((qs.get("lines") or [""])[0] or str(LAB_DEFAULT_HISTORY_LINES))
-                text = _capture_history(LAB_SESSION, lines=lines)
+                text = _capture_history(sess, lines=lines)
                 return self._send_json(
                     200,
                     {
-                        "lab_session": LAB_SESSION,
-                        "tmux_session": _lab_session_name(),
+                        "lab_session": sess,
+                        "tmux_session": _lab_session_name(sess),
                         "captured_at": _utc_iso(),
                         "lines_requested": lines,
                         "text": text,
@@ -775,15 +891,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        qs = parse_qs(parsed.query)
         try:
             if parsed.path == "/api/lab/upload":
+                sess = _lab_session_from_request(handler=self, qs=qs)
                 content_length = int(self.headers.get("Content-Length") or "0")
                 if content_length <= 0:
                     return self._send(400, b"missing body\n", "text/plain; charset=utf-8")
                 if content_length > LAB_MAX_UPLOAD_BYTES:
                     return self._send(413, b"upload too large\n", "text/plain; charset=utf-8")
 
-                ensure_lab_dirs()
+                ensure_lab_dirs(sess)
                 ctype = self.headers.get("Content-Type") or ""
                 if "multipart/form-data" not in ctype:
                     return self._send(415, b"expected multipart/form-data\n", "text/plain; charset=utf-8")
@@ -804,16 +922,17 @@ class Handler(BaseHTTPRequestHandler):
 
                 filename, content = parsed_file
                 upload_name = _safe_name(filename, default="upload")
-                inbox = _lab_inbox_dir()
+                inbox = _lab_inbox_dir(sess)
                 dest_path = _unique_path(inbox, upload_name)
                 with open(dest_path, "wb") as out:
                     out.write(content)
 
-                body = lab_page(f"Uploaded to inbox: {html.escape(os.path.basename(dest_path))}")
+                body = lab_page(sess=sess, message=f"Uploaded to inbox: {os.path.basename(dest_path)}")
                 return self._send(200, body)
 
             if parsed.path == "/api/lab/paste":
-                ensure_lab_dirs()
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                ensure_lab_dirs(sess)
                 body = _read_body(self, max_bytes=5 * 1024 * 1024)
                 obj = _parse_json(body) or {}
                 dir_name = str(obj.get("dir") or "inbox").strip().lower()
@@ -831,7 +950,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     raw = str(content or "").encode("utf-8")
 
-                dest_dir = _lab_inbox_dir() if dir_name == "inbox" else _lab_outbox_dir()
+                dest_dir = _lab_inbox_dir(sess) if dir_name == "inbox" else _lab_outbox_dir(sess)
                 dest_path = _unique_path(dest_dir, name)
                 with open(dest_path, "wb") as out:
                     out.write(raw)

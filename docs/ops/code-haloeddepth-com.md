@@ -9,7 +9,9 @@ It is fronted by **Caddy** with **Basic Auth** configured in `/etc/caddy/Caddyfi
 - `/` → **terminal session picker UI** (lists tmux sessions like `codex1`, `codex2`, …)
 - `/xterm/?arg=codexN` → **ttyd** (xterm.js) attached to tmux session `codexN`
 - `/tN` → **legacy** ShellInABox terminal for tmux session `codexN`
-- `/lab` → **Lab UI** for the configured lab session (default `codex7`): iframe terminal + upload (inbox) + download (outbox-only)
+- `/lab` → **Lab UI** for the selected Lab session (stable/canary): iframe terminal + upload (inbox) + download (outbox-only) + tmux history capture
+  - Select with `?session=N` or the UI buttons
+  - Persisted in cookie `dw_lab_session`
 
 Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) so refresh works even if query params are lost.
 
@@ -55,7 +57,9 @@ Shared configuration is read from `/etc/darelwasl/webterm.env` (used by the syst
 - `DW_TERMINAL_COUNT` (default `32`)
 - `DW_WORKDIR` (default `/opt/darelwasl`)
 - `DW_LISTEN_HOST` / `DW_LISTEN_PORT` (picker UI bind)
-- `DW_LAB_SESSION` (default `7`)
+- `DW_LAB_SESSION_STABLE` (default `7`)
+- `DW_LAB_SESSION_CANARY` (default: `DW_LAB_SESSION_STABLE + 1`)
+- Legacy: `DW_LAB_SESSION` (treated as stable when `DW_LAB_SESSION_STABLE` is not set)
 - `DW_LAB_DIR` (default `/opt/darelwasl/tmp/lab`)
 - `DW_LAB_MAX_UPLOAD_BYTES` (default `52428800` / 50MB)
 
@@ -86,6 +90,12 @@ scripts/webterm-ui.sh install
 scripts/webterm-ui.sh restart
 scripts/webterm-ui.sh smoke
 ```
+
+## Canary upgrades (stable ↔ canary swap)
+
+When making Lab-related changes that could break workflows, validate in **canary** first, then promote by swapping the stable/canary session numbers in `/etc/darelwasl/webterm.env`.
+
+Policy: `policies/lab-canary-upgrades.md`
 
 ## Quick checks
 

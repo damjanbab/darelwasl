@@ -70,16 +70,25 @@ Workflow:
 - Telegram commands + documents flows: `docs/telegram.md`
 
 ## Lab session (code.haloeddepth.com)
-Terminal session **7** (`codex7`) is treated as the shared “Lab”.
+The Lab is split into **stable** and **canary** sessions (defaults: `codex7` and `codex8`).
 
 File handoff convention (browser ↔ codex):
-- Uploads from the Lab UI land in `tmp/lab/codex7/inbox/`
-- Files to download should be written to `tmp/lab/codex7/outbox/` (outbox-only downloads)
+- Stable:
+  - Uploads land in `tmp/lab/codex7/inbox/`
+  - Downloads come from `tmp/lab/codex7/outbox/` (outbox-only downloads)
+- Canary:
+  - Uploads land in `tmp/lab/codex8/inbox/`
+  - Downloads come from `tmp/lab/codex8/outbox/`
+
+Notes:
+- Select stable/canary in the Lab UI (`/lab`) or with `?session=N` (persisted via cookie `dw_lab_session`).
+- Roles are configured by `DW_LAB_SESSION_STABLE` / `DW_LAB_SESSION_CANARY` (legacy `DW_LAB_SESSION` still works).
 
 Helper commands:
-- `scripts/lab.sh paths`
-- `scripts/lab.sh ls-inbox`
-- `scripts/lab.sh put-outbox path/to/file.zip`
+- Stable: `scripts/lab.sh --stable paths`
+- Canary: `scripts/lab.sh --canary paths`
+- List inbox: `scripts/lab.sh --stable ls-inbox`
+- Put file in outbox: `scripts/lab.sh --stable put-outbox path/to/file.zip`
 
 ## Agents (capability contracts)
 Agent contracts live under `agents/` (one folder per agent type). Each contract defines:
@@ -188,6 +197,7 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - Policies:
   - `policies/ops-governance-changes.md`
   - `policies/lab-artifacts-to-outbox.md`
+  - `policies/lab-canary-upgrades.md`
   - `policies/verification-required.md`
 - Proof:
   - `scripts/checks.sh governance`
@@ -195,6 +205,7 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - `scripts/webterm-ui.sh smoke`
 - Next:
   - If you want auto-published PDFs in the Lab outbox, enable `DW_LAB_AUTO_OUTBOX=1` in the environment running the PDF generators.
+  - For risky Lab changes: validate in canary first, then swap stable/canary per `policies/lab-canary-upgrades.md`.
 
 ### Playbook: work/isolate-pr — isolated work + PR submission
 - When: Any `change:` or `governance:` work that should not touch the base working tree.
