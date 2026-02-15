@@ -64,6 +64,18 @@ Optional:
 - `DW_LAB_HISTORY_LINES` (default `20000`; UI default for history capture)
 - `DW_TMUX_HISTORY_LIMIT` (default `50000`; tmux history-limit for newly created sessions)
 
+## Auto-publishing artifacts to Lab outbox
+
+To make generated PDFs show up in the Lab outbox automatically (for one-click download), set:
+
+```bash
+export DW_LAB_AUTO_OUTBOX=1
+```
+
+Supported generators:
+- `node scripts/documents-pdf.js ...`
+- `node scripts/account-statement-pdf.js ...`
+
 ## Deploying UI changes
 
 The webterm UI server is installed outside the repo, so treat the repo as the source of truth and deploy with:
