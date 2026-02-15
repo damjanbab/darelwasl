@@ -179,6 +179,23 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - Next:
   - If you created a new repeatable workflow, add a playbook and link it from here.
 
+### Playbook: lab/ui — improve Lab UI (code.haloeddepth.com)
+- When: You need better Lab UX (history, exchange, artifacts), or to deploy Lab UI changes.
+- Start:
+  - Read: `docs/ops/code-haloeddepth-com.md`
+  - Edit UI server source: `ops/webterm-ui/server.py`
+  - Deploy on host: `scripts/webterm-ui.sh install && scripts/webterm-ui.sh restart`
+- Policies:
+  - `policies/ops-governance-changes.md`
+  - `policies/lab-artifacts-to-outbox.md`
+  - `policies/verification-required.md`
+- Proof:
+  - `scripts/checks.sh governance`
+  - `python3 -m py_compile ops/webterm-ui/server.py`
+  - `scripts/webterm-ui.sh smoke`
+- Next:
+  - If you want auto-published PDFs in the Lab outbox, enable `DW_LAB_AUTO_OUTBOX=1` in the environment running the PDF generators.
+
 ### Playbook: work/isolate-pr — isolated work + PR submission
 - When: Any `change:` or `governance:` work that should not touch the base working tree.
 - Start:
