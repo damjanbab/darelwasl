@@ -28,6 +28,18 @@ DW_SECRETS_MASTER_KEY_FILE=/path/to/secrets.key scripts/secrets.sh init-master-k
 scripts/secrets.sh set github/token
 ```
 
+Store from a file (recommended for handoffs; avoids pasting secrets into terminals/chat):
+
+```bash
+cat path/to/pat.txt | scripts/secrets.sh set github/token
+```
+
+Store from the File Library UI (one-off handoff):
+
+- Upload a 1-line `pat.txt` into the File Library.
+- Provide the `file/id` (UUID) to the operator/agent.
+- Import into the vault and then delete the plaintext file asset.
+
 List stored keys (metadata only):
 
 ```bash
@@ -54,4 +66,3 @@ git config credential.helper "!/opt/darelwasl/scripts/git-credential-dw.sh"
 ```
 
 Then `git push` should work without interactive prompts (as long as the vault has `github/token` and the master key file is present).
-
