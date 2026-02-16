@@ -194,16 +194,21 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - Start:
   - Read: `docs/ops/code-haloeddepth-com.md`
   - Edit UI server source: `ops/webterm-ui/server.py`
-  - Deploy on host: `scripts/webterm-ui.sh install && scripts/webterm-ui.sh restart`
+  - Deploy canary on host (review first): `scripts/webterm-ui.sh deploy-canary`
+  - Review in browser: `https://code.haloeddepth.com/canary/lab?session=<N>`
+  - After acceptance: `scripts/work.sh pr-create <work-id>`
+  - After merge: `scripts/webterm-ui.sh deploy-stable` (and `scripts/webterm-ui.sh promote-lab` if this is workflow-risky)
 - Policies:
   - `policies/ops-governance-changes.md`
   - `policies/lab-artifacts-to-outbox.md`
   - `policies/lab-canary-upgrades.md`
+  - `policies/lab-ui-blue-green.md`
   - `policies/verification-required.md`
 - Proof:
   - `scripts/checks.sh governance`
   - `python3 -m py_compile ops/webterm-ui/server.py`
   - `scripts/webterm-ui.sh smoke`
+  - `scripts/webterm-ui.sh smoke --canary`
 - Next:
   - If you want auto-published PDFs in the Lab outbox, enable `DW_LAB_AUTO_OUTBOX=1` in the environment running the PDF generators.
   - For risky Lab changes: validate in canary first, then swap stable/canary per `policies/lab-canary-upgrades.md`.

@@ -12,6 +12,8 @@ It is fronted by **Caddy** with **Basic Auth** configured in `/etc/caddy/Caddyfi
 - `/lab` → **Lab UI** for the selected Lab session (stable/canary): iframe terminal + upload (inbox) + download (outbox-only) + tmux history capture
   - Select with `?session=N` or the UI buttons
   - Persisted in cookie `dw_lab_session`
+- `/canary/*` → **canary UI** for the picker + Lab UI (same functionality, new code deployed first)
+  - Example: `/canary/lab?session=N`
 
 Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) so refresh works even if query params are lost.
 
@@ -20,6 +22,7 @@ Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) s
 These are the local services Caddy proxies to:
 
 - `127.0.0.1:7682` — terminal session picker UI (installed at `/usr/local/lib/dw-webterm-ui/server.py`; source-of-truth is `ops/webterm-ui/server.py`)
+- `127.0.0.1:7684` — **canary** picker UI (installed at `/usr/local/lib/dw-webterm-ui-canary/server.py`; source-of-truth is `ops/webterm-ui/server.py`, with `DW_PUBLIC_BASE_PATH=/canary`)
 - `127.0.0.1:7683` — `ttyd` (started by `darelwasl-ttyd.service`, base-path `/xterm`)
 - `127.0.0.1:7681` — ShellInABox (started by `darelwasl-webterm.service`)
 
@@ -89,6 +92,15 @@ scripts/webterm-ui.sh diff
 scripts/webterm-ui.sh install
 scripts/webterm-ui.sh restart
 scripts/webterm-ui.sh smoke
+```
+
+Canary-first UI deployment (recommended for Lab UI changes):
+
+```bash
+scripts/webterm-ui.sh ensure-canary
+scripts/webterm-ui.sh deploy-canary
+# review in browser: https://code.haloeddepth.com/canary/lab?session=<N>
+scripts/work.sh pr-create <work-id>
 ```
 
 ## Canary upgrades (stable ↔ canary swap)

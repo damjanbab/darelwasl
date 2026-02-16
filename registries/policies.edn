@@ -97,6 +97,16 @@
   :proofs {:commands ["python3 -m py_compile ops/webterm-ui/server.py"
                       "scripts/checks.sh governance"]}}
 
+ {:id :cap/policy/lab-ui-blue-green
+  :title "Lab UI blue/green (stable + canary UI)"
+  :version "v1"
+  :policy-path "policies/lab-ui-blue-green.md"
+  :enforces [:lab :ui :canary]
+  :proofs {:commands ["python3 -m py_compile ops/webterm-ui/server.py"
+                      "scripts/webterm-ui.sh smoke"
+                      "scripts/webterm-ui.sh smoke --canary"
+                      "scripts/checks.sh governance"]}}
+
  {:id :cap/policy/secrets-vault
   :title "Secrets vault (Datomic ciphertext + external master key)"
   :version "v1"

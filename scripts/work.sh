@@ -42,6 +42,7 @@ Commands:
   verify <id> -- <command...>
   commit <id> -m <message>
   pr <id>
+  pr-create <id> [--draft]
   close <id>
 
 Notes:
@@ -258,7 +259,8 @@ cmd_start() {
   f="$(work_file "$id")"
   [ -s "$f" ] || die "Work item not found: $f"
 
-  if [ -n "$(cd "$ROOT" && git status --porcelain)" ]; then
+  dirty_non_work="$(cd "$ROOT" && git status --porcelain | grep -vE 'docs/work/' || true)"
+  if [ -n "${dirty_non_work:-}" ]; then
     if [ "$do_park" -eq 1 ]; then
       park_if_dirty "before start ${id}"
     else
@@ -374,6 +376,140 @@ Title suggestion:
 EOF
 }
 
+require_github_token() {
+  if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    if [[ -s "$ROOT/scripts/load_github_token.sh" ]]; then
+      # shellcheck disable=SC1090
+      source "$ROOT/scripts/load_github_token.sh" >/dev/null 2>&1 || true
+    fi
+  fi
+  [[ -n "${GITHUB_TOKEN:-}" ]] || die "Missing GITHUB_TOKEN (set env or store github/token in vault)."
+}
+
+github_repo_slug() {
+  local remote="$1"
+  if [[ "$remote" =~ ^git@github\.com:(.+)\.git$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  elif [[ "$remote" =~ ^git@github\.com:(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  elif [[ "$remote" =~ ^https://github\.com/(.+)\.git$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  elif [[ "$remote" =~ ^https://github\.com/(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+cmd_pr_create() {
+  local id="${1:-}"
+  shift || true
+  [ -n "$id" ] || die "pr-create requires <id>"
+
+  local draft="false"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --draft) draft="true"; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "Unknown arg: $1" ;;
+    esac
+  done
+
+  local wt branch base summary
+  wt="$(work_get "$id" "worktree")"
+  branch="$(work_get "$id" "branch")"
+  base="$(work_get "$id" "base")"
+  summary="$(work_get "$id" "summary")"
+  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
+  [ -n "$branch" ] || die "Work item has no branch yet. Run: scripts/work.sh start $id"
+  [ -n "$base" ] || base="$BASE_BRANCH_DEFAULT"
+
+  echo "[work] pushing branch..."
+  (cd "$wt" && git push -u origin "$branch")
+
+  local remote repo owner
+  remote="$(cd "$wt" && git remote get-url origin 2>/dev/null || true)"
+  repo="$(github_repo_slug "$remote" || true)"
+  [ -n "$repo" ] || die "Unable to derive GitHub repo from origin url: $remote"
+  owner="${repo%%/*}"
+
+  require_github_token
+
+  payload="$(DW_PR_TITLE="$summary" \
+    DW_PR_HEAD="$branch" \
+    DW_PR_BASE="$base" \
+    DW_PR_BODY="Work item: docs/work/${id}.md\n\nProof: (fill in / run per playbook)" \
+    DW_PR_DRAFT="$draft" \
+    python3 - <<'PY'
+import json
+import os
+
+draft = (os.environ.get("DW_PR_DRAFT", "false").strip().lower() == "true")
+print(json.dumps({
+  "title": os.environ.get("DW_PR_TITLE",""),
+  "head": os.environ.get("DW_PR_HEAD",""),
+  "base": os.environ.get("DW_PR_BASE","main"),
+  "body": os.environ.get("DW_PR_BODY",""),
+  "draft": draft,
+}))
+PY
+  )"
+
+  api="https://api.github.com/repos/${repo}/pulls"
+  resp="$(curl -sS -X POST \
+    -H "Authorization: token ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    -d "$payload" \
+    -w "\n__HTTP_STATUS__:%{http_code}\n" \
+    "$api" || true)"
+
+  status="$(printf "%s" "$resp" | tail -n1 | sed -E 's/^__HTTP_STATUS__://')"
+  body="$(printf "%s" "$resp" | sed '$d')"
+
+  pr_url=""
+  pr_number=""
+
+  if [[ "$status" == "201" ]]; then
+    read -r pr_url pr_number < <(python3 - <<'PY' <<<"$body"
+import json, sys
+obj=json.loads(sys.stdin.read() or "{}")
+print(obj.get("html_url",""))
+print(obj.get("number",""))
+PY
+)
+  elif [[ "$status" == "422" ]]; then
+    # PR already exists; find it.
+    q="https://api.github.com/repos/${repo}/pulls?state=open&head=${owner}:${branch}"
+    existing="$(curl -fsS \
+      -H "Authorization: token ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      "$q" || true)"
+    read -r pr_url pr_number < <(python3 - <<'PY' <<<"$existing"
+import json, sys
+arr=json.loads(sys.stdin.read() or "[]")
+if isinstance(arr, list) and arr:
+    print(arr[0].get("html_url",""))
+    print(arr[0].get("number",""))
+PY
+)
+  else
+    echo "[work] PR create failed (HTTP $status). Response:" >&2
+    echo "$body" >&2
+    cmd_pr "$id"
+    exit 1
+  fi
+
+  [ -n "${pr_url:-}" ] || die "Unable to resolve PR URL."
+  work_set "$id" "pr_url" "$pr_url"
+  work_set "$id" "pr_number" "${pr_number:-}"
+  work_touch_updated "$id"
+
+  echo "[work] PR: $pr_url"
+}
+
 cmd_close() {
   local id="${1:-}"
   [ -n "$id" ] || die "close requires <id>"
@@ -396,6 +532,7 @@ case "$cmd" in
   verify) cmd_verify "${1:-}" "${@:2}" ;;
   commit) cmd_commit "${1:-}" "${@:2}" ;;
   pr) cmd_pr "${1:-}" ;;
+  pr-create) cmd_pr_create "${1:-}" "${@:2}" ;;
   close) cmd_close "${1:-}" ;;
   -h|--help|help|"") usage ;;
   *) die "Unknown command: $cmd" ;;

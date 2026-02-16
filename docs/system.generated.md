@@ -2,12 +2,12 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `3623e73d679cc87d4dc02d4aeb2c8a8d2cbf7ca2bbc47db53cee93f200e027ff`
+- Catalog version: `06fb729f96bfd3c989572c2980d073314144655d744636264aae6822fdc9b7dc`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
 
-### Schema (46)
+### Schema (48)
 - schema/activation-step
 - schema/agreement
 - schema/betting-bet
@@ -44,6 +44,8 @@ This file is auto-generated. Do not edit by hand.
 - schema/persona
 - schema/provenance
 - schema/report-card
+- schema/secret
+- schema/secret-version
 - schema/service-case
 - schema/service-case-step
 - schema/support-responsibility
@@ -201,18 +203,21 @@ This file is auto-generated. Do not edit by hand.
 - agent/registries
 - agent/website
 
-### Policies (15)
+### Policies (18)
 - policy/app-ui-changes
 - policy/backend-changes
 - policy/docs-are-output
 - policy/lab-artifacts-to-outbox
 - policy/lab-canary-upgrades
+- policy/lab-ui-blue-green
 - policy/ops-governance-changes
+- policy/pr-required
 - policy/preview-auth-required
 - policy/preview-before-promote
 - policy/registries-are-contract
 - policy/registry-changes
 - policy/review-window-required
+- policy/secrets-vault
 - policy/telegram-dev-bot-only
 - policy/telegram-single-flight
 - policy/verification-required
@@ -405,6 +410,8 @@ Common queries:
 - DOCUMENT_TEMPLATE_VERSION
 - DOCUMENT_VERIFY_BASE_URL
 - DOCUMENT_VERIFY_SECRET
+- DW_SECRETS_MASTER_KEY_B64
+- DW_SECRETS_MASTER_KEY_FILE
 - FILES_STORAGE_DIR
 - GITHUB_API_URL
 - GITHUB_COMMITS_PER_PR
@@ -414,6 +421,7 @@ Common queries:
 - GITHUB_TIMEOUT_MS
 - GITHUB_TOKEN
 - GITHUB_TOKEN_FILE
+- GITHUB_TOKEN_SECRET_KEY
 - OUTBOX_WORKER_ENABLED
 - OUTBOX_WORKER_POLL_MS
 - PORTAL_BASE_URL
@@ -454,7 +462,9 @@ Common queries:
 - final_merge.txt
 - final_merge.txt
 - generate-docs.sh
+- git-credential-dw.sh
 - high_intake.py
+- hooks.sh
 - lab.sh
 - llm_smoke.py
 - load_github_token.sh
@@ -471,6 +481,7 @@ Common queries:
 - routes_map.txt
 - routes_map.txt
 - run-service.sh
+- secrets.sh
 - site-screenshot.js
 - spec.schema.json
 - test-system.sh
@@ -559,6 +570,9 @@ Common queries:
 - darelwasl.report-cards
 - darelwasl.rezultati-scraper
 - darelwasl.schema
+- darelwasl.secrets.cli
+- darelwasl.secrets.crypto
+- darelwasl.secrets.store
 - darelwasl.server
 - darelwasl.service-cases
 - darelwasl.shared.block-types
