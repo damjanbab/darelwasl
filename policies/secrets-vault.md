@@ -17,6 +17,9 @@ Store operational secrets (GitHub tokens, Telegram tokens, etc.) in a single, qu
   - generated docs
   - logs
   - chat transcripts
+- Prefer secret handoff via:
+  - Lab inbox files (`tmp/lab/.../inbox/`) or
+  - File Library uploads (one-off), followed by deletion after import
 - The master key file must be:
   - readable only by the service user (`0600`)
   - outside the repo (default: `/etc/darelwasl/secrets.key`)

@@ -28,12 +28,29 @@ DW_SECRETS_MASTER_KEY_FILE=/path/to/secrets.key scripts/secrets.sh init-master-k
 scripts/secrets.sh set github/token
 ```
 
-Store from a file (recommended for Lab handoffs; avoids pasting secrets into terminals/chat):
+Store from a file (recommended for handoffs; avoids pasting secrets into terminals/chat):
+
+```bash
+scripts/secrets.sh set github/token --file path/to/pat.txt
+```
+
+Lab example (File Library/Lab UI → codex inbox):
 
 ```bash
 scripts/secrets.sh set github/token --file tmp/lab/codex7/inbox/github_pat.txt
 ```
 
+Store from stdin (works well when your source is a pipe):
+
+```bash
+cat path/to/pat.txt | scripts/secrets.sh set github/token
+```
+
+Store from the File Library UI (one-off handoff):
+
+- Upload a 1-line `pat.txt` into the File Library.
+- Provide the `file/id` (UUID) to the operator/agent.
+- Import into the vault and then delete the plaintext file asset.
 List stored keys (metadata only):
 
 ```bash
