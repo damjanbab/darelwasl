@@ -43,8 +43,11 @@
             :repo-owner nil
             :repo-name nil
             :token nil
+            :token-secret-key "github/token"
             :prs-per-page 20
             :commits-per-pr 10}
+   :secrets {:master-key-file "/etc/darelwasl/secrets.key"
+             :master-key-b64 nil}
 	   :files {:storage-dir "data/files"}
 	   :documents {:verify-secret nil
 	               :verify-base-url "https://www.darelwasl.com"
@@ -224,22 +227,29 @@
                      token-file (env-str (get env "GITHUB_TOKEN_FILE") ".secrets/github_token")
                      token-file-value (normalize-token (read-secret-file token-file))
                      token (or token-env token-file-value default-token)]
-                 {:api-url (env-str (get env "GITHUB_API_URL")
-                                    (get-in default-config [:github :api-url]))
-                  :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")
-                                         (get-in default-config [:github :timeout-ms]))
+	                 {:api-url (env-str (get env "GITHUB_API_URL")
+	                                    (get-in default-config [:github :api-url]))
+	                  :timeout-ms (parse-int (get env "GITHUB_TIMEOUT_MS")
+	                                         (get-in default-config [:github :timeout-ms]))
                   :repo-owner (env-str (get env "GITHUB_REPO_OWNER")
                                        (get-in default-config [:github :repo-owner]))
                   :repo-name (env-str (get env "GITHUB_REPO_NAME")
                                       (get-in default-config [:github :repo-name]))
                   :token token
+                  :token-secret-key (env-str (get env "GITHUB_TOKEN_SECRET_KEY")
+                                             (get-in default-config [:github :token-secret-key]))
                   :prs-per-page (parse-int (get env "GITHUB_PRS_PER_PAGE")
                                            (get-in default-config [:github :prs-per-page]))
                   :commits-per-pr (parse-int (get env "GITHUB_COMMITS_PER_PR")
                                              (get-in default-config [:github :commits-per-pr]))}))
-        (assoc :files
-               {:storage-dir (env-str (get env "FILES_STORAGE_DIR")
-                                      (get-in default-config [:files :storage-dir]))})
+        (assoc :secrets
+               {:master-key-file (env-str (get env "DW_SECRETS_MASTER_KEY_FILE")
+                                          (get-in default-config [:secrets :master-key-file]))
+                :master-key-b64 (let [raw (some-> (get env "DW_SECRETS_MASTER_KEY_B64") str/trim)]
+                                  (when-not (str/blank? raw) raw))})
+	        (assoc :files
+	               {:storage-dir (env-str (get env "FILES_STORAGE_DIR")
+	                                      (get-in default-config [:files :storage-dir]))})
         (assoc :outbox
                {:worker-enabled? (env-bool (get env "OUTBOX_WORKER_ENABLED")
                                            (get-in default-config [:outbox :worker-enabled?]))

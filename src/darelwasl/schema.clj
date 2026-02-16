@@ -65,6 +65,8 @@
                    [:client/id :entity.type/person]
                    [:system/id :entity.type/system]
                    [:outbox/id :entity.type/outbox]
+                   [:secret/id :entity.type/secret]
+                   [:secret.version/id :entity.type/secret-version]
                    [:content.tag/id :entity.type/content-tag]
                    [:content.page/id :entity.type/content-page]
                    [:content.block/id :entity.type/content-block]

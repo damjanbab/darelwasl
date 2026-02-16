@@ -4,7 +4,9 @@
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [datomic.client.api :as d]
+            [darelwasl.secrets.store :as secrets]))
 
 (def ^:private default-timeout-ms 3000)
 (def ^:private default-base-url "https://api.github.com")
@@ -126,13 +128,25 @@
      :commit/date (get-in info [:author :date])}))
 
 (defn list-pulls
-  [cfg params]
-  (let [github (:github cfg)
+  [state params]
+  (let [cfg (:config state)
+        github (:github cfg)
+        token (or (:token github)
+                  (let [secret-key (or (:token-secret-key github) "github/token")
+                        conn (get-in state [:db :conn])]
+                    (when (and conn (seq (or secret-key "")))
+                      (let [res (secrets/get-secret (d/db conn) cfg secret-key)]
+                        (when-not (:error res)
+                          (:secret/value res))))))
+        github (assoc github :token token)
         resolved (resolve-repo cfg)
         state (normalize-state (or (:pr/state params) (:state params)))]
     (cond
       (nil? resolved)
       (error 500 "GitHub repo not configured")
+
+      (or (nil? token) (str/blank? (str token)))
+      (error 500 "GitHub token not configured" {:hint "Set GITHUB_TOKEN or store secret key github/token via scripts/secrets.sh"})
 
       (nil? state)
       (error 400 "Invalid PR state")
@@ -164,8 +178,18 @@
             {:pulls items}))))))
 
 (defn close-pr
-  [cfg params]
-  (let [body (or params {})
+  [state params]
+  (let [cfg (:config state)
+        github (:github cfg)
+        token (or (:token github)
+                  (let [secret-key (or (:token-secret-key github) "github/token")
+                        conn (get-in state [:db :conn])]
+                    (when (and conn (seq (or secret-key "")))
+                      (let [res (secrets/get-secret (d/db conn) cfg secret-key)]
+                        (when-not (:error res)
+                          (:secret/value res))))))
+        github (assoc github :token token)
+        body (or params {})
         pr-number (or (:pr/number body)
                       (:pr-number body)
                       (:number body))
@@ -174,12 +198,15 @@
       (nil? resolved)
       (error 500 "GitHub repo not configured")
 
+      (or (nil? token) (str/blank? (str token)))
+      (error 500 "GitHub token not configured" {:hint "Set GITHUB_TOKEN or store secret key github/token via scripts/secrets.sh"})
+
       (nil? pr-number)
       (error 400 "PR number is required")
 
       :else
       (let [{:keys [owner repo]} resolved
-            resp (request-json* (:github cfg)
+            resp (request-json* github
                                 :patch
                                 (str "/repos/" owner "/" repo "/pulls/" pr-number)
                                 nil

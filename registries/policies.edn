@@ -81,5 +81,13 @@
   :policy-path "policies/ops-governance-changes.md"
   :enforces [:ops :governance]}
 
+ {:id :cap/policy/secrets-vault
+  :title "Secrets vault (Datomic ciphertext + external master key)"
+  :version "v1"
+  :policy-path "policies/secrets-vault.md"
+  :enforces [:secrets :crypto :ops]
+  :proofs {:commands ["scripts/checks.sh governance"
+                      "scripts/checks.sh schema"]}}
+
  ;; Intentionally no policy-first placeholder procedures here.
 ]

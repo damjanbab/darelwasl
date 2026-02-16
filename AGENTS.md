@@ -13,6 +13,7 @@ Optimize for:
 
 ## Ops runbooks (start here)
 - Telegram dev/prod bots + promotion: `docs/ops/telegram-bots.md`
+- Secrets vault (Datomic + master key): `docs/ops/secrets.md`
 
 ## Agents (capability contracts)
 Agent contracts live under `agents/` (one folder per agent type). Each contract defines:
