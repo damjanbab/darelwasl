@@ -33,6 +33,19 @@ function labOutboxDir() {
   return path.join(base, labSessionName(), "outbox");
 }
 
+function safeWorkId(v) {
+  const s = String(v || "").trim();
+  if (!s) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,200}$/.test(s)) return null;
+  return s;
+}
+
+function labLibraryDir() {
+  const workId = safeWorkId(process.env.DW_LAB_WORK_ID || process.env.DW_WORK_ID);
+  if (!workId) return labOutboxDir();
+  return path.join(labOutboxDir(), "work", workId);
+}
+
 function uniqueCopyDest(dir, filename) {
   const base = path.basename(filename);
   const ext = path.extname(base);
@@ -51,7 +64,7 @@ function uniqueCopyDest(dir, filename) {
 function maybePublishToLabOutbox(outPath) {
   if (!isTruthyEnv(process.env.DW_LAB_AUTO_OUTBOX)) return null;
   try {
-    const outbox = labOutboxDir();
+    const outbox = labLibraryDir();
     fs.mkdirSync(outbox, { recursive: true });
 
     const src = path.resolve(outPath);

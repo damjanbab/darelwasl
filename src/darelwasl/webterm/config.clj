@@ -29,11 +29,14 @@
 
 (defn config
   []
-  (let [stable (env-int "DW_LAB_SESSION_STABLE" (env-int "DW_LAB_SESSION" 7))]
+  (let [workdir (env "DW_WORKDIR" "/opt/darelwasl")
+        repo-root (env "DW_REPO_ROOT" workdir)
+        stable (env-int "DW_LAB_SESSION_STABLE" (env-int "DW_LAB_SESSION" 7))]
     {:tmux-bin (env "DW_TMUX_BIN" "tmux")
      :tmux-prefix (env "DW_TMUX_PREFIX" "codex")
      :terminal-count (env-int "DW_TERMINAL_COUNT" 32)
-     :workdir (env "DW_WORKDIR" "/opt/darelwasl")
+     :workdir workdir
+     :repo-root repo-root
      :listen-host (env "DW_LISTEN_HOST" "127.0.0.1")
      :listen-port (env-int "DW_LISTEN_PORT" 7682)
      :public-base-path (public-base-path)

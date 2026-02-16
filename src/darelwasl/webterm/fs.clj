@@ -29,14 +29,25 @@
           (> (count cleaned) 200) (subs cleaned 0 200)
           :else cleaned)))))
 
+(defn safe-segment
+  "Returns a safe path segment (no slashes, no spaces) or nil."
+  [s]
+  (let [s (some-> s str str/trim)]
+    (when (and (some? s)
+               (not (str/blank? s))
+               (re-matches #"(?i)^[a-z0-9][a-z0-9._-]{0,200}$" s))
+      s)))
+
 (defn ensure-dirs!
   [^String lab-dir ^String session-name]
   (let [root (Paths/get lab-dir (into-array String [session-name]))
         inbox (.resolve root "inbox")
-        outbox (.resolve root "outbox")]
+        outbox (.resolve root "outbox")
+        work-root (.resolve outbox "work")]
     (Files/createDirectories inbox (make-array java.nio.file.attribute.FileAttribute 0))
     (Files/createDirectories outbox (make-array java.nio.file.attribute.FileAttribute 0))
-    {:root root :inbox inbox :outbox outbox}))
+    (Files/createDirectories work-root (make-array java.nio.file.attribute.FileAttribute 0))
+    {:root root :inbox inbox :outbox outbox :work-root work-root}))
 
 (defn unique-path
   ^Path
@@ -64,6 +75,15 @@
                                                                  StandardOpenOption/WRITE]))
     (.getFileName dest)))
 
+(defn ensure-work-dir!
+  ^Path
+  [^String lab-dir ^String session-name ^String work-id]
+  (when-let [wid (safe-segment work-id)]
+    (let [{:keys [work-root]} (ensure-dirs! lab-dir session-name)
+          dir (.resolve work-root wid)]
+      (Files/createDirectories dir (make-array java.nio.file.attribute.FileAttribute 0))
+      dir)))
+
 (defn list-files
   [^Path dir]
   (let [ds (Files/newDirectoryStream dir)]
@@ -73,7 +93,7 @@
            (iterator-seq)
            (map (fn [^Path p]
                   (when (Files/isRegularFile p (make-array LinkOption 0))
-                    (let [st (Files/readAttributes p "basic:*" (make-array LinkOption 0))
+                    (let [^java.nio.file.attribute.BasicFileAttributes st (Files/readAttributes p java.nio.file.attribute.BasicFileAttributes (make-array LinkOption 0))
                           size (.size st)
                           ^FileTime ft (.lastModifiedTime st)
                           mtime-ms (.toMillis ft)]
@@ -85,6 +105,47 @@
            (vec))
       (finally
         (.close ds)))))
+
+(defn list-recent-work-files
+  "Returns recent files across all work dirs under outbox/work."
+  [^Path work-root limit]
+  (let [limit (-> (or limit 80) (max 1) (min 500))
+        dirs (Files/newDirectoryStream work-root)]
+    (try
+      (->> dirs
+           (.iterator)
+           (iterator-seq)
+           (map (fn [^Path d]
+                  (when (Files/isDirectory d (make-array LinkOption 0))
+                    (let [wid (str (.getFileName d))
+                          files (list-files d)]
+                      (for [f files]
+                        (assoc f :work_id wid :ref (str "work:" wid "/" (:name f))))))))
+           (remove nil?)
+           (apply concat)
+           (sort-by :mtime_ms >)
+           (take limit)
+           (vec))
+      (finally (.close dirs)))))
+
+(defn resolve-work-ref
+  "Resolves a ref like 'work:<id>/<filename>' into a Path under outbox/work/<id>/.
+  Returns nil when invalid."
+  ^Path
+  [^String lab-dir ^String session-name ^String ref]
+  (let [raw (some-> ref str str/trim)]
+    (when (and raw (not (str/blank? raw)))
+      (let [raw (if (str/starts-with? raw "work:") (subs raw 5) raw)
+            parts (->> (str/split raw #"/") (remove str/blank?) (vec))]
+        (when (= 2 (count parts))
+          (let [[wid name] parts
+                wid (safe-segment wid)
+                fname (safe-name name "file")]
+            (when (and wid (not (str/blank? fname)))
+              (let [{:keys [work-root]} (ensure-dirs! lab-dir session-name)
+                    p (.normalize (.resolve (.resolve work-root wid) fname))]
+                (when (.startsWith p (.resolve work-root wid))
+                  p)))))))))
 
 (defn resolve-outbox-path
   ^Path
