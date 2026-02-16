@@ -6,10 +6,11 @@
 # 2) Secrets vault (if available): secret key github/token
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+LOG_CFG="${DW_LOGBACK_CLI_CONFIG:-$ROOT/resources/logback-cli.xml}"
 
 if [[ -z "${DARELWASL_GITHUB_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]]; then
   if command -v clojure >/dev/null 2>&1; then
-    token="$(cd "$ROOT" && clojure -M -m darelwasl.secrets.cli get --key github/token --show 2>/dev/null || true)"
+    token="$(cd "$ROOT" && clojure -J-Dlogback.configurationFile="$LOG_CFG" -M -m darelwasl.secrets.cli get --key github/token --show 2>/dev/null || true)"
     if [[ -n "${token:-}" ]]; then
       export GITHUB_TOKEN="$token"
     fi

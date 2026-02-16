@@ -88,7 +88,9 @@
       (die! "Failed" err)
       (do
         (if show
-          (print (:secret/value res))
+          (do
+            (print (:secret/value res))
+            (flush))
           (println "ok" (:secret/key res) (:secret/kid res)))
         (System/exit 0)))))
 
