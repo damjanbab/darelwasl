@@ -40,6 +40,22 @@ You (the user) start every initial message with one of:
 
 Default if ambiguous: treat as `question:`.
 
+## One-off vs workflow (wiring-first contract)
+Default behavior:
+- If the request is **one-off**, use existing capabilities (actions/routes/scripts) and avoid adding new automation.
+- If capability exists but is **not wired into this repo contract** (no playbook/runbook pointers), wire it:
+  - Add/extend a playbook section in `AGENTS.md` and/or link an ops doc under `docs/ops/`.
+  - Do this wiring in the same PR as the one-off fix when it is low-risk and clarifies future work.
+- Only “productize” into new scripts/policies when:
+  - you explicitly ask for a repeatable workflow, or
+  - the same gap repeats, or
+  - not having tooling is a security/operational risk.
+
+Tooling proposal rule (progressive disclosure):
+1) Discover first via the catalog: `scripts/query.sh TERM` (backed by generated `docs/catalog.edn`).
+2) If something exists, reuse it; if it’s not referenced in playbooks, wire pointers before inventing new tooling.
+3) If nothing exists, propose the smallest helper (script/check/policy) with exact `Proof:` commands.
+
 ## Oversight gate (before edits)
 If the request type is `change:`, `refactor:`, `delete:`, or `governance:`, do not start editing until you present and get confirmation on:
 - Type
@@ -58,6 +74,9 @@ Prefer catalog-backed lookups before `rg` spelunking.
 - Machine-readable catalog: `docs/catalog.edn`
 - Query tool: `scripts/query.sh`
 - Checks: `scripts/checks.sh query` (also runs under `scripts/checks.sh docs`)
+
+Notes:
+- `scripts/query.sh` queries the **generated** catalog (`docs/catalog.edn`). If results look stale/missing, run `scripts/checks.sh docs` (or `scripts/generate-docs.sh`) and commit the regenerated docs.
 
 Workflow:
 1) `scripts/query.sh TERM` to get candidate IDs + source files
@@ -144,6 +163,22 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - Manual: generate each impacted PDF once on the **dev** path (Telegram or script) and visually verify.
 - Next:
   - If you had to invent a new repeatable “how to verify” step, extend this playbook with the exact commands.
+
+### Playbook: secrets/vault — store and retrieve secrets safely
+- When: You need to store/rotate operational secrets (GitHub/Telegram/etc.) without putting them in git/logs/chat.
+- Start:
+  - Read: `docs/ops/secrets.md`
+  - One-time master key (per environment): `scripts/secrets.sh init-master-key`
+  - Store a secret (stdin or prompt): `scripts/secrets.sh set <key>`
+  - Store from a file (preferred for handoffs): `cat path/to/secret.txt | scripts/secrets.sh set <key>`
+  - Convention: GitHub PAT lives at key `github/token`
+- Policies:
+  - `policies/secrets-vault.md`
+- Proof:
+  - `scripts/checks.sh governance`
+  - `scripts/checks.sh schema`
+- Next:
+  - Prefer Lab inbox (`tmp/lab/.../inbox/`) or File Library for secret handoff; delete plaintext artifacts after import.
 
 ### Playbook: backend/api-surface — add/modify a backend route or API contract
 - When: You add/modify an HTTP route, request/response shape, or anything that changes API surface.
