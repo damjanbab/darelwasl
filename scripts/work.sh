@@ -38,7 +38,7 @@ Commands:
   show <id>
   search <text>
   path <id>
-  start <id> [--base <branch>] [--no-park]
+  start <id> [--base <branch>] [--park]
   verify <id> -- <command...>
   commit <id> -m <message>
   pr <id>
@@ -47,8 +47,8 @@ Commands:
 Notes:
   - Work items live in docs/work/<id>.md and are meant to be committed.
   - start creates an isolated branch + git worktree under target/worktrees/<id>/.
-  - If the current working tree is dirty, start will "park" changes by committing them to a local park/<timestamp> branch,
-    then returning to the original branch (unless --no-park).
+  - For parallel work, keep the base checkout clean. By default, start refuses to run when the base checkout is dirty.
+  - If you truly need it, --park will snapshot the dirty tree to a local park/<timestamp> branch, then return.
 EOF
 }
 
@@ -244,11 +244,11 @@ cmd_start() {
   ensure_dirs
 
   local base="$BASE_BRANCH_DEFAULT"
-  local do_park=1
+  local do_park=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --base) base="${2:-}"; shift 2 ;;
-      --no-park) do_park=0; shift ;;
+      --park) do_park=1; shift ;;
       -h|--help) usage; exit 0 ;;
       *) die "Unknown arg: $1" ;;
     esac
@@ -258,11 +258,11 @@ cmd_start() {
   f="$(work_file "$id")"
   [ -s "$f" ] || die "Work item not found: $f"
 
-  if [ "$do_park" -eq 1 ]; then
-    park_if_dirty "before start ${id}"
-  else
-    if [ -n "$(cd "$ROOT" && git status --porcelain)" ]; then
-      die "Working tree is dirty; run without --no-park or clean it first."
+  if [ -n "$(cd "$ROOT" && git status --porcelain)" ]; then
+    if [ "$do_park" -eq 1 ]; then
+      park_if_dirty "before start ${id}"
+    else
+      die "Working tree is dirty; commit/stash/clean it first, or re-run with --park."
     fi
   fi
 

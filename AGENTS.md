@@ -216,10 +216,12 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - Open worktree path: `scripts/work.sh path <work-id>`
 - Policies:
   - `policies/verification-required.md`
+  - `policies/pr-required.md`
 - Proof:
   - In worktree: `scripts/work.sh verify <work-id> -- scripts/checks.sh governance`
   - In worktree: run the playbook-specific proofs for the change.
 - Next:
+  - Install the local guard hook (once): `scripts/hooks.sh install`
   - Commit and PR: `scripts/work.sh commit <work-id> -m "…"`, then `scripts/work.sh pr <work-id>`
 
 ## Unknown / Triage (no matching playbook)
