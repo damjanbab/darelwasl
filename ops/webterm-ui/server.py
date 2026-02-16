@@ -38,6 +38,8 @@ LAB_DEFAULT_HISTORY_LINES = int(os.environ.get("DW_LAB_HISTORY_LINES", "20000"))
 
 TMUX_HISTORY_LIMIT = int(os.environ.get("DW_TMUX_HISTORY_LIMIT", "50000"))
 
+_UI_BUILD_STAMP = datetime.fromtimestamp(os.path.getmtime(__file__), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
 
 def _utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -309,9 +311,11 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
     if PUBLIC_BASE_PATH == "/canary":
         other_ui_label = "Stable UI"
         other_ui_href = f"/lab?session={sess}"
+        ui_role = "canary"
     else:
         other_ui_label = "Canary UI"
         other_ui_href = f"/canary/lab?session={sess}"
+        ui_role = "stable"
 
     body = f"""<!doctype html>
 <html>
@@ -449,6 +453,8 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
     <div class="topbar">
       <div class="title">
         <h1>Lab</h1>
+        <span class="chip">ui {ui_role}</span>
+        <span class="chip">build {html.escape(_UI_BUILD_STAMP)}</span>
         <span class="chip">stable {LAB_STABLE_SESSION}</span>
         <span class="chip">canary {LAB_CANARY_SESSION}</span>
         <span class="chip">active <span id="active-session">{sess}</span></span>
