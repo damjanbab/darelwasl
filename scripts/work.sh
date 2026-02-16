@@ -384,6 +384,14 @@ require_github_token() {
     fi
   fi
   [[ -n "${GITHUB_TOKEN:-}" ]] || die "Missing GITHUB_TOKEN (set env or store github/token in vault)."
+
+  # Validate token early so PR automation fails with an actionable message.
+  if ! curl -fsS -o /dev/null \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    https://api.github.com/user; then
+    die "GITHUB_TOKEN is present but invalid. Update it (PAT with PR permissions): scripts/secrets.sh set github/token"
+  fi
 }
 
 github_repo_slug() {
