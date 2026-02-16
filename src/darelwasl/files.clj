@@ -72,7 +72,8 @@
     (boolean
      (and (seq name)
           (or (str/ends-with? name ".md")
-              (str/ends-with? name ".markdown"))))))
+              (str/ends-with? name ".markdown")
+              (str/ends-with? name ".txt"))))))
 
 (defn- zip-filename?
   [filename]
@@ -82,6 +83,13 @@
 (defn- markdown-mime?
   [mime]
   (contains? #{"text/markdown" "text/x-markdown"} mime))
+
+(defn- plain-text-mime?
+  [mime]
+  (let [m (some-> mime str/lower-case str/trim)]
+    (boolean
+     (and (seq m)
+          (str/starts-with? m "text/plain")))))
 
 (defn- file-type
   [mime filename]
@@ -94,7 +102,7 @@
              (zip-filename? filename)))
     :file.type/zip
     (or (markdown-mime? mime)
-        (and (= mime "text/plain") (markdown-filename? filename)))
+        (and (plain-text-mime? mime) (markdown-filename? filename)))
     :file.type/markdown
     :else nil))
 
