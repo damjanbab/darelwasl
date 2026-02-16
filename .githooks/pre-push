@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block direct pushes to main by default so changes land via PRs.
+# Bypass only when explicitly allowed:
+#   ALLOW_PUSH_MAIN=1 git push origin main
+
+remote="${1:-}"
+url="${2:-}"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      if [[ "${ALLOW_PUSH_MAIN:-}" != "1" ]]; then
+        echo "Blocked: refusing to push directly to origin/main." >&2
+        echo "Use a PR workflow (scripts/work.sh start/commit/pr)." >&2
+        echo "Emergency bypass: ALLOW_PUSH_MAIN=1 git push origin main" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+exit 0
+

@@ -105,5 +105,12 @@
   :proofs {:commands ["scripts/checks.sh governance"
                       "scripts/checks.sh schema"]}}
 
+ {:id :cap/policy/pr-required
+  :title "Changes land via PR (no direct pushes to main)"
+  :version "v1"
+  :policy-path "policies/pr-required.md"
+  :enforces [:git :pr :process]
+  :proofs {:commands ["scripts/checks.sh governance"]}}
+
  ;; Intentionally no policy-first placeholder procedures here.
 ]
