@@ -59,7 +59,7 @@
      [:div.section-header
       [:div
        [:h2 "Upload"]
-       [:span.meta "Images, PDFs, Markdown, and ZIP"]]
+       [:span.meta "Images, PDFs, Text/Markdown, and ZIP"]]
       [:div.controls
        [ui/button {:variant :secondary
                    :disabled uploading?
@@ -70,7 +70,7 @@
        [:label {:for "file-input"} "File"]
        [:input.form-input {:id "file-input"
                            :type "file"
-                           :accept "image/*,application/pdf,application/zip,text/markdown,text/x-markdown,.md,.markdown,.zip"
+                           :accept "image/*,application/pdf,application/zip,text/plain,text/markdown,text/x-markdown,.txt,.md,.markdown,.zip"
                            :disabled uploading?
                            :on-change #(let [f (aget (.. % -target -files) 0)]
                                          (rf/dispatch [:darelwasl.app/set-upload-file f]))}]
