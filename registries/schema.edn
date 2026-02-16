@@ -2385,7 +2385,87 @@
   :compatibility {:backward true
                   :forward true
                   :flags []}
-  :related {:actions [:cap/action/site-screenshot-bundle]
+ :related {:actions [:cap/action/site-screenshot-bundle]
             :views [:cap/view/file-library]
             :schema [:cap/schema/entity :cap/schema/user :cap/schema/file]}}
+
+{:id :cap/schema/secret
+  :title "Secret (encrypted value in Datomic)"
+  :version "v1"
+  :attributes
+  [{:ident :secret/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Secret identity"}
+   {:ident :secret/key
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :unique :db.unique/value
+    :doc "Stable secret key (e.g. github/token, telegram/prod/bot-token)"}
+   {:ident :secret/description
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Human description (no secret content)"}
+   {:ident :secret/active-version
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Ref to the active secret version (ciphertext)"} 
+   {:ident :secret/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}
+   {:ident :secret/updated-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Update timestamp"}]
+  :enums []
+  :invariants ["Secret key unique"
+               "Secret entities set :entity/type to :entity.type/secret"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity]}}
+
+{:id :cap/schema/secret-version
+  :title "Secret Version (ciphertext)"
+  :version "v1"
+  :attributes
+  [{:ident :secret.version/id
+    :type :db.type/uuid
+    :cardinality :db.cardinality/one
+    :unique :db.unique/identity
+    :doc "Secret version identity"}
+   {:ident :secret.version/secret
+    :type :db.type/ref
+    :cardinality :db.cardinality/one
+    :doc "Owning secret"}
+   {:ident :secret.version/format
+    :type :db.type/keyword
+    :cardinality :db.cardinality/one
+    :doc "Cipher format keyword (e.g. :dw.secrets/aes-256-gcm-v1)"}
+   {:ident :secret.version/kid
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Master key id used for this encryption"}
+   {:ident :secret.version/nonce
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "AES-GCM nonce (base64)"} 
+   {:ident :secret.version/ciphertext
+    :type :db.type/string
+    :cardinality :db.cardinality/one
+    :doc "Ciphertext (base64; includes GCM tag)"} 
+   {:ident :secret.version/created-at
+    :type :db.type/instant
+    :cardinality :db.cardinality/one
+    :doc "Creation timestamp"}]
+  :enums []
+  :invariants ["Secret versions set :entity/type to :entity.type/secret-version"]
+  :history {:strategy :overwrite}
+  :compatibility {:backward true
+                  :forward true
+                  :flags []}
+  :related {:schema [:cap/schema/entity :cap/schema/secret]}}
 ]

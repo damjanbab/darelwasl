@@ -348,12 +348,12 @@
 (defn- github-pulls
   [state {:keys [input]}]
   (let [body (or input {})]
-    (github/list-pulls (:config state) body)))
+    (github/list-pulls state body)))
 
 (defn- github-close-pr
   [state {:keys [input]}]
   (let [body (or input {})]
-    (github/close-pr (:config state) body)))
+    (github/close-pr state body)))
 
 (defn- site-screenshot-bundle
   [state {:keys [input actor]}]

@@ -67,6 +67,7 @@ Workflow:
 ## Ops runbooks
 - Telegram dev/prod bots + promotion: `docs/ops/telegram-bots.md`
 - `code.haloeddepth.com` endpoint (web terminals): `docs/ops/code-haloeddepth-com.md`
+- Secrets vault (Datomic + master key): `docs/ops/secrets.md`
 - Telegram commands + documents flows: `docs/telegram.md`
 
 ## Lab session (code.haloeddepth.com)
