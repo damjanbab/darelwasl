@@ -7,7 +7,8 @@ work/branch: work/20260216-174943-file-library-allow-txt-uploads-for-one-off-sec
 work/worktree: /opt/darelwasl/target/worktrees/20260216-174943-file-library-allow-txt-uploads-for-one-off-secre
 work/base: main
 work/created_at: 2026-02-16T17:49:43Z
-work/updated_at: 2026-02-16T17:52:38Z
+work/updated_at: 2026-02-16T18:22:57Z
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/63
 
 # Notes
 

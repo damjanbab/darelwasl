@@ -34,13 +34,13 @@ Store from a file (recommended for handoffs; avoids pasting secrets into termina
 scripts/secrets.sh set github/token --file path/to/pat.txt
 ```
 
-Example (Lab inbox):
+Lab example (File Library/Lab UI → codex inbox):
 
 ```bash
 scripts/secrets.sh set github/token --file tmp/lab/codex7/inbox/github_pat.txt
 ```
 
-Store from stdin:
+Store from stdin (works well when your source is a pipe):
 
 ```bash
 cat path/to/pat.txt | scripts/secrets.sh set github/token
