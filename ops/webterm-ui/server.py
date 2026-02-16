@@ -272,6 +272,13 @@ def _capture_history(n: int, *, lines: int) -> str:
     return proc.stdout
 
 
+def _clear_terminal(n: int) -> None:
+    name = session_name(n)
+    ensure_session(n)
+    _tmux("clear-history", "-t", name)
+    _tmux("send-keys", "-t", name, "clear", "C-m")
+
+
 def _read_body(handler: BaseHTTPRequestHandler, *, max_bytes: int) -> bytes:
     length = int(handler.headers.get("Content-Length") or "0")
     if length <= 0:
@@ -445,7 +452,7 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 
 	    body.term-max .grid {{ grid-template-columns: 1fr; }}
 	    body.term-max #exchange-card {{ display: none; }}
-	    body.term-max iframe {{ height: 84vh; }}
+	    body.term-max #terminal-card iframe {{ height: 84vh; }}
 	  </style>
 </head>
 <body>
@@ -464,113 +471,119 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       <span class="spacer"></span>
 	      <a class="btn" href="{ui_url("/")}" rel="noreferrer">Terminals</a>
 	      <a class="btn" href="{html.escape(other_ui_href)}" rel="noreferrer">{html.escape(other_ui_label)}</a>
-	      <button class="btn" id="toggle-terminal" type="button">Maximize terminal</button>
+	      <button class="btn" id="toggle-terminal" type="button">Show files</button>
+	      <button class="btn" id="clear-terminal" type="button">Clear</button>
 	      <a class="btn" id="open-terminal" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
 	      <a class="btn primary" id="start-codex" href="{ui_url(f"/codex?n={sess}")}" target="_blank" rel="noreferrer">Start codex</a>
 	    </div>
 
     {msg_html}
 
-	    <div class="grid">
-		      <div class="card" id="exchange-card">
-        <div class="hd">
-          <div>
-            <h2>Terminal</h2>
-            <div class="sub">This is the live ttyd terminal attached to tmux <code id="active-tmux-sub">{html.escape(sname)}</code>.</div>
-          </div>
-        </div>
-        <div class="bd">
-          <iframe id="term" src="{iframe_src}" title="terminal"></iframe>
-          <div class="kvs" style="margin-top: 10px;">
-            <div class="kv"><span>inbox</span><b><code>tmp/lab/<span id="active-tmux-path">{html.escape(sname)}</span>/inbox</code></b></div>
-            <div class="kv"><span>outbox</span><b><code>tmp/lab/<span id="active-tmux-path2">{html.escape(sname)}</span>/outbox</code></b></div>
-          </div>
-        </div>
-      </div>
+		    <div class="grid">
+		      <div class="card" id="terminal-card">
+		        <div class="hd">
+		          <div>
+		            <h2>Terminal</h2>
+		            <div class="sub">This is the live ttyd terminal attached to tmux <code id="active-tmux-sub">{html.escape(sname)}</code>.</div>
+		          </div>
+		        </div>
+		        <div class="bd">
+		          <iframe id="term" src="{iframe_src}" title="terminal"></iframe>
+		          <div class="kvs" style="margin-top: 10px;">
+		            <div class="kv"><span>inbox</span><b><code>tmp/lab/<span id="active-tmux-path">{html.escape(sname)}</span>/inbox</code></b></div>
+		            <div class="kv"><span>outbox</span><b><code>tmp/lab/<span id="active-tmux-path2">{html.escape(sname)}</span>/outbox</code></b></div>
+		          </div>
+		        </div>
+		      </div>
 
-	      <div class="card">
-	        <div class="hd">
-	          <div>
-	            <h2>Exchange</h2>
-	            <div class="sub">Files (outbox) + clipboard + history. Outbox is the shared “library” (agent outputs land here).</div>
-	          </div>
+		      <div class="card" id="exchange-card">
+		        <div class="hd">
+		          <div>
+		            <h2>Exchange</h2>
+		            <div class="sub">Files (outbox) + clipboard + history. Outbox is the shared “library” (agent outputs land here).</div>
+		          </div>
 	          <div class="row">
 	            <button class="btn" id="use-stable" type="button">Use stable</button>
 	            <button class="btn" id="use-canary" type="button">Use canary</button>
 	            <button class="btn" id="refresh-all" type="button">Refresh</button>
 	          </div>
 	        </div>
-	        <div class="bd">
-	          <div class="split">
-	            <div>
-	              <h2 style="margin-bottom:8px;">Add file</h2>
-	              <form id="upload-form" action="{ui_url("/api/lab/upload?dir=outbox")}" method="post" enctype="multipart/form-data">
-	                <div class="row">
-	                  <input type="file" name="file" required />
-	                  <select id="upload-dir" class="btn" style="padding: 7px 10px;">
-	                    <option value="outbox" selected>To outbox</option>
-	                    <option value="inbox">To inbox</option>
-	                  </select>
-	                  <button class="btn primary" type="submit">Upload</button>
-	                </div>
-	                <div class="sub" style="margin-top:6px;">Max upload: {LAB_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.</div>
-	              </form>
-	            </div>
-            <div>
-              <h2 style="margin-bottom:8px;">Paste → file</h2>
-              <div class="row">
-                <input id="paste-name" type="text" placeholder="filename (optional, e.g. note.txt)" />
-              </div>
-              <div style="margin-top:8px;">
-                <textarea id="paste-content" placeholder="Paste text here (logs, JSON, notes)…"></textarea>
-              </div>
-              <div class="row" style="margin-top:8px;">
-                <button class="btn" id="paste-inbox" type="button">Save to inbox</button>
-                <button class="btn primary" id="paste-outbox" type="button">Save to outbox</button>
-                <span class="pill" id="paste-status"></span>
-              </div>
-            </div>
-          </div>
+		        <div class="bd">
+		          <div>
+		            <h2 style="margin-bottom:8px;">Add file</h2>
+		            <form id="upload-form" action="{ui_url("/api/lab/upload?dir=outbox")}" method="post" enctype="multipart/form-data">
+		              <div class="row">
+		                <input type="file" name="file" required />
+		                <select id="upload-dir" class="btn" style="padding: 7px 10px;">
+		                  <option value="outbox" selected>To outbox</option>
+		                  <option value="inbox">To inbox</option>
+		                </select>
+		                <button class="btn primary" type="submit">Upload</button>
+		              </div>
+		              <div class="sub" style="margin-top:6px;">Max upload: {LAB_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.</div>
+		            </form>
+		          </div>
 
-          <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
+		          <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
 
-	          <div class="split">
-	            <div>
-	              <div class="row" style="justify-content: space-between;">
-	                <h2 style="margin:0;">Outbox (library)</h2>
-	                <span class="sub" id="outbox-status"></span>
-	              </div>
-	              <ul id="outbox" class="filelist"></ul>
-	            </div>
-	            <div>
-	              <div class="row" style="justify-content: space-between;">
-	                <h2 style="margin:0;">Inbox (list only)</h2>
-	                <span class="sub" id="inbox-status"></span>
-	              </div>
-	              <ul id="inbox" class="filelist"></ul>
-	            </div>
-	          </div>
+		          <div class="row" style="justify-content: space-between;">
+		            <div>
+		              <h2 style="margin:0;">Outbox (library)</h2>
+		              <div class="sub">Tap a file row to view it as a “paper”.</div>
+		            </div>
+		            <span class="sub" id="outbox-status"></span>
+		          </div>
+		          <ul id="outbox" class="filelist"></ul>
 
-          <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
+		          <details id="advanced-tools" style="margin-top: 12px;">
+		            <summary class="btn" style="list-style:none; user-select:none;">Advanced tools</summary>
+		            <div style="margin-top:12px;">
+		              <div class="split">
+		                <div>
+		                  <h2 style="margin-bottom:8px;">Paste → file</h2>
+		                  <div class="row">
+		                    <input id="paste-name" type="text" placeholder="filename (optional, e.g. note.txt)" />
+		                  </div>
+		                  <div style="margin-top:8px;">
+		                    <textarea id="paste-content" placeholder="Paste text here (logs, JSON, notes)…"></textarea>
+		                  </div>
+		                  <div class="row" style="margin-top:8px;">
+		                    <button class="btn" id="paste-inbox" type="button">Save to inbox</button>
+		                    <button class="btn primary" id="paste-outbox" type="button">Save to outbox</button>
+		                    <span class="pill" id="paste-status"></span>
+		                  </div>
+		                </div>
+		                <div>
+		                  <div class="row" style="justify-content: space-between;">
+		                    <h2 style="margin:0;">Inbox (list only)</h2>
+		                    <span class="sub" id="inbox-status"></span>
+		                  </div>
+		                  <ul id="inbox" class="filelist"></ul>
+		                </div>
+		              </div>
 
-          <div class="row" style="justify-content: space-between;">
-            <div>
-              <h2 style="margin:0;">History</h2>
-              <div class="sub">Captured from tmux scrollback (independent of the iframe scroll).</div>
-            </div>
-            <div class="row">
-              <input id="hist-lines" type="number" min="200" max="200000" value="{LAB_DEFAULT_HISTORY_LINES}" style="width: 140px;" />
-              <button class="btn" id="hist-refresh" type="button">Capture</button>
-              <button class="btn" id="hist-save-outbox" type="button">Save to outbox</button>
-            </div>
-          </div>
-          <div id="hist-error" style="margin-top:10px;"></div>
-          <pre id="history">(loading…)</pre>
-          <div class="sub" style="margin-top:8px;">Tip: use browser find (Ctrl/⌘+F) inside the history box.</div>
-        </div>
-      </div>
-	    </div>
-	  </div>
+		              <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
+
+		              <div class="row" style="justify-content: space-between;">
+		                <div>
+		                  <h2 style="margin:0;">History</h2>
+		                  <div class="sub">Captured from tmux scrollback (independent of the iframe scroll).</div>
+		                </div>
+		                <div class="row">
+		                  <input id="hist-lines" type="number" min="200" max="200000" value="{LAB_DEFAULT_HISTORY_LINES}" style="width: 140px;" />
+		                  <button class="btn" id="hist-refresh" type="button">Capture</button>
+		                  <button class="btn" id="hist-save-outbox" type="button">Save to outbox</button>
+		                </div>
+		              </div>
+		              <div id="hist-error" style="margin-top:10px;"></div>
+		              <pre id="history">(open Advanced tools to load)</pre>
+		              <div class="sub" style="margin-top:8px;">Tip: use browser find (Ctrl/⌘+F) inside the history box.</div>
+		            </div>
+		          </details>
+		        </div>
+	      </div>
+		    </div>
+		  </div>
 
 	  <div id="viewer-overlay" class="viewer-overlay" aria-hidden="true">
 	    <div class="viewer-sheet">
@@ -752,6 +765,7 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 	        sub.textContent = fmtKB(it.size_bytes);
 	        meta.appendChild(name);
 	        meta.appendChild(sub);
+	        meta.addEventListener("click", () => openViewer(it.name));
 
 	        const actions = document.createElement("div");
 	        actions.className = "fileactions";
@@ -856,48 +870,89 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 	      if (e.key === "Escape") closeViewer();
 	    }});
 
-	    const uploadDir = document.getElementById("upload-dir");
-	    const uploadForm = document.getElementById("upload-form");
-	    if (uploadDir && uploadForm) {{
-	      uploadDir.addEventListener("change", () => {{
-	        const dir = uploadDir.value === "inbox" ? "inbox" : "outbox";
-	        uploadForm.action = UI_PREFIX + "/api/lab/upload?dir=" + encodeURIComponent(dir);
-	      }});
-	    }}
+		    const uploadDir = document.getElementById("upload-dir");
+		    const uploadForm = document.getElementById("upload-form");
+		    if (uploadDir && uploadForm) {{
+		      uploadDir.addEventListener("change", () => {{
+		        const dir = uploadDir.value === "inbox" ? "inbox" : "outbox";
+		        uploadForm.action = UI_PREFIX + "/api/lab/upload?dir=" + encodeURIComponent(dir);
+		      }});
+		    }}
 
-	    const toggleTerm = document.getElementById("toggle-terminal");
-	    if (toggleTerm) {{
-	      const sync = () => {{
-	        const on = document.body.classList.contains("term-max");
-	        toggleTerm.textContent = on ? "Show files" : "Maximize terminal";
-	      }};
-	      toggleTerm.addEventListener("click", () => {{
-	        document.body.classList.toggle("term-max");
-	        sync();
-	      }});
-	      sync();
-	    }}
-	    document.getElementById("use-stable").addEventListener("click", async () => {{
-	      setActiveSession(STABLE_SESSION);
-	      await refreshAll();
-	      await loadHistory();
-	    }});
-	    document.getElementById("use-canary").addEventListener("click", async () => {{
-	      setActiveSession(CANARY_SESSION);
-	      await refreshAll();
-	      await loadHistory();
-	    }});
+		    const advanced = document.getElementById("advanced-tools");
+		    if (advanced) {{
+		      let historyLoaded = false;
+		      const maybeLoad = async () => {{
+		        if (historyLoaded) return;
+		        historyLoaded = true;
+		        await loadHistory();
+		      }};
+		      if (advanced.open) {{
+		        maybeLoad();
+		      }}
+		      advanced.addEventListener("toggle", () => {{
+		        if (advanced.open) maybeLoad();
+		      }});
+		    }}
+
+		    const toggleTerm = document.getElementById("toggle-terminal");
+		    if (toggleTerm) {{
+		      const apply = (on) => {{
+		        if (on) document.body.classList.add("term-max");
+		        else document.body.classList.remove("term-max");
+		        try {{ localStorage.setItem("dw_lab_term_max", on ? "1" : "0"); }} catch (e) {{}}
+		      }};
+		      const current = (() => {{
+		        try {{
+		          const v = localStorage.getItem("dw_lab_term_max");
+		          if (v === "0") return false;
+		          if (v === "1") return true;
+		        }} catch (e) {{}}
+		        return true;
+		      }})();
+		      apply(current);
+		      const sync = () => {{
+		        const on = document.body.classList.contains("term-max");
+		        toggleTerm.textContent = on ? "Show files" : "Show files";
+		        if (!on) toggleTerm.textContent = "Hide files";
+		      }};
+		      toggleTerm.addEventListener("click", () => {{
+		        const next = !document.body.classList.contains("term-max");
+		        apply(next);
+		        sync();
+		      }});
+		      sync();
+		    }}
+
+		    const clearBtn = document.getElementById("clear-terminal");
+		    if (clearBtn) {{
+		      clearBtn.addEventListener("click", async () => {{
+		        try {{
+		          const resp = await fetch(apiUrl("/api/lab/terminal/clear"), {{method: "POST"}});
+		          if (!resp.ok) throw new Error("HTTP " + resp.status);
+		          const src = "/xterm/?arg=" + encodeURIComponent(tmuxName(activeSession)) + "&_=" + String(Date.now());
+		          document.getElementById("term").src = src;
+		        }} catch (e) {{}}
+		      }});
+		    }}
+		    document.getElementById("use-stable").addEventListener("click", async () => {{
+		      setActiveSession(STABLE_SESSION);
+		      await refreshAll();
+		    }});
+		    document.getElementById("use-canary").addEventListener("click", async () => {{
+		      setActiveSession(CANARY_SESSION);
+		      await refreshAll();
+		    }});
 
 	    (async () => {{
 	      const c = (document.cookie || "").split(";").map(s => s.trim()).find(s => s.startsWith("dw_lab_session="));
-	      if (c) {{
-	        const v = c.split("=", 2)[1] || "";
-	        const n = Number(v);
-	        if (Number.isFinite(n)) setActiveSession(n);
-	      }}
-	      await refreshAll();
-	      await loadHistory();
-	    }})();
+		      if (c) {{
+		        const v = c.split("=", 2)[1] || "";
+		        const n = Number(v);
+		        if (Number.isFinite(n)) setActiveSession(n);
+		      }}
+		      await refreshAll();
+		    }})();
 	  </script>
 </body>
 </html>"""
@@ -1193,6 +1248,11 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)
         try:
+            if parsed.path == "/api/lab/terminal/clear":
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                _clear_terminal(sess)
+                return self._send_json(200, {"ok": True, "lab_session": sess, "tmux_session": _lab_session_name(sess)})
+
             if parsed.path == "/api/lab/upload":
                 sess = _lab_session_from_request(handler=self, qs=qs)
                 content_length = int(self.headers.get("Content-Length") or "0")
