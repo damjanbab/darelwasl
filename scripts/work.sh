@@ -42,6 +42,7 @@ Commands:
   verify <id> -- <command...>
   commit <id> -m <message>
   pr <id>
+  pr-create <id>
   close <id>
 
 Notes:
@@ -374,6 +375,133 @@ Title suggestion:
 EOF
 }
 
+cmd_pr_create() {
+  local id="${1:-}"
+  [ -n "$id" ] || die "pr-create requires <id>"
+
+  local wt branch base summary
+  wt="$(work_get "$id" "worktree")"
+  branch="$(work_get "$id" "branch")"
+  base="$(work_get "$id" "base")"
+  summary="$(work_get "$id" "summary")"
+  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
+  [ -n "$branch" ] || die "Work item has no branch yet. Run: scripts/work.sh start $id"
+  [ -n "$base" ] || base="$BASE_BRANCH_DEFAULT"
+
+  if ! (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+    die "Worktree path missing or not a git checkout: $wt"
+  fi
+
+  # Load token into $GITHUB_TOKEN (does not persist).
+  # shellcheck source=/dev/null
+  source "$ROOT/scripts/load_github_token.sh" >/dev/null || true
+  [ -n "${GITHUB_TOKEN:-}" ] || die "GITHUB_TOKEN not loaded"
+
+  if ! curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/user >/dev/null; then
+    die "GitHub token validation failed (revoke and re-issue; then store it as github/token)"
+  fi
+
+  (cd "$wt" && git push -u origin "$branch")
+
+  local remote repo compare_url
+  remote="$(cd "$wt" && git remote get-url origin 2>/dev/null || true)"
+  repo=""
+  if [[ "$remote" =~ ^git@github\.com:(.+)\.git$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^git@github\.com:(.+)$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^https://github\.com/(.+)\.git$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  elif [[ "$remote" =~ ^https://github\.com/(.+)$ ]]; then
+    repo="${BASH_REMATCH[1]}"
+  fi
+  [ -n "$repo" ] || die "Unable to infer GitHub repo from origin remote: ${remote:-<none>}"
+
+  compare_url="https://github.com/${repo}/compare/${base}...${branch}?expand=1"
+
+  local payload resp http_code json pr_url owner
+  owner="${repo%%/*}"
+  payload="$(DW_PR_TITLE="$summary" DW_PR_HEAD="$branch" DW_PR_BASE="$base" DW_PR_WORK_ID="$id" \
+    python3 - <<'PY'
+import json, os
+title = (os.environ.get("DW_PR_TITLE") or "").strip() or (os.environ.get("DW_PR_WORK_ID") or "").strip() or "Update"
+head = (os.environ.get("DW_PR_HEAD") or "").strip()
+base = (os.environ.get("DW_PR_BASE") or "").strip()
+work_id = (os.environ.get("DW_PR_WORK_ID") or "").strip()
+print(json.dumps({
+  "title": title,
+  "head": head,
+  "base": base,
+  "body": f"Work item: {work_id}",
+}))
+PY
+  )"
+
+  resp="$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+               -H "Accept: application/vnd.github+json" \
+               -d "$payload" \
+               -w "\n%{http_code}" \
+               "https://api.github.com/repos/${repo}/pulls" || true)"
+  http_code="$(printf "%s" "$resp" | tail -n1 | tr -d '\r')"
+  json="$(printf "%s" "$resp" | sed '$d')"
+
+  pr_url="$(python3 - <<PY
+import json, sys
+data = {}
+try:
+  data = json.loads(sys.stdin.read() or "{}")
+except Exception:
+  print("")
+  raise SystemExit(0)
+print(data.get("html_url","") or "")
+PY
+<<<"$json"
+)"
+  if [[ -z "$pr_url" ]]; then
+    pr_url="$(printf "%s" "$json" | sed -nE 's/.*"html_url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\\1/p' | head -n1)"
+  fi
+
+  if [[ "$http_code" == "201" && -n "$pr_url" ]]; then
+    work_set "$id" "pr_url" "$pr_url"
+    work_touch_updated "$id"
+    echo "$pr_url"
+    return 0
+  fi
+
+  if [[ "$http_code" == "422" ]]; then
+    pr_url="$(curl -sS -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                   -H "Accept: application/vnd.github+json" \
+                   --get \
+                   --data-urlencode "head=${owner}:${branch}" \
+                   --data-urlencode "base=${base}" \
+                   --data-urlencode "state=open" \
+                   "https://api.github.com/repos/${repo}/pulls" \
+      | python3 - <<PY
+import json, sys
+try:
+  data = json.loads(sys.stdin.read() or "[]")
+except Exception:
+  data = []
+if isinstance(data, list) and data:
+  print(data[0].get("html_url","") or "")
+else:
+  print("")
+PY
+)"
+    if [[ -n "$pr_url" ]]; then
+      work_set "$id" "pr_url" "$pr_url"
+      work_touch_updated "$id"
+      echo "$pr_url"
+      return 0
+    fi
+  fi
+
+  echo "Failed to create PR (HTTP ${http_code:-?})." >&2
+  echo "Compare URL: $compare_url" >&2
+  echo "Response: $json" >&2
+  return 2
+}
+
 cmd_close() {
   local id="${1:-}"
   [ -n "$id" ] || die "close requires <id>"
@@ -396,6 +524,7 @@ case "$cmd" in
   verify) cmd_verify "${1:-}" "${@:2}" ;;
   commit) cmd_commit "${1:-}" "${@:2}" ;;
   pr) cmd_pr "${1:-}" ;;
+  pr-create) cmd_pr_create "${1:-}" ;;
   close) cmd_close "${1:-}" ;;
   -h|--help|help|"") usage ;;
   *) die "Unknown command: $cmd" ;;

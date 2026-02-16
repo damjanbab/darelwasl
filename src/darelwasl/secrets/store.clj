@@ -43,34 +43,38 @@
       (not (string? plaintext)) (error 400 "Plaintext must be a string")
       :else
       (let [dbv (d/db conn)
-            existed? (boolean (secret-eid dbv k))
+            existing-eid (secret-eid dbv k)
+            existed? (boolean existing-eid)
             sid (UUID/randomUUID)
             vid (UUID/randomUUID)
             aad (utf8-bytes k)
             enc (crypto/encrypt-bytes cfg aad (utf8-bytes plaintext))
             created (now)
-            secret {:db/id "secret"
-                    :entity/type :entity.type/secret
-                    :secret/key k
-                    :secret/updated-at created
-                    :secret/active-version "version"}
-            secret (cond-> secret
-                     (not existed?) (assoc :secret/id sid :secret/created-at created)
-                     (and (not existed?) (string? description) (not (str/blank? description)))
-                     (assoc :secret/description (str/trim description))
-                     (and existed? (string? description) (not (str/blank? description)))
-                     (assoc :secret/description (str/trim description)))
-            version (-> {:db/id "version"
-                         :entity/type :entity.type/secret-version
-                         :secret.version/id vid
-                         :secret.version/secret "secret"
-                         :secret.version/format (:format enc)
-                         :secret.version/kid (:kid enc)
-                         :secret.version/nonce (b64 (:nonce enc))
-                         :secret.version/ciphertext (b64 (:ciphertext enc))
-                         :secret.version/created-at created}
-                        (entity/with-ref dbv))
-            secret (entity/with-ref dbv secret)]
+            secret-id (if existed? existing-eid -1)
+            version-id -2
+            secret-base {:db/id secret-id
+                         :entity/type :entity.type/secret
+                         :secret/key k
+                         :secret/updated-at created
+                         :secret/active-version version-id}
+            secret-base (cond-> secret-base
+                          (not existed?) (assoc :secret/id sid :secret/created-at created)
+                          (and (string? description) (not (str/blank? description)))
+                          (assoc :secret/description (str/trim description)))
+            secret (if existed?
+                     secret-base
+                     (entity/with-ref dbv secret-base))
+            version (entity/with-ref
+                     dbv
+                     {:db/id version-id
+                      :entity/type :entity.type/secret-version
+                      :secret.version/id vid
+                      :secret.version/secret secret-id
+                      :secret.version/format (:format enc)
+                      :secret.version/kid (:kid enc)
+                      :secret.version/nonce (b64 (:nonce enc))
+                      :secret.version/ciphertext (b64 (:ciphertext enc))
+                      :secret.version/created-at created})]
         (try
           (db/transact! conn {:tx-data [secret version]})
           {:status :ok
@@ -78,7 +82,17 @@
            :secret/version-id vid
            :secret/kid (:kid enc)}
           (catch Exception e
-            (error 500 "Failed to store secret" {:message (.getMessage e)})))))))
+            (let [data (ex-data e)]
+              (error 500
+                     "Failed to store secret"
+                     (cond-> {:message (.getMessage e)}
+                       (map? data)
+                       (assoc :datomic/anomaly
+                              (select-keys data
+                                            [:cognitect.anomalies/category
+                                             :cognitect.anomalies/message
+                                             :db/error
+                                            :entity])))))))))))
 
 (defn get-secret
   "Read and decrypt the active secret value for key. Returns {:secret/value \"...\"} or {:error ...}."

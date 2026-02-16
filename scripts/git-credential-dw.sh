@@ -10,6 +10,7 @@ set -euo pipefail
 #   - secret key: github/token
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOG_CFG="${DW_LOGBACK_CLI_CONFIG:-$ROOT/resources/logback-cli.xml}"
 
 op="${1:-get}"
 if [[ "$op" != "get" ]]; then
@@ -33,11 +34,10 @@ if ! command -v clojure >/dev/null 2>&1; then
   exit 0
 fi
 
-token="$(cd "$ROOT" && clojure -M -m darelwasl.secrets.cli get --key github/token --show 2>/dev/null || true)"
+token="$(cd "$ROOT" && clojure -J-Dlogback.configurationFile="$LOG_CFG" -M -m darelwasl.secrets.cli get --key github/token --show 2>/dev/null || true)"
 if [[ -z "$token" ]]; then
   exit 0
 fi
 
 echo "username=x-access-token"
 echo "password=$token"
-
