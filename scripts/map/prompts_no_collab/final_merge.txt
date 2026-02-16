@@ -1,0 +1,31 @@
+You are the coordinator agent. Do NOT use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+- Node results are under: {{RUN_DIR}}/nodes/<node-id>/result.json
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values.
+- Final answer MUST be valid JSON only.
+
+Task:
+Read the node result JSON files produced by this run and merge into a single summary:
+- nodes/registries_xref/result.json
+- nodes/routes_map/result.json
+- nodes/entrypoints/result.json
+- nodes/checks_inventory/result.json
+- nodes/catalog_summary/result.json
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "summary": {
+    "what_it_is": [ "string" ],
+    "major_surfaces": [ "string" ],
+    "query_playbook": [ "string" ]
+  },
+  "artifacts": [ { "path": "string", "description": "string" } ],
+  "gaps": [ "string" ]
+}
+

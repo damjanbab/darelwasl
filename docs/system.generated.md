@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `db45a254a7f11603a8b13c363e7f3ea27e570ac2dce64b27c8a35d8747838f2b`
+- Catalog version: `3623e73d679cc87d4dc02d4aeb2c8a8d2cbf7ca2bbc47db53cee93f200e027ff`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -201,10 +201,12 @@ This file is auto-generated. Do not edit by hand.
 - agent/registries
 - agent/website
 
-### Policies (13)
+### Policies (15)
 - policy/app-ui-changes
 - policy/backend-changes
 - policy/docs-are-output
+- policy/lab-artifacts-to-outbox
+- policy/lab-canary-upgrades
 - policy/ops-governance-changes
 - policy/preview-auth-required
 - policy/preview-before-promote
@@ -278,6 +280,22 @@ This file is auto-generated. Do not edit by hand.
 - automation/task-telegram-notify-due
 - automation/task-telegram-notify-status
 - automation/telegram-onboarding-task
+
+## Querying the Codebase (protocol)
+
+Start with the generated catalog, then narrow to source files.
+
+- Inventory snapshot: `docs/system.generated.md`
+- Machine-readable catalog: `docs/catalog.edn`
+- Query tool (catalog-backed): `scripts/query.sh`
+
+Common queries:
+
+- Find anything by keyword: `scripts/query.sh TERM`
+- Filter by kind: `scripts/query.sh --kind action TERM`
+- Exact lookup by catalog id: `scripts/query.sh id action/action/auth-login`
+- Exact lookup by registry id: `scripts/query.sh registry-id :cap/action/auth-login`
+- Show only file paths: `scripts/query.sh --paths TERM`
 
 ## Routes
 
@@ -423,16 +441,35 @@ This file is auto-generated. Do not edit by hand.
 - account-statement-pdf.js
 - agent
 - app-smoke.js
+- catalog_summary.txt
+- catalog_summary.txt
 - checks.sh
+- checks_inventory.txt
+- checks_inventory.txt
+- dag.json
+- dag.no-collab.json
 - documents-pdf.js
+- entrypoints.txt
+- entrypoints.txt
+- final_merge.txt
+- final_merge.txt
 - generate-docs.sh
 - high_intake.py
+- lab.sh
 - llm_smoke.py
 - load_github_token.sh
+- map-dag.py
 - operations.json
 - plan.schema.json
+- playbook.sh
 - preview
 - promote-live.sh
+- query.sh
+- registries_xref.txt
+- registries_xref.txt
+- routes_map.clj
+- routes_map.txt
+- routes_map.txt
 - run-service.sh
 - site-screenshot.js
 - spec.schema.json
@@ -445,6 +482,9 @@ This file is auto-generated. Do not edit by hand.
 - tgctl.sh
 - theme-css-vars.sh
 - website-agent
+- webterm-ui.sh
+- work.sh
+- xref.clj
 
 ## Namespaces
 
@@ -529,6 +569,7 @@ This file is auto-generated. Do not edit by hand.
 - darelwasl.state
 - darelwasl.tasks
 - darelwasl.telegram
+- darelwasl.tools.query
 - darelwasl.ui.components
 - darelwasl.ui.entity
 - darelwasl.ui.shell

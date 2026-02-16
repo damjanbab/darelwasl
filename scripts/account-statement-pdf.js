@@ -15,6 +15,58 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
+const REPO_ROOT = path.resolve(__dirname, "..");
+
+function isTruthyEnv(v) {
+  const s = String(v || "").trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
+function labSessionName() {
+  const prefix = String(process.env.DW_TMUX_PREFIX || "codex").trim() || "codex";
+  const n = String(process.env.DW_LAB_SESSION || process.env.DW_LAB_SESSION_STABLE || "7").trim() || "7";
+  return `${prefix}${n}`;
+}
+
+function labOutboxDir() {
+  const base = String(process.env.DW_LAB_DIR || path.join(REPO_ROOT, "tmp", "lab")).trim();
+  return path.join(base, labSessionName(), "outbox");
+}
+
+function uniqueCopyDest(dir, filename) {
+  const base = path.basename(filename);
+  const ext = path.extname(base);
+  const stem = ext ? base.slice(0, -ext.length) : base;
+  let candidate = base;
+  let idx = 1;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const dest = path.join(dir, candidate);
+    if (!fs.existsSync(dest)) return dest;
+    candidate = `${stem}-${idx}${ext}`;
+    idx += 1;
+  }
+}
+
+function maybePublishToLabOutbox(outPath) {
+  if (!isTruthyEnv(process.env.DW_LAB_AUTO_OUTBOX)) return null;
+  try {
+    const outbox = labOutboxDir();
+    fs.mkdirSync(outbox, { recursive: true });
+
+    const src = path.resolve(outPath);
+    const outboxAbs = path.resolve(outbox);
+    if (src.startsWith(outboxAbs + path.sep)) return null;
+
+    const dest = uniqueCopyDest(outbox, path.basename(outPath));
+    fs.copyFileSync(src, dest);
+    return dest;
+  } catch (e) {
+    console.warn("Lab outbox publish failed:", e && e.message ? e.message : e);
+    return null;
+  }
+}
+
 function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i += 1) {
@@ -412,8 +464,7 @@ async function run() {
   }
 
   const input = JSON.parse(fs.readFileSync(inputPath, "utf8"));
-  const repoRoot = path.resolve(__dirname, "..");
-  const logoPath = path.join(repoRoot, "public", "logo.svg");
+  const logoPath = path.join(REPO_ROOT, "public", "logo.svg");
   const logoSvg = fs.existsSync(logoPath) ? fs.readFileSync(logoPath, "utf8") : null;
 
   const html = buildHtml(input, { logoSvg });
@@ -434,6 +485,10 @@ async function run() {
       printBackground: true,
       margin: { top: "18mm", right: "14mm", bottom: "16mm", left: "14mm" },
     });
+    const published = maybePublishToLabOutbox(outPath);
+    if (published) {
+      console.log(`[lab] published to outbox: ${published}`);
+    }
     await page.close();
     await context.close();
   } finally {

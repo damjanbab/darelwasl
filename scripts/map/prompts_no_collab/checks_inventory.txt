@@ -1,0 +1,33 @@
+You are the coordinator agent. Do NOT use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Final answer MUST be valid JSON only.
+
+Task:
+Map the verification/check surfaces and entrypoints using local commands only.
+
+Required steps (recommended commands):
+1) Extract `scripts/checks.sh` targets from the usage string and the `case` arms:
+   - `python3 - <<'PY'\nimport re\ntext=open('scripts/checks.sh','r',encoding='utf-8').read()\nusage=re.search(r\"Usage:.*?\\n\\nCommands:\",text,flags=re.S)\nprint(usage.group(0) if usage else \"\")\nprint('---')\ncase=re.search(r\"case\\s+\\\"\\$\\{target\\}\\\"\\s+in(.*)esac\",text,flags=re.S)\nprint(case.group(1)[:8000] if case else \"\")\nPY`
+2) List tracked scripts + policies + agents:
+   - `git ls-files scripts | sort`
+   - `git ls-files policies | sort`
+   - `git ls-files agents | sort`
+3) Build a checks array (targets + what they run) by reading `scripts/checks.sh` functions and the case arms. Keep it simple: for each target, list the check_* functions invoked in order.
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "checks": [
+    { "target": "string", "runs": [ "string" ], "notes": "string|null" }
+  ],
+  "scripts": [ "string" ],
+  "policies": [ "string" ],
+  "agents": [ "string" ],
+  "notes": [ "string" ]
+}
+

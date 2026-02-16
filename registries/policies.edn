@@ -81,5 +81,21 @@
   :policy-path "policies/ops-governance-changes.md"
   :enforces [:ops :governance]}
 
+ {:id :cap/policy/lab-artifacts-to-outbox
+  :title "Lab artifacts to outbox"
+  :version "v1"
+  :policy-path "policies/lab-artifacts-to-outbox.md"
+  :enforces [:lab :artifacts :outbox]
+  :proofs {:commands ["node --check scripts/documents-pdf.js"
+                      "node --check scripts/account-statement-pdf.js"]}}
+
+ {:id :cap/policy/lab-canary-upgrades
+  :title "Lab canary upgrades (stable ↔ canary swap)"
+  :version "v1"
+  :policy-path "policies/lab-canary-upgrades.md"
+  :enforces [:lab :canary :upgrade]
+  :proofs {:commands ["python3 -m py_compile ops/webterm-ui/server.py"
+                      "scripts/checks.sh governance"]}}
+
  ;; Intentionally no policy-first placeholder procedures here.
 ]

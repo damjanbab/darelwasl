@@ -1,0 +1,50 @@
+{
+  "format": "darelwasl/map-dag",
+  "version": 1,
+  "defaults": {
+    "codex": {
+      "sandbox": "read-only",
+      "enable_features": ["collab"],
+      "color": "never"
+    }
+  },
+  "nodes": [
+    {
+      "id": "catalog_summary",
+      "title": "Catalog + system inventory summary",
+      "depends_on": [],
+      "prompt_file": "scripts/map/prompts/catalog_summary.txt"
+    },
+    {
+      "id": "registries_xref",
+      "title": "Registries cross-reference edges",
+      "depends_on": ["catalog_summary"],
+      "prompt_file": "scripts/map/prompts/registries_xref.txt"
+    },
+    {
+      "id": "routes_map",
+      "title": "HTTP routes map (paths -> sources)",
+      "depends_on": ["catalog_summary"],
+      "prompt_file": "scripts/map/prompts/routes_map.txt"
+    },
+    {
+      "id": "entrypoints",
+      "title": "Entrypoints + runtime surfaces",
+      "depends_on": ["catalog_summary"],
+      "prompt_file": "scripts/map/prompts/entrypoints.txt"
+    },
+    {
+      "id": "checks_inventory",
+      "title": "Checks surface + scripts entrypoints",
+      "depends_on": [],
+      "prompt_file": "scripts/map/prompts/checks_inventory.txt"
+    },
+    {
+      "id": "final_merge",
+      "title": "Merge node results into one map summary",
+      "depends_on": ["registries_xref", "routes_map", "entrypoints", "checks_inventory"],
+      "prompt_file": "scripts/map/prompts/final_merge.txt"
+    }
+  ]
+}
+

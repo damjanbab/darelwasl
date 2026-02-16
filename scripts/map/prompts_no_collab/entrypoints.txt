@@ -1,0 +1,39 @@
+You are the coordinator agent. Do NOT use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values.
+- Final answer MUST be valid JSON only.
+
+Task:
+Identify entrypoints and runtime surfaces (single-agent, local commands).
+
+Required steps (recommended commands):
+1) deps.edn aliases for backend entrypoints:
+   - `sed -n '1,120p' deps.edn`
+2) CLJS entry from shadow-cljs.edn:
+   - `cat shadow-cljs.edn`
+3) Main runtime: inspect src/darelwasl/main.clj and servers/workers:
+   - `rg -n \"\\bdefn\\s+-main\\b\" -S src/darelwasl | head`
+   - `nl -ba src/darelwasl/main.clj | sed -n '1,220p'`
+   - `nl -ba src/darelwasl/server.clj | sed -n '1,160p'`
+   - `nl -ba src/darelwasl/site/server.clj | sed -n '1,160p'`
+4) Env var names:
+   - `rg -n \"System/getenv \\\"[A-Z0-9_]+\\\"\" -S src | sed -n '1,120p'`
+   - `rg -n \"^## Config Env Vars\" -n docs/system.generated.md -n`
+   - `sed -n '1,120p' src/darelwasl/config.clj`
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "entrypoints": {
+    "clj": [ { "alias": "string|null", "ns_or_cmd": "string", "source": "string" } ],
+    "cljs": [ { "target": "string", "source": "string" } ]
+  },
+  "config": { "files": [ "string" ], "env_vars": [ "string" ] },
+  "notes": [ "string" ]
+}
+

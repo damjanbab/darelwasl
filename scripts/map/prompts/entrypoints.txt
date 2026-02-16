@@ -1,0 +1,35 @@
+You are the coordinator agent. You MUST use collaboration sub-agents.
+
+Context:
+- Mapping run directory: {{RUN_DIR}}
+
+Hard rules:
+- Do NOT modify any repository file.
+- Do NOT output secret values.
+- Final answer MUST be valid JSON only.
+
+Task:
+Identify entrypoints and runtime surfaces:
+- Clojure backend entrypoint(s) (main, dev, seed, import)
+- ClojureScript app entrypoint(s)
+- Key config file(s) and env var *names* used
+- Notable long-running processes implied (Jetty, Datomic local, Playwright usage)
+
+1) Spawn up to 4 helpers:
+   - helper A: inspect deps.edn aliases and likely -m entrypoints.
+   - helper B: find src/* main namespaces (darelwasl.main, http server, fixtures).
+   - helper C: identify CLJS entry (shadow-cljs.edn + app.cljs + features).
+   - helper D: list env var names from docs/system.generated.md section and src/darelwasl/config.clj.
+2) Merge.
+
+Output JSON schema:
+{
+  "run_dir": "string",
+  "entrypoints": {
+    "clj": [ { "alias": "string|null", "ns_or_cmd": "string", "source": "string" } ],
+    "cljs": [ { "target": "string", "source": "string" } ]
+  },
+  "config": { "files": [ "string" ], "env_vars": [ "string" ] },
+  "notes": [ "string" ]
+}
+

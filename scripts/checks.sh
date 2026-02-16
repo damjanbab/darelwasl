@@ -7,10 +7,12 @@ DATOMIC_TMP=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/checks.sh [all|governance|registries|schema|actions|app-smoke|views|action-contracts|import|docs]
+Usage: scripts/checks.sh [all|governance|query|map|registries|schema|actions|app-smoke|views|action-contracts|import|docs]
 
 Commands:
   governance       Repo housekeeping invariants (skills/policies scaffolding)
+  query            Catalog-backed query tool + docs protocol present
+  map              Validate repo mapping DAG engine (no network)
   registries       Registry presence + field checks + EDN/fixture parse
   schema           Registries + schema load into temp Datomic
   actions          Registries + schema + action contract harness
@@ -21,11 +23,77 @@ Commands:
 EOF
 }
 
+check_agents_md_playbooks() {
+  echo "Checking AGENTS.md playbooks format..."
+  local f="$ROOT/AGENTS.md"
+  if [ ! -s "$f" ]; then
+    echo "Missing or empty: $f"
+    exit 1
+  fi
+
+  if ! grep -q "^## Playbooks" "$f"; then
+    echo "AGENTS.md missing required section: ## Playbooks"
+    exit 1
+  fi
+
+  if ! grep -q "^## Unknown / Triage" "$f"; then
+    echo "AGENTS.md missing required section: ## Unknown / Triage"
+    exit 1
+  fi
+
+  if ! grep -q "^### Playbook template" "$f"; then
+    echo "AGENTS.md missing required section: ### Playbook template"
+    exit 1
+  fi
+
+  local playbook_count
+  playbook_count="$(grep -c "^### Playbook:" "$f" || true)"
+  if [ "${playbook_count:-0}" -lt 1 ]; then
+    echo "AGENTS.md must define at least one playbook (### Playbook: ...)"
+    exit 1
+  fi
+
+  # Ensure every playbook has the same minimal shape so it remains a reliable entrypoint.
+  awk '
+    function reset_flags() { when=0; start=0; policies=0; proof=0; next_flag=0; }
+    function fail(msg) { print msg; ok=0; }
+    function check_section() {
+      if (!when) fail("Playbook missing: - When:");
+      if (!start) fail("Playbook missing: - Start:");
+      if (!policies) fail("Playbook missing: - Policies:");
+      if (!proof) fail("Playbook missing: - Proof:");
+      if (!next_flag) fail("Playbook missing: - Next:");
+    }
+    BEGIN { ok=1; in_pb=0; reset_flags(); }
+    /^### Playbook:/ {
+      if (in_pb) check_section();
+      reset_flags();
+      in_pb=1;
+      next;
+    }
+    /^## / {
+      if (in_pb) { check_section(); in_pb=0; }
+      next;
+    }
+    {
+      if (!in_pb) next;
+      if ($0 ~ /^- When:/) when=1;
+      if ($0 ~ /^- Start:/) start=1;
+      if ($0 ~ /^- Policies:/) policies=1;
+      if ($0 ~ /^- Proof:/) proof=1;
+      if ($0 ~ /^- Next:/) next_flag=1;
+    }
+    END { if (in_pb) check_section(); exit(ok ? 0 : 1); }
+  ' "$f" || exit 1
+
+  echo "AGENTS.md playbooks look consistent."
+}
+
 check_governance() {
   echo "Checking repo housekeeping invariants..."
 
   local missing=0
-  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md" "$ROOT/agents/README.md" "$ROOT/agents/website/AGENT.md" "$ROOT/agents/website/AGENT.json"; do
+  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md" "$ROOT/agents/README.md" "$ROOT/agents/website/AGENT.md" "$ROOT/agents/website/AGENT.json" "$ROOT/scripts/query.sh" "$ROOT/scripts/playbook.sh" "$ROOT/scripts/work.sh" "$ROOT/scripts/webterm-ui.sh" "$ROOT/ops/webterm-ui/server.py" "$ROOT/docs/work/README.md" "$ROOT/docs/ops/code-haloeddepth-com.md"; do
     if [ ! -s "$f" ]; then
       echo "Missing or empty: $f"
       missing=1
@@ -49,7 +117,63 @@ check_governance() {
     exit 1
   fi
 
+  if [ ! -d "$ROOT/docs/work" ]; then
+    echo "Missing directory: $ROOT/docs/work"
+    exit 1
+  fi
+
+  check_agents_md_playbooks
+
   echo "Governance checks passed."
+}
+
+check_query() {
+  check_clojure_available
+  echo "Checking catalog-backed query tool..."
+
+  if [ ! -s "$ROOT/scripts/query.sh" ]; then
+    echo "Missing or empty: $ROOT/scripts/query.sh"
+    exit 1
+  fi
+
+  if [ ! -s "$ROOT/docs/catalog.edn" ] || [ ! -s "$ROOT/docs/system.generated.md" ]; then
+    echo "Generated docs missing. Run scripts/generate-docs.sh and commit the results."
+    exit 1
+  fi
+
+  (cd "$ROOT" && scripts/query.sh --self-check)
+
+  if ! grep -q "## Querying the Codebase (protocol)" "$ROOT/docs/system.generated.md"; then
+    echo "Missing query protocol section in docs/system.generated.md. Run scripts/generate-docs.sh and commit the results."
+    exit 1
+  fi
+
+  echo "Query checks passed."
+}
+
+check_map() {
+  echo "Validating mapping DAG engine..."
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "python3 not found. Install Python 3 to run map checks."
+    exit 1
+  fi
+  if [ ! -s "$ROOT/scripts/map-dag.py" ]; then
+    echo "Missing or empty: $ROOT/scripts/map-dag.py"
+    exit 1
+  fi
+  if [ ! -s "$ROOT/scripts/map/dag.json" ]; then
+    echo "Missing or empty: $ROOT/scripts/map/dag.json"
+    exit 1
+  fi
+  if [ ! -s "$ROOT/scripts/map/dag.no-collab.json" ]; then
+    echo "Missing or empty: $ROOT/scripts/map/dag.no-collab.json"
+    exit 1
+  fi
+  (cd "$ROOT" && python3 scripts/map-dag.py validate)
+  (cd "$ROOT" && python3 scripts/map-dag.py validate --dag scripts/map/dag.no-collab.json)
+  (cd "$ROOT" && python3 scripts/map-dag.py dry-run >/dev/null)
+  (cd "$ROOT" && python3 scripts/map-dag.py dry-run --dag scripts/map/dag.no-collab.json >/dev/null)
+  echo "Map checks passed."
 }
 
 check_registries() {
@@ -735,19 +859,23 @@ check_import() {
 target="${1:-all}"
 case "$target" in
   governance) check_governance ;;
+  query) check_query ;;
+  map) check_map ;;
   registries) check_registries; check_registry_fields; check_edn_parse ;;
   schema) check_registries; check_registry_fields; check_edn_parse; check_schema_load ;;
   actions|action-contracts) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_actions ;;
   app-smoke|views) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_docs; check_actions; check_app_smoke ;;
-  docs) check_registries; check_registry_fields; check_edn_parse; check_docs ;;
+  docs) check_registries; check_registry_fields; check_edn_parse; check_docs; check_query ;;
   import) check_registries; check_registry_fields; check_edn_parse; check_schema_load; check_import ;;
   all)
     check_governance
+    check_map
     check_registries
     check_registry_fields
     check_edn_parse
     check_schema_load
     check_docs
+    check_query
     check_import
     check_actions
     check_app_smoke
