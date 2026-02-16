@@ -460,7 +460,7 @@ PY
 
   api="https://api.github.com/repos/${repo}/pulls"
   resp="$(curl -sS -X POST \
-    -H "Authorization: token ${GITHUB_TOKEN}" \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -d "$payload" \
     -w "\n__HTTP_STATUS__:%{http_code}\n" \
@@ -484,7 +484,7 @@ PY
     # PR already exists; find it.
     q="https://api.github.com/repos/${repo}/pulls?state=open&head=${owner}:${branch}"
     existing="$(curl -fsS \
-      -H "Authorization: token ${GITHUB_TOKEN}" \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
       -H "Accept: application/vnd.github+json" \
       "$q" || true)"
     read -r pr_url pr_number < <(python3 - <<'PY' <<<"$existing"
