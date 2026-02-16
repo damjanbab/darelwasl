@@ -1,0 +1,17 @@
+[Unit]
+Description=DarelWasl Web Terminal UI
+After=network.target
+
+[Service]
+Type=simple
+User=darelwasl
+Group=darelwasl
+EnvironmentFile=/etc/darelwasl/webterm.env
+WorkingDirectory=/usr/local/lib/dw-webterm-ui
+ExecStart=/usr/local/lib/dw-webterm-ui/run.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

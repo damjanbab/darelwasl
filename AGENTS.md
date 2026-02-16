@@ -29,6 +29,9 @@ It is designed for:
 - `scripts/` (automation + checks; CI entrypoint is `scripts/checks.sh`)
 - Generated inventory only: `docs/system.generated.md` + `docs/catalog.edn` (via `scripts/generate-docs.sh`)
 
+## Language preference
+- Prefer **Clojure** for new server-side code + ops tooling when feasible (policy: `policies/clojure-first.md`).
+
 ## Request types (first word)
 You (the user) start every initial message with one of:
 - `question:` Explain/compare. No repo changes unless explicitly switched.
@@ -228,8 +231,9 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - When: You need better Lab UX (history, exchange, artifacts), or to deploy Lab UI changes.
 - Start:
   - Read: `docs/ops/code-haloeddepth-com.md`
-  - Edit UI server source: `ops/webterm-ui/server.py`
-  - Deploy on host: `scripts/webterm-ui.sh install && scripts/webterm-ui.sh restart`
+  - Edit UI server source: `src/darelwasl/webterm/`
+  - Canary deploy on host: `scripts/webterm-ui.sh deploy-canary`
+  - Stable deploy on host (post-merge): `scripts/webterm-ui.sh deploy-stable`
 - Policies:
   - `policies/ops-governance-changes.md`
   - `policies/lab-artifacts-to-outbox.md`
@@ -237,7 +241,7 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - `policies/verification-required.md`
 - Proof:
   - `scripts/checks.sh governance`
-  - `python3 -m py_compile ops/webterm-ui/server.py`
+  - `clojure -M -m darelwasl.webterm.server --check`
   - `scripts/webterm-ui.sh smoke`
 - Next:
   - If you want auto-published PDFs in the Lab outbox, enable `DW_LAB_AUTO_OUTBOX=1` in the environment running the PDF generators.

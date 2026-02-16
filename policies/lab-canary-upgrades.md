@@ -56,14 +56,13 @@ scripts/webterm-ui.sh deploy-canary
 4) After merge, deploy to stable:
 
 ```bash
-scripts/webterm-ui.sh install
-scripts/webterm-ui.sh restart
-scripts/webterm-ui.sh smoke
+scripts/webterm-ui.sh deploy-stable
 ```
 
 Optional (session rotation): swap stable/canary session numbers in `/etc/darelwasl/webterm.env` and restart the UI.
 
 ## Proof
 
-- `python3 -m py_compile ops/webterm-ui/server.py`
+- `clojure -M -m darelwasl.webterm.server --check`
+- `scripts/webterm-ui.sh smoke`
 - `scripts/checks.sh governance`

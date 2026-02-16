@@ -94,7 +94,8 @@
   :version "v1"
   :policy-path "policies/lab-canary-upgrades.md"
   :enforces [:lab :canary :upgrade]
-  :proofs {:commands ["python3 -m py_compile ops/webterm-ui/server.py"
+  :proofs {:commands ["clojure -M -m darelwasl.webterm.server --check"
+                      "scripts/webterm-ui.sh smoke"
                       "scripts/checks.sh governance"]}}
 
  {:id :cap/policy/secrets-vault
@@ -104,6 +105,13 @@
   :enforces [:secrets :crypto :ops]
   :proofs {:commands ["scripts/checks.sh governance"
                       "scripts/checks.sh schema"]}}
+
+ {:id :cap/policy/clojure-first
+  :title "Clojure-first (when possible)"
+  :version "v1"
+  :policy-path "policies/clojure-first.md"
+  :enforces [:language :clojure]
+  :proofs {:commands ["scripts/checks.sh governance"]}}
 
  {:id :cap/policy/pr-required
   :title "Changes land via PR (no direct pushes to main)"
