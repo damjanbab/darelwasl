@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+from typing import Final
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -219,6 +220,29 @@ def _require_outbox_path(n: int, name: str) -> str | None:
     return path
 
 
+_PDF_EXTS: Final[set[str]] = {".pdf"}
+_TEXT_EXTS: Final[set[str]] = {".txt", ".md", ".markdown", ".log", ".json", ".edn", ".csv"}
+_IMAGE_TYPES: Final[dict[str, str]] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+}
+
+
+def _guess_content_type(name: str) -> str:
+    ext = os.path.splitext(name.lower())[1]
+    if ext in _PDF_EXTS:
+        return "application/pdf"
+    if ext in _IMAGE_TYPES:
+        return _IMAGE_TYPES[ext]
+    if ext in _TEXT_EXTS:
+        return "text/plain; charset=utf-8"
+    return "application/octet-stream"
+
+
 def _list_dir_files(directory: str) -> list[dict]:
     items: list[dict] = []
     for name in os.listdir(directory):
@@ -373,10 +397,52 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       white-space: pre;
     }}
     .kvs {{ display:grid; grid-template-columns: 1fr; gap: 6px; }}
-    .kv {{ display:flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }}
-    .kv b {{ font-weight: 600; color: rgba(255,255,255,0.88); }}
-    .pill {{ font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }}
-  </style>
+	    .kv {{ display:flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }}
+	    .kv b {{ font-weight: 600; color: rgba(255,255,255,0.88); }}
+	    .pill {{ font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }}
+	    .filelist {{ list-style: none; padding: 0; margin: 10px 0 0; }}
+	    .filelist li {{ display:flex; gap: 10px; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; background: rgba(255,255,255,0.04); }}
+	    .filemeta {{ display:flex; flex-direction: column; gap: 2px; min-width: 0; }}
+	    .filename {{ font-family: var(--mono); font-size: 12px; color: rgba(255,255,255,0.92); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; }}
+	    @media (min-width: 1180px) {{ .filename {{ max-width: 26vw; }} }}
+	    .filesub {{ font-size: 12px; color: var(--muted2); }}
+	    .fileactions {{ display:flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
+	    .btn.small {{ padding: 6px 8px; border-radius: 10px; font-size: 12px; }}
+
+	    .viewer-overlay {{ position: fixed; inset: 0; display: none; background: rgba(0,0,0,0.55); z-index: 50; }}
+	    .viewer-overlay.open {{ display: block; }}
+	    .viewer-sheet {{
+	      position: absolute;
+	      top: 0; bottom: 0; right: 0;
+	      width: 100%;
+	      background: rgba(11,18,32,0.96);
+	      border-left: 1px solid var(--border);
+	      backdrop-filter: blur(6px);
+	      -webkit-backdrop-filter: blur(6px);
+	      display:flex;
+	      flex-direction: column;
+	    }}
+	    @media (min-width: 980px) {{ .viewer-sheet {{ width: 50vw; }} }}
+	    .viewer-hd {{ padding: 12px 12px; display:flex; align-items:center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.04); }}
+	    .viewer-title {{ font-family: var(--mono); font-size: 12px; color: rgba(255,255,255,0.92); overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }}
+	    .viewer-bd {{ padding: 12px; overflow: auto; }}
+	    .paper {{
+	      background: #ffffff;
+	      color: #111827;
+	      border-radius: 14px;
+	      box-shadow: 0 22px 60px rgba(0,0,0,0.45);
+	      border: 1px solid rgba(0,0,0,0.08);
+	      overflow: hidden;
+	      min-height: 70vh;
+	    }}
+	    .paper iframe {{ width: 100%; height: 76vh; border: 0; border-radius: 0; background: #fff; }}
+	    .paper img {{ display:block; width: 100%; height: auto; }}
+	    .paper pre {{ max-height: none; border: 0; border-radius: 0; background: transparent; color: #111827; font-size: 13px; line-height: 1.45; }}
+
+	    body.term-max .grid {{ grid-template-columns: 1fr; }}
+	    body.term-max #exchange-card {{ display: none; }}
+	    body.term-max iframe {{ height: 84vh; }}
+	  </style>
 </head>
 <body>
   <div class="wrap">
@@ -390,16 +456,17 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       </div>
       <span class="muted">Upload → inbox · Download ← outbox · History via tmux · Canary-safe upgrades</span>
       <span class="spacer"></span>
-      <a class="btn" href="{ui_url("/")}" rel="noreferrer">Terminals</a>
-      <a class="btn" href="{html.escape(other_ui_href)}" rel="noreferrer">{html.escape(other_ui_label)}</a>
-      <a class="btn" id="open-terminal" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
-      <a class="btn primary" id="start-codex" href="{ui_url(f"/codex?n={sess}")}" target="_blank" rel="noreferrer">Start codex</a>
-    </div>
+	      <a class="btn" href="{ui_url("/")}" rel="noreferrer">Terminals</a>
+	      <a class="btn" href="{html.escape(other_ui_href)}" rel="noreferrer">{html.escape(other_ui_label)}</a>
+	      <button class="btn" id="toggle-terminal" type="button">Maximize terminal</button>
+	      <a class="btn" id="open-terminal" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
+	      <a class="btn primary" id="start-codex" href="{ui_url(f"/codex?n={sess}")}" target="_blank" rel="noreferrer">Start codex</a>
+	    </div>
 
     {msg_html}
 
-    <div class="grid">
-      <div class="card">
+	    <div class="grid">
+		      <div class="card" id="exchange-card">
         <div class="hd">
           <div>
             <h2>Terminal</h2>
@@ -415,30 +482,34 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
         </div>
       </div>
 
-      <div class="card">
-        <div class="hd">
-          <div>
-            <h2>Exchange</h2>
-            <div class="sub">Files + clipboard snippets + history viewer.</div>
-          </div>
-          <div class="row">
-            <button class="btn" id="use-stable" type="button">Use stable</button>
-            <button class="btn" id="use-canary" type="button">Use canary</button>
-            <button class="btn" id="refresh-all" type="button">Refresh</button>
-          </div>
-        </div>
-        <div class="bd">
-          <div class="split">
-            <div>
-              <h2 style="margin-bottom:8px;">Upload to inbox</h2>
-              <form action="{ui_url("/api/lab/upload")}" method="post" enctype="multipart/form-data">
-                <div class="row">
-                  <input type="file" name="file" required />
-                  <button class="btn primary" type="submit">Upload</button>
-                </div>
-                <div class="sub" style="margin-top:6px;">Max upload: {LAB_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.</div>
-              </form>
-            </div>
+	      <div class="card">
+	        <div class="hd">
+	          <div>
+	            <h2>Exchange</h2>
+	            <div class="sub">Files (outbox) + clipboard + history. Outbox is the shared “library” (agent outputs land here).</div>
+	          </div>
+	          <div class="row">
+	            <button class="btn" id="use-stable" type="button">Use stable</button>
+	            <button class="btn" id="use-canary" type="button">Use canary</button>
+	            <button class="btn" id="refresh-all" type="button">Refresh</button>
+	          </div>
+	        </div>
+	        <div class="bd">
+	          <div class="split">
+	            <div>
+	              <h2 style="margin-bottom:8px;">Add file</h2>
+	              <form id="upload-form" action="{ui_url("/api/lab/upload?dir=outbox")}" method="post" enctype="multipart/form-data">
+	                <div class="row">
+	                  <input type="file" name="file" required />
+	                  <select id="upload-dir" class="btn" style="padding: 7px 10px;">
+	                    <option value="outbox" selected>To outbox</option>
+	                    <option value="inbox">To inbox</option>
+	                  </select>
+	                  <button class="btn primary" type="submit">Upload</button>
+	                </div>
+	                <div class="sub" style="margin-top:6px;">Max upload: {LAB_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.</div>
+	              </form>
+	            </div>
             <div>
               <h2 style="margin-bottom:8px;">Paste → file</h2>
               <div class="row">
@@ -457,22 +528,22 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 
           <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
 
-          <div class="split">
-            <div>
-              <div class="row" style="justify-content: space-between;">
-                <h2 style="margin:0;">Inbox (list only)</h2>
-                <span class="sub" id="inbox-status"></span>
-              </div>
-              <ul id="inbox" style="margin-top:10px;"></ul>
-            </div>
-            <div>
-              <div class="row" style="justify-content: space-between;">
-                <h2 style="margin:0;">Outbox</h2>
-                <span class="sub" id="outbox-status"></span>
-              </div>
-              <ul id="outbox" style="margin-top:10px;"></ul>
-            </div>
-          </div>
+	          <div class="split">
+	            <div>
+	              <div class="row" style="justify-content: space-between;">
+	                <h2 style="margin:0;">Outbox (library)</h2>
+	                <span class="sub" id="outbox-status"></span>
+	              </div>
+	              <ul id="outbox" class="filelist"></ul>
+	            </div>
+	            <div>
+	              <div class="row" style="justify-content: space-between;">
+	                <h2 style="margin:0;">Inbox (list only)</h2>
+	                <span class="sub" id="inbox-status"></span>
+	              </div>
+	              <ul id="inbox" class="filelist"></ul>
+	            </div>
+	          </div>
 
           <hr style="border:none;border-top:1px solid var(--border);margin:14px 0" />
 
@@ -492,10 +563,24 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
           <div class="sub" style="margin-top:8px;">Tip: use browser find (Ctrl/⌘+F) inside the history box.</div>
         </div>
       </div>
-    </div>
-  </div>
+	    </div>
+	  </div>
 
-  <script>
+	  <div id="viewer-overlay" class="viewer-overlay" aria-hidden="true">
+	    <div class="viewer-sheet">
+	      <div class="viewer-hd">
+	        <div class="viewer-title" id="viewer-title"></div>
+	        <div class="row">
+	          <a class="btn small" id="viewer-download" href="#" rel="noreferrer">Download</a>
+	          <button class="btn small" id="viewer-copy" type="button">Copy ref</button>
+	          <button class="btn small primary" id="viewer-close" type="button">Close</button>
+	        </div>
+	      </div>
+	      <div class="viewer-bd" id="viewer-body"></div>
+	    </div>
+	  </div>
+
+	  <script>
     function fmtKB(n) {{
       const kb = Math.round((n || 0) / 1024);
       return kb + " KB";
@@ -539,39 +624,163 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       return full + sep + "session=" + encodeURIComponent(String(activeSession));
     }}
 
-    async function loadInbox() {{
-      const status = document.getElementById("inbox-status");
-      const list = document.getElementById("inbox");
-      status.textContent = "Loading…";
-      list.innerHTML = "";
-      const data = await jget(apiUrl("/api/lab/inbox"));
-      const items = (data.inbox || []);
-      status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
-      for (const it of items) {{
-        const li = document.createElement("li");
-        li.textContent = it.name + " (" + fmtKB(it.size_bytes) + ")";
-        list.appendChild(li);
-      }}
-    }}
+	    async function loadInbox() {{
+	      const status = document.getElementById("inbox-status");
+	      const list = document.getElementById("inbox");
+	      status.textContent = "Loading…";
+	      list.innerHTML = "";
+	      const data = await jget(apiUrl("/api/lab/inbox"));
+	      const items = (data.inbox || []);
+	      status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
+	      for (const it of items) {{
+	        const li = document.createElement("li");
+	        const meta = document.createElement("div");
+	        meta.className = "filemeta";
+	        const name = document.createElement("div");
+	        name.className = "filename";
+	        name.textContent = it.name;
+	        const sub = document.createElement("div");
+	        sub.className = "filesub";
+	        sub.textContent = fmtKB(it.size_bytes);
+	        meta.appendChild(name);
+	        meta.appendChild(sub);
+	        li.appendChild(meta);
+	        list.appendChild(li);
+	      }}
+	    }}
 
-    async function loadOutbox() {{
-      const status = document.getElementById("outbox-status");
-      const list = document.getElementById("outbox");
-      status.textContent = "Loading…";
+	    function extLower(name) {{
+	      const s = String(name || "").toLowerCase();
+	      const i = s.lastIndexOf(".");
+	      return i >= 0 ? s.slice(i) : "";
+	    }}
+
+	    function isPreviewable(name) {{
+	      const ext = extLower(name);
+	      return ext === ".pdf" || [".png",".jpg",".jpeg",".gif",".webp",".svg",".txt",".md",".markdown",".log",".json",".edn",".csv"].includes(ext);
+	    }}
+
+	    function viewUrl(name) {{
+	      return apiUrl("/api/lab/outbox/view?name=" + encodeURIComponent(String(name || "")));
+	    }}
+
+	    function downloadUrl(name) {{
+	      return apiUrl("/api/lab/outbox/download?name=" + encodeURIComponent(String(name || "")));
+	    }}
+
+	    function setViewerOpen(open) {{
+	      const overlay = document.getElementById("viewer-overlay");
+	      if (!overlay) return;
+	      if (open) overlay.classList.add("open");
+	      else overlay.classList.remove("open");
+	    }}
+
+	    async function openViewer(name) {{
+	      const title = document.getElementById("viewer-title");
+	      const body = document.getElementById("viewer-body");
+	      const dl = document.getElementById("viewer-download");
+	      const copy = document.getElementById("viewer-copy");
+	      if (!title || !body || !dl || !copy) return;
+	      const url = viewUrl(name);
+	      title.textContent = String(name || "");
+	      body.innerHTML = "";
+	      dl.href = downloadUrl(name);
+	      copy.onclick = async () => {{
+	        try {{
+	          await navigator.clipboard.writeText("outbox/" + String(name || ""));
+	        }} catch (e) {{}}
+	      }};
+
+	      setViewerOpen(true);
+	      const ext = extLower(name);
+	      const paper = document.createElement("div");
+	      paper.className = "paper";
+	      body.appendChild(paper);
+	      if (ext === ".pdf") {{
+	        const iframe = document.createElement("iframe");
+	        iframe.src = url;
+	        iframe.title = String(name || "pdf");
+	        paper.appendChild(iframe);
+	        return;
+	      }}
+	      if ([".png",".jpg",".jpeg",".gif",".webp",".svg"].includes(ext)) {{
+	        const img = document.createElement("img");
+	        img.src = url;
+	        img.alt = String(name || "image");
+	        paper.appendChild(img);
+	        return;
+	      }}
+	      const pre = document.createElement("pre");
+	      pre.textContent = "(loading…)";
+	      paper.appendChild(pre);
+	      try {{
+	        const resp = await fetch(url, {{cache: "no-store"}});
+	        if (!resp.ok) throw new Error("HTTP " + resp.status);
+	        pre.textContent = await resp.text();
+	      }} catch (e) {{
+	        pre.textContent = "Failed to load: " + (e && e.message ? e.message : String(e));
+	      }}
+	    }}
+
+	    function closeViewer() {{
+	      setViewerOpen(false);
+	    }}
+
+	    async function loadOutbox() {{
+	      const status = document.getElementById("outbox-status");
+	      const list = document.getElementById("outbox");
+	      status.textContent = "Loading…";
       list.innerHTML = "";
       const data = await jget(apiUrl("/api/lab/outbox"));
-      const items = (data.outbox || []);
-      status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
-      for (const it of items) {{
-        const li = document.createElement("li");
-        const a = document.createElement("a");
-        a.textContent = it.name + " (" + fmtKB(it.size_bytes) + ")";
-        a.href = apiUrl("/api/lab/outbox/download?name=" + encodeURIComponent(it.name));
-        a.rel = "noreferrer";
-        li.appendChild(a);
-        list.appendChild(li);
-      }}
-    }}
+	      const items = (data.outbox || []);
+	      status.textContent = items.length ? (items.length + " file(s)") : "Empty.";
+	      for (const it of items) {{
+	        const li = document.createElement("li");
+	        const meta = document.createElement("div");
+	        meta.className = "filemeta";
+	        const name = document.createElement("div");
+	        name.className = "filename";
+	        name.textContent = it.name;
+	        const sub = document.createElement("div");
+	        sub.className = "filesub";
+	        sub.textContent = fmtKB(it.size_bytes);
+	        meta.appendChild(name);
+	        meta.appendChild(sub);
+
+	        const actions = document.createElement("div");
+	        actions.className = "fileactions";
+
+	        const btnView = document.createElement("button");
+	        btnView.className = "btn small";
+	        btnView.type = "button";
+	        btnView.textContent = isPreviewable(it.name) ? "View" : "Open";
+	        btnView.addEventListener("click", () => openViewer(it.name));
+
+	        const a = document.createElement("a");
+	        a.className = "btn small";
+	        a.textContent = "Download";
+	        a.href = downloadUrl(it.name);
+	        a.rel = "noreferrer";
+
+	        const btnCopy = document.createElement("button");
+	        btnCopy.className = "btn small";
+	        btnCopy.type = "button";
+	        btnCopy.textContent = "Copy ref";
+	        btnCopy.addEventListener("click", async () => {{
+	          try {{
+	            await navigator.clipboard.writeText("outbox/" + String(it.name || ""));
+	          }} catch (e) {{}}
+	        }});
+
+	        actions.appendChild(btnView);
+	        actions.appendChild(a);
+	        actions.appendChild(btnCopy);
+
+	        li.appendChild(meta);
+	        li.appendChild(actions);
+	        list.appendChild(li);
+	      }}
+	    }}
 
 	    async function pasteTo(dir) {{
 	      const name = document.getElementById("paste-name").value || "";
@@ -633,6 +842,35 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 	    document.getElementById("paste-outbox").addEventListener("click", () => pasteTo("outbox"));
 	    document.getElementById("hist-refresh").addEventListener("click", loadHistory);
 	    document.getElementById("hist-save-outbox").addEventListener("click", saveHistoryToOutbox);
+	    document.getElementById("viewer-close").addEventListener("click", closeViewer);
+	    document.getElementById("viewer-overlay").addEventListener("click", (e) => {{
+	      if (e.target && e.target.id === "viewer-overlay") closeViewer();
+	    }});
+	    document.addEventListener("keydown", (e) => {{
+	      if (e.key === "Escape") closeViewer();
+	    }});
+
+	    const uploadDir = document.getElementById("upload-dir");
+	    const uploadForm = document.getElementById("upload-form");
+	    if (uploadDir && uploadForm) {{
+	      uploadDir.addEventListener("change", () => {{
+	        const dir = uploadDir.value === "inbox" ? "inbox" : "outbox";
+	        uploadForm.action = UI_PREFIX + "/api/lab/upload?dir=" + encodeURIComponent(dir);
+	      }});
+	    }}
+
+	    const toggleTerm = document.getElementById("toggle-terminal");
+	    if (toggleTerm) {{
+	      const sync = () => {{
+	        const on = document.body.classList.contains("term-max");
+	        toggleTerm.textContent = on ? "Show files" : "Maximize terminal";
+	      }};
+	      toggleTerm.addEventListener("click", () => {{
+	        document.body.classList.toggle("term-max");
+	        sync();
+	      }});
+	      sync();
+	    }}
 	    document.getElementById("use-stable").addEventListener("click", async () => {{
 	      setActiveSession(STABLE_SESSION);
 	      await refreshAll();
@@ -791,12 +1029,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_file(self, status: int, path: str, content_type: str, download_name: str) -> None:
+    def _send_file(
+        self,
+        status: int,
+        path: str,
+        content_type: str,
+        download_name: str,
+        *,
+        disposition: str = "attachment",
+    ) -> None:
         st = os.stat(path)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(st.st_size))
-        self.send_header("Content-Disposition", f"attachment; filename=\"{download_name}\"")
+        disp = (disposition or "attachment").strip().lower()
+        if disp not in {"attachment", "inline"}:
+            disp = "attachment"
+        self.send_header("Content-Disposition", f"{disp}; filename=\"{download_name}\"")
         self.end_headers()
         with open(path, "rb") as f:
             shutil.copyfileobj(f, self.wfile)
@@ -895,7 +1144,22 @@ class Handler(BaseHTTPRequestHandler):
                 if not path or not os.path.exists(path) or not os.path.isfile(path):
                     return self._send(404, b"not found\n", "text/plain; charset=utf-8")
                 download_name = _safe_name(name, default="download")
-                return self._send_file(200, path, "application/octet-stream", download_name)
+                return self._send_file(200, path, "application/octet-stream", download_name, disposition="attachment")
+
+            if parsed.path == "/api/lab/outbox/view":
+                sess = _lab_session_from_request(handler=self, qs=qs)
+                name = (qs.get("name") or [""])[0]
+                path = _require_outbox_path(sess, name)
+                if not path or not os.path.exists(path) or not os.path.isfile(path):
+                    return self._send(404, b"not found\n", "text/plain; charset=utf-8")
+                view_name = _safe_name(name, default="file")
+                return self._send_file(
+                    200,
+                    path,
+                    _guess_content_type(view_name),
+                    view_name,
+                    disposition="inline",
+                )
 
             if parsed.path == "/api/lab/history":
                 sess = _lab_session_from_request(handler=self, qs=qs)
@@ -932,6 +1196,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(413, b"upload too large\n", "text/plain; charset=utf-8")
 
                 ensure_lab_dirs(sess)
+                dir_name = str((qs.get("dir") or ["inbox"])[0] or "inbox").strip().lower()
+                if dir_name not in {"inbox", "outbox"}:
+                    return self._send(400, b"bad dir\n", "text/plain; charset=utf-8")
                 ctype = self.headers.get("Content-Type") or ""
                 if "multipart/form-data" not in ctype:
                     return self._send(415, b"expected multipart/form-data\n", "text/plain; charset=utf-8")
@@ -952,12 +1219,12 @@ class Handler(BaseHTTPRequestHandler):
 
                 filename, content = parsed_file
                 upload_name = _safe_name(filename, default="upload")
-                inbox = _lab_inbox_dir(sess)
-                dest_path = _unique_path(inbox, upload_name)
+                dest_dir = _lab_inbox_dir(sess) if dir_name == "inbox" else _lab_outbox_dir(sess)
+                dest_path = _unique_path(dest_dir, upload_name)
                 with open(dest_path, "wb") as out:
                     out.write(content)
 
-                body = lab_page(sess=sess, message=f"Uploaded to inbox: {os.path.basename(dest_path)}")
+                body = lab_page(sess=sess, message=f"Uploaded to {dir_name}: {os.path.basename(dest_path)}")
                 return self._send(200, body)
 
             if parsed.path == "/api/lab/paste":

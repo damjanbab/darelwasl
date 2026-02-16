@@ -13,6 +13,9 @@ It is fronted by **Caddy** with **Basic Auth** configured in `/etc/caddy/Caddyfi
 - `/lab` → **Lab UI** for the selected Lab session (stable/canary): iframe terminal + upload (inbox) + download (outbox-only) + tmux history capture
   - Select with `?session=N` or the UI buttons
   - Persisted in cookie `dw_lab_session`
+- In the Lab UI, **outbox** is treated as the shared “library”:
+  - Agent outputs should be written there (easy view/download on mobile/desktop).
+  - The UI supports in-page viewing for PDFs/images/text via the outbox list.
 
 Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) so refresh works even if query params are lost.
 

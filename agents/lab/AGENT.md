@@ -22,6 +22,7 @@ For Lab UI/code changes:
    - `scripts/webterm-ui.sh deploy-canary`
 4) Provide the proctor link (no extra prompting required):
    - `https://code.haloeddepth.com/canary/lab?session=<canary>`
+   - Mention any produced files by their outbox name (users can tap “View” or “Copy ref”).
 5) On user confirmation (“PR ready”), create the PR (`scripts/work.sh pr-create <id>`).
 6) After merge, deploy to stable:
    - `scripts/webterm-ui.sh install`
@@ -37,4 +38,3 @@ For Lab UI/code changes:
 - `python3 -m py_compile ops/webterm-ui/server.py`
 - `scripts/webterm-ui.sh smoke`
 - `scripts/checks.sh governance`
-
