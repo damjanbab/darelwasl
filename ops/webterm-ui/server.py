@@ -24,6 +24,11 @@ PREFIX = os.environ.get("DW_TMUX_PREFIX", "codex")
 COUNT = int(os.environ.get("DW_TERMINAL_COUNT", "32"))
 WORKDIR = os.environ.get("DW_WORKDIR", "/opt/darelwasl")
 
+PUBLIC_BASE_PATH = os.environ.get("DW_PUBLIC_BASE_PATH", "").strip()
+if PUBLIC_BASE_PATH and not PUBLIC_BASE_PATH.startswith("/"):
+    PUBLIC_BASE_PATH = "/" + PUBLIC_BASE_PATH
+PUBLIC_BASE_PATH = PUBLIC_BASE_PATH.rstrip("/")
+
 LAB_STABLE_SESSION = int(os.environ.get("DW_LAB_SESSION_STABLE", os.environ.get("DW_LAB_SESSION", "7")))
 LAB_CANARY_SESSION = int(os.environ.get("DW_LAB_SESSION_CANARY", str(LAB_STABLE_SESSION + 1)))
 LAB_DIR = os.environ.get("DW_LAB_DIR", "/opt/darelwasl/tmp/lab")
@@ -89,6 +94,20 @@ def next_available() -> int | None:
 
 def xterm_url(n: int) -> str:
     return f"/xterm/?arg={session_name(n)}"
+
+
+def ui_url(path: str) -> str:
+    if not path:
+        path = "/"
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    if not path.startswith("/"):
+        path = "/" + path
+    if not PUBLIC_BASE_PATH:
+        return path
+    if path == "/":
+        return PUBLIC_BASE_PATH + "/"
+    return PUBLIC_BASE_PATH + path
 
 
 def _clamp_session(n: int) -> int:
@@ -263,6 +282,12 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
     msg_html = f"<div class='toast ok'>{html.escape(message)}</div>" if message else ""
     sname = _lab_session_name(sess)
     iframe_src = xterm_url(sess)
+    if PUBLIC_BASE_PATH == "/canary":
+        other_ui_label = "Stable UI"
+        other_ui_href = f"/lab?session={sess}"
+    else:
+        other_ui_label = "Canary UI"
+        other_ui_href = f"/canary/lab?session={sess}"
 
     body = f"""<!doctype html>
 <html>
@@ -365,9 +390,10 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       </div>
       <span class="muted">Upload → inbox · Download ← outbox · History via tmux · Canary-safe upgrades</span>
       <span class="spacer"></span>
-      <a class="btn" href="/" rel="noreferrer">Terminals</a>
+      <a class="btn" href="{ui_url("/")}" rel="noreferrer">Terminals</a>
+      <a class="btn" href="{html.escape(other_ui_href)}" rel="noreferrer">{html.escape(other_ui_label)}</a>
       <a class="btn" id="open-terminal" href="{iframe_src}" target="_blank" rel="noreferrer">Open terminal</a>
-      <a class="btn primary" id="start-codex" href="/codex?n={sess}" target="_blank" rel="noreferrer">Start codex</a>
+      <a class="btn primary" id="start-codex" href="{ui_url(f"/codex?n={sess}")}" target="_blank" rel="noreferrer">Start codex</a>
     </div>
 
     {msg_html}
@@ -405,7 +431,7 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
           <div class="split">
             <div>
               <h2 style="margin-bottom:8px;">Upload to inbox</h2>
-              <form action="/api/lab/upload" method="post" enctype="multipart/form-data">
+              <form action="{ui_url("/api/lab/upload")}" method="post" enctype="multipart/form-data">
                 <div class="row">
                   <input type="file" name="file" required />
                   <button class="btn primary" type="submit">Upload</button>
@@ -481,6 +507,7 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
       return await resp.json();
     }}
 
+    const UI_PREFIX = {json.dumps(PUBLIC_BASE_PATH)};
     const TMUX_PREFIX = {json.dumps(PREFIX)};
     const STABLE_SESSION = {LAB_STABLE_SESSION};
     const CANARY_SESSION = {LAB_CANARY_SESSION};
@@ -499,16 +526,17 @@ def lab_page(*, sess: int, message: str | None = None) -> bytes:
 	      document.getElementById("active-session").textContent = String(nn);
 	      document.getElementById("active-tmux").textContent = tn;
 	      document.getElementById("active-tmux-sub").textContent = tn;
-	      document.getElementById("active-tmux-path").textContent = tn;
+      document.getElementById("active-tmux-path").textContent = tn;
       document.getElementById("active-tmux-path2").textContent = tn;
       document.getElementById("term").src = "/xterm/?arg=" + encodeURIComponent(tn);
       document.getElementById("open-terminal").href = "/xterm/?arg=" + encodeURIComponent(tn);
-      document.getElementById("start-codex").href = "/codex?n=" + encodeURIComponent(String(nn));
+      document.getElementById("start-codex").href = UI_PREFIX + "/codex?n=" + encodeURIComponent(String(nn));
     }}
 
     function apiUrl(path) {{
-      const sep = path.includes("?") ? "&" : "?";
-      return path + sep + "session=" + encodeURIComponent(String(activeSession));
+      const full = UI_PREFIX + path;
+      const sep = full.includes("?") ? "&" : "?";
+      return full + sep + "session=" + encodeURIComponent(String(activeSession));
     }}
 
     async function loadInbox() {{
@@ -687,7 +715,9 @@ def html_page(message: str | None = None) -> bytes:
         is_canary = n == LAB_CANARY_SESSION
         lab_marker = " (lab stable)" if is_stable else (" (lab canary)" if is_canary else "")
         lab_link = (
-            f" | <a href=\"/lab?session={n}\" target=\"_blank\" rel=\"noreferrer\">lab</a>" if (is_stable or is_canary) else ""
+            f" | <a href=\"{ui_url(f"/lab?session={n}")}\" target=\"_blank\" rel=\"noreferrer\">lab</a>"
+            if (is_stable or is_canary)
+            else ""
         )
         row_style = " style=\"background:#fffbe6\"" if is_stable else (" style=\"background:#e6f4ff\"" if is_canary else "")
         rows.append(
@@ -697,10 +727,10 @@ def html_page(message: str | None = None) -> bytes:
             f"<td>{status}</td>"
             f"<td>"
             f"<a href=\"{xterm_url(n)}\" target=\"_blank\" rel=\"noreferrer\">open</a> | "
-            f"<a href=\"/open?n={n}\">open+create</a> | "
-            f"<a href=\"/codex?n={n}\">start codex</a> | "
+            f"<a href=\"{ui_url(f"/open?n={n}")}\">open+create</a> | "
+            f"<a href=\"{ui_url(f"/codex?n={n}")}\">start codex</a> | "
             f"<a href=\"/t{n}\" target=\"_blank\" rel=\"noreferrer\">legacy</a> | "
-            f"<a href=\"/kill?n={n}\" onclick=\"return confirm('Kill {name}?')\">kill</a>"
+            f"<a href=\"{ui_url(f"/kill?n={n}")}\" onclick=\"return confirm('Kill {name}?')\">kill</a>"
             f"{lab_link}"
             f"</td>"
             f"</tr>"
@@ -727,10 +757,10 @@ def html_page(message: str | None = None) -> bytes:
   <h1>Web terminals</h1>
   {msg_html}
   <div class=\"bar\">
-    <a href=\"/new\">New terminal (next free)</a>
-    <a href=\"/lab?session={LAB_STABLE_SESSION}\" target=\"_blank\" rel=\"noreferrer\">Lab (stable {LAB_STABLE_SESSION})</a>
-    <a href=\"/lab?session={LAB_CANARY_SESSION}\" target=\"_blank\" rel=\"noreferrer\">Lab (canary {LAB_CANARY_SESSION})</a>
-    <a href=\"/\">Refresh</a>
+    <a href=\"{ui_url("/new")}\">New terminal (next free)</a>
+    <a href=\"{ui_url(f"/lab?session={LAB_STABLE_SESSION}")}\" target=\"_blank\" rel=\"noreferrer\">Lab (stable {LAB_STABLE_SESSION})</a>
+    <a href=\"{ui_url(f"/lab?session={LAB_CANARY_SESSION}")}\" target=\"_blank\" rel=\"noreferrer\">Lab (canary {LAB_CANARY_SESSION})</a>
+    <a href=\"{ui_url("/")}\">Refresh</a>
   </div>
   <p><b>Open</b> uses ttyd (xterm.js; good copy/paste + scrolling). <b>legacy</b> is the old shellinabox terminal.</p>
   <table>

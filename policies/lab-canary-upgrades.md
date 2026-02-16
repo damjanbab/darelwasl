@@ -1,15 +1,17 @@
-# Policy: Lab canary upgrades (stable ↔ canary swap)
+# Policy: Lab canary upgrades (stable ↔ canary)
 
 ## Goal
 
-Make operational changes to the Lab (`code.haloeddepth.com/lab`) safer by always validating in a **canary Lab** first, then promoting by **swapping roles** so the next change has a fresh canary.
+Make operational changes to the Lab (`code.haloeddepth.com/lab`) safer by always validating in a **canary Lab** first, then promoting safely.
 
 ## Definitions
 
-- **Stable Lab**: the default Lab session used for day-to-day work.
-- **Canary Lab**: the “try changes here first” Lab session.
+- **Stable UI**: `https://code.haloeddepth.com/` (normal picker + Lab UI).
+- **Canary UI**: `https://code.haloeddepth.com/canary/` (separate canary deploy for validating UI/code changes).
+- **Stable Lab session**: the default tmux session used for day-to-day work.
+- **Canary Lab session**: the “try changes here first” tmux session.
 
-Both are just separate tmux sessions and separate file roots under `DW_LAB_DIR`.
+Lab sessions are separate tmux sessions and separate file roots under `DW_LAB_DIR`.
 
 ## Configuration
 
@@ -25,31 +27,41 @@ The Lab UI also persists the currently selected session in the browser cookie:
 
 ## Rules
 
-- **Canary-first:** any Lab-related change that could break workflows is validated in **canary** first.
+- **Canary-first:** any Lab UI/code change that could break workflows is validated in the **Canary UI** first.
 - **No inbox downloads:** inbox remains list-only; outbox remains the only download surface.
-- **Promotion = swap:** after canary is proctored, **swap stable/canary session numbers** so the just-proctored canary becomes stable, and the old stable becomes the next canary.
 - **PR-first:** Lab UI/code changes land via an isolated worktree + PR (see `AGENTS.md` playbook `work/isolate-pr`).
 
 ## Proctoring checklist (minimum)
 
-In `/lab?session=<canary>`:
+In the **Canary UI**: `/canary/lab?session=<canary>`:
 - Upload a file → appears in inbox list.
 - Paste to inbox/outbox → appears in the right list.
 - Download an outbox file → download succeeds.
 - Capture history and “Save to outbox” → file appears and is downloadable.
 - “Start codex” works for the active session.
 
-## Promotion procedure (swap roles)
+## Promotion procedure
 
-On the host, update `/etc/darelwasl/webterm.env` (or the equivalent env source) by swapping:
+1) Deploy to canary (operator/agent does this automatically for Lab changes):
 
-- `DW_LAB_SESSION_STABLE=<old canary>`
-- `DW_LAB_SESSION_CANARY=<old stable>`
+```bash
+scripts/webterm-ui.sh deploy-canary
+```
 
-Then restart the webterm UI service and smoke-test:
+2) Proctor in the browser:
+- `https://code.haloeddepth.com/canary/lab?session=<canary>`
 
-- `scripts/webterm-ui.sh restart`
-- `scripts/webterm-ui.sh smoke`
+3) After confirmation, open/merge the PR.
+
+4) After merge, deploy to stable:
+
+```bash
+scripts/webterm-ui.sh install
+scripts/webterm-ui.sh restart
+scripts/webterm-ui.sh smoke
+```
+
+Optional (session rotation): swap stable/canary session numbers in `/etc/darelwasl/webterm.env` and restart the UI.
 
 ## Proof
 

@@ -7,6 +7,7 @@ It is fronted by **Caddy** with **Basic Auth** configured in `/etc/caddy/Caddyfi
 ## Routes (public)
 
 - `/` → **terminal session picker UI** (lists tmux sessions like `codex1`, `codex2`, …)
+- `/canary/` → **canary** terminal picker + Lab UI (canary deploy for validating UI/code changes)
 - `/xterm/?arg=codexN` → **ttyd** (xterm.js) attached to tmux session `codexN`
 - `/tN` → **legacy** ShellInABox terminal for tmux session `codexN`
 - `/lab` → **Lab UI** for the selected Lab session (stable/canary): iframe terminal + upload (inbox) + download (outbox-only) + tmux history capture
@@ -20,6 +21,7 @@ Note: Caddy persists the chosen xterm session in a cookie (`dw_xterm_session`) s
 These are the local services Caddy proxies to:
 
 - `127.0.0.1:7682` — terminal session picker UI (installed at `/usr/local/lib/dw-webterm-ui/server.py`; source-of-truth is `ops/webterm-ui/server.py`)
+- `127.0.0.1:7684` — **canary** terminal picker UI (installed at `/usr/local/lib/dw-webterm-ui-canary/server.py`; built from the same source, but served under `/canary/`)
 - `127.0.0.1:7683` — `ttyd` (started by `darelwasl-ttyd.service`, base-path `/xterm`)
 - `127.0.0.1:7681` — ShellInABox (started by `darelwasl-webterm.service`)
 
@@ -89,6 +91,12 @@ scripts/webterm-ui.sh diff
 scripts/webterm-ui.sh install
 scripts/webterm-ui.sh restart
 scripts/webterm-ui.sh smoke
+```
+
+Canary-first deploy (recommended for Lab UI/code changes):
+
+```bash
+scripts/webterm-ui.sh deploy-canary
 ```
 
 ## Canary upgrades (stable ↔ canary swap)

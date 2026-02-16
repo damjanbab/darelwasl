@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `97acb6ef5565025c6fb65c8020da1775084738c4e2f280c7f887562d53cbb93f`
+- Catalog version: `020eab60173a36bc0fa86465845b63682865b3345d706375178d8dea33002e18`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -196,9 +196,10 @@ This file is auto-generated. Do not edit by hand.
 - integration/rezultati
 - integration/telegram-bot
 
-### Agents (5)
+### Agents (6)
 - agent/app-ui
 - agent/backend
+- agent/lab
 - agent/ops-governance
 - agent/registries
 - agent/website
