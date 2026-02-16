@@ -13,4 +13,4 @@ work/updated_at: 2026-02-16T17:52:38Z
 
 ## Proof
 - [x] `scripts/checks.sh governance`
-- [ ] `scripts/checks.sh docs`
+- [x] `scripts/checks.sh docs`
