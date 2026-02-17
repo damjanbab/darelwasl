@@ -1,3 +1,4 @@
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/78
 work/id: 20260217-214651-codify-spec-only-agent-role-prereq-first-workflo
 work/type: governance
 work/status: open
@@ -9,7 +10,7 @@ work/base: main
 work/prereqs: []
 work/lock: 
 work/created_at: 2026-02-17T21:46:51Z
-work/updated_at: 2026-02-17T21:47:56Z
+work/updated_at: 2026-02-17T23:21:00Z
 
 # Notes
 
