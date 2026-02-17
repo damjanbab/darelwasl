@@ -446,7 +446,7 @@ cmd_pr_create() {
   # Load token into $GITHUB_TOKEN (does not persist).
   # shellcheck source=/dev/null
   source "$ROOT/scripts/load_github_token.sh" >/dev/null || true
-  [ -n "${GITHUB_TOKEN:-}" ] || die "GITHUB_TOKEN not loaded"
+  [ -n "${GITHUB_TOKEN:-}" ] || die "GITHUB_TOKEN not loaded (store it: scripts/secrets.sh set github/token)"
 
   if ! curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/user >/dev/null; then
     die "GitHub token validation failed (revoke and re-issue; then store it as github/token)"
@@ -515,6 +515,24 @@ PY
   if [[ "$http_code" == "201" && -n "$pr_url" ]]; then
     work_set "$id" "pr_url" "$pr_url"
     work_touch_updated "$id"
+    # Keep the worktree clean by recording PR metadata as a commit (best-effort).
+    local wf
+    wf="docs/work/${id}.md"
+    if (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+      local dirty
+      dirty="$(cd "$wt" && git status --porcelain=v1 || true)"
+      if [ -n "${dirty:-}" ]; then
+        if echo "$dirty" | grep -vqE "^[ MARCUD?!]{2}[[:space:]]+${wf//\//\\/}$"; then
+          echo "warning: worktree dirty after PR create; not auto-committing pr_url" >&2
+        else
+          (cd "$wt" && git add "$wf")
+          if !(cd "$wt" && git diff --cached --quiet); then
+            (cd "$wt" && git commit -m "work: record pr_url")
+            (cd "$wt" && git push)
+          fi
+        fi
+      fi
+    fi
     echo "$pr_url"
     return 0
   fi
@@ -542,6 +560,24 @@ PY
     if [[ -n "$pr_url" ]]; then
       work_set "$id" "pr_url" "$pr_url"
       work_touch_updated "$id"
+      # Keep the worktree clean by recording PR metadata as a commit (best-effort).
+      local wf
+      wf="docs/work/${id}.md"
+      if (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+        local dirty
+        dirty="$(cd "$wt" && git status --porcelain=v1 || true)"
+        if [ -n "${dirty:-}" ]; then
+          if echo "$dirty" | grep -vqE "^[ MARCUD?!]{2}[[:space:]]+${wf//\//\\/}$"; then
+            echo "warning: worktree dirty after PR lookup; not auto-committing pr_url" >&2
+          else
+            (cd "$wt" && git add "$wf")
+            if !(cd "$wt" && git diff --cached --quiet); then
+              (cd "$wt" && git commit -m "work: record pr_url")
+              (cd "$wt" && git push)
+            fi
+          fi
+        fi
+      fi
       echo "$pr_url"
       return 0
     fi

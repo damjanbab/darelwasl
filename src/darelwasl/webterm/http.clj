@@ -10,9 +10,10 @@
             [ring.middleware.params :as params]
             [ring.util.codec :as codec]
             [ring.util.response :as resp])
-  (:import (java.io ByteArrayInputStream)
+  (:import (java.io ByteArrayInputStream ByteArrayOutputStream)
            (java.nio.file Files Path Paths)
-           (java.time Instant)))
+           (java.time Instant)
+           (java.util.concurrent TimeUnit)))
 
 (defn- parse-int
   [s default]
@@ -39,6 +40,24 @@
 (defn- ui-role
   [cfg]
   (if (= (:public-base-path cfg) "/canary") "canary" "stable"))
+
+(defn- run-proc
+  [{:keys [cmd timeout-ms cwd]}]
+  (let [pb (ProcessBuilder. ^java.util.List cmd)
+        _ (.redirectErrorStream pb false)
+        _ (when cwd (.directory pb (java.io.File. (str cwd))))
+        proc (.start pb)
+        out (ByteArrayOutputStream.)
+        err (ByteArrayOutputStream.)]
+    (future (with-open [is (.getInputStream proc)] (.transferTo is out)))
+    (future (with-open [is (.getErrorStream proc)] (.transferTo is err)))
+    (let [ok (.waitFor proc (long timeout-ms) TimeUnit/MILLISECONDS)]
+      (when-not ok
+        (.destroyForcibly proc)
+        (throw (ex-info "process timeout" {:cmd cmd :timeout-ms timeout-ms :cwd cwd})))
+      {:exit (.exitValue proc)
+       :out (.toString out "UTF-8")
+       :err (.toString err "UTF-8")})))
 
 (defn json-response
   [payload]
@@ -96,6 +115,230 @@
   ^Path
   [cfg & parts]
   (Paths/get (:repo-root cfg) (into-array String parts)))
+
+(defn- work-file-path
+  ^Path
+  [cfg id]
+  (repo-path cfg "docs" "work" (str id ".md")))
+
+(defn- read-work-header
+  [cfg id]
+  (let [p (work-file-path cfg id)]
+    (when (Files/exists p (make-array java.nio.file.LinkOption 0))
+      (try
+        (with-open [r (java.io.BufferedReader.
+                       (java.io.InputStreamReader.
+                        (Files/newInputStream p (make-array java.nio.file.OpenOption 0)) "UTF-8"))]
+          (loop [i 0 acc {}]
+            (if (>= i 120)
+              acc
+              (if-let [line (.readLine r)]
+                (let [line (str/trim line)]
+                  (if (str/blank? line)
+                    acc
+                    (if-let [[_ k v] (re-matches #"^([a-zA-Z0-9_./-]+):\\s*(.*)$" line)]
+                      (recur (inc i) (assoc acc (keyword k) (str/trim v)))
+                      (recur (inc i) acc))))
+                acc))))
+        (catch Exception _ nil)))))
+
+(def ^:private canary-proctor-paths
+  ["src/darelwasl/webterm/"
+   "ops/webterm-ui/"
+   "scripts/webterm-ui.sh"
+   "docs/ops/code-haloeddepth-com.md"
+   "policies/lab-canary-upgrades.md"])
+
+(defn- starts-with-any?
+  [s prefixes]
+  (some (fn [p]
+          (or (= s p) (str/starts-with? s p)))
+        prefixes))
+
+(defn- changed-files
+  [worktree base]
+  (let [base (or (some-> base str/trim) "main")
+        try-ref (fn [ref]
+                  (try
+                    (let [{:keys [exit out]} (run-proc {:cmd ["git" "diff" "--name-only" (str ref "...HEAD")]
+                                                        :cwd worktree
+                                                        :timeout-ms 15000})]
+                      (when (zero? exit)
+                        (->> (str/split-lines (or out ""))
+                             (map str/trim)
+                             (remove str/blank?)
+                             (vec))))
+                    (catch Exception _ nil)))]
+    (or (try-ref base)
+        (try-ref (str "origin/" base))
+        [])))
+
+(defn- required-proctor
+  [cfg work-id header]
+  (let [explicit (some-> (get header :work/proctor) str/lower-case str/trim)]
+    (cond
+      (#{"stable" "canary"} explicit)
+      {:required explicit
+       :reason "work/proctor"}
+
+      :else
+      (let [wt (or (some-> (get header :work/worktree) str/trim)
+                   (str (repo-path cfg "target" "worktrees" work-id)))
+            base (get header :work/base)
+            files (when (and (string? wt) (not (str/blank? wt))) (changed-files wt base))
+            trigger (first (filter #(starts-with-any? % canary-proctor-paths) files))]
+        (if trigger
+          {:required "canary"
+           :reason (str "changed " trigger)
+           :changed files}
+          {:required "stable"
+           :reason (if (get header :work/worktree) "default" "default (inferred worktree)")
+           :changed files})))))
+
+(defn- proctor-href
+  [cfg which]
+  (if (= which "canary")
+    (str "/canary/lab?session=" (:lab-canary-session cfg))
+    (str "/lab?session=" (:lab-stable-session cfg))))
+
+(defn- handle-work-requirements
+  [cfg req]
+  (let [id (fs/safe-segment (get-in req [:query-params "id"]))
+        header (when id (read-work-header cfg id))]
+    (if-not (and id header)
+      (-> (json-response {:ok false :message "work not found"}) (assoc :status 404))
+      (let [{:keys [required reason]} (required-proctor cfg id header)
+            current (ui-role cfg)]
+        (json-response {:ok (= required current)
+                        :work_id id
+                        :required_proctor required
+                        :current_proctor current
+                        :reason reason
+                        :required_href (proctor-href cfg required)})))))
+
+(defn- read-json-body
+  [req]
+  (let [body-text (try
+                    (let [b (:body req)]
+                      (cond
+                        (nil? b) ""
+                        (instance? java.io.InputStream b) (with-open [r (java.io.InputStreamReader. ^java.io.InputStream b "UTF-8")] (slurp r))
+                        (instance? java.io.Reader b) (slurp ^java.io.Reader b)
+                        :else (str b)))
+                    (catch Exception _ ""))]
+    (try (json/read-str body-text) (catch Exception _ {}))))
+
+(defn- take-lines
+  [s n]
+  (->> (str/split-lines (or s ""))
+       (take n)
+       (str/join "\n")))
+
+(defn- json-error
+  [status payload]
+  (-> (json-response payload)
+      (assoc :status status)))
+
+(defn- handle-work-signoff
+  [cfg req]
+  (let [obj (read-json-body req)
+        id (fs/safe-segment (or (get obj "id") (get obj "work") (get-in req [:query-params "id"])))
+        header (when id (read-work-header cfg id))
+        base-err (cond
+                   (nil? id) (json-error 400 {:ok false :message "missing work id"})
+                   (nil? header) (json-error 404 {:ok false :message "work not found" :work_id id})
+                   :else nil)]
+    (if base-err
+      base-err
+      (let [{:keys [required reason]} (required-proctor cfg id header)
+            current (ui-role cfg)
+            required-href (proctor-href cfg required)
+            wt (or (some-> (get header :work/worktree) str/trim)
+                   (str (repo-path cfg "target" "worktrees" id)))
+            wt-path (when (and (string? wt) (not (str/blank? wt))) (Paths/get wt (make-array String 0)))
+            err (cond
+                  (not= required current)
+                  (json-error 409 {:ok false
+                                   :message "wrong proctor channel"
+                                   :work_id id
+                                   :required_proctor required
+                                   :current_proctor current
+                                   :required_href required-href})
+
+                  (not (and wt-path
+                            (Files/isDirectory wt-path (make-array java.nio.file.LinkOption 0))
+                            (Files/exists (.resolve wt-path ".git") (make-array java.nio.file.LinkOption 0))))
+                  (json-error 412 {:ok false
+                                   :message "worktree path missing or not a git checkout (run: scripts/work.sh start <id>)"
+                                   :work_id id})
+
+                  :else nil)]
+        (if err
+          err
+          (let [{:keys [exit out]} (run-proc {:cmd ["git" "status" "--porcelain=v1"]
+                                              :cwd wt
+                                              :timeout-ms 15000})
+                err (cond
+                      (not (zero? exit)) (json-error 500 {:ok false :message "git status failed" :work_id id})
+                      (not (str/blank? (str/trim out))) (json-error 412 {:ok false :message "worktree is dirty; commit first" :work_id id})
+                      :else nil)]
+            (if err
+              err
+              (let [gov (run-proc {:cmd ["bash" "scripts/checks.sh" "governance"]
+                                   :cwd wt
+                                   :timeout-ms 600000})
+                    err (when-not (zero? (:exit gov))
+                          (json-error 412 {:ok false
+                                           :message "checks failed: governance"
+                                           :details (take-lines (str (:out gov) "\n" (:err gov)) 80)
+                                           :work_id id}))]
+                (if err
+                  err
+                  (let [docs (run-proc {:cmd ["bash" "scripts/checks.sh" "docs"]
+                                        :cwd wt
+                                        :timeout-ms 600000})
+                        err (when-not (zero? (:exit docs))
+                              (json-error 412 {:ok false
+                                               :message "checks failed: docs"
+                                               :details (take-lines (str (:out docs) "\n" (:err docs)) 80)
+                                               :work_id id}))]
+                    (if err
+                      err
+                      (let [pr (run-proc {:cmd ["bash" "scripts/work.sh" "pr-create" id]
+                                          :cwd wt
+                                          :timeout-ms 240000})
+                            pr-url (some->> (str (:out pr) "\n" (:err pr))
+                                            (re-find #"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/\d+"))
+                            err (when-not (and (zero? (:exit pr)) (string? pr-url) (not (str/blank? pr-url)))
+                                  (json-error 500 {:ok false
+                                                   :message "PR create failed"
+                                                   :details (take-lines (str (:out pr) "\n" (:err pr)) 120)
+                                                   :work_id id}))]
+                        (if err
+                          err
+                          (let [sess (lab-session cfg req)
+                                sname (ensure-lab! cfg sess)
+                                dir (fs/ensure-work-dir! (:lab-dir cfg) sname id)
+                                sha (let [{:keys [exit out]} (run-proc {:cmd ["git" "rev-parse" "HEAD"]
+                                                                        :cwd wt
+                                                                        :timeout-ms 15000})]
+                                      (when (zero? exit) (str/trim out)))
+                                content (str "# Sign off\n\n"
+                                             "- work/id: " id "\n"
+                                             "- pr: " pr-url "\n"
+                                             "- proctor/required: " required "\n"
+                                             "- proctor/current: " current "\n"
+                                             "- reason: " reason "\n"
+                                             (when (and sha (not (str/blank? sha))) (str "- git/sha: " sha "\n"))
+                                             "- at: " (str (Instant/now)) "\n")]
+                            (when dir
+                              (fs/write-bytes! dir (str "signoff-" (System/currentTimeMillis) ".md") (.getBytes content "UTF-8")))
+                            (json-response {:ok true
+                                            :work_id id
+                                            :required_proctor required
+                                            :current_proctor current
+                                            :pr_url pr-url
+                                            :required_href required-href})))))))))))))))
 
 (defn- list-work-items
   [cfg]
@@ -400,6 +643,8 @@
                 (and (= m :get) (= uri "/api/sessions")) (handle-sessions cfg req)
                 (and (= m :get) (= uri "/api/work/list")) (handle-work-list cfg req)
                 (and (= m :get) (= uri "/api/work/file")) (handle-work-file cfg req)
+                (and (= m :get) (= uri "/api/work/requirements")) (handle-work-requirements cfg req)
+                (and (= m :post) (= uri "/api/work/signoff")) (handle-work-signoff cfg req)
                 (and (= m :get) (= uri "/new"))
                 (if-let [n (next-available cfg)]
                   (do (tmux/ensure-session! cfg n) (redirect (ui/xterm-url cfg n)))

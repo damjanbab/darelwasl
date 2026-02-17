@@ -54,6 +54,22 @@ The picker UI (`127.0.0.1:7682`) supports:
   - `GET /api/lab/outbox/download?name=...` — download a single outbox file (no browsing)
   - `GET /api/lab/history?lines=N` — capture tmux scrollback for the lab session
 
+## Work sign-off (proctor → PR)
+
+The Lab UI is the canonical “review + sign off” surface for work items.
+
+- Select a work (`Work` → `Select`), then use `Sign off`.
+- The UI enforces the correct proctor channel per work:
+  - **Lab UI / webterm changes** must be proctored in **canary** (`/canary/lab?...`).
+  - Everything else is proctored in **stable** (`/lab?...`).
+- On success, `Sign off` creates (or finds) the GitHub PR and returns the PR URL.
+
+Prereq: a GitHub token must be available to the server, via the secrets vault key `github/token`:
+
+```bash
+scripts/secrets.sh set github/token
+```
+
 ## Configuration knobs
 
 Shared configuration is read from `/etc/darelwasl/webterm.env` (used by the systemd units and picker UI), e.g.:
