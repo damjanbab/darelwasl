@@ -111,7 +111,7 @@ PY
 
 require_work_item() {
   local id="$1"
-  [ -s "$ROOT/docs/work/$id.md" ] || die "Work item missing: docs/work/$id.md (create: scripts/work.sh new ...)"
+  scripts/work.sh show "$id" >/dev/null 2>&1 || die "Work item missing: $id (create: scripts/work.sh new ...)"
 }
 
 require_cmd() {
@@ -209,12 +209,6 @@ cmd_new() {
   [ -n "$summary" ] || die "new requires --summary"
   scripts/playbook.sh show "$playbook" >/dev/null 2>&1 || die "Unknown playbook: $playbook"
 
-  local dirty
-  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
-  if [ -n "${dirty:-}" ]; then
-    die "Refusing to create a new work item while the base checkout is dirty. Clean it first (or park it), then retry."
-  fi
-
   local new_id
   if [ -n "${id:-}" ]; then
     new_id="$(scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary" --id "$id")"
@@ -222,20 +216,6 @@ cmd_new() {
     new_id="$(scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary")"
   fi
   [ -n "${new_id:-}" ] || die "work.sh new returned an empty id"
-
-  # Keep the base checkout clean so scripts/work.sh start can run.
-  local wf="docs/work/${new_id}.md"
-  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
-  if [ -n "${dirty:-}" ]; then
-    if [ "$dirty" = "?? $wf" ]; then
-      (cd "$ROOT" && git add "$wf" && git commit -m "work: ${new_id} (work-prod)" >/dev/null 2>&1) \
-        || die "Failed to auto-commit work item file: $wf"
-    fi
-  fi
-  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
-  if [ -n "${dirty:-}" ]; then
-    die "Base checkout left dirty after work creation. Resolve and retry: git status shows:\n$dirty"
-  fi
 
   echo "$new_id"
 }
