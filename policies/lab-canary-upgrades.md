@@ -13,6 +13,8 @@ Make operational changes to the Lab (`code.haloeddepth.com/lab`) safer by always
 
 Lab sessions are separate tmux sessions and separate file roots under `DW_LAB_DIR`.
 
+Note: this policy is about the **Lab session** (tmux + file roots). For **Lab UI code** deployment canary, see `policies/lab-ui-blue-green.md` (`/canary/*`).
+
 ## Configuration
 
 Preferred (new):
