@@ -74,7 +74,7 @@
 
 (defn- guess-content-type
   [name]
-  (let [ext (some-> name str/lower-case (re-find #"\.[a-z0-9]+$"))]
+  (let [ext (some-> name str/lower-case (#(re-find #"\.[a-z0-9]+$" %)))]
     (cond
       (= ext ".pdf") "application/pdf"
       (= ext ".png") "image/png"
@@ -202,33 +202,45 @@
 
 (defn- handle-library-list
   [cfg req]
-  (let [sess (lab-session cfg req)
-        sname (ensure-lab! cfg sess)
-        wid (fs/safe-segment (get-in req [:query-params "work"]))]
+  (let [wid (fs/safe-segment (get-in req [:query-params "work"]))]
     (if-not wid
       (-> (text-response "missing work\n") (assoc :status 400))
-      (let [dir (fs/ensure-work-dir! (:lab-dir cfg) sname wid)]
-        (json-response {:lab_session sess
-                        :tmux_session sname
-                        :work_id wid
-                        :items (mapv (fn [it] (assoc it :ref (str "work:" wid "/" (:name it))))
-                                     (fs/list-files dir))})))))
+      (let [dir (fs/ensure-library-work-dir! (:lab-library-dir cfg) wid)
+            shared (fs/list-files dir)
+            stable-work-root (-> (fs/ensure-dirs! (:lab-dir cfg) (tmux/session-name cfg (:lab-stable-session cfg))) :work-root)
+            canary-work-root (-> (fs/ensure-dirs! (:lab-dir cfg) (tmux/session-name cfg (:lab-canary-session cfg))) :work-root)
+            legacy (->> [stable-work-root canary-work-root]
+                        (map (fn [^Path root]
+                               (let [p (.resolve root wid)]
+                                 (when (Files/isDirectory p (make-array java.nio.file.LinkOption 0))
+                                   (fs/list-files p)))))
+                        (remove nil?)
+                        (apply concat)
+                        (vec))
+            items (->> (concat shared legacy)
+                       (sort-by :mtime_ms >)
+                       (mapv (fn [it] (assoc it :ref (str "work:" wid "/" (:name it))))))]
+        (json-response {:work_id wid
+                        :items items})))))
 
 (defn- handle-library-recent
   [cfg req]
-  (let [sess (lab-session cfg req)
-        sname (ensure-lab! cfg sess)
-        limit (parse-int (get-in req [:query-params "limit"]) 80)
-        {:keys [work-root]} (fs/ensure-dirs! (:lab-dir cfg) sname)]
-    (json-response {:lab_session sess
-                    :tmux_session sname
-                    :items (fs/list-recent-work-files work-root limit)})))
+  (let [limit (parse-int (get-in req [:query-params "limit"]) 80)
+        {:keys [work-root]} (fs/ensure-library! (:lab-library-dir cfg))
+        stable-work-root (-> (fs/ensure-dirs! (:lab-dir cfg) (tmux/session-name cfg (:lab-stable-session cfg))) :work-root)
+        canary-work-root (-> (fs/ensure-dirs! (:lab-dir cfg) (tmux/session-name cfg (:lab-canary-session cfg))) :work-root)
+        items (->> (concat
+                    (fs/list-recent-work-files work-root limit)
+                    (fs/list-recent-work-files stable-work-root limit)
+                    (fs/list-recent-work-files canary-work-root limit))
+                   (sort-by :mtime_ms >)
+                   (take limit)
+                   (vec))]
+    (json-response {:items items})))
 
 (defn- handle-library-upload
   [cfg req]
-  (let [sess (lab-session cfg req)
-        sname (ensure-lab! cfg sess)
-        wid (fs/safe-segment (get-in req [:query-params "work"]))
+  (let [wid (fs/safe-segment (get-in req [:query-params "work"]))
         f (get-in req [:params "file"])
         size (some-> f :size long)
         tempfile (some-> f :tempfile)
@@ -239,7 +251,7 @@
       (throw (ex-info "missing file" {})))
     (when (and size (> size (:lab-max-upload-bytes cfg)))
       (throw (ex-info "upload too large" {:status 413})))
-    (let [dir (fs/ensure-work-dir! (:lab-dir cfg) sname wid)
+    (let [dir (fs/ensure-library-work-dir! (:lab-library-dir cfg) wid)
           saved (fs/write-upload! dir filename tempfile)
           fname (str saved)]
       (json-response {:ok true
@@ -251,8 +263,7 @@
 
 (defn- handle-library-paste
   [cfg req]
-  (let [sess (lab-session cfg req)
-        sname (ensure-lab! cfg sess)
+  (let [
         body-text (try
                     (let [b (:body req)]
                       (cond
@@ -268,7 +279,7 @@
         raw (.getBytes (str content) "UTF-8")]
     (when-not wid
       (throw (ex-info "missing work" {:status 400})))
-    (let [dir (fs/ensure-work-dir! (:lab-dir cfg) sname wid)
+    (let [dir (fs/ensure-library-work-dir! (:lab-library-dir cfg) wid)
           saved (fs/write-bytes! dir name raw)
           fname (str saved)]
       (json-response {:ok true
@@ -280,10 +291,10 @@
 
 (defn- handle-library-file
   [cfg req disposition]
-  (let [sess (lab-session cfg req)
-        sname (ensure-lab! cfg sess)
-        ref (get-in req [:query-params "ref"])
-        p (fs/resolve-work-ref (:lab-dir cfg) sname ref)]
+  (let [ref (get-in req [:query-params "ref"])
+        p (or (fs/resolve-library-ref (:lab-library-dir cfg) ref)
+              (fs/resolve-work-ref (:lab-dir cfg) (tmux/session-name cfg (:lab-stable-session cfg)) ref)
+              (fs/resolve-work-ref (:lab-dir cfg) (tmux/session-name cfg (:lab-canary-session cfg)) ref))]
     (if-not (and p
                  (Files/exists p (make-array java.nio.file.LinkOption 0))
                  (Files/isRegularFile p (into-array java.nio.file.LinkOption [java.nio.file.LinkOption/NOFOLLOW_LINKS]))

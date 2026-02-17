@@ -160,12 +160,14 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - Locate the generator entrypoint(s): `scripts/query.sh documents-pdf`
   - Reproduce via script (fast): `node scripts/documents-pdf.js --help`
   - Reproduce via Telegram flow (realistic): `docs/telegram.md` (Documents starter pack)
+  - For Lab review: set `DW_LAB_AUTO_OUTBOX=1` and ensure a work id is set (prefer `DW_LAB_WORK_ID=<work-id>` or worktree branch `work/<id>`).
 - Policies:
   - `policies/backend-changes.md`
+  - `policies/lab-artifacts-to-outbox.md`
   - `policies/verification-required.md`
 - Proof:
   - `scripts/checks.sh governance`
-  - Manual: generate each impacted PDF once on the **dev** path (Telegram or script) and visually verify.
+  - Manual: generate each impacted PDF once and visually verify in the Lab UI (Work → Select → Review).
 - Next:
   - If you had to invent a new repeatable “how to verify” step, extend this playbook with the exact commands.
 

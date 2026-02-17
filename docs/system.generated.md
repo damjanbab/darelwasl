@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `f37e85b39fe8ae87da0d57596fbc4f392c15ed5906ae9fbc1b2a7e0fb3c00554`
+- Catalog version: `d07eecc3c8a73d585b9782427ef82d43eda844a8a21e38db60a05c8df8ec8bf9`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -617,3 +617,4 @@ Work items live in `docs/work/` and can be queried via:
 - work-item/20260216-174943-file-library-allow-txt-uploads-for-one-off-secre
 - work-item/20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
 - work-item/20260217-013524-work-items-are-queryable-via-catalog-better-work
+- work-item/20260217-093956-lab-shared-library-across-sessions-business-doc-

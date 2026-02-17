@@ -22,7 +22,7 @@
                                   \_)))
                          (apply str)
                          (str/trim)
-                         (str/split #"\s+")
+                         (#(str/split % #"\s+"))
                          (str/join " "))]
         (cond
           (str/blank? cleaned) default
@@ -48,6 +48,31 @@
     (Files/createDirectories outbox (make-array java.nio.file.attribute.FileAttribute 0))
     (Files/createDirectories work-root (make-array java.nio.file.attribute.FileAttribute 0))
     {:root root :inbox inbox :outbox outbox :work-root work-root}))
+
+(defn ensure-library!
+  [^String library-dir]
+  (let [root (Paths/get library-dir (make-array String 0))
+        work-root (.resolve root "work")
+        unscoped (.resolve root "unscoped")]
+    (Files/createDirectories root (make-array java.nio.file.attribute.FileAttribute 0))
+    (Files/createDirectories work-root (make-array java.nio.file.attribute.FileAttribute 0))
+    (Files/createDirectories unscoped (make-array java.nio.file.attribute.FileAttribute 0))
+    {:root root :work-root work-root :unscoped unscoped}))
+
+(defn ensure-library-work-dir!
+  ^Path
+  [^String library-dir ^String work-id]
+  (when-let [wid (safe-segment work-id)]
+    (let [{:keys [work-root]} (ensure-library! library-dir)
+          dir (.resolve work-root wid)]
+      (Files/createDirectories dir (make-array java.nio.file.attribute.FileAttribute 0))
+      dir)))
+
+(defn ensure-library-unscoped-dir!
+  ^Path
+  [^String library-dir]
+  (let [{:keys [unscoped]} (ensure-library! library-dir)]
+    unscoped))
 
 (defn unique-path
   ^Path
@@ -145,6 +170,26 @@
               (let [{:keys [work-root]} (ensure-dirs! lab-dir session-name)
                     p (.normalize (.resolve (.resolve work-root wid) fname))]
                 (when (.startsWith p (.resolve work-root wid))
+                  p)))))))))
+
+(defn resolve-library-ref
+  "Resolves a ref like 'work:<id>/<filename>' into a Path under library/work/<id>/.
+  Returns nil when invalid."
+  ^Path
+  [^String library-dir ^String ref]
+  (let [raw (some-> ref str str/trim)]
+    (when (and raw (not (str/blank? raw)))
+      (let [raw (if (str/starts-with? raw "work:") (subs raw 5) raw)
+            parts (->> (str/split raw #"/") (remove str/blank?) (vec))]
+        (when (= 2 (count parts))
+          (let [[wid name] parts
+                wid (safe-segment wid)
+                fname (safe-name name "file")]
+            (when (and wid (not (str/blank? fname)))
+              (let [{:keys [work-root]} (ensure-library! library-dir)
+                    base (.resolve work-root wid)
+                    p (.normalize (.resolve base fname))]
+                (when (.startsWith p base)
                   p)))))))))
 
 (defn resolve-outbox-path

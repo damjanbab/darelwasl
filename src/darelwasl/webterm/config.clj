@@ -31,6 +31,8 @@
   []
   (let [workdir (env "DW_WORKDIR" "/opt/darelwasl")
         repo-root (env "DW_REPO_ROOT" workdir)
+        lab-dir (env "DW_LAB_DIR" "/opt/darelwasl/tmp/lab")
+        lab-library-dir (env "DW_LAB_LIBRARY_DIR" (str (some-> lab-dir str/trim) "/library"))
         stable (env-int "DW_LAB_SESSION_STABLE" (env-int "DW_LAB_SESSION" 7))]
     {:tmux-bin (env "DW_TMUX_BIN" "tmux")
      :tmux-prefix (env "DW_TMUX_PREFIX" "codex")
@@ -42,7 +44,8 @@
      :public-base-path (public-base-path)
      :lab-stable-session stable
      :lab-canary-session (env-int "DW_LAB_SESSION_CANARY" (inc stable))
-     :lab-dir (env "DW_LAB_DIR" "/opt/darelwasl/tmp/lab")
+     :lab-dir lab-dir
+     :lab-library-dir lab-library-dir
      :lab-max-upload-bytes (env-int "DW_LAB_MAX_UPLOAD_BYTES" (* 50 1024 1024))
      :lab-default-history-lines (env-int "DW_LAB_HISTORY_LINES" 20000)
      :tmux-history-limit (env-int "DW_TMUX_HISTORY_LIMIT" 50000)}))

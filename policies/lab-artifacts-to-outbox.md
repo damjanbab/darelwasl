@@ -1,22 +1,22 @@
-# Policy: Lab artifacts to outbox
+# Policy: Lab artifacts to outbox (shared Library)
 
 ## Goal
 
-When working in the Lab (`code.haloeddepth.com/lab`), artifacts that are meant to be downloaded (especially PDFs) should land in the Lab **outbox** automatically, so you do not have to manually copy files around.
+When working in the Lab (`code.haloeddepth.com/lab`), artifacts that are meant to be reviewed/downloaded (especially PDFs) should land in the Lab **Library** automatically, scoped to a **work id**, so you do not have to manually copy files around.
 
 ## Rules
 
-- **Library (outbox) is the only download surface.** Do not add “download from inbox” behavior.
-- When generating PDFs in a Lab session, enable auto-publish:
+- **Library is the only download surface.** Do not add “download from inbox” behavior.
+- When generating PDFs in a Lab session (or inside a `work/<id>` git worktree), enable auto-publish:
   - `DW_LAB_AUTO_OUTBOX=1`
-- Auto-publish uses the standard Lab paths:
-  - `DW_LAB_DIR` (default: `tmp/lab`)
-  - `DW_TMUX_PREFIX` + Lab session number
-    - Prefer: `DW_LAB_SESSION` (explicit target for a single run)
-    - Else: `DW_LAB_SESSION_STABLE` (default: `7`)
-  - Outbox directory becomes: `<DW_LAB_DIR>/<DW_TMUX_PREFIX><N>/outbox/`
-  - Optional (work-scoped publishing): set `DW_LAB_WORK_ID=<work-id>` to publish to:
-    - `<DW_LAB_DIR>/<DW_TMUX_PREFIX><N>/outbox/work/<work-id>/`
+- Auto-publish writes into the shared Lab Library:
+  - `DW_LAB_LIBRARY_DIR` (default: `<DW_LAB_DIR>/library`)
+  - Work-scoped publishing:
+    - Prefer: `DW_LAB_WORK_ID=<work-id>` (or `DW_WORK_ID`)
+    - Fallback: infer from git branch `work/<work-id>`
+  - Library directory becomes:
+    - `.../work/<work-id>/` (preferred)
+    - or `.../unscoped/` (fallback when no work id)
 
 ## Supported generators
 
