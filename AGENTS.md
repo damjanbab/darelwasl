@@ -14,9 +14,11 @@ It is designed for:
 
 ### Quick commands
 - Find things (catalog-first): `scripts/query.sh TERM`
+- Find work items (catalog-backed): `scripts/query.sh --kind work-item TERM`
 - List playbooks: `scripts/playbook.sh list`
 - Open a playbook: `scripts/playbook.sh show <id>`
 - Create work item: `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
+- List open work: `scripts/work.sh list --open`
 - Start isolated worktree: `scripts/work.sh start <work-id>`
 - Verify in isolation: `scripts/work.sh verify <work-id> -- scripts/checks.sh governance`
 - Check the query protocol exists: `scripts/checks.sh query`
@@ -251,6 +253,7 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - When: Any `change:` or `governance:` work that should not touch the base working tree.
 - Start:
   - Create a work item: `scripts/work.sh new --type change --playbook work/isolate-pr --summary "<summary>"`
+  - (Optional) Find existing work: `scripts/work.sh list --open` or `scripts/query.sh --kind work-item TERM`
   - Create an isolated worktree: `scripts/work.sh start <work-id>`
   - Open worktree path: `scripts/work.sh path <work-id>`
 - Policies:

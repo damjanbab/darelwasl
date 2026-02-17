@@ -45,6 +45,18 @@
        (map :name)
        sort))
 
+(defn- work-status
+  [entry]
+  (some-> entry :data :work/status))
+
+(defn- list-open-work-items
+  [entries]
+  (->> entries
+       (filter #(= (:kind %) :work-item))
+       (filter #(= "open" (work-status %)))
+       (map :id)
+       sort))
+
 (defn- render-system-generated
   [catalog]
   (let [entries (:entries catalog)
@@ -65,6 +77,7 @@
         envs (list-envs entries)
         scripts (list-by-kind entries :script)
         namespaces (list-by-kind entries :namespace)
+        open-work-items (list-open-work-items entries)
         query-section (str "## Querying the Codebase (protocol)\n\n"
                            "Start with the generated catalog, then narrow to source files.\n\n"
                            "- Inventory snapshot: `docs/system.generated.md`\n"
@@ -90,7 +103,12 @@
          "\n## Scripts\n\n"
          (bullet-list scripts)
          "\n## Namespaces\n\n"
-         (bullet-list namespaces))))
+         (bullet-list namespaces)
+         "\n## Work items (open)\n\n"
+         "Work items live in `docs/work/` and can be queried via:\n\n"
+         "- `scripts/query.sh --kind work-item TERM`\n"
+         "- `scripts/work.sh list --open`\n\n"
+         (bullet-list open-work-items))))
 
 (defn write-system-generated!
   [path catalog]

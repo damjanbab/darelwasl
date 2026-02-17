@@ -9,8 +9,20 @@ This repo stores work items under `docs/work/` as plain Markdown so they are:
 
 - Create a work item: `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
 - List work items: `scripts/work.sh list`
+  - Only open: `scripts/work.sh list --open`
+  - Only closed: `scripts/work.sh list --closed`
+  - Filter by type: `scripts/work.sh list --type governance`
+  - Filter by playbook: `scripts/work.sh list --playbook work/isolate-pr`
+  - Limit output: `scripts/work.sh list --limit 20`
 - Show one item: `scripts/work.sh show <id>`
 - Search work: `scripts/work.sh search <text>`
+
+## Catalog-backed queries (fast locate)
+
+Work items are also indexed into `docs/catalog.edn` so you can use the standard query tool:
+
+- Find by summary/id: `scripts/query.sh --kind work-item TERM`
+- List open work items (best-effort): `scripts/query.sh --kind work-item open`
 
 ## Isolation workflow (recommended)
 

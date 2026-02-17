@@ -34,7 +34,7 @@ Usage: scripts/work.sh <command> [args]
 
 Commands:
   new --type <t> --summary <s> [--playbook <id>] [--id <id>] [--base <branch>]
-  list
+  list [--open|--closed] [--type <t>] [--playbook <id>] [--limit <n>]
   show <id>
   search <text>
   path <id>
@@ -164,27 +164,78 @@ EOF
 }
 
 cmd_list() {
+  local want_status="" want_type="" want_playbook="" limit=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --open)
+        [ -z "$want_status" ] || die "list: only one of --open/--closed may be set"
+        want_status="open"
+        shift
+        ;;
+      --closed)
+        [ -z "$want_status" ] || die "list: only one of --open/--closed may be set"
+        want_status="closed"
+        shift
+        ;;
+      --type)
+        want_type="${2:-}"
+        [ -n "$want_type" ] || die "list: --type requires a value"
+        shift 2
+        ;;
+      --playbook)
+        want_playbook="${2:-}"
+        [ -n "$want_playbook" ] || die "list: --playbook requires a value"
+        shift 2
+        ;;
+      --limit)
+        limit="${2:-}"
+        [ -n "$limit" ] || die "list: --limit requires a value"
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        die "Unknown arg for list: $1"
+        ;;
+    esac
+  done
+
   ensure_dirs
   local f
-  for f in "$WORK_DIR"/*.md; do
-    [ -e "$f" ] || exit 0
-    if [ "$(basename "$f")" = "README.md" ]; then
-      continue
-    fi
-    if ! grep -qE "^work/id:" "$f"; then
-      continue
-    fi
-    local id status type playbook summary
-    id="$(grep -E "^work/id:" "$f" | head -n1 | sed -E 's/^work\/id:[[:space:]]*//')"
-    if [[ "$id" == *"<"* ]]; then
-      continue
-    fi
-    status="$(grep -E "^work/status:" "$f" | head -n1 | sed -E 's/^work\/status:[[:space:]]*//')"
-    type="$(grep -E "^work/type:" "$f" | head -n1 | sed -E 's/^work\/type:[[:space:]]*//')"
-    playbook="$(grep -E "^work/playbook:" "$f" | head -n1 | sed -E 's/^work\/playbook:[[:space:]]*//')"
-    summary="$(grep -E "^work/summary:" "$f" | head -n1 | sed -E 's/^work\/summary:[[:space:]]*//')"
-    printf "%s\t%s\t%s\t%s\t%s\n" "$id" "${status:-?}" "${type:-?}" "${playbook:-}" "${summary:-}"
-  done | sort
+  (
+    for f in "$WORK_DIR"/*.md; do
+      [ -e "$f" ] || exit 0
+      if [ "$(basename "$f")" = "README.md" ]; then
+        continue
+      fi
+      if ! grep -qE "^work/id:" "$f"; then
+        continue
+      fi
+      local id status type playbook summary
+      id="$(grep -E "^work/id:" "$f" | head -n1 | sed -E 's/^work\/id:[[:space:]]*//')"
+      if [[ "$id" == *"<"* ]]; then
+        continue
+      fi
+      status="$(grep -E "^work/status:" "$f" | head -n1 | sed -E 's/^work\/status:[[:space:]]*//')"
+      type="$(grep -E "^work/type:" "$f" | head -n1 | sed -E 's/^work\/type:[[:space:]]*//')"
+      playbook="$(grep -E "^work/playbook:" "$f" | head -n1 | sed -E 's/^work\/playbook:[[:space:]]*//')"
+      summary="$(grep -E "^work/summary:" "$f" | head -n1 | sed -E 's/^work\/summary:[[:space:]]*//')"
+
+      if [ -n "$want_status" ] && [ "${status:-}" != "$want_status" ]; then
+        continue
+      fi
+      if [ -n "$want_type" ] && [ "${type:-}" != "$want_type" ]; then
+        continue
+      fi
+      if [ -n "$want_playbook" ] && [ "${playbook:-}" != "$want_playbook" ]; then
+        continue
+      fi
+
+      printf "%s\t%s\t%s\t%s\t%s\n" "$id" "${status:-?}" "${type:-?}" "${playbook:-}" "${summary:-}"
+    done
+  ) | sort | { if [ -n "$limit" ]; then head -n "$limit"; else cat; fi; }
 }
 
 cmd_show() {
