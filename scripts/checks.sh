@@ -93,7 +93,18 @@ check_governance() {
   echo "Checking repo housekeeping invariants..."
 
   local missing=0
-  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md" "$ROOT/agents/README.md" "$ROOT/agents/website/AGENT.md" "$ROOT/agents/website/AGENT.json" "$ROOT/scripts/query.sh" "$ROOT/scripts/playbook.sh" "$ROOT/scripts/work.sh" "$ROOT/scripts/webterm-ui.sh" "$ROOT/ops/webterm-ui/deps.edn" "$ROOT/ops/webterm-ui/run.sh" "$ROOT/ops/webterm-ui/systemd/darelwasl-webterm-ui.service" "$ROOT/ops/webterm-ui/systemd/darelwasl-webterm-ui-canary.service" "$ROOT/src/darelwasl/webterm/server.clj" "$ROOT/docs/work/README.md" "$ROOT/docs/ops/code-haloeddepth-com.md" "$ROOT/scripts/hooks.sh" "$ROOT/.githooks/pre-push"; do
+  for f in "$ROOT/AGENTS.md" "$ROOT/skills/README.md" "$ROOT/policies/README.md" "$ROOT/agents/README.md" \
+    "$ROOT/agents/website/AGENT.md" "$ROOT/agents/website/AGENT.json" \
+    "$ROOT/agents/backend/AGENT.md" "$ROOT/agents/backend/AGENT.json" \
+    "$ROOT/agents/app-ui/AGENT.md" "$ROOT/agents/app-ui/AGENT.json" \
+    "$ROOT/agents/registries/AGENT.md" "$ROOT/agents/registries/AGENT.json" \
+    "$ROOT/agents/ops-governance/AGENT.md" "$ROOT/agents/ops-governance/AGENT.json" \
+    "$ROOT/scripts/query.sh" "$ROOT/scripts/playbook.sh" "$ROOT/scripts/work.sh" "$ROOT/scripts/work-prod.sh" \
+    "$ROOT/scripts/agent-runner" "$ROOT/scripts/git-resolve-conflicts.py" "$ROOT/scripts/pr-merge.sh" \
+    "$ROOT/scripts/webterm-ui.sh" "$ROOT/ops/webterm-ui/deps.edn" "$ROOT/ops/webterm-ui/run.sh" \
+    "$ROOT/ops/webterm-ui/systemd/darelwasl-webterm-ui.service" "$ROOT/ops/webterm-ui/systemd/darelwasl-webterm-ui-canary.service" \
+    "$ROOT/src/darelwasl/webterm/server.clj" "$ROOT/docs/work/README.md" "$ROOT/docs/ops/code-haloeddepth-com.md" \
+    "$ROOT/scripts/hooks.sh" "$ROOT/.githooks/pre-push"; do
     if [ ! -s "$f" ]; then
       echo "Missing or empty: $f"
       missing=1

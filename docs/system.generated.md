@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `8b071a4be83fa848e638263653779a87cc6c766eecdddba4032a6f29b414659d`
+- Catalog version: `aeaae0712c053a92e73e76ba80255faf5b8077390804739ab171d5552c46696b`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -204,7 +204,7 @@ This file is auto-generated. Do not edit by hand.
 - agent/registries
 - agent/website
 
-### Policies (19)
+### Policies (20)
 - policy/app-ui-changes
 - policy/backend-changes
 - policy/clojure-first
@@ -224,6 +224,7 @@ This file is auto-generated. Do not edit by hand.
 - policy/telegram-single-flight
 - policy/verification-required
 - policy/website-agent
+- policy/work-production-pipeline
 
 ### Internal capabilities (2)
 - internal/catalog-entry
@@ -254,7 +255,7 @@ This file is auto-generated. Do not edit by hand.
 
 ### Recipes (0)
 
-### Tooling (20)
+### Tooling (21)
 - tooling/account-statement-pdf
 - tooling/action-contract
 - tooling/app-smoke
@@ -275,6 +276,7 @@ This file is auto-generated. Do not edit by hand.
 - tooling/telegram-watch-webhook
 - tooling/theme-css-vars
 - tooling/website-agent-runner
+- tooling/work-production-pipeline
 
 ### Theme (3)
 - dark
@@ -450,6 +452,7 @@ Common queries:
 
 - account-statement-pdf.js
 - agent
+- agent-runner
 - app-smoke.js
 - catalog_summary.txt
 - catalog_summary.txt
@@ -465,6 +468,8 @@ Common queries:
 - final_merge.txt
 - generate-docs.sh
 - git-credential-dw.sh
+- git-resolve-conflicts.py
+- github-token.sh
 - high_intake.py
 - hooks.sh
 - lab.sh
@@ -474,6 +479,7 @@ Common queries:
 - operations.json
 - plan.schema.json
 - playbook.sh
+- pr-merge.sh
 - preview
 - promote-live.sh
 - query.sh
@@ -496,6 +502,7 @@ Common queries:
 - theme-css-vars.sh
 - website-agent
 - webterm-ui.sh
+- work-prod.sh
 - work.sh
 - xref.clj
 
@@ -611,3 +618,4 @@ Work items live in `docs/work/` and can be queried via:
 - `scripts/query.sh --kind work-item TERM`
 - `scripts/work.sh list --open`
 
+- work-item/20260217-160413-work-prod-pipeline-preview-auto-auth-proof-deliv

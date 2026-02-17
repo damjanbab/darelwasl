@@ -1,0 +1,19 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "registries",
+  "title": "Registry agent",
+  "allowed_paths": [
+    "registries/",
+    "fixtures/"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "scripts/checks.sh registries"
+    ]
+  }
+}
+

@@ -127,8 +127,21 @@
   :scope :shared
   :determinism :high
   :enforces [:preview :worktree]
-  :related {:capabilities [:cap/agent/website :cap/tooling/website-agent-runner]}
-  :gotchas ["Creates a git worktree under target/previews/<run-id> and may share node_modules from the repo."]}
+ :related {:capabilities [:cap/agent/website :cap/tooling/website-agent-runner]}
+ :gotchas ["Creates a git worktree under target/previews/<run-id> and may share node_modules from the repo."]}
+
+ {:id :cap/tooling/work-production-pipeline
+  :title "Work production pipeline (approved work → proof → PR → merge)"
+  :version "v1"
+  :invocation "scripts/work-prod.sh new|init|approve-spec|execute|preview|approve-proof|merge-agent"
+  :files ["scripts/work-prod.sh" "scripts/agent-runner" "scripts/pr-merge.sh" "scripts/git-resolve-conflicts.py"]
+  :scope :shared
+  :determinism :high
+  :enforces [:work :pipeline :proof :pr]
+  :related {:capabilities [:cap/policy/work-production-pipeline]}
+  :gotchas ["GitHub operations require GITHUB_TOKEN (env or secrets vault github/token)."
+            "Merge operations require DEPLOY_APPROVED=1."
+            "Preview publishing requires caddy/systemd on the host (scripts/preview manages snippets)."]}
 
  {:id :cap/tooling/website-agent-runner
   :title "Website agent runner"

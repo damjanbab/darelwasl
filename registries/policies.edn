@@ -130,5 +130,12 @@
   :enforces [:git :pr :process]
   :proofs {:commands ["scripts/checks.sh governance"]}}
 
+ {:id :cap/policy/work-production-pipeline
+  :title "Work production pipeline (approved work → proof → PR → merge)"
+  :version "v1"
+  :policy-path "policies/work-production-pipeline.md"
+  :enforces [:work :pipeline :proof :pr]
+  :proofs {:commands ["scripts/checks.sh governance"]}}
+
  ;; Intentionally no policy-first placeholder procedures here.
 ]

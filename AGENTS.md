@@ -63,17 +63,13 @@ Tooling proposal rule (progressive disclosure):
 2) If something exists, reuse it; if it’s not referenced in playbooks, wire pointers before inventing new tooling.
 3) If nothing exists, propose the smallest helper (script/check/policy) with exact `Proof:` commands.
 
-## Oversight gate (before edits)
-If the request type is `change:`, `refactor:`, `delete:`, or `governance:`, do not start editing until you present and get confirmation on:
-- Type
-- Goal (1 sentence)
-- Scope (files/areas)
-- Proof (exact command(s))
-- Non-goals
-
-Also: create a work item first (so the work is stored + queryable):
-- `scripts/work.sh new ...`
-- `scripts/work.sh start <id>` (isolates changes into a worktree/branch)
+## Work brief (work-first)
+If the request type is `change:`, `refactor:`, `delete:`, or `governance:`, speak in terms of **work**:
+- Write a 1-time work brief: Type / Goal / Scope / Proof / Non-goals.
+- Create a work item so the work is stored + queryable:
+  - `scripts/work.sh new ...`
+  - `scripts/work.sh start <id>` (isolates changes into a worktree/branch)
+- Proceed with implementation; only pause to ask questions when truly blocked.
 
 ## Query protocol (how to find things fast)
 Prefer catalog-backed lookups before `rg` spelunking.
@@ -270,6 +266,28 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - Install the local guard hook (once): `scripts/hooks.sh install`
   - Commit and PR: `scripts/work.sh commit <work-id> -m "…"`, then `scripts/work.sh pr <work-id>`
 
+### Playbook: work/production-pipeline — approved work → proof → PR → merge
+- When: You want the system to run an approved work end-to-end (agent execution + proof + PR + merge).
+- Start:
+  - Create work: `scripts/work-prod.sh new --type change --playbook work/production-pipeline --summary "<summary>"`
+  - Start worktree: `scripts/work.sh start <work-id>`
+  - Initialize work-prod state: `scripts/work-prod.sh init <work-id> --agent agents/<agent>/AGENT.json --request "<request>"`
+  - (Optional) Preflight only: `scripts/work-prod.sh preflight <work-id> --agent agents/<agent>/AGENT.json`
+  - Approve spec (records runtime approval): `scripts/work-prod.sh approve-spec <work-id>`
+  - Execute (auto-syncs origin/main first): `scripts/work-prod.sh execute <work-id>`
+  - Publish proof + deliver to Lab outbox: `scripts/work-prod.sh preview <work-id> --lab stable`
+  - Approve proof (via approve link in the proof HTML, or CLI): `scripts/work-prod.sh approve-proof <work-id>`
+- Policies:
+  - `policies/work-production-pipeline.md`
+  - `policies/verification-required.md`
+  - `policies/pr-required.md`
+- Proof:
+  - `scripts/checks.sh governance`
+  - Manual: open the outbox `work-proof-<id>.html` (or `work-links-<id>.txt`) in the Lab UI, verify preview behavior, then approve (creates PR and attempts merge).
+- Next:
+  - Run merge agent (for queued work branches): `DEPLOY_APPROVED=1 scripts/work-prod.sh merge-agent`
+  - If the work cannot be specified due to missing playbooks/tooling: create a prerequisite governance work and block the work until prerequisites land on `main`.
+
 ## Unknown / Triage (no matching playbook)
 
 Use this when your request doesn’t fit any playbook yet. The goal is to **standardize** by extending `AGENTS.md`.
@@ -304,4 +322,4 @@ Use this when your request doesn’t fit any playbook yet. The goal is to **stan
 Use this shape:
 1) **Answer (now)**: plain language, minimal jargon, grounded in repo context retrieval.
 2) **Tooling opportunities (optional)**: only if it removes repetition/breakage (Opportunity / Proposed automation / Proof / Scope).
-3) **Stop gate**: ask the user to choose one: stop, draft, or implement.
+3) **Work brief (if action is requested)**: state Type / Goal / Scope / Proof / Non-goals once, then proceed.

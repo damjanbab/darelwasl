@@ -1,0 +1,22 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "ops-governance",
+  "title": "Ops/governance agent",
+  "allowed_paths": [
+    "scripts/",
+    "agents/",
+    "policies/",
+    ".github/workflows/",
+    "docs/"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "scripts/checks.sh governance"
+    ]
+  }
+}
+

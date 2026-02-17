@@ -694,6 +694,16 @@ def cmd_start(args: argparse.Namespace) -> int:
             "SITE_ENABLED": "true" if site_enabled else "false",
             "SITE_BASE_PATH": f"/_preview/{args.id}/site",
             "SESSION_COOKIE_PATH": f"/_preview/{args.id}/app",
+            "PREVIEW_TOKEN": token,
+            # Preview auto-auth: allow opening preview links without logging in.
+            # The proxy forwards the token via X-Preview-Token, and the app uses it to
+            # synthesize an authenticated session.
+            "PREVIEW_AUTO_LOGIN_USER_ID": os.environ.get("PREVIEW_AUTO_LOGIN_USER_ID", "00000000-0000-0000-0000-000000000001"),
+            "PREVIEW_AUTO_LOGIN_USERNAME": os.environ.get("PREVIEW_AUTO_LOGIN_USERNAME", "huda"),
+            "PREVIEW_AUTO_LOGIN_ROLES": os.environ.get(
+                "PREVIEW_AUTO_LOGIN_ROLES",
+                ":role/admin,:role/content-editor,:role/file-library",
+            ),
             "ALLOW_FIXTURE_SEED": "true",
             "DATOMIC_STORAGE_DIR": str((preview_dir(root, args.id) / "datomic").resolve()),
         }

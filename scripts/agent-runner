@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+import subprocess
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _load_json(path: Path) -> dict:
+    raw = json.loads(_read_text(path))
+    if not isinstance(raw, dict):
+        raise ValueError("agent json must be an object")
+    return raw
+
+
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+    check: bool = True,
+    log_file: Path | None = None,
+    input: str | None = None,
+) -> subprocess.CompletedProcess:
+    if log_file is None:
+        return subprocess.run(cmd, cwd=str(cwd), env=env, check=check, text=True, input=input)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with log_file.open("a", encoding="utf-8") as f:
+        f.write(f"\n[{_utc_iso()}] $ {shlex.join(cmd)}\n")
+        proc = subprocess.run(cmd, cwd=str(cwd), env=env, text=True, input=input, stdout=f, stderr=subprocess.STDOUT)
+    if check and proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+    return proc
+
+
+def _git_changed_paths(wt: Path) -> list[str]:
+    proc = subprocess.run(["git", "status", "--porcelain"], cwd=str(wt), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    out: list[str] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        # Porcelain: XY <path> (or R  old -> new)
+        path = line[3:].strip()
+        if "->" in path:
+            path = path.split("->", 1)[1].strip()
+        out.append(path.replace("\\", "/"))
+    return sorted(set(out))
+
+
+def _is_allowed(path: str, allowed: list[str]) -> bool:
+    p = path.replace("\\", "/")
+    for prefix in allowed:
+        pref = str(prefix).replace("\\", "/").strip()
+        if not pref:
+            continue
+        if pref == "." or pref == "./":
+            return True
+        if not pref.endswith("/"):
+            # allow exact file paths too
+            if p == pref:
+                return True
+            pref = pref + "/"
+        if p == pref[:-1] or p.startswith(pref):
+            return True
+    return False
+
+
+def _ensure_clean(wt: Path, *, log: Path) -> None:
+    _run(["git", "reset", "--hard"], cwd=wt, check=False, log_file=log)
+    _run(["git", "clean", "-fd"], cwd=wt, check=False, log_file=log)
+
+
+def _commit_all(wt: Path, *, message: str, log: Path, author_name: str, author_email: str) -> None:
+    env = os.environ.copy()
+    env.setdefault("GIT_AUTHOR_NAME", author_name)
+    env.setdefault("GIT_AUTHOR_EMAIL", author_email)
+    env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
+    env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+
+    _run(["git", "add", "-A"], cwd=wt, env=env, log_file=log)
+    proc = _run(["git", "commit", "-m", message], cwd=wt, env=env, check=False, log_file=log)
+    if proc.returncode != 0:
+        raise SystemExit("No changes to commit (agent produced no diff).")
+
+
+def _default_model() -> str:
+    return (os.environ.get("DARELWASL_WORK_MODEL") or "gpt-5.2-high").strip()
+
+
+@dataclass(frozen=True)
+class AgentContract:
+    agent_id: str
+    title: str
+    allowed_paths: list[str]
+    proof_commands: list[str]
+    codex_sandbox: str
+    md: str
+
+
+def _load_contract(*, root: Path, agent_json: Path, agent_md: Path | None) -> AgentContract:
+    agent = _load_json(agent_json)
+    allowed = agent.get("allowed_paths", [])
+    if not isinstance(allowed, list) or not allowed:
+        raise SystemExit("agent json missing allowed_paths")
+    allowed_paths = [str(p) for p in allowed]
+
+    proofs = agent.get("proofs", {})
+    proof_cmds = proofs.get("commands", []) if isinstance(proofs, dict) else []
+    if not isinstance(proof_cmds, list):
+        proof_cmds = []
+
+    sandbox = agent.get("sandbox", {})
+    codex_sandbox = "workspace-write"
+    if isinstance(sandbox, dict) and isinstance(sandbox.get("codex_exec_sandbox"), str):
+        codex_sandbox = sandbox["codex_exec_sandbox"].strip() or codex_sandbox
+
+    agent_id = str(agent.get("id") or agent_json.parent.name).strip() or agent_json.parent.name
+    title = str(agent.get("title") or agent_id).strip()
+
+    md_path = agent_md if agent_md is not None else agent_json.with_suffix(".md")
+    md_text = _read_text(md_path)
+
+    return AgentContract(
+        agent_id=agent_id,
+        title=title,
+        allowed_paths=allowed_paths,
+        proof_commands=[str(c) for c in proof_cmds if str(c).strip()],
+        codex_sandbox=codex_sandbox,
+        md=md_text,
+    )
+
+
+def _build_prompt(*, contract_md: str, request: str, model: str) -> str:
+    return (
+        "You are the implementation agent.\n"
+        f"Model requirement: use {model}.\n"
+        "This run is non-interactive and has been approved by the operator.\n"
+        "Do NOT ask for confirmation. Proceed to implement the request now.\n\n"
+        "Hard rules:\n"
+        "- Only modify files within the allowed paths in the contract.\n"
+        "- If you cannot safely complete the request within the allowed paths, explain why and make no changes.\n"
+        "- Do not print secrets.\n\n"
+        "=== AGENT CONTRACT ===\n"
+        f"{contract_md.strip()}\n"
+        "=== END CONTRACT ===\n\n"
+        "User request:\n"
+        f"{request.strip()}\n"
+    )
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    root = _repo_root()
+    wt = Path(args.worktree).resolve()
+    agent_json_path = (root / args.agent_json).resolve()
+    agent_md_path = None if args.agent_md is None else (root / args.agent_md).resolve()
+
+    contract = _load_contract(root=root, agent_json=agent_json_path, agent_md=agent_md_path)
+    model = (args.model or _default_model()).strip()
+    request = (args.request or "").strip()
+    if not request:
+        raise SystemExit("agent-runner run requires a non-empty --request")
+
+    work_id = (args.work_id or "").strip() or "run"
+    out_dir = (root / "target" / "work-runs" / work_id / contract.agent_id).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_path = out_dir / "agent.log"
+    last_message_path = out_dir / "agent.last-message.txt"
+    prompt_path = out_dir / "agent.prompt.txt"
+    report_path = out_dir / "agent.report.json"
+
+    started_at = _utc_iso()
+
+    before = set(_git_changed_paths(wt))
+    if before:
+        _ensure_clean(wt, log=log_path)
+
+    prompt = _build_prompt(contract_md=contract.md, request=request, model=model)
+    prompt_path.write_text(prompt, encoding="utf-8")
+
+    cmd = [
+        "codex",
+        "exec",
+        "--color",
+        "never",
+        "-s",
+        contract.codex_sandbox,
+        "--output-last-message",
+        str(last_message_path),
+        "-C",
+        str(wt),
+        "-m",
+        model,
+        "-",
+    ]
+
+    _run(["codex", "login", "status"], cwd=wt, log_file=log_path)
+    t0 = time.time()
+    proc = _run(cmd, cwd=wt, check=False, log_file=log_path, input=prompt)
+    duration_ms = int((time.time() - t0) * 1000)
+
+    changed = _git_changed_paths(wt)
+    disallowed = [p for p in changed if not _is_allowed(p, contract.allowed_paths)]
+    if disallowed:
+        _ensure_clean(wt, log=log_path)
+        report_path.write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "disallowed_paths",
+                    "agent_id": contract.agent_id,
+                    "work_id": work_id,
+                    "disallowed": disallowed,
+                    "allowed_paths": contract.allowed_paths,
+                    "model": model,
+                    "started_at": started_at,
+                    "finished_at": _utc_iso(),
+                    "duration_ms": duration_ms,
+                    "codex_exit": proc.returncode,
+                    "last_message_path": str(last_message_path),
+                    "prompt_path": str(prompt_path),
+                    "log_path": str(log_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print("agent changed disallowed files:\n" + "\n".join(f"- {p}" for p in disallowed), file=sys.stderr)
+        return 1
+
+    if not changed:
+        report_path.write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "no_changes",
+                    "agent_id": contract.agent_id,
+                    "work_id": work_id,
+                    "allowed_paths": contract.allowed_paths,
+                    "model": model,
+                    "started_at": started_at,
+                    "finished_at": _utc_iso(),
+                    "duration_ms": duration_ms,
+                    "codex_exit": proc.returncode,
+                    "last_message_path": str(last_message_path),
+                    "prompt_path": str(prompt_path),
+                    "log_path": str(log_path),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print("agent produced no changes", file=sys.stderr)
+        return 1
+
+    for cmd_str in contract.proof_commands:
+        _run(["bash", "-lc", str(cmd_str)], cwd=wt, log_file=log_path)
+
+    author_name = os.environ.get("DARELWASL_AGENT_AUTHOR_NAME", "work-agent")
+    author_email = os.environ.get("DARELWASL_AGENT_AUTHOR_EMAIL", "work-agent@haloeddepth.com")
+    commit_msg = args.commit_message or f"{contract.agent_id}({work_id}): {request.splitlines()[0][:72]}"
+    _commit_all(wt, message=commit_msg, log=log_path, author_name=author_name, author_email=author_email)
+
+    report_path.write_text(
+        json.dumps(
+            {
+                "status": "ok" if proc.returncode == 0 else "warn",
+                "agent_id": contract.agent_id,
+                "work_id": work_id,
+                "changed_paths": changed,
+                "allowed_paths": contract.allowed_paths,
+                "model": model,
+                "codex_exit": proc.returncode,
+                "started_at": started_at,
+                "finished_at": _utc_iso(),
+                "duration_ms": duration_ms,
+                "last_message_path": str(last_message_path),
+                "prompt_path": str(prompt_path),
+                "log_path": str(log_path),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="scripts/agent-runner")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    p_run = sub.add_parser("run", help="Run a Codex agent under a contract in a worktree")
+    p_run.add_argument("--work-id", required=True, help="Work id (used for logs)")
+    p_run.add_argument("--worktree", required=True, help="Path to git worktree")
+    p_run.add_argument("--request", required=True, help="Natural language request to implement")
+    p_run.add_argument("--agent-json", required=True, help="Agent JSON contract path (repo-relative)")
+    p_run.add_argument("--agent-md", default=None, help="Agent Markdown contract path (repo-relative)")
+    p_run.add_argument("--model", default=None, help="Codex model (default: env DARELWASL_WORK_MODEL or gpt-5.2-high)")
+    p_run.add_argument("--commit-message", default=None, help="Override commit message")
+    p_run.set_defaults(fn=cmd_run)
+
+    return p
+
+
+def main(argv: list[str]) -> int:
+    args = build_parser().parse_args(argv)
+    return int(args.fn(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
+

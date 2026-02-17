@@ -479,9 +479,12 @@
                      (str uri "?" new-qs)))))
 
 (defn- proxy-request
-  [request upstream-url]
+  [request upstream-url preview-token]
   (let [method (:request-method request)
         headers (sanitize-headers (:headers request))
+        headers (cond-> headers
+                  (and (string? preview-token) (not (str/blank? preview-token)))
+                  (assoc "x-preview-token" preview-token))
         body (:body request)
         content-type (get headers "content-type")
         has-body? (and body (not (#{:get :head} method)))
@@ -548,8 +551,33 @@
               expires-at (parse-instant (:expires_at manifest))]
           (if-not (token-valid? manifest token)
             (common/error-response 403 "Forbidden")
-            (if (= module "agent")
+            (cond
+              (= module "approve")
+              (let [cmd-str (str "scripts/work-prod.sh approve-proof " (pr-str run-id))
+                    cmd ["bash" "-lc" cmd-str]
+                    pb (ProcessBuilder. ^java.util.List cmd)
+                    out (java.io.ByteArrayOutputStream.)
+                    _ (.directory pb (io/file (System/getProperty "user.dir")))
+                    _ (doto (.environment pb)
+                        (.put "DEPLOY_APPROVED" "1"))
+                    _ (.redirectErrorStream pb true)
+                    p (.start pb)
+                    _ (with-open [in (.getInputStream p)]
+                        (.transferTo in out))
+                    code (.waitFor p)
+                    text (.toString out "UTF-8")]
+                (if (zero? (long code))
+                  {:status 200
+                   :headers {"Content-Type" "text/plain; charset=utf-8"}
+                   :body text}
+                  {:status 500
+                   :headers {"Content-Type" "text/plain; charset=utf-8"}
+                   :body (str "approve failed (exit " code ")\n\n" text)}))
+
+              (= module "agent")
               (handle-agent-api state request run-id)
+
+              :else
               (let [port (upstream-port manifest module)]
                 (if-not port
                   (common/error-response 400 "Preview module not available")
@@ -572,7 +600,7 @@
                         resp0 (when set-cookie?
                                 (redirect-without-token request))
                         proxied (or resp0
-                                    (let [up (proxy-request request up-url)]
+                                    (let [up (proxy-request request up-url token)]
                                       {:status (:status up)
                                        :headers (sanitize-headers (:headers up))
                                        :body (:body up)
