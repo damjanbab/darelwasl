@@ -39,7 +39,7 @@ Commands:
   search <text>
   path <id>
   audit [--into <ref>] [--no-fetch] [--strict]
-  start <id> [--base <branch>] [--park]
+  start <id> [--base <branch>]
   verify <id> -- <command...>
   commit <id> -m <message>
   pr <id>
@@ -50,8 +50,7 @@ Commands:
 Notes:
   - Work items live in docs/work/<id>.md and are meant to be committed.
   - start creates an isolated branch + git worktree under target/worktrees/<id>/.
-  - For parallel work, keep the base checkout clean. By default, start refuses to run when the base checkout is dirty.
-  - If you truly need it, --park will snapshot the dirty tree to a local park/<timestamp> branch, then return.
+  - Work items may exist only on their work branch until merged; show/list will read from work/<id> or origin/work/<id> when needed.
 EOF
 }
 
@@ -59,6 +58,19 @@ die() { echo "$*" >&2; exit 2; }
 
 utc_iso() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+pick_base_ref() {
+  local want="${1:-}"
+  if [ -n "$want" ]; then
+    echo "$want"
+    return 0
+  fi
+  if git_ref_exists "refs/remotes/origin/${BASE_BRANCH_DEFAULT}"; then
+    echo "origin/${BASE_BRANCH_DEFAULT}"
+    return 0
+  fi
+  echo "${BASE_BRANCH_DEFAULT}"
 }
 
 safe_slug() {
@@ -81,48 +93,19 @@ git_ref_exists() {
   (cd "$ROOT" && git show-ref --verify --quiet "$ref")
 }
 
-pick_into_ref() {
-  local want="${1:-}"
-  if [ -n "$want" ]; then
-    echo "$want"
-    return 0
-  fi
-  if git_ref_exists "refs/remotes/origin/${BASE_BRANCH_DEFAULT}"; then
-    echo "origin/${BASE_BRANCH_DEFAULT}"
-    return 0
-  fi
-  echo "${BASE_BRANCH_DEFAULT}"
-}
-
 resolve_work_branch_ref() {
   local id="${1:-}"
   [ -n "$id" ] || return 1
   local branch remote_ref local_ref
-  branch="$(work_get "$id" "branch" | tr -d '\r' || true)"
-  branch="$(echo "${branch:-}" | xargs || true)"
-
-  if [ -n "$branch" ]; then
-    remote_ref="refs/remotes/origin/${branch}"
-    local_ref="refs/heads/${branch}"
-    if git_ref_exists "$remote_ref"; then
-      echo "origin/${branch}"
-      return 0
-    fi
-    if git_ref_exists "$local_ref"; then
-      echo "${branch}"
-      return 0
-    fi
-    return 0
-  fi
-
-  remote_ref="refs/remotes/origin/work/${id}"
-  local_ref="refs/heads/work/${id}"
-  if git_ref_exists "$remote_ref"; then
-    echo "origin/work/${id}"
-    return 0
-  fi
+  branch="work/${id}"
+  local_ref="refs/heads/${branch}"
+  remote_ref="refs/remotes/origin/${branch}"
   if git_ref_exists "$local_ref"; then
-    echo "work/${id}"
+    echo "${branch}"
+    return 0
+  fi
+  if git_ref_exists "$remote_ref"; then
+    echo "origin/${branch}"
     return 0
   fi
   echo ""
@@ -134,12 +117,25 @@ work_file() {
   echo "$WORK_DIR/$id.md"
 }
 
-work_get() {
-  local id="$1" key="$2"
+work_read() {
+  local id="$1"
+  local ref
+  ref="$(resolve_work_branch_ref "$id")"
+  if [ -n "${ref:-}" ]; then
+    (cd "$ROOT" && git show "${ref}:docs/work/${id}.md" 2>/dev/null) && return 0
+  fi
   local f
   f="$(work_file "$id")"
-  [ -s "$f" ] || die "Work item not found: $f"
-  grep -E "^work/${key}:" "$f" | head -n1 | sed -E "s/^work\/${key}:[[:space:]]*//"
+  if [ -s "$f" ]; then
+    cat "$f"
+    return 0
+  fi
+  die "Work item not found: docs/work/${id}.md (local or in work/${id})"
+}
+
+work_get() {
+  local id="$1" key="$2"
+  work_read "$id" | grep -E "^work/${key}:" | head -n1 | sed -E "s/^work\/${key}:[[:space:]]*//"
 }
 
 work_set() {
@@ -200,10 +196,31 @@ cmd_new() {
     id="${now}-${slug}"
   fi
 
+  require_git_repo
+
+  local base_ref branch wt_path
+  base_ref="$(pick_base_ref "$base")"
+  branch="work/${id}"
+  wt_path="${WORKTREES_DIR}/${id}"
+
+  if git_ref_exists "refs/heads/${branch}"; then
+    die "Work branch already exists: ${branch}"
+  fi
+  if git_ref_exists "refs/remotes/origin/${branch}"; then
+    die "Remote work branch already exists: origin/${branch}"
+  fi
+
+  if [ -e "$wt_path/.git" ] || (cd "$ROOT" && git worktree list --porcelain | grep -q "worktree ${wt_path}"); then
+    die "Worktree path already exists: $wt_path"
+  fi
+
+  (cd "$ROOT" && git worktree add -b "$branch" "$wt_path" "$base_ref" >/dev/null)
+
+  mkdir -p "$wt_path/docs/work"
   local f
-  f="$(work_file "$id")"
+  f="$wt_path/docs/work/$id.md"
   if [ -e "$f" ]; then
-    die "Work item already exists: $f"
+    die "Work item already exists in worktree: $f"
   fi
 
   cat >"$f" <<EOF
@@ -212,8 +229,8 @@ work/type: $type
 work/status: open
 work/playbook: ${playbook}
 work/summary: ${summary}
-work/branch:
-work/worktree:
+work/branch: ${branch}
+work/worktree: target/worktrees/${id}
 work/base: ${base}
 work/created_at: $(utc_iso)
 work/updated_at: $(utc_iso)
@@ -224,6 +241,9 @@ work/updated_at: $(utc_iso)
 - [ ] <fill in exact commands, ideally from the playbook>
 EOF
 
+  (cd "$wt_path" && git add "docs/work/$id.md" && git commit -m "work: ${id}" >/dev/null)
+
+  echo "[work] created ${branch} at ${wt_path}" >&2
   echo "$id"
 }
 
@@ -267,48 +287,75 @@ cmd_list() {
   done
 
   ensure_dirs
-  local f
   (
+    declare -A seen
+
+    emit_from_text() {
+      local text="$1"
+      local id status type playbook summary
+      id="$(printf "%s" "$text" | sed -nE 's/^work\/id:[[:space:]]*//p' | head -n1)"
+      [ -n "${id:-}" ] || return 0
+      if [[ "$id" == *"<"* ]]; then
+        return 0
+      fi
+      if [[ -n "${seen[$id]:-}" ]]; then
+        return 0
+      fi
+      seen["$id"]=1
+
+      status="$(printf "%s" "$text" | sed -nE 's/^work\/status:[[:space:]]*//p' | head -n1)"
+      type="$(printf "%s" "$text" | sed -nE 's/^work\/type:[[:space:]]*//p' | head -n1)"
+      playbook="$(printf "%s" "$text" | sed -nE 's/^work\/playbook:[[:space:]]*//p' | head -n1)"
+      summary="$(printf "%s" "$text" | sed -nE 's/^work\/summary:[[:space:]]*//p' | head -n1)"
+
+      if [ -n "$want_status" ] && [ "${status:-}" != "$want_status" ]; then
+        return 0
+      fi
+      if [ -n "$want_type" ] && [ "${type:-}" != "$want_type" ]; then
+        return 0
+      fi
+      if [ -n "$want_playbook" ] && [ "${playbook:-}" != "$want_playbook" ]; then
+        return 0
+      fi
+
+      printf "%s\t%s\t%s\t%s\t%s\n" "$id" "${status:-?}" "${type:-?}" "${playbook:-}" "${summary:-}"
+    }
+
+    local f
     for f in "$WORK_DIR"/*.md; do
-      [ -e "$f" ] || exit 0
+      [ -e "$f" ] || break
       if [ "$(basename "$f")" = "README.md" ]; then
         continue
       fi
       if ! grep -qE "^work/id:" "$f"; then
         continue
       fi
-      local id status type playbook summary
-      id="$(grep -E "^work/id:" "$f" | head -n1 | sed -E 's/^work\/id:[[:space:]]*//')"
-      if [[ "$id" == *"<"* ]]; then
-        continue
-      fi
-      status="$(grep -E "^work/status:" "$f" | head -n1 | sed -E 's/^work\/status:[[:space:]]*//')"
-      type="$(grep -E "^work/type:" "$f" | head -n1 | sed -E 's/^work\/type:[[:space:]]*//')"
-      playbook="$(grep -E "^work/playbook:" "$f" | head -n1 | sed -E 's/^work\/playbook:[[:space:]]*//')"
-      summary="$(grep -E "^work/summary:" "$f" | head -n1 | sed -E 's/^work\/summary:[[:space:]]*//')"
-
-      if [ -n "$want_status" ] && [ "${status:-}" != "$want_status" ]; then
-        continue
-      fi
-      if [ -n "$want_type" ] && [ "${type:-}" != "$want_type" ]; then
-        continue
-      fi
-      if [ -n "$want_playbook" ] && [ "${playbook:-}" != "$want_playbook" ]; then
-        continue
-      fi
-
-      printf "%s\t%s\t%s\t%s\t%s\n" "$id" "${status:-?}" "${type:-?}" "${playbook:-}" "${summary:-}"
+      emit_from_text "$(cat "$f")"
     done
+
+    local b id text
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      id="${b#work/}"
+      text="$(cd "$ROOT" && git show "${b}:docs/work/${id}.md" 2>/dev/null || true)"
+      [ -n "${text:-}" ] || continue
+      emit_from_text "$text"
+    done < <((cd "$ROOT" && git for-each-ref 'refs/heads/work' --format='%(refname:short)' | sort) || true)
+
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      id="${b#origin/work/}"
+      text="$(cd "$ROOT" && git show "${b}:docs/work/${id}.md" 2>/dev/null || true)"
+      [ -n "${text:-}" ] || continue
+      emit_from_text "$text"
+    done < <((cd "$ROOT" && git for-each-ref 'refs/remotes/origin/work' --format='%(refname:short)' | sort) || true)
   ) | sort | { if [ -n "$limit" ]; then head -n "$limit"; else cat; fi; }
 }
 
 cmd_show() {
   local id="${1:-}"
   [ -n "$id" ] || die "show requires <id>"
-  local f
-  f="$(work_file "$id")"
-  [ -s "$f" ] || die "Work item not found: $f"
-  cat "$f"
+  work_read "$id"
 }
 
 cmd_search() {
@@ -326,29 +373,15 @@ cmd_path() {
   local id="${1:-}"
   [ -n "$id" ] || die "path requires <id>"
   local wt
-  wt="$(work_get "$id" "worktree")"
-  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
-  echo "$wt"
-}
-
-park_if_dirty() {
-  local reason="${1:-}"
-  local orig_branch
-  orig_branch="$(cd "$ROOT" && git rev-parse --abbrev-ref HEAD)"
-  if [ -n "$(cd "$ROOT" && git status --porcelain)" ]; then
-    local ts park_branch
-    ts="$(date -u +%Y%m%d-%H%M%S)"
-    park_branch="park/${ts}"
-    echo "[work] parking dirty tree on ${park_branch} (${reason})" >&2
-    (cd "$ROOT" && git switch -c "$park_branch" >/dev/null)
-    (cd "$ROOT" && git add -A)
-    if (cd "$ROOT" && git diff --cached --quiet); then
-      echo "[work] nothing staged after add -A; leaving park branch without commit" >&2
-    else
-      (cd "$ROOT" && git commit -m "park: snapshot ${ts} ${reason}" >/dev/null)
-    fi
-    (cd "$ROOT" && git switch "$orig_branch" >/dev/null)
+  wt="$(work_get "$id" "worktree" | tr -d '\r' | xargs || true)"
+  if [ -z "${wt:-}" ]; then
+    wt="target/worktrees/${id}"
   fi
+  if [[ "$wt" != /* ]]; then
+    wt="${COMMON_ROOT}/${wt}"
+  fi
+  [ -d "$wt" ] || die "Worktree path missing: $wt (run: scripts/work.sh start $id)"
+  echo "$wt"
 }
 
 cmd_start() {
@@ -360,48 +393,32 @@ cmd_start() {
   ensure_dirs
 
   local base="$BASE_BRANCH_DEFAULT"
-  local do_park=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --base) base="${2:-}"; shift 2 ;;
-      --park) do_park=1; shift ;;
       -h|--help) usage; exit 0 ;;
       *) die "Unknown arg: $1" ;;
     esac
   done
 
-  local f
-  f="$(work_file "$id")"
-  [ -s "$f" ] || die "Work item not found: $f"
-
-  if [ -n "$(cd "$ROOT" && git status --porcelain)" ]; then
-    if [ "$do_park" -eq 1 ]; then
-      park_if_dirty "before start ${id}"
-    else
-      die "Working tree is dirty; commit/stash/clean it first, or re-run with --park."
-    fi
-  fi
-
-  local branch wt_path
+  local base_ref branch wt_path
+  base_ref="$(pick_base_ref "$base")"
   branch="work/${id}"
   wt_path="${WORKTREES_DIR}/${id}"
 
-  if (cd "$ROOT" && git show-ref --verify --quiet "refs/heads/${branch}"); then
+  if git_ref_exists "refs/heads/${branch}"; then
     :
+  elif git_ref_exists "refs/remotes/origin/${branch}"; then
+    (cd "$ROOT" && git branch --track "$branch" "origin/${branch}" >/dev/null)
   else
-    (cd "$ROOT" && git branch "$branch" "$base" >/dev/null)
+    (cd "$ROOT" && git branch "$branch" "$base_ref" >/dev/null)
   fi
 
-  if [ -d "$wt_path/.git" ] || (cd "$ROOT" && git worktree list --porcelain | grep -q "worktree ${wt_path}"); then
-    echo "[work] worktree already exists: $wt_path" >&2
+  if [ -e "$wt_path/.git" ] || (cd "$ROOT" && git worktree list --porcelain | grep -q "worktree ${wt_path}"); then
+    :
   else
     (cd "$ROOT" && git worktree add "$wt_path" "$branch" >/dev/null)
   fi
-
-  work_set "$id" "branch" "$branch"
-  work_set "$id" "worktree" "$wt_path"
-  work_set "$id" "base" "$base"
-  work_touch_updated "$id"
 
   echo "$wt_path"
 }
@@ -415,8 +432,7 @@ cmd_verify() {
   [ $# -gt 0 ] || die "verify requires a command after --"
 
   local wt
-  wt="$(work_get "$id" "worktree")"
-  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
+  wt="$(cmd_path "$id")"
   [ -d "$wt" ] || die "Worktree path missing: $wt"
 
   (cd "$wt" && "$@")
@@ -437,15 +453,13 @@ cmd_commit() {
   [ -n "$msg" ] || die "commit requires -m <message>"
 
   local wt
-  wt="$(work_get "$id" "worktree")"
-  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
+  wt="$(cmd_path "$id")"
 
   (cd "$wt" && git add -A)
   if (cd "$wt" && git diff --cached --quiet); then
     die "No changes staged to commit in worktree: $wt"
   fi
   (cd "$wt" && git commit -m "$msg")
-  work_touch_updated "$id"
 }
 
 cmd_audit() {
@@ -468,7 +482,7 @@ cmd_audit() {
   fi
 
   local into_ref
-  into_ref="$(pick_into_ref "$into")"
+  into_ref="$(pick_base_ref "$into")"
 
   local issues=0
   echo "[work] audit: into=$into_ref"
@@ -479,8 +493,8 @@ cmd_audit() {
     remote_branch_count=$((remote_branch_count + 1))
     local id
     id="${b#origin/work/}"
-    if [ ! -s "$WORK_DIR/$id.md" ]; then
-      echo "[work] warning: remote branch has no workfile: $b (expected docs/work/$id.md)"
+    if !(cd "$ROOT" && git show "${b}:docs/work/${id}.md" >/dev/null 2>&1); then
+      echo "[work] warning: remote branch missing workfile: $b (expected docs/work/$id.md in that branch)"
       remote_missing_workfile=$((remote_missing_workfile + 1))
       issues=$((issues + 1))
     fi
@@ -556,7 +570,7 @@ cmd_close_merged() {
   fi
 
   local into_ref
-  into_ref="$(pick_into_ref "$into")"
+  into_ref="$(pick_base_ref "$into")"
   echo "[work] close-merged: into=$into_ref dry-run=$dry_run"
 
   local closed=0
@@ -601,13 +615,12 @@ cmd_pr() {
   local id="${1:-}"
   [ -n "$id" ] || die "pr requires <id>"
   local wt branch base summary
-  wt="$(work_get "$id" "worktree")"
-  branch="$(work_get "$id" "branch")"
-  base="$(work_get "$id" "base")"
+  wt="$(cmd_path "$id")"
+  branch="$(work_get "$id" "branch" | tr -d '\r' | xargs || true)"
+  [ -n "${branch:-}" ] || branch="work/${id}"
+  base="$(work_get "$id" "base" | tr -d '\r' | xargs || true)"
+  [ -n "${base:-}" ] || base="$BASE_BRANCH_DEFAULT"
   summary="$(work_get "$id" "summary")"
-  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
-  [ -n "$branch" ] || die "Work item has no branch yet. Run: scripts/work.sh start $id"
-  [ -n "$base" ] || base="$BASE_BRANCH_DEFAULT"
 
   local remote repo compare_url
   remote="$(cd "$wt" && git remote get-url origin 2>/dev/null || true)"
@@ -644,13 +657,12 @@ cmd_pr_create() {
   [ -n "$id" ] || die "pr-create requires <id>"
 
   local wt branch base summary
-  wt="$(work_get "$id" "worktree")"
-  branch="$(work_get "$id" "branch")"
-  base="$(work_get "$id" "base")"
+  wt="$(cmd_path "$id")"
+  branch="$(work_get "$id" "branch" | tr -d '\r' | xargs || true)"
+  [ -n "${branch:-}" ] || branch="work/${id}"
+  base="$(work_get "$id" "base" | tr -d '\r' | xargs || true)"
+  [ -n "${base:-}" ] || base="$BASE_BRANCH_DEFAULT"
   summary="$(work_get "$id" "summary")"
-  [ -n "$wt" ] || die "Work item has no worktree yet. Run: scripts/work.sh start $id"
-  [ -n "$branch" ] || die "Work item has no branch yet. Run: scripts/work.sh start $id"
-  [ -n "$base" ] || base="$BASE_BRANCH_DEFAULT"
 
   if ! (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
     die "Worktree path missing or not a git checkout: $wt"
@@ -726,24 +738,16 @@ PY
   fi
 
   if [[ "$http_code" == "201" && -n "$pr_url" ]]; then
-    work_set "$id" "pr_url" "$pr_url"
-    work_touch_updated "$id"
-    # Keep the worktree clean by recording PR metadata as a commit (best-effort).
     local wf
     wf="docs/work/${id}.md"
-    if (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
-      local dirty
-      dirty="$(cd "$wt" && git status --porcelain=v1 || true)"
-      if [ -n "${dirty:-}" ]; then
-        if echo "$dirty" | grep -vqE "^[ MARCUD?!]{2}[[:space:]]+${wf//\//\\/}$"; then
-          echo "warning: worktree dirty after PR create; not auto-committing pr_url" >&2
-        else
-          (cd "$wt" && git add "$wf")
-          if !(cd "$wt" && git diff --cached --quiet); then
-            (cd "$wt" && git commit -m "work: record pr_url")
-            (cd "$wt" && git push)
-          fi
-        fi
+    if [ -s "$wt/$wf" ]; then
+      # Record PR metadata in the work branch itself.
+      WORK_DIR="$wt/docs/work" work_set "$id" "pr_url" "$pr_url"
+      WORK_DIR="$wt/docs/work" work_touch_updated "$id"
+      (cd "$wt" && git add "$wf")
+      if !(cd "$wt" && git diff --cached --quiet); then
+        (cd "$wt" && git commit -m "work: record pr_url" >/dev/null)
+        (cd "$wt" && git push >/dev/null)
       fi
     fi
     echo "$pr_url"
@@ -771,24 +775,15 @@ else:
 PY
 )"
     if [[ -n "$pr_url" ]]; then
-      work_set "$id" "pr_url" "$pr_url"
-      work_touch_updated "$id"
-      # Keep the worktree clean by recording PR metadata as a commit (best-effort).
       local wf
       wf="docs/work/${id}.md"
-      if (cd "$wt" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
-        local dirty
-        dirty="$(cd "$wt" && git status --porcelain=v1 || true)"
-        if [ -n "${dirty:-}" ]; then
-          if echo "$dirty" | grep -vqE "^[ MARCUD?!]{2}[[:space:]]+${wf//\//\\/}$"; then
-            echo "warning: worktree dirty after PR lookup; not auto-committing pr_url" >&2
-          else
-            (cd "$wt" && git add "$wf")
-            if !(cd "$wt" && git diff --cached --quiet); then
-              (cd "$wt" && git commit -m "work: record pr_url")
-              (cd "$wt" && git push)
-            fi
-          fi
+      if [ -s "$wt/$wf" ]; then
+        WORK_DIR="$wt/docs/work" work_set "$id" "pr_url" "$pr_url"
+        WORK_DIR="$wt/docs/work" work_touch_updated "$id"
+        (cd "$wt" && git add "$wf")
+        if !(cd "$wt" && git diff --cached --quiet); then
+          (cd "$wt" && git commit -m "work: record pr_url" >/dev/null)
+          (cd "$wt" && git push >/dev/null)
         fi
       fi
       echo "$pr_url"

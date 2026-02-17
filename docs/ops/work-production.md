@@ -22,12 +22,16 @@ Default agent model is `gpt-5.2-high`.
 Override (only when needed):
 - `DARELWASL_WORK_MODEL=<model>`
 
+Note:
+- If you’re running Codex via ChatGPT device auth and `gpt-5.2-high` is rejected as unsupported, set `DARELWASL_WORK_MODEL=gpt-5.2`.
+
 ## Merge gating
 Merging into `main` is gated:
 - `DEPLOY_APPROVED=1`
 
 ## Core commands
-- Create + start: `scripts/work-prod.sh new ...` then `scripts/work.sh start <id>`
+- Create (also creates `work/<id>` + worktree): `scripts/work-prod.sh new ...`
+- If you need to recreate the worktree later: `scripts/work.sh start <id>`
 - Init: `scripts/work-prod.sh init <id> --agent agents/<agent>/AGENT.json --request "<request>"`
 - Preflight only: `scripts/work-prod.sh preflight <id> --agent agents/<agent>/AGENT.json`
 - Approve spec: `scripts/work-prod.sh approve-spec <id>`

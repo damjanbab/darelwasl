@@ -7,7 +7,7 @@ This repo stores work items under `docs/work/` as plain Markdown so they are:
 
 ## Commands
 
-- Create a work item: `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
+- Create a work item (also creates `work/<id>` + worktree): `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
 - List work items: `scripts/work.sh list`
   - Only open: `scripts/work.sh list --open`
   - Only closed: `scripts/work.sh list --closed`
@@ -27,13 +27,13 @@ Work items are also indexed into `docs/catalog.edn` so you can use the standard 
 ## Isolation workflow (recommended)
 
 All changes should be done on an isolated branch + worktree:
-- Start worktree: `scripts/work.sh start <id>`
+- Start worktree (idempotent): `scripts/work.sh start <id>`
 - Print worktree path: `scripts/work.sh path <id>`
 - Run proofs in worktree: `scripts/work.sh verify <id> -- scripts/checks.sh governance`
 - Commit in worktree: `scripts/work.sh commit <id> -m "…" `
 - Print PR commands: `scripts/work.sh pr <id>`
 
-If the base working tree is dirty, `start` will automatically “park” it by committing all changes to a local `park/<timestamp>` branch, then returning you to your original branch (use `--no-park` to refuse).
+`start` does not require a clean base checkout (it does not mutate the base tree).
 
 ## File format
 
