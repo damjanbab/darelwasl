@@ -53,13 +53,17 @@ scripts/webterm-ui.sh deploy-canary
 
 3) After confirmation, open/merge the PR.
 
-4) After merge, deploy to stable:
+4) Promote (blue/green swap): stable gets canary, and canary becomes the previous stable:
 
 ```bash
-scripts/webterm-ui.sh deploy-stable
+DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
 ```
 
-Optional (session rotation): swap stable/canary session numbers in `/etc/darelwasl/webterm.env` and restart the UI.
+Optional: redeploy canary from `main` so the canary tracks the latest code before the next round of changes:
+
+```bash
+scripts/webterm-ui.sh deploy-canary
+```
 
 ## Proof
 

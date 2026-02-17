@@ -95,6 +95,7 @@ scripts/webterm-ui.sh install
 scripts/webterm-ui.sh install-unit
 scripts/webterm-ui.sh restart
 scripts/webterm-ui.sh smoke
+DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
 ```
 
 Canary-first deploy (recommended for Lab UI/code changes):
@@ -105,7 +106,7 @@ scripts/webterm-ui.sh deploy-canary
 
 ## Canary upgrades (stable ↔ canary swap)
 
-When making Lab-related changes that could break workflows, validate in **canary** first, then promote by swapping the stable/canary session numbers in `/etc/darelwasl/webterm.env`.
+When making Lab-related changes that could break workflows, validate in **canary** first, then promote via a **blue/green swap** (stable ⇄ canary installed trees). This ensures the *new canary* becomes the *previous stable* automatically, so you don’t “lose” features like the toolbar on the canary after promotion.
 
 Policy: `policies/lab-canary-upgrades.md`
 

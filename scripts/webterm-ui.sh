@@ -55,6 +55,7 @@ Commands:
   check       Run 'clojure --check' in ${DST}
   restart     Restart systemd service (${SERVICE})
   smoke       Curl a couple endpoints (stable + canary)
+  promote     Blue/green swap: stable ⇄ canary installed trees, restart both
   deploy-canary  Install+install-unit+restart canary; print proctor link
   deploy-stable  Install+install-unit+restart stable
 
@@ -67,6 +68,7 @@ Env overrides:
   DW_WEBTERM_UI_UNIT_DST=/etc/systemd/system/name.service
   DW_WEBTERM_UI_OWNER=user:group
   DW_WEBTERM_PUBLIC_ORIGIN=https://code.haloeddepth.com
+  DW_WEBTERM_UI_PROMOTE_APPROVED=1 (or DEPLOY_APPROVED=1) to allow promote
 EOF
 }
 
@@ -138,6 +140,15 @@ case "$cmd" in
     smoke_one() {
       local listen="$1" label="$2"
       local ok=0
+
+      assert_toolbar() {
+        local url="$1"
+        local page
+        page="$(curl -fsS "$url")"
+        echo "$page" | grep -q '<div class="bar">' || { echo "missing toolbar container: $url (${label})" >&2; exit 2; }
+        echo "$page" | grep -q 'id="b-work"' || { echo "missing toolbar buttons: $url (${label})" >&2; exit 2; }
+      }
+
       for _ in {1..60}; do
         if curl -fsS "$listen/api/sessions" >/dev/null 2>&1; then
           ok=1
@@ -149,16 +160,75 @@ case "$cmd" in
         curl -fsS "$listen/api/sessions" >/dev/null
       fi
       echo "sessions ok (${label})"
-      curl -fsS "$listen/lab?session=$LAB_STABLE_N" >/dev/null && echo "lab stable ok (${label})"
+      assert_toolbar "$listen/lab?session=$LAB_STABLE_N"
+      echo "lab stable ok (${label})"
       curl -fsS "$listen/api/lab/outbox?session=$LAB_STABLE_N" >/dev/null && echo "outbox stable ok (${label})"
       curl -fsS "$listen/api/lab/history?lines=200&session=$LAB_STABLE_N" >/dev/null && echo "history stable ok (${label})"
-      curl -fsS "$listen/lab?session=$LAB_CANARY_N" >/dev/null && echo "lab canary ok (${label})"
+      assert_toolbar "$listen/lab?session=$LAB_CANARY_N"
+      echo "lab canary ok (${label})"
       curl -fsS "$listen/api/lab/outbox?session=$LAB_CANARY_N" >/dev/null && echo "outbox canary ok (${label})"
       curl -fsS "$listen/api/lab/history?lines=200&session=$LAB_CANARY_N" >/dev/null && echo "history canary ok (${label})"
     }
 
     smoke_one "$STABLE_LISTEN_DEFAULT" "stable-ui"
     smoke_one "$CANARY_LISTEN_DEFAULT" "canary-ui"
+    ;;
+  promote)
+    if [[ "${DW_WEBTERM_UI_PROMOTE_APPROVED:-}" != "1" && "${DEPLOY_APPROVED:-}" != "1" ]]; then
+      cat <<'EOF'
+Refusing to promote (stable ⇄ canary swap): approval flag is not set.
+
+To promote intentionally, run:
+  DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
+
+(or set DW_WEBTERM_UI_PROMOTE_APPROVED=1)
+EOF
+      exit 1
+    fi
+
+    if [[ "$(id -u)" != "0" ]]; then
+      echo "promote must run as root (it swaps /usr/local/lib trees and restarts systemd). Use: sudo $0 promote" >&2
+      exit 2
+    fi
+
+    stable_dst="${DW_WEBTERM_UI_STABLE_DST:-$STABLE_DST_DEFAULT}"
+    canary_dst="${DW_WEBTERM_UI_CANARY_DST:-$CANARY_DST_DEFAULT}"
+    stable_svc="${DW_WEBTERM_UI_STABLE_SERVICE:-$STABLE_SERVICE_DEFAULT}"
+    canary_svc="${DW_WEBTERM_UI_CANARY_SERVICE:-$CANARY_SERVICE_DEFAULT}"
+
+    [ -d "$stable_dst" ] || { echo "stable installed dir not found: $stable_dst" >&2; exit 2; }
+    [ -d "$canary_dst" ] || { echo "canary installed dir not found: $canary_dst" >&2; exit 2; }
+
+    echo "[promote] stopping services..."
+    systemctl stop "$stable_svc" || true
+    systemctl stop "$canary_svc" || true
+
+    tmp="${stable_dst}.swap.$(date -u +%Y%m%d-%H%M%S)"
+    echo "[promote] swapping installed trees:"
+    echo "  stable: $stable_dst"
+    echo "  canary: $canary_dst"
+    echo "  tmp:    $tmp"
+
+    mv "$stable_dst" "$tmp"
+    mv "$canary_dst" "$stable_dst"
+    mv "$tmp" "$canary_dst"
+
+    chown -R "$OWNER" "$stable_dst" "$canary_dst" || true
+
+    echo "[promote] starting services..."
+    systemctl start "$stable_svc"
+    systemctl start "$canary_svc"
+
+    systemctl status "$stable_svc" --no-pager -l || true
+    systemctl status "$canary_svc" --no-pager -l || true
+
+    "$0" smoke
+
+    echo "Promoted canary → stable (blue/green swap complete)."
+    echo "Stable:"
+    echo "  ${PUBLIC_ORIGIN}/lab?session=${LAB_STABLE_N}"
+    echo "Canary:"
+    echo "  ${PUBLIC_ORIGIN}/canary/lab?session=${LAB_CANARY_N}"
     ;;
   deploy-canary)
     "$0" --target canary install
