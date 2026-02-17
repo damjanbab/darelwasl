@@ -199,11 +199,32 @@ cmd_new() {
   [ -n "$summary" ] || die "new requires --summary"
   scripts/playbook.sh show "$playbook" >/dev/null 2>&1 || die "Unknown playbook: $playbook"
 
-  if [ -n "${id:-}" ]; then
-    scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary" --id "$id"
-  else
-    scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary"
+  local dirty
+  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
+  if [ -n "${dirty:-}" ]; then
+    die "Refusing to create a new work item while the base checkout is dirty. Clean it first (or park it), then retry."
   fi
+
+  local new_id
+  if [ -n "${id:-}" ]; then
+    new_id="$(scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary" --id "$id")"
+  else
+    new_id="$(scripts/work.sh new --type "$type" --playbook "$playbook" --summary "$summary")"
+  fi
+  [ -n "${new_id:-}" ] || die "work.sh new returned an empty id"
+
+  # Keep the base checkout clean so scripts/work.sh start can run.
+  local wf="docs/work/${new_id}.md"
+  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
+  if [ -n "${dirty:-}" ]; then
+    local n
+    n="$(printf "%s" "$dirty" | wc -l | tr -d ' ')"
+    if [[ "$n" == "1" ]] && printf "%s" "$dirty" | rg -q "^\\?\\?[[:space:]]+${wf//\//\\/}$"; then
+      (cd "$ROOT" && git add "$wf" && git commit -m "work: ${new_id} (work-prod)" >/dev/null 2>&1) || true
+    fi
+  fi
+
+  echo "$new_id"
 }
 
 cmd_init() {
