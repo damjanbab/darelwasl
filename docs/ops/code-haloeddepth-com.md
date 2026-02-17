@@ -66,6 +66,7 @@ Shared configuration is read from `/etc/darelwasl/webterm.env` (used by the syst
 - `DW_LAB_SESSION_CANARY` (default: `DW_LAB_SESSION_STABLE + 1`)
 - Legacy: `DW_LAB_SESSION` (treated as stable when `DW_LAB_SESSION_STABLE` is not set)
 - `DW_LAB_DIR` (default `/opt/darelwasl/tmp/lab`)
+- `DW_LAB_LIBRARY_DIR` (default: `<DW_LAB_DIR>/library`)
 - `DW_LAB_MAX_UPLOAD_BYTES` (default `52428800` / 50MB)
 
 Optional:
@@ -73,9 +74,9 @@ Optional:
 - `DW_LAB_HISTORY_LINES` (default `20000`; UI default for history capture)
 - `DW_TMUX_HISTORY_LIMIT` (default `50000`; tmux history-limit for newly created sessions)
 
-## Auto-publishing artifacts to Lab outbox
+## Auto-publishing artifacts to Lab Library
 
-To make generated PDFs show up in the Lab outbox automatically (for one-click download), set:
+To make generated PDFs show up in the Lab Library automatically (for one-click review/download), set:
 
 ```bash
 export DW_LAB_AUTO_OUTBOX=1

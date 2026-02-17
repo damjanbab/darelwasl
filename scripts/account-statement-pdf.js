@@ -13,6 +13,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const { chromium } = require("playwright");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -22,17 +23,6 @@ function isTruthyEnv(v) {
   return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 
-function labSessionName() {
-  const prefix = String(process.env.DW_TMUX_PREFIX || "codex").trim() || "codex";
-  const n = String(process.env.DW_LAB_SESSION || process.env.DW_LAB_SESSION_STABLE || "7").trim() || "7";
-  return `${prefix}${n}`;
-}
-
-function labOutboxDir() {
-  const base = String(process.env.DW_LAB_DIR || path.join(REPO_ROOT, "tmp", "lab")).trim();
-  return path.join(base, labSessionName(), "outbox");
-}
-
 function safeWorkId(v) {
   const s = String(v || "").trim();
   if (!s) return null;
@@ -40,10 +30,55 @@ function safeWorkId(v) {
   return s;
 }
 
+function inferWorkIdFromGit() {
+  try {
+    const branch = String(
+      childProcess.execSync("git rev-parse --abbrev-ref HEAD", {
+        cwd: REPO_ROOT,
+        stdio: ["ignore", "pipe", "ignore"],
+      }) || "",
+    )
+      .trim()
+      .replace(/^refs\/heads\//, "");
+    const m = branch.match(/^work\/(.+)$/);
+    if (!m) return null;
+    return safeWorkId(m[1]);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function effectiveWorkId() {
+  return safeWorkId(process.env.DW_LAB_WORK_ID || process.env.DW_WORK_ID) || inferWorkIdFromGit();
+}
+
+function defaultLabDir() {
+  const explicit = String(process.env.DW_LAB_DIR || "").trim();
+  if (explicit) return explicit;
+
+  const parts = REPO_ROOT.split(path.sep).filter(Boolean);
+  const targetIdx = parts.lastIndexOf("target");
+  const next = targetIdx >= 0 ? parts[targetIdx + 1] : null;
+  if (targetIdx >= 0 && (next === "worktrees" || next === "previews")) {
+    const commonRoot = path.sep + parts.slice(0, targetIdx).join(path.sep);
+    return path.join(commonRoot, "tmp", "lab");
+  }
+
+  return path.join(REPO_ROOT, "tmp", "lab");
+}
+
+function labLibraryRootDir() {
+  const explicit = String(process.env.DW_LAB_LIBRARY_DIR || "").trim();
+  if (explicit) return explicit;
+  const base = defaultLabDir();
+  return path.join(base, "library");
+}
+
 function labLibraryDir() {
-  const workId = safeWorkId(process.env.DW_LAB_WORK_ID || process.env.DW_WORK_ID);
-  if (!workId) return labOutboxDir();
-  return path.join(labOutboxDir(), "work", workId);
+  const workId = effectiveWorkId();
+  const root = labLibraryRootDir();
+  if (!workId) return path.join(root, "unscoped");
+  return path.join(root, "work", workId);
 }
 
 function uniqueCopyDest(dir, filename) {
@@ -75,7 +110,7 @@ function maybePublishToLabOutbox(outPath) {
     fs.copyFileSync(src, dest);
     return dest;
   } catch (e) {
-    console.warn("Lab outbox publish failed:", e && e.message ? e.message : e);
+    console.warn("Lab library publish failed:", e && e.message ? e.message : e);
     return null;
   }
 }
