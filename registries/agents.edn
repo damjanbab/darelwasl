@@ -61,4 +61,30 @@
              :cap/policy/verification-required]
   :routing {:signals {:keywords ["ci" "checks" "script" "policy" "governance" "docs generation" "agent"]
                       :paths ["scripts/" "agents/" "policies/" ".github/workflows/"]}}}
+
+ {:id :cap/agent/lab
+  :title "Lab agent"
+  :version "v1"
+  :allowed-paths ["src/darelwasl/webterm/"
+                  "ops/webterm-ui/"
+                  "scripts/webterm-ui.sh"
+                  "docs/ops/"
+                  "policies/"
+                  "agents/"
+                  "registries/agents.edn"
+                  "registries/policies.edn"]
+  :proofs {:commands ["clojure -M -m darelwasl.webterm.server --check"
+                      "scripts/webterm-ui.sh smoke"
+                      "scripts/checks.sh governance"]}
+  :policies [:cap/policy/clojure-first
+             :cap/policy/lab-canary-upgrades
+             :cap/policy/pr-required
+             :cap/policy/ops-governance-changes
+             :cap/policy/verification-required]
+  :routing {:signals {:keywords ["lab" "webterm" "webterm ui" "code.haloeddepth.com" "canary" "ttyd" "shellinabox" "tmux history"]
+                      :paths ["src/darelwasl/webterm/"
+                              "ops/webterm-ui/"
+                              "scripts/webterm-ui.sh"
+                              "docs/ops/code-haloeddepth-com.md"
+                              "policies/lab-canary-upgrades.md"]}}}
 ]

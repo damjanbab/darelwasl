@@ -1,0 +1,17 @@
+[Unit]
+Description=DarelWasl Web Terminal UI (Canary)
+After=network.target
+
+[Service]
+Type=simple
+User=darelwasl
+Group=darelwasl
+EnvironmentFile=/etc/darelwasl/webterm.env
+WorkingDirectory=/usr/local/lib/dw-webterm-ui-canary
+ExecStart=/usr/bin/env DW_LISTEN_PORT=7684 DW_PUBLIC_BASE_PATH=/canary /usr/local/lib/dw-webterm-ui-canary/run.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `97acb6ef5565025c6fb65c8020da1775084738c4e2f280c7f887562d53cbb93f`
+- Catalog version: `1b59e9a0d5ab00c3fdf20b50fd19c1cbbf9e4a1f2889c14f73f1a0f12c28f3d3`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -196,16 +196,18 @@ This file is auto-generated. Do not edit by hand.
 - integration/rezultati
 - integration/telegram-bot
 
-### Agents (5)
+### Agents (6)
 - agent/app-ui
 - agent/backend
+- agent/lab
 - agent/ops-governance
 - agent/registries
 - agent/website
 
-### Policies (17)
+### Policies (18)
 - policy/app-ui-changes
 - policy/backend-changes
+- policy/clojure-first
 - policy/docs-are-output
 - policy/lab-artifacts-to-outbox
 - policy/lab-canary-upgrades
@@ -589,6 +591,12 @@ Common queries:
 - darelwasl.users
 - darelwasl.util
 - darelwasl.validation
+- darelwasl.webterm.config
+- darelwasl.webterm.fs
+- darelwasl.webterm.http
+- darelwasl.webterm.server
+- darelwasl.webterm.tmux
+- darelwasl.webterm.ui
 - darelwasl.workers.betting-scheduler
 - darelwasl.workers.outbox
 - darelwasl.workers.telegram-poller

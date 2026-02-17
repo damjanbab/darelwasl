@@ -6,7 +6,7 @@ When working in the Lab (`code.haloeddepth.com/lab`), artifacts that are meant t
 
 ## Rules
 
-- **Outbox is the only download surface.** Do not add “download from inbox” behavior.
+- **Library (outbox) is the only download surface.** Do not add “download from inbox” behavior.
 - When generating PDFs in a Lab session, enable auto-publish:
   - `DW_LAB_AUTO_OUTBOX=1`
 - Auto-publish uses the standard Lab paths:
@@ -15,6 +15,8 @@ When working in the Lab (`code.haloeddepth.com/lab`), artifacts that are meant t
     - Prefer: `DW_LAB_SESSION` (explicit target for a single run)
     - Else: `DW_LAB_SESSION_STABLE` (default: `7`)
   - Outbox directory becomes: `<DW_LAB_DIR>/<DW_TMUX_PREFIX><N>/outbox/`
+  - Optional (work-scoped publishing): set `DW_LAB_WORK_ID=<work-id>` to publish to:
+    - `<DW_LAB_DIR>/<DW_TMUX_PREFIX><N>/outbox/work/<work-id>/`
 
 ## Supported generators
 
