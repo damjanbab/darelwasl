@@ -101,6 +101,7 @@
       (= ext ".gif") "image/gif"
       (= ext ".webp") "image/webp"
       (= ext ".svg") "image/svg+xml"
+      (or (= ext ".html") (= ext ".htm")) "text/html; charset=utf-8"
       (contains? #{".txt" ".md" ".markdown" ".log" ".json" ".edn" ".csv"} ext) "text/plain; charset=utf-8"
       :else "application/octet-stream")))
 
@@ -121,25 +122,22 @@
   [cfg id]
   (repo-path cfg "docs" "work" (str id ".md")))
 
+(declare parse-work-header-from-text)
+
 (defn- read-work-header
   [cfg id]
   (let [p (work-file-path cfg id)]
-    (when (Files/exists p (make-array java.nio.file.LinkOption 0))
+    (or
+      (when (Files/exists p (make-array java.nio.file.LinkOption 0))
+        (try
+          (parse-work-header-from-text (slurp (str p) :encoding "UTF-8"))
+          (catch Exception _ nil)))
       (try
-        (with-open [r (java.io.BufferedReader.
-                       (java.io.InputStreamReader.
-                        (Files/newInputStream p (make-array java.nio.file.OpenOption 0)) "UTF-8"))]
-          (loop [i 0 acc {}]
-            (if (>= i 120)
-              acc
-              (if-let [line (.readLine r)]
-                (let [line (str/trim line)]
-                  (if (str/blank? line)
-                    acc
-                    (if-let [[_ k v] (re-matches #"^([a-zA-Z0-9_./-]+):\\s*(.*)$" line)]
-                      (recur (inc i) (assoc acc (keyword k) (str/trim v)))
-                      (recur (inc i) acc))))
-                acc))))
+        (let [{:keys [exit out]} (run-proc {:cmd ["bash" "scripts/work.sh" "show" id]
+                                            :cwd (:repo-root cfg)
+                                            :timeout-ms 20000})]
+          (when (zero? exit)
+            (parse-work-header-from-text out)))
         (catch Exception _ nil)))))
 
 (def ^:private canary-proctor-paths
@@ -227,6 +225,23 @@
                         :else (str b)))
                     (catch Exception _ ""))]
     (try (json/read-str body-text) (catch Exception _ {}))))
+
+(defn- parse-work-header-from-text
+  [text]
+  (try
+    (with-open [r (java.io.BufferedReader. (java.io.StringReader. (or text "")))]
+      (loop [i 0 acc {}]
+        (if (>= i 120)
+          acc
+          (if-let [line (.readLine r)]
+            (let [line (str/trim line)]
+              (if (str/blank? line)
+                acc
+                (if-let [[_ k v] (re-matches #"^([a-zA-Z0-9_./-]+):\\s*(.*)$" line)]
+                  (recur (inc i) (assoc acc (keyword k) (str/trim v)))
+                  (recur (inc i) acc))))
+            acc))))
+    (catch Exception _ nil)))
 
 (defn- take-lines
   [s n]
@@ -392,16 +407,112 @@
 
 (defn- handle-work-list
   [cfg _req]
-  (json-response {:items (list-work-items cfg)}))
+  (try
+    (let [{:keys [exit out err]} (run-proc {:cmd ["bash" "scripts/work.sh" "list" "--limit" "200"]
+                                           :cwd (:repo-root cfg)
+                                           :timeout-ms 20000})]
+      (when-not (zero? exit)
+        (throw (ex-info "work list failed" {:stderr err})))
+      (let [items (->> (str/split-lines (or out ""))
+                       (map (fn [line]
+                              (let [[id status type playbook summary] (str/split line #"\t" 5)]
+                                (when (and id (not (str/blank? id)))
+                                  {:id (str/trim id)
+                                   :status (str/trim (or status ""))
+                                   :type (str/trim (or type ""))
+                                   :playbook (str/trim (or playbook ""))
+                                   :summary (str/trim (or summary ""))}))))
+                       (remove nil?)
+                       (vec))]
+        (json-response {:items items})))
+    (catch Exception e
+      (-> (json-response {:items [] :ok false :message (or (.getMessage e) "failed")})
+          (assoc :status 500)))))
 
 (defn- handle-work-file
   [cfg req]
   (let [id (fs/safe-segment (get-in req [:query-params "id"]))
-        p (when id (repo-path cfg "docs" "work" (str id ".md")))]
-    (if-not (and p (Files/exists p (make-array java.nio.file.LinkOption 0)))
+        repo (:repo-root cfg)]
+    (if-not id
       (resp/not-found "not found\n")
-      (-> (resp/response (slurp (str p) :encoding "UTF-8"))
-          (resp/content-type "text/plain; charset=utf-8")))))
+      (let [{:keys [exit out err]} (run-proc {:cmd ["bash" "scripts/work.sh" "show" id]
+                                             :cwd repo
+                                             :timeout-ms 20000})]
+        (if-not (zero? exit)
+          (resp/not-found "not found\n")
+          (-> (resp/response (or out ""))
+              (resp/content-type "text/plain; charset=utf-8")))))))
+
+(defn- handle-work-header
+  [cfg req]
+  (let [id (fs/safe-segment (get-in req [:query-params "id"]))
+        repo (:repo-root cfg)]
+    (if-not id
+      (-> (json-response {:ok false :message "missing id"}) (assoc :status 400))
+      (let [{:keys [exit out]} (run-proc {:cmd ["bash" "scripts/work.sh" "show" id]
+                                          :cwd repo
+                                          :timeout-ms 20000})
+            header (when (zero? exit) (parse-work-header-from-text out))]
+        (if-not header
+          (-> (json-response {:ok false :message "work not found" :work_id id}) (assoc :status 404))
+          (json-response {:ok true :work_id id :header header}))))))
+
+(defn- handle-tmux-paste
+  [cfg req]
+  (let [obj (read-json-body req)
+        text (or (get obj "text") (get obj "ref") "")]
+    (when-not (string? text)
+      (throw (ex-info "bad text" {:status 400})))
+    (tmux/paste-text! cfg (lab-session cfg req) text)
+    (json-response {:ok true :len (count (str text))})))
+
+(defn- work-prod-state-path
+  ^Path
+  [cfg id]
+  (repo-path cfg "data" "work-prod" "works" (str id ".json")))
+
+(defn- handle-work-prod-state
+  [cfg req]
+  (let [id (fs/safe-segment (get-in req [:query-params "id"]))
+        p (when id (work-prod-state-path cfg id))]
+    (if-not (and id p (Files/exists p (make-array java.nio.file.LinkOption 0)))
+      (-> (json-response {:ok false :message "state not found" :work_id id}) (assoc :status 404))
+      (try
+        (let [data (json/read-str (slurp (str p) :encoding "UTF-8"))]
+          (json-response {:ok true
+                          :work_id id
+                          :status (get data "status")
+                          :updated_at (get data "updated_at")
+                          :pr_url (get data "pr_url")
+                          :preview (get data "preview")}))
+        (catch Exception e
+          (-> (json-response {:ok false :message (or (.getMessage e) "bad state") :work_id id})
+              (assoc :status 500)))))))
+
+(defn- handle-work-prod-approve-proof
+  [cfg req]
+  (let [obj (read-json-body req)
+        id (fs/safe-segment (or (get obj "id") (get obj "work") (get-in req [:query-params "id"])))
+        header (when id (read-work-header cfg id))]
+    (when-not (and id header)
+      (throw (ex-info "work not found" {:status 404 :work_id id})))
+    (let [{:keys [required]} (required-proctor cfg id header)
+          current (ui-role cfg)]
+      (when-not (= required current)
+        (throw (ex-info "wrong proctor channel" {:status 409
+                                                 :required_proctor required
+                                                 :current_proctor current
+                                                 :required_href (proctor-href cfg required)
+                                                 :work_id id}))))
+    (let [{:keys [exit out err]} (run-proc {:cmd ["bash" "scripts/work-prod.sh" "approve-proof" id]
+                                           :cwd (:repo-root cfg)
+                                           :timeout-ms 600000})]
+      (when-not (zero? exit)
+        (throw (ex-info "approve-proof failed" {:status 500
+                                                :message "approve-proof failed"
+                                                :details (take-lines (str out "\n" err) 120)
+                                                :work_id id})))
+      (json-response {:ok true :work_id id :pr_url (str/trim (or out ""))}))))
 
 (defn- handle-sessions
   [cfg _req]
@@ -643,6 +754,7 @@
                 (and (= m :get) (= uri "/api/sessions")) (handle-sessions cfg req)
                 (and (= m :get) (= uri "/api/work/list")) (handle-work-list cfg req)
                 (and (= m :get) (= uri "/api/work/file")) (handle-work-file cfg req)
+                (and (= m :get) (= uri "/api/work/header")) (handle-work-header cfg req)
                 (and (= m :get) (= uri "/api/work/requirements")) (handle-work-requirements cfg req)
                 (and (= m :post) (= uri "/api/work/signoff")) (handle-work-signoff cfg req)
                 (and (= m :get) (= uri "/new"))
@@ -672,8 +784,12 @@
                 (and (= m :get) (= uri "/api/lab/outbox/view")) (handle-outbox-download cfg req "inline")
                 (and (= m :get) (= uri "/api/lab/history")) (handle-history cfg req)
                 (and (= m :post) (= uri "/api/lab/terminal/clear")) (handle-terminal-clear cfg req)
+                (and (= m :post) (= uri "/api/lab/tmux/paste")) (handle-tmux-paste cfg req)
                 (and (= m :post) (= uri "/api/lab/upload")) (handle-upload cfg req build-stamp)
                 (and (= m :post) (= uri "/api/lab/paste")) (handle-paste cfg req)
+
+                (and (= m :get) (= uri "/api/work-prod/state")) (handle-work-prod-state cfg req)
+                (and (= m :post) (= uri "/api/work-prod/approve-proof")) (handle-work-prod-approve-proof cfg req)
 
                 (and (= m :get) (= uri "/api/library/list")) (handle-library-list cfg req)
                 (and (= m :get) (= uri "/api/library/recent")) (handle-library-recent cfg req)
