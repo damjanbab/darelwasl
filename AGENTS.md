@@ -19,6 +19,8 @@ It is designed for:
 - Open a playbook: `scripts/playbook.sh show <id>`
 - Create work item: `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
 - List open work: `scripts/work.sh list --open`
+- Audit work tracking: `scripts/work.sh audit`
+- Auto-close merged work items: `scripts/work.sh close-merged --into main`
 - Start isolated worktree: `scripts/work.sh start <work-id>`
 - Verify in isolation: `scripts/work.sh verify <work-id> -- scripts/checks.sh governance`
 - Check the query protocol exists: `scripts/checks.sh query`

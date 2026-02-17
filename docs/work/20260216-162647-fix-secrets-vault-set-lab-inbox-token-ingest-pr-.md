@@ -1,6 +1,7 @@
+work/closed_at: 2026-02-17T12:45:16Z
 work/id: 20260216-162647-fix-secrets-vault-set-lab-inbox-token-ingest-pr-
 work/type: governance
-work/status: open
+work/status: closed
 work/playbook: secrets/vault
 work/summary: Fix secrets vault set + lab inbox token ingest + PR create automation
 work/branch: work/20260216-162647-fix-secrets-vault-set-lab-inbox-token-ingest-pr-
@@ -8,7 +9,7 @@ work/worktree: /opt/darelwasl/target/worktrees/20260216-162647-fix-secrets-vault
 work/pr_url: https://github.com/damjanbab/darelwasl/pull/61
 work/base: main
 work/created_at: 2026-02-16T16:26:47Z
-work/updated_at: 2026-02-16T18:12:52Z
+work/updated_at: 2026-02-17T12:45:16Z
 
 # Notes
 

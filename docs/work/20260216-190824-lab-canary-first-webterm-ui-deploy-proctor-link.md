@@ -1,13 +1,14 @@
+work/closed_at: 2026-02-17T12:45:17Z
 work/id: 20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
 work/type: governance
-work/status: open
+work/status: closed
 work/playbook: work/isolate-pr
 work/summary: Lab: canary-first webterm UI deploy + proctor link
 work/branch: work/20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
 work/worktree: /opt/darelwasl/target/worktrees/20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
 work/base: bootstrap/20260216-lab-canary-ui
 work/created_at: 2026-02-16T19:08:24Z
-work/updated_at: 2026-02-16T23:45:10Z
+work/updated_at: 2026-02-17T12:45:17Z
 
 # Notes
 

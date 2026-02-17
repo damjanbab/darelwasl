@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `d07eecc3c8a73d585b9782427ef82d43eda844a8a21e38db60a05c8df8ec8bf9`
+- Catalog version: `e84d9679af148bf9d1174723cd5b53c6ddd9e8cf800603b3574520bc6afc74a2`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -204,13 +204,14 @@ This file is auto-generated. Do not edit by hand.
 - agent/registries
 - agent/website
 
-### Policies (18)
+### Policies (19)
 - policy/app-ui-changes
 - policy/backend-changes
 - policy/clojure-first
 - policy/docs-are-output
 - policy/lab-artifacts-to-outbox
 - policy/lab-canary-upgrades
+- policy/lab-ui-blue-green
 - policy/ops-governance-changes
 - policy/pr-required
 - policy/preview-auth-required
@@ -610,11 +611,3 @@ Work items live in `docs/work/` and can be queried via:
 - `scripts/query.sh --kind work-item TERM`
 - `scripts/work.sh list --open`
 
-- work-item/20260215-201345-lab-ui-professional-design-history-scroll-codex-
-- work-item/20260216-130953-enforce-pr-workflow-parallel-worktrees-hooks-wor
-- work-item/20260216-162647-fix-secrets-vault-set-lab-inbox-token-ingest-pr-
-- work-item/20260216-174051-agents-wire-discovery-first-one-off-vs-workflow-
-- work-item/20260216-174943-file-library-allow-txt-uploads-for-one-off-secre
-- work-item/20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
-- work-item/20260217-013524-work-items-are-queryable-via-catalog-better-work
-- work-item/20260217-093956-lab-shared-library-across-sessions-business-doc-

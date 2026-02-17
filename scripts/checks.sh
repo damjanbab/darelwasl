@@ -124,6 +124,9 @@ check_governance() {
 
   check_agents_md_playbooks
 
+  echo "Auditing work tracking (non-fatal)..."
+  (cd "$ROOT" && scripts/work.sh audit --no-fetch)
+
   echo "Governance checks passed."
 }
 

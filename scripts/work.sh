@@ -38,11 +38,13 @@ Commands:
   show <id>
   search <text>
   path <id>
+  audit [--into <ref>] [--no-fetch] [--strict]
   start <id> [--base <branch>] [--park]
   verify <id> -- <command...>
   commit <id> -m <message>
   pr <id>
   pr-create <id>
+  close-merged [--into <ref>] [--no-fetch] [--dry-run]
   close <id>
 
 Notes:
@@ -71,6 +73,59 @@ ensure_dirs() {
 
 require_git_repo() {
   (cd "$ROOT" && git rev-parse --is-inside-work-tree >/dev/null 2>&1) || die "Not a git repo: $ROOT"
+}
+
+git_ref_exists() {
+  local ref="${1:-}"
+  [ -n "$ref" ] || return 1
+  (cd "$ROOT" && git show-ref --verify --quiet "$ref")
+}
+
+pick_into_ref() {
+  local want="${1:-}"
+  if [ -n "$want" ]; then
+    echo "$want"
+    return 0
+  fi
+  if git_ref_exists "refs/remotes/origin/${BASE_BRANCH_DEFAULT}"; then
+    echo "origin/${BASE_BRANCH_DEFAULT}"
+    return 0
+  fi
+  echo "${BASE_BRANCH_DEFAULT}"
+}
+
+resolve_work_branch_ref() {
+  local id="${1:-}"
+  [ -n "$id" ] || return 1
+  local branch remote_ref local_ref
+  branch="$(work_get "$id" "branch" | tr -d '\r' || true)"
+  branch="$(echo "${branch:-}" | xargs || true)"
+
+  if [ -n "$branch" ]; then
+    remote_ref="refs/remotes/origin/${branch}"
+    local_ref="refs/heads/${branch}"
+    if git_ref_exists "$remote_ref"; then
+      echo "origin/${branch}"
+      return 0
+    fi
+    if git_ref_exists "$local_ref"; then
+      echo "${branch}"
+      return 0
+    fi
+    return 0
+  fi
+
+  remote_ref="refs/remotes/origin/work/${id}"
+  local_ref="refs/heads/work/${id}"
+  if git_ref_exists "$remote_ref"; then
+    echo "origin/work/${id}"
+    return 0
+  fi
+  if git_ref_exists "$local_ref"; then
+    echo "work/${id}"
+    return 0
+  fi
+  echo ""
 }
 
 work_file() {
@@ -104,6 +159,15 @@ work_set() {
 work_touch_updated() {
   local id="$1"
   work_set "$id" "updated_at" "$(utc_iso)"
+}
+
+work_touch_closed() {
+  local id="$1"
+  if grep -qE "^work/closed_at:" "$(work_file "$id")"; then
+    work_set "$id" "closed_at" "$(utc_iso)"
+  else
+    work_set "$id" "closed_at" "$(utc_iso)"
+  fi
 }
 
 cmd_new() {
@@ -384,6 +448,155 @@ cmd_commit() {
   work_touch_updated "$id"
 }
 
+cmd_audit() {
+  local into="" do_fetch=1 strict=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --into) into="${2:-}"; shift 2 ;;
+      --no-fetch) do_fetch=0; shift ;;
+      --strict) strict=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "audit: unknown arg: $1" ;;
+    esac
+  done
+
+  require_git_repo
+  ensure_dirs
+
+  if [ "$do_fetch" -eq 1 ]; then
+    (cd "$ROOT" && git fetch origin --prune >/dev/null 2>&1 || true)
+  fi
+
+  local into_ref
+  into_ref="$(pick_into_ref "$into")"
+
+  local issues=0
+  echo "[work] audit: into=$into_ref"
+
+  local remote_branch_count=0 remote_open_count=0 remote_merged_count=0 remote_missing_workfile=0
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
+    remote_branch_count=$((remote_branch_count + 1))
+    local id
+    id="${b#origin/work/}"
+    if [ ! -s "$WORK_DIR/$id.md" ]; then
+      echo "[work] warning: remote branch has no workfile: $b (expected docs/work/$id.md)"
+      remote_missing_workfile=$((remote_missing_workfile + 1))
+      issues=$((issues + 1))
+    fi
+    if (cd "$ROOT" && git merge-base --is-ancestor "$b" "$into_ref" >/dev/null 2>&1); then
+      remote_merged_count=$((remote_merged_count + 1))
+    else
+      remote_open_count=$((remote_open_count + 1))
+      echo "[work] open: $b"
+    fi
+  done < <((cd "$ROOT" && git for-each-ref 'refs/remotes/origin/work' --format='%(refname:short)' | sort) || true)
+
+  local open_items=0 stale_open_merged=0 open_missing_branch=0
+  local f
+  for f in "$WORK_DIR"/*.md; do
+    [ -e "$f" ] || break
+    if [ "$(basename "$f")" = "README.md" ]; then
+      continue
+    fi
+    if ! grep -qE "^work/id:" "$f"; then
+      continue
+    fi
+    local id status
+    id="$(grep -E "^work/id:" "$f" | head -n1 | sed -E 's/^work\/id:[[:space:]]*//')"
+    status="$(grep -E "^work/status:" "$f" | head -n1 | sed -E 's/^work\/status:[[:space:]]*//')"
+    if [ "$status" != "open" ]; then
+      continue
+    fi
+    open_items=$((open_items + 1))
+
+    local ref
+    ref="$(resolve_work_branch_ref "$id")"
+    if [ -z "${ref:-}" ]; then
+      echo "[work] warning: open work item has no branch ref: $id (set work/branch or create origin/work/$id)"
+      open_missing_branch=$((open_missing_branch + 1))
+      issues=$((issues + 1))
+      continue
+    fi
+
+    if (cd "$ROOT" && git merge-base --is-ancestor "$ref" "$into_ref" >/dev/null 2>&1); then
+      echo "[work] warning: open work item is already merged: $id (branch=$ref into=$into_ref)"
+      stale_open_merged=$((stale_open_merged + 1))
+      issues=$((issues + 1))
+    fi
+  done
+
+  echo "[work] audit summary:"
+  echo "  remote branches: $remote_branch_count (merged=$remote_merged_count open=$remote_open_count missing-workfile=$remote_missing_workfile)"
+  echo "  open work items: $open_items (open-but-merged=$stale_open_merged open-missing-branch=$open_missing_branch)"
+
+  if [ "$strict" -eq 1 ] && [ "$issues" -ne 0 ]; then
+    return 2
+  fi
+  return 0
+}
+
+cmd_close_merged() {
+  local into="" do_fetch=1 dry_run=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --into) into="${2:-}"; shift 2 ;;
+      --no-fetch) do_fetch=0; shift ;;
+      --dry-run) dry_run=1; shift ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "close-merged: unknown arg: $1" ;;
+    esac
+  done
+
+  require_git_repo
+  ensure_dirs
+
+  if [ "$do_fetch" -eq 1 ]; then
+    (cd "$ROOT" && git fetch origin --prune >/dev/null 2>&1 || true)
+  fi
+
+  local into_ref
+  into_ref="$(pick_into_ref "$into")"
+  echo "[work] close-merged: into=$into_ref dry-run=$dry_run"
+
+  local closed=0
+  local f
+  for f in "$WORK_DIR"/*.md; do
+    [ -e "$f" ] || break
+    if [ "$(basename "$f")" = "README.md" ]; then
+      continue
+    fi
+    if ! grep -qE "^work/id:" "$f"; then
+      continue
+    fi
+    local id status
+    id="$(grep -E "^work/id:" "$f" | head -n1 | sed -E 's/^work\/id:[[:space:]]*//')"
+    status="$(grep -E "^work/status:" "$f" | head -n1 | sed -E 's/^work\/status:[[:space:]]*//')"
+    if [ "$status" != "open" ]; then
+      continue
+    fi
+
+    local ref
+    ref="$(resolve_work_branch_ref "$id")"
+    if [ -z "${ref:-}" ]; then
+      continue
+    fi
+    if (cd "$ROOT" && git merge-base --is-ancestor "$ref" "$into_ref" >/dev/null 2>&1); then
+      if [ "$dry_run" -eq 1 ]; then
+        echo "[work] would close: $id (branch=$ref merged into $into_ref)"
+      else
+        work_set "$id" "status" "closed"
+        work_touch_closed "$id"
+        work_touch_updated "$id"
+        echo "[work] closed: $id"
+      fi
+      closed=$((closed + 1))
+    fi
+  done
+
+  echo "[work] close-merged: affected=$closed"
+}
+
 cmd_pr() {
   local id="${1:-}"
   [ -n "$id" ] || die "pr requires <id>"
@@ -607,11 +820,13 @@ case "$cmd" in
   show) cmd_show "${1:-}" ;;
   search) cmd_search "${1:-}" ;;
   path) cmd_path "${1:-}" ;;
+  audit) cmd_audit "$@" ;;
   start) cmd_start "${1:-}" "${@:2}" ;;
   verify) cmd_verify "${1:-}" "${@:2}" ;;
   commit) cmd_commit "${1:-}" "${@:2}" ;;
   pr) cmd_pr "${1:-}" ;;
   pr-create) cmd_pr_create "${1:-}" ;;
+  close-merged) cmd_close_merged "$@" ;;
   close) cmd_close "${1:-}" ;;
   -h|--help|help|"") usage ;;
   *) die "Unknown command: $cmd" ;;
