@@ -693,7 +693,7 @@ cmd_pr_create() {
     die "GitHub token validation failed (revoke and re-issue; then store it as github/token)"
   fi
 
-  (cd "$wt" && git push -u origin "$branch")
+  (cd "$wt" && git push -u origin "$branch" >&2)
 
   local remote repo compare_url
   remote="$(cd "$wt" && git remote get-url origin 2>/dev/null || true)"
