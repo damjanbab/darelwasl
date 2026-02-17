@@ -1,3 +1,4 @@
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/77
 work/id: 20260217-223404-work-prod-proof-modes-by-work-type-durable-previ
 work/type: governance
 work/status: open
@@ -9,7 +10,7 @@ work/base: main
 work/prereqs: []
 work/lock: 
 work/created_at: 2026-02-17T22:34:04Z
-work/updated_at: 2026-02-17T22:35:41Z
+work/updated_at: 2026-02-17T22:39:11Z
 
 # Notes
 
