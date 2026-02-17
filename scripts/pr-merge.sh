@@ -258,9 +258,8 @@ cmd_poll() {
   while IFS= read -r num; do
     [[ -n "$num" ]] || continue
     cmd_merge --pr "$num" --method "$method" $( [[ "$resolve" -eq 1 ]] && printf "%s" "--resolve" ) || true
-  done < <(printf "%s" "$prs" | python3 - <<PY
-import json,sys
-prefix="$prefix"
+  done < <(printf "%s" "$prs" | python3 -c 'import json,sys
+prefix=sys.argv[1]
 data=json.loads(sys.stdin.read() or "[]")
 if not isinstance(data, list):
   raise SystemExit(0)
@@ -270,8 +269,7 @@ for pr in data:
     n=pr.get("number")
     if isinstance(n, int):
       print(n)
-PY
-)
+' "$prefix")
 }
 
 cmd="${1:-}"
