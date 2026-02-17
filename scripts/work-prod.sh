@@ -494,10 +494,11 @@ PY
   )"
   # scripts/preview prints JSON on success; capture last {...}.
   local preview_json
-  preview_json="$(printf "%s" "$out_json" | python3 - <<'PY'
+  preview_json="$(python3 - "$out_json" <<'PY'
 import json, sys
 
-s = sys.stdin.read()
+_s = sys.argv[1] if len(sys.argv) > 1 else ""
+s = _s
 try:
     d = json.loads(s)
     print(json.dumps(d))
