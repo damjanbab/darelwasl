@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `8b071a4be83fa848e638263653779a87cc6c766eecdddba4032a6f29b414659d`
+- Catalog version: `085d2181157f9d15542820dd39d471d3e0ffe4ebc4324e4d4c8ca945771422f6`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -204,7 +204,7 @@ This file is auto-generated. Do not edit by hand.
 - agent/registries
 - agent/website
 
-### Policies (19)
+### Policies (20)
 - policy/app-ui-changes
 - policy/backend-changes
 - policy/clojure-first
@@ -224,6 +224,7 @@ This file is auto-generated. Do not edit by hand.
 - policy/telegram-single-flight
 - policy/verification-required
 - policy/website-agent
+- policy/work-production-pipeline
 
 ### Internal capabilities (2)
 - internal/catalog-entry
@@ -254,7 +255,7 @@ This file is auto-generated. Do not edit by hand.
 
 ### Recipes (0)
 
-### Tooling (20)
+### Tooling (21)
 - tooling/account-statement-pdf
 - tooling/action-contract
 - tooling/app-smoke
@@ -275,6 +276,7 @@ This file is auto-generated. Do not edit by hand.
 - tooling/telegram-watch-webhook
 - tooling/theme-css-vars
 - tooling/website-agent-runner
+- tooling/work-production-pipeline
 
 ### Theme (3)
 - dark

@@ -1,0 +1,20 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "app-ui",
+  "title": "App UI agent",
+  "allowed_paths": [
+    "src/darelwasl/ui/",
+    "src/darelwasl/features/",
+    "public/css/"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "npm run check"
+    ]
+  }
+}
+

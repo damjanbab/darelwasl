@@ -1,0 +1,22 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "backend",
+  "title": "Backend/API agent",
+  "allowed_paths": [
+    "src/darelwasl/http/",
+    "src/darelwasl/actions.clj",
+    "src/darelwasl/entity.clj",
+    "src/darelwasl/events.clj",
+    "src/darelwasl/config.clj"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "scripts/checks.sh actions"
+    ]
+  }
+}
+

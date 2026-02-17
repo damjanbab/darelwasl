@@ -233,5 +233,5 @@
 (defn write-catalog!
   [path]
   (let [catalog (build-catalog)]
-    (spit path (pr-str catalog))
+    (spit path (str (pr-str catalog) "\n"))
     catalog))
