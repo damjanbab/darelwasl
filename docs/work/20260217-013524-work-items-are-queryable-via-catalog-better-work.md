@@ -7,11 +7,11 @@ work/branch: work/20260217-013524-work-items-are-queryable-via-catalog-better-wo
 work/worktree: /opt/darelwasl/target/worktrees/20260217-013524-work-items-are-queryable-via-catalog-better-work
 work/base: main
 work/created_at: 2026-02-17T01:35:24Z
-work/updated_at: 2026-02-17T01:45:12Z
+work/updated_at: 2026-02-17T01:47:01Z
 
 # Notes
 
 ## Proof
-- [ ] `scripts/checks.sh governance`
-- [ ] `scripts/checks.sh docs`
-- [ ] `scripts/checks.sh query`
+- [x] `scripts/checks.sh governance`
+- [x] `scripts/checks.sh docs`
+- [x] `scripts/checks.sh query`
