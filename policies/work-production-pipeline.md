@@ -5,6 +5,8 @@
 - Before executing work, the system must verify prerequisites exist on `main`:
   - A playbook exists for the work (`scripts/playbook.sh show <id>` must succeed).
   - A matching agent contract exists (allowed paths + proofs).
+  - If the work spec declares `work/prereqs`, every prerequisite work id must exist on `origin/main` before execution starts.
+- If the work spec declares `work/lock`, the system must not execute multiple works holding the same lock concurrently.
 - The system must **reconsolidate** with `origin/main` before execution and before PR creation.
 - The system must produce **user-visible proof** in the Lab (outbox) and require user approval before PR creation/merge.
 - Work execution and conflict resolution must use the pinned model `gpt-5.2-high` (configurable only by explicit environment override).
@@ -21,4 +23,3 @@
 
 ## Notes
 - GitHub operations require `GITHUB_TOKEN` (env or secrets vault key `github/token`).
-

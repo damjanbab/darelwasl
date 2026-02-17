@@ -7,7 +7,7 @@ This repo stores work items under `docs/work/` as plain Markdown so they are:
 
 ## Commands
 
-- Create a work item (also creates `work/<id>` + worktree): `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>"`
+- Create a work item (also creates `work/<id>` + worktree): `scripts/work.sh new --type <change|governance|investigate|question|refactor|delete> --playbook <id> --summary "<text>" [--prereq <work-id>]... [--lock <name>]`
 - List work items: `scripts/work.sh list`
   - Only open: `scripts/work.sh list --open`
   - Only closed: `scripts/work.sh list --closed`
@@ -48,6 +48,8 @@ work/summary: <one line>
 work/branch: <git branch>
 work/worktree: <path>
 work/base: <base branch>
+work/prereqs: <json array of prerequisite work ids>
+work/lock: <optional lock name>
 work/created_at: <utc iso>
 work/updated_at: <utc iso>
 ```

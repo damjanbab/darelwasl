@@ -33,7 +33,7 @@ usage() {
 Usage: scripts/work.sh <command> [args]
 
 Commands:
-  new --type <t> --summary <s> [--playbook <id>] [--id <id>] [--base <branch>]
+  new --type <t> --summary <s> [--playbook <id>] [--id <id>] [--base <branch>] [--prereq <work-id>]... [--lock <name>]
   list [--open|--closed] [--type <t>] [--playbook <id>] [--limit <n>]
   show <id>
   search <text>
@@ -167,7 +167,8 @@ work_touch_closed() {
 }
 
 cmd_new() {
-  local type="" summary="" playbook="" id="" base="$BASE_BRANCH_DEFAULT"
+  local type="" summary="" playbook="" id="" base="$BASE_BRANCH_DEFAULT" lock=""
+  local prereqs=()
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -176,6 +177,8 @@ cmd_new() {
       --playbook) playbook="${2:-}"; shift 2 ;;
       --id) id="${2:-}"; shift 2 ;;
       --base) base="${2:-}"; shift 2 ;;
+      --prereq) prereqs+=("${2:-}"); shift 2 ;;
+      --lock) lock="${2:-}"; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       *) die "Unknown arg: $1" ;;
     esac
@@ -223,6 +226,17 @@ cmd_new() {
     die "Work item already exists in worktree: $f"
   fi
 
+  local prereqs_json prereqs_lines
+  prereqs_lines="$(printf "%s\n" "${prereqs[@]:-}" | sed '/^$/d' || true)"
+  prereqs_json="$(
+    DW_PREREQS="$prereqs_lines" python3 - <<'PY'
+import json, os
+raw = os.environ.get("DW_PREREQS", "")
+items = [s.strip() for s in raw.split("\n") if s.strip()]
+print(json.dumps(items))
+PY
+  )"
+
   cat >"$f" <<EOF
 work/id: $id
 work/type: $type
@@ -232,6 +246,8 @@ work/summary: ${summary}
 work/branch: ${branch}
 work/worktree: target/worktrees/${id}
 work/base: ${base}
+work/prereqs: ${prereqs_json}
+work/lock: ${lock}
 work/created_at: $(utc_iso)
 work/updated_at: $(utc_iso)
 

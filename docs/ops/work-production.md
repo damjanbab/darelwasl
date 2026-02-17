@@ -37,9 +37,23 @@ Merging into `main` is gated:
 - Approve spec: `scripts/work-prod.sh approve-spec <id>`
 - Execute: `scripts/work-prod.sh execute <id>`
 - Preview + outbox proof: `scripts/work-prod.sh preview <id> --lab stable`
+- Run to proof (execute + preview): `scripts/work-prod.sh run <id> --lab stable`
 - Approve proof: open `work-proof-<id>.html` (or `work-links-<id>.txt`) in Lab outbox and click the approve link (or run `scripts/work-prod.sh approve-proof <id>`).
+
+## Optional prerequisites + locks
+Work specs can declare:
+- `work/prereqs: ["<work-id>", ...]` — work ids that must exist on `origin/main` before execution starts.
+- `work/lock: <name>` — an optional lock name to prevent concurrent execution of conflicting work.
+
+When prerequisites are missing, execution transitions the work state to `blocked_on_prereqs`.
+When a lock is held, execution transitions to `blocked_on_lock`.
 
 ## Merge agent
 To merge queued work PRs (head refs `work/<id>`):
 
 `DEPLOY_APPROVED=1 scripts/work-prod.sh merge-agent`
+
+## Running multiple works
+To attempt running all ready works (in parallel where safe):
+
+`scripts/work-prod.sh run-ready --max 4 --lab stable`
