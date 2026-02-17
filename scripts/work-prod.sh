@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 STATE_DIR="${DW_WORK_PROD_STATE_DIR:-$ROOT/data/work-prod/works}"
 ARTIFACT_DIR="${DW_WORK_PROD_ARTIFACT_DIR:-$ROOT/target/work-prod}"
+LOCK_DIR="${DW_WORK_PROD_LOCK_DIR:-$ROOT/data/work-prod/locks}"
 DEFAULT_MODEL="${DARELWASL_WORK_MODEL:-gpt-5.2-high}"
 
 usage() {
@@ -19,9 +20,11 @@ Commands:
   init <id> --agent <agents/.../AGENT.json> --request <text> [--model <m>]
   preflight <id> [--agent <agents/.../AGENT.json>]
   approve-spec <id>
-  execute <id>
+  execute <id> [--lab stable|canary|session:N]
   preview <id> [--lab stable|canary|session:N] [--public-host <url>]
   approve-proof <id>
+  run <id> [--lab stable|canary|session:N] [--public-host <url>]
+  run-ready [--max <n>] [--lab stable|canary|session:N] [--public-host <url>]
   merge-agent [--prefix work/] [--method merge|squash|rebase]
 
 Notes:
@@ -34,7 +37,7 @@ EOF
 die() { echo "error: $*" >&2; exit 2; }
 
 ensure_dirs() {
-  mkdir -p "$STATE_DIR" "$ARTIFACT_DIR"
+  mkdir -p "$STATE_DIR" "$ARTIFACT_DIR" "$LOCK_DIR"
 }
 
 state_path() {
@@ -80,6 +83,143 @@ work_branch() {
   local id="$1"
   (scripts/work.sh show "$id" | rg -n "^work/branch:" -o || true) >/dev/null 2>&1
   scripts/work.sh show "$id" | sed -nE 's/^work\/branch:[[:space:]]*//p' | head -n1
+}
+
+work_lock() {
+  local id="$1"
+  (scripts/work.sh show "$id" | rg -n "^work/lock:" -o || true) >/dev/null 2>&1
+  scripts/work.sh show "$id" | sed -nE 's/^work\/lock:[[:space:]]*//p' | head -n1 | xargs || true
+}
+
+work_prereqs() {
+  local id="$1"
+  (scripts/work.sh show "$id" | rg -n "^work/prereqs:" -o || true) >/dev/null 2>&1
+  scripts/work.sh show "$id" | sed -nE 's/^work\/prereqs:[[:space:]]*//p' | head -n1
+}
+
+prereq_ids() {
+  local raw="${1:-}"
+  python3 - "$raw" <<'PY'
+import json, sys
+raw = (sys.argv[1] or "").strip()
+if not raw:
+    raise SystemExit(0)
+try:
+    data = json.loads(raw)
+except Exception:
+    # fallback: comma/space separated
+    data = [x.strip() for x in raw.replace(",", " ").split() if x.strip()]
+if isinstance(data, str):
+    data = [data]
+if not isinstance(data, list):
+    raise SystemExit(0)
+for x in data:
+    if isinstance(x, str) and x.strip():
+        print(x.strip())
+PY
+}
+
+lock_slug() {
+  local raw="${1:-}"
+  python3 - "$raw" <<'PY'
+import re, sys
+s = (sys.argv[1] or "").strip().lower()
+s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+print(s or "lock")
+PY
+}
+
+state_set_status() {
+  local id="$1" status="$2" kind="$3"
+  local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  state_read "$id" | DW_NOW="$now" DW_STATUS="$status" DW_KIND="$kind" python3 -c '
+import json,os,sys
+d=json.loads(sys.stdin.read() or "{}")
+now=os.environ["DW_NOW"]
+status=os.environ["DW_STATUS"]
+kind=os.environ.get("DW_KIND","")
+d["status"]=status
+d["updated_at"]=now
+ev={"at":now,"kind":kind or status}
+d.setdefault("events",[]).append(ev)
+print(json.dumps(d, indent=2, sort_keys=True))
+' | state_write "$id"
+}
+
+block_on_prereqs_if_needed() {
+  local id="$1"
+  (cd "$ROOT" && git fetch origin --prune >/dev/null 2>&1 || true)
+  local raw missing
+  raw="$(work_prereqs "$id")"
+  missing="$(prereq_ids "$raw" | while IFS= read -r dep; do
+    [ -n "${dep:-}" ] || continue
+    if (cd "$ROOT" && git cat-file -e "origin/main:docs/work/${dep}.md" >/dev/null 2>&1); then
+      :
+    else
+      echo "$dep"
+    fi
+  done)"
+  if [ -n "${missing:-}" ]; then
+    local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    state_read "$id" | DW_NOW="$now" DW_MISSING="$missing" python3 -c '
+import json,os,sys
+d=json.loads(sys.stdin.read() or "{}")
+now=os.environ["DW_NOW"]
+missing=[x for x in (os.environ.get("DW_MISSING","").splitlines()) if x.strip()]
+d["status"]="blocked_on_prereqs"
+d["updated_at"]=now
+d["blocked"]={"kind":"prereqs","missing":missing}
+d.setdefault("events",[]).append({"at":now,"kind":"blocked_on_prereqs","missing":missing})
+print(json.dumps(d, indent=2, sort_keys=True))
+' | state_write "$id"
+    echo "[work-prod] blocked on prereqs (missing on origin/main):" >&2
+    printf "%s\n" "$missing" | sed 's/^/- /' >&2
+    return 3
+  fi
+  return 0
+}
+
+acquire_lock_or_block() {
+  local id="$1"
+  local lock_name lock_file slug
+  lock_name="$(work_lock "$id")"
+  lock_name="$(echo "${lock_name:-}" | xargs || true)"
+  if [ -z "${lock_name:-}" ]; then
+    echo ""
+    return 0
+  fi
+  slug="$(lock_slug "$lock_name")"
+  lock_file="$LOCK_DIR/${slug}.lock"
+  mkdir -p "$LOCK_DIR"
+  # shellcheck disable=SC2317
+  exec {DW_LOCK_FD}>"$lock_file"
+  if flock -n "$DW_LOCK_FD"; then
+    echo "$DW_LOCK_FD"
+    return 0
+  fi
+  eval "exec ${DW_LOCK_FD}>&-"
+  local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  state_read "$id" | DW_NOW="$now" DW_LOCK_NAME="$lock_name" DW_LOCK_FILE="$lock_file" python3 -c '
+import json,os,sys
+d=json.loads(sys.stdin.read() or "{}")
+now=os.environ["DW_NOW"]
+name=os.environ.get("DW_LOCK_NAME","")
+path=os.environ.get("DW_LOCK_FILE","")
+d["status"]="blocked_on_lock"
+d["updated_at"]=now
+d["blocked"]={"kind":"lock","name":name,"path":path}
+d.setdefault("events",[]).append({"at":now,"kind":"blocked_on_lock","name":name})
+print(json.dumps(d, indent=2, sort_keys=True))
+' | state_write "$id"
+  echo "[work-prod] blocked on lock: ${lock_name} (${lock_file})" >&2
+  return 3
+}
+
+release_lock_fd() {
+  local fd="${1:-}"
+  if [ -n "${fd:-}" ]; then
+    eval "exec ${fd}>&-"
+  fi
 }
 
 preview_run_id() {
@@ -348,9 +488,23 @@ cmd_approve_spec() {
 cmd_execute() {
   local id="${1:-}"
   [ -n "$id" ] || die "execute requires <id>"
+  shift || true
   ensure_dirs
+
+  local lab=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lab) lab="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "execute: unknown arg: $1" ;;
+    esac
+  done
+
   local status; status="$(state_read "$id" | json_get status)"
-  [ "$status" = "spec_approved" ] || die "work $id not spec_approved (status=$status)"
+  case "$status" in
+    spec_approved|blocked_on_prereqs|blocked_on_lock) ;;
+    *) die "work $id not executable (status=$status)" ;;
+  esac
 
   local agent_json model request
   agent_json="$(state_read "$id" | json_get agent_json)"
@@ -360,24 +514,100 @@ cmd_execute() {
   [ -n "$model" ] || model="$DEFAULT_MODEL"
   [ -n "$request" ] || die "state missing request"
 
+  if ! block_on_prereqs_if_needed "$id"; then
+    return $?
+  fi
+
+  local lock_fd=""
+  lock_fd="$(acquire_lock_or_block "$id")" || return $?
+
   local wt; wt="$(ensure_worktree "$id")"
   if ! sync_with_origin_main "$wt"; then
+    release_lock_fd "$lock_fd"
     die "Failed to reconsolidate with origin/main in $wt (resolve conflicts, then retry execute)"
   fi
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   state_read "$id" | DW_NOW="$now" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="executing"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"executing"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 
+  set +e
   "$ROOT/scripts/agent-runner" run \
     --work-id "$id" \
     --worktree "$wt" \
     --agent-json "$agent_json" \
     --model "$model" \
     --request "$request"
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    local out_dir="$ARTIFACT_DIR/$id"
+    mkdir -p "$out_dir"
+    local report_json
+    report_json="$(ls -1 "$ROOT/target/work-runs/$id"/*/agent.report.json 2>/dev/null | head -n1 || true)"
+    local log_path
+    log_path="$(ls -1 "$ROOT/target/work-runs/$id"/*/agent.log 2>/dev/null | head -n1 || true)"
+    local last_msg
+    last_msg="$(ls -1 "$ROOT/target/work-runs/$id"/*/agent.last-message.txt 2>/dev/null | head -n1 || true)"
+
+    local failure_html="$out_dir/work-failure-$id.html"
+    cat >"$failure_html" <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>Work failed: $id</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; max-width: 980px; }
+  .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 12px 0; }
+  pre { background: #f3f4f6; padding: 12px; border-radius: 10px; overflow: auto; }
+</style>
+<h1>Work failed</h1>
+<div class="card">
+  <div><strong>work_id</strong>: <code>$id</code></div>
+  <div><strong>exit</strong>: <code>$rc</code></div>
+</div>
+<div class="card">
+  <h2>Review artifacts</h2>
+  <ul>
+    <li>agent report: <code>${report_json:-"(missing)"}</code></li>
+    <li>agent log: <code>${log_path:-"(missing)"}</code></li>
+    <li>agent last message: <code>${last_msg:-"(missing)"}</code></li>
+  </ul>
+</div>
+<div class="card">
+  <h2>Next steps</h2>
+  <pre><code>scripts/work-prod.sh execute $id</code></pre>
+  <div>If this is a missing prerequisite/tooling issue, create a prerequisite governance work item and add it to <code>work/prereqs</code> in <code>docs/work/$id.md</code>.</div>
+</div>
+HTML
+
+    local nowf; nowf="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    state_read "$id" | DW_NOW="$nowf" DW_RC="$rc" DW_REPORT="$report_json" DW_LOG="$log_path" python3 -c '
+import json,os,sys
+d=json.loads(sys.stdin.read() or "{}")
+now=os.environ["DW_NOW"]
+rc=int(os.environ.get("DW_RC","1"))
+d["status"]="failed"
+d["updated_at"]=now
+d["failure"]={"kind":"agent_run","exit":rc,"report_json":os.environ.get("DW_REPORT",""),"log_path":os.environ.get("DW_LOG","")}
+d.setdefault("events",[]).append({"at":now,"kind":"failed","exit":rc})
+print(json.dumps(d, indent=2, sort_keys=True))
+' | state_write "$id"
+
+    if [ -n "${lab:-}" ]; then
+      case "$lab" in
+        stable) "$ROOT/scripts/lab.sh" --stable put-outbox "$failure_html" ;;
+        canary) "$ROOT/scripts/lab.sh" --canary put-outbox "$failure_html" ;;
+        session:*) n="${lab#session:}"; "$ROOT/scripts/lab.sh" --session "$n" put-outbox "$failure_html" ;;
+        *) echo "warning: unknown --lab for failure delivery: $lab" >&2 ;;
+      esac
+    fi
+    release_lock_fd "$lock_fd"
+    return "$rc"
+  fi
 
   local sha; sha="$(cd "$wt" && git rev-parse HEAD)"
   local now2; now2="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   state_read "$id" | DW_NOW="$now2" DW_SHA="$sha" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; sha=os.environ["DW_SHA"]; d["status"]="executed"; d["updated_at"]=now; d["executed_sha"]=sha; d.setdefault("events",[]).append({"at":now,"kind":"executed","sha":sha}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  release_lock_fd "$lock_fd"
 }
 
 write_proof_html() {
@@ -546,6 +776,81 @@ PY
     state_write "$id"
 }
 
+cmd_run() {
+  local id="${1:-}"; shift || true
+  [ -n "$id" ] || die "run requires <id>"
+  ensure_dirs
+
+  local lab="stable" public_host="https://haloeddepth.com"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lab) lab="${2:-}"; shift 2 ;;
+      --public-host) public_host="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "run: unknown arg: $1" ;;
+    esac
+  done
+
+  local status; status="$(state_read "$id" | json_get status)"
+  case "$status" in
+    proof_ready|pr_created|merged)
+      state_read "$id" | json_get pr_url
+      return 0
+      ;;
+    executed)
+      cmd_preview "$id" --lab "$lab" --public-host "$public_host"
+      return 0
+      ;;
+    spec_approved|blocked_on_prereqs|blocked_on_lock)
+      cmd_execute "$id" --lab "$lab" || return $?
+      cmd_preview "$id" --lab "$lab" --public-host "$public_host"
+      return 0
+      ;;
+    failed)
+      echo "work $id failed; see state and artifacts under: $ARTIFACT_DIR/$id" >&2
+      return 1
+      ;;
+    *)
+      die "work $id not runnable (status=$status)"
+      ;;
+  esac
+}
+
+cmd_run_ready() {
+  ensure_dirs
+  local max="4" lab="stable" public_host="https://haloeddepth.com"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --max) max="${2:-}"; shift 2 ;;
+      --lab) lab="${2:-}"; shift 2 ;;
+      --public-host) public_host="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "run-ready: unknown arg: $1" ;;
+    esac
+  done
+
+  local ids
+  ids="$(python3 - "$STATE_DIR" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+want = {"spec_approved","blocked_on_prereqs","blocked_on_lock","executed"}
+out = []
+for p in sorted(root.glob("*.json")):
+    try:
+        d = json.loads(p.read_text(encoding="utf-8") or "{}")
+    except Exception:
+        continue
+    if d.get("status") in want and d.get("work_id"):
+        out.append(d["work_id"])
+print("\n".join(out))
+PY
+)"
+  [ -n "${ids:-}" ] || return 0
+
+  printf "%s\n" "$ids" | xargs -I{} -P "$max" bash -lc "scripts/work-prod.sh run {} --lab $(printf %q "$lab") --public-host $(printf %q "$public_host")" || true
+}
+
 cmd_approve_proof() {
   local id="${1:-}"
   [ -n "$id" ] || die "approve-proof requires <id>"
@@ -603,6 +908,8 @@ case "$cmd" in
   execute) cmd_execute "$@" ;;
   preview) cmd_preview "$@" ;;
   approve-proof) cmd_approve_proof "$@" ;;
+  run) cmd_run "$@" ;;
+  run-ready) cmd_run_ready "$@" ;;
   merge-agent) cmd_merge_agent "$@" ;;
   -h|--help|help|"") usage ;;
   *)

@@ -301,10 +301,14 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
   - Create work: `scripts/work-prod.sh new --type change --playbook work/production-pipeline --summary "<summary>"`
   - Start worktree: `scripts/work.sh start <work-id>`
   - Initialize work-prod state: `scripts/work-prod.sh init <work-id> --agent agents/<agent>/AGENT.json --request "<request>"`
+  - (Optional) Declare prerequisites/lock in `docs/work/<id>.md`:
+    - `work/prereqs: ["<work-id>", ...]`
+    - `work/lock: <name>`
   - (Optional) Preflight only: `scripts/work-prod.sh preflight <work-id> --agent agents/<agent>/AGENT.json`
   - Approve spec (records runtime approval): `scripts/work-prod.sh approve-spec <work-id>`
-  - Execute (auto-syncs origin/main first): `scripts/work-prod.sh execute <work-id>`
-  - Publish proof + deliver to Lab outbox: `scripts/work-prod.sh preview <work-id> --lab stable`
+  - Execute + publish proof (recommended): `scripts/work-prod.sh run <work-id> --lab stable`
+  - (Alternative) Execute only: `scripts/work-prod.sh execute <work-id>`
+  - (Alternative) Publish proof: `scripts/work-prod.sh preview <work-id> --lab stable`
   - Approve proof (via approve link in the proof HTML, or CLI): `scripts/work-prod.sh approve-proof <work-id>`
 - Policies:
   - `policies/work-production-pipeline.md`
