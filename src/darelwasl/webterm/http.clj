@@ -182,7 +182,8 @@
        :reason "work/proctor"}
 
       :else
-      (let [wt (get header :work/worktree)
+      (let [wt (or (some-> (get header :work/worktree) str/trim)
+                   (str (repo-path cfg "target" "worktrees" work-id)))
             base (get header :work/base)
             files (when (and (string? wt) (not (str/blank? wt))) (changed-files wt base))
             trigger (first (filter #(starts-with-any? % canary-proctor-paths) files))]
@@ -191,7 +192,7 @@
            :reason (str "changed " trigger)
            :changed files}
           {:required "stable"
-           :reason "default"
+           :reason (if (get header :work/worktree) "default" "default (inferred worktree)")
            :changed files})))))
 
 (defn- proctor-href
@@ -252,7 +253,8 @@
       (let [{:keys [required reason]} (required-proctor cfg id header)
             current (ui-role cfg)
             required-href (proctor-href cfg required)
-            wt (some-> (get header :work/worktree) str/trim)
+            wt (or (some-> (get header :work/worktree) str/trim)
+                   (str (repo-path cfg "target" "worktrees" id)))
             wt-path (when (and (string? wt) (not (str/blank? wt))) (Paths/get wt (make-array String 0)))
             err (cond
                   (not= required current)
@@ -263,16 +265,11 @@
                                    :current_proctor current
                                    :required_href required-href})
 
-                  (str/blank? wt)
-                  (json-error 412 {:ok false
-                                   :message "work has no worktree (run: scripts/work.sh start <id>)"
-                                   :work_id id})
-
                   (not (and wt-path
                             (Files/isDirectory wt-path (make-array java.nio.file.LinkOption 0))
                             (Files/exists (.resolve wt-path ".git") (make-array java.nio.file.LinkOption 0))))
                   (json-error 412 {:ok false
-                                   :message "worktree path missing or not a git checkout"
+                                   :message "worktree path missing or not a git checkout (run: scripts/work.sh start <id>)"
                                    :work_id id})
 
                   :else nil)]
