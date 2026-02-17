@@ -95,7 +95,7 @@ scripts/webterm-ui.sh install
 scripts/webterm-ui.sh install-unit
 scripts/webterm-ui.sh restart
 scripts/webterm-ui.sh smoke
-DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
+sudo scripts/webterm-ui.sh promote --approved
 ```
 
 Canary-first deploy (recommended for Lab UI/code changes):

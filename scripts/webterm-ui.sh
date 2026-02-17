@@ -22,6 +22,7 @@ if [[ "${1:-}" == "--target" ]]; then
   shift 2 || true
 fi
 cmd="${1:-}"
+shift || true
 
 dst_default="$STABLE_DST_DEFAULT"
 service_default="$STABLE_SERVICE_DEFAULT"
@@ -55,7 +56,7 @@ Commands:
   check       Run 'clojure --check' in ${DST}
   restart     Restart systemd service (${SERVICE})
   smoke       Curl a couple endpoints (stable + canary)
-  promote     Blue/green swap: stable ⇄ canary installed trees, restart both
+  promote --approved  Blue/green swap: stable ⇄ canary installed trees, restart both
   deploy-canary  Install+install-unit+restart canary; print proctor link
   deploy-stable  Install+install-unit+restart stable
 
@@ -68,7 +69,7 @@ Env overrides:
   DW_WEBTERM_UI_UNIT_DST=/etc/systemd/system/name.service
   DW_WEBTERM_UI_OWNER=user:group
   DW_WEBTERM_PUBLIC_ORIGIN=https://code.haloeddepth.com
-  DW_WEBTERM_UI_PROMOTE_APPROVED=1 (or DEPLOY_APPROVED=1) to allow promote
+  DW_WEBTERM_UI_PROMOTE_APPROVED=1 (or DEPLOY_APPROVED=1) to allow promote without --approved
 EOF
 }
 
@@ -174,14 +175,27 @@ case "$cmd" in
     smoke_one "$CANARY_LISTEN_DEFAULT" "canary-ui"
     ;;
   promote)
-    if [[ "${DW_WEBTERM_UI_PROMOTE_APPROVED:-}" != "1" && "${DEPLOY_APPROVED:-}" != "1" ]]; then
+    approved=0
+    if [[ "${DW_WEBTERM_UI_PROMOTE_APPROVED:-}" == "1" || "${DEPLOY_APPROVED:-}" == "1" ]]; then
+      approved=1
+    fi
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --approved|--yes) approved=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "unknown arg for promote: $1" >&2; exit 2 ;;
+      esac
+    done
+
+    if [[ "$approved" != "1" ]]; then
       cat <<'EOF'
 Refusing to promote (stable ⇄ canary swap): approval flag is not set.
 
 To promote intentionally, run:
-  DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
+  sudo scripts/webterm-ui.sh promote --approved
 
-(or set DW_WEBTERM_UI_PROMOTE_APPROVED=1)
+Alternative:
+  DW_WEBTERM_UI_PROMOTE_APPROVED=1 sudo -E scripts/webterm-ui.sh promote
 EOF
       exit 1
     fi

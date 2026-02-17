@@ -56,7 +56,7 @@ scripts/webterm-ui.sh deploy-canary
 4) Promote (blue/green swap): stable gets canary, and canary becomes the previous stable:
 
 ```bash
-DEPLOY_APPROVED=1 sudo scripts/webterm-ui.sh promote
+sudo scripts/webterm-ui.sh promote --approved
 ```
 
 Optional: redeploy canary from `main` so the canary tracks the latest code before the next round of changes:
