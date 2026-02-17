@@ -8,7 +8,8 @@
     "agents/",
     "policies/",
     ".github/workflows/",
-    "docs/"
+    "docs/",
+    "AGENTS.md"
   ],
   "sandbox": {
     "codex_exec_sandbox": "workspace-write"
@@ -19,4 +20,3 @@
     ]
   }
 }
-
