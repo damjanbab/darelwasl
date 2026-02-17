@@ -17,6 +17,18 @@ This repo stores work items under `docs/work/` as plain Markdown so they are:
 - Show one item: `scripts/work.sh show <id>`
 - Search work: `scripts/work.sh search <text>`
 
+## Agent default: spec-only (work/spec authoring)
+
+By default, any agent working in this repo is expected to be **spec-only**:
+- Create/update the work item + spec in `docs/work/<id>.md`.
+- Declare prerequisites/locks up front (`work/prereqs`, `work/lock`).
+- Stop after the spec is produced (no direct implementation, execution, or proofs).
+
+Implementation is gated by the work production pipeline approval steps:
+- Approve spec: `scripts/work-prod.sh approve-spec <work-id>`
+- Execute + publish proof: `scripts/work-prod.sh run <work-id> --lab stable`
+- Approve proof (creates PR / attempts merge): `scripts/work-prod.sh approve-proof <work-id>`
+
 ## Catalog-backed queries (fast locate)
 
 Work items are also indexed into `docs/catalog.edn` so you can use the standard query tool:
