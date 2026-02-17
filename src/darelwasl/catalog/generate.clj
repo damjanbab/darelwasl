@@ -159,11 +159,12 @@
          (map (fn [file]
                 (let [path (normalize-source file)
                       headers (parse-work-headers (slurp file))
-                      id (:work/id headers)
-                      status (:work/status headers)
-                      type (:work/type headers)
-                      playbook (:work/playbook headers)
-                      summary (:work/summary headers)]
+                      data (select-keys headers [:work/id :work/status :work/type :work/playbook :work/summary])
+                      id (:work/id data)
+                      status (:work/status data)
+                      type (:work/type data)
+                      playbook (:work/playbook data)
+                      summary (:work/summary data)]
                   (when (and (some? id)
                              (not (str/blank? id))
                              (not (str/includes? id "<")))
@@ -176,7 +177,7 @@
                                 " — "
                                 (or summary ""))
                      :source path
-                     :data headers}))))
+                     :data data}))))
          (remove nil?))))
 
 (defn- route-paths
