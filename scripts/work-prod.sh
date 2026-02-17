@@ -334,7 +334,7 @@ cmd_approve_spec() {
     (cd "$wt" && git add "docs/work/$id.md" && git commit -m "work-prod($id): approve spec" >/dev/null 2>&1) || true
   fi
 
-  DW_NOW="$now" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="spec_approved"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"spec_approved"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  state_read "$id" | DW_NOW="$now" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="spec_approved"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"spec_approved"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 }
 
 cmd_execute() {
@@ -358,7 +358,7 @@ cmd_execute() {
   fi
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  DW_NOW="$now" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="executing"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"executing"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  state_read "$id" | DW_NOW="$now" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="executing"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"executing"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 
   "$ROOT/scripts/agent-runner" run \
     --work-id "$id" \
@@ -369,7 +369,7 @@ cmd_execute() {
 
   local sha; sha="$(cd "$wt" && git rev-parse HEAD)"
   local now2; now2="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  DW_NOW="$now2" DW_SHA="$sha" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; sha=os.environ["DW_SHA"]; d["status"]="executed"; d["updated_at"]=now; d["executed_sha"]=sha; d.setdefault("events",[]).append({"at":now,"kind":"executed","sha":sha}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  state_read "$id" | DW_NOW="$now2" DW_SHA="$sha" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; sha=os.environ["DW_SHA"]; d["status"]="executed"; d["updated_at"]=now; d["executed_sha"]=sha; d.setdefault("events",[]).append({"at":now,"kind":"executed","sha":sha}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 }
 
 write_proof_html() {
@@ -496,14 +496,16 @@ PY
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   local preview_json_file="$ARTIFACT_DIR/$id/preview.json"
   printf "%s" "$preview_json" >"$preview_json_file"
-  DW_NOW="$now" \
-  DW_PREVIEW_JSON_FILE="$preview_json_file" \
-  DW_TOKEN="$token" \
-  DW_EXPIRES_AT="$expires_at" \
-  DW_PROOF_HTML="$proof_html" \
-  DW_LINKS_TXT="$links_txt" \
-  DW_APPROVE_URL="$approve_url" \
-  state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; preview=json.load(open(os.environ["DW_PREVIEW_JSON_FILE"],"r",encoding="utf-8")); d["status"]="proof_ready"; d["updated_at"]=now; d["preview"]={"json": preview, "token": os.environ.get("DW_TOKEN",""), "expires_at": os.environ.get("DW_EXPIRES_AT",""), "proof_html": os.environ.get("DW_PROOF_HTML",""), "links_txt": os.environ.get("DW_LINKS_TXT",""), "approve_url": os.environ.get("DW_APPROVE_URL","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  state_read "$id" | \
+    DW_NOW="$now" \
+    DW_PREVIEW_JSON_FILE="$preview_json_file" \
+    DW_TOKEN="$token" \
+    DW_EXPIRES_AT="$expires_at" \
+    DW_PROOF_HTML="$proof_html" \
+    DW_LINKS_TXT="$links_txt" \
+    DW_APPROVE_URL="$approve_url" \
+    python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; preview=json.load(open(os.environ["DW_PREVIEW_JSON_FILE"],"r",encoding="utf-8")); d["status"]="proof_ready"; d["updated_at"]=now; d["preview"]={"json": preview, "token": os.environ.get("DW_TOKEN",""), "expires_at": os.environ.get("DW_EXPIRES_AT",""), "proof_html": os.environ.get("DW_PROOF_HTML",""), "links_txt": os.environ.get("DW_LINKS_TXT",""), "approve_url": os.environ.get("DW_APPROVE_URL","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | \
+    state_write "$id"
 }
 
 cmd_approve_proof() {
@@ -529,12 +531,12 @@ cmd_approve_proof() {
   pr_url="$(scripts/work.sh pr-create "$id")"
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  DW_NOW="$now" DW_PR_URL="$pr_url" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="pr_created"; d["updated_at"]=now; d["pr_url"]=url; d.setdefault("events",[]).append({"at":now,"kind":"pr_created","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+  state_read "$id" | DW_NOW="$now" DW_PR_URL="$pr_url" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="pr_created"; d["updated_at"]=now; d["pr_url"]=url; d.setdefault("events",[]).append({"at":now,"kind":"pr_created","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 
   # Attempt merge (requires DEPLOY_APPROVED=1 + GitHub token).
   if scripts/pr-merge.sh merge-work "$id" --resolve >/dev/null 2>&1; then
     local now3; now3="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    DW_NOW="$now3" DW_PR_URL="$pr_url" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="merged"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"merged","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
+    state_read "$id" | DW_NOW="$now3" DW_PR_URL="$pr_url" python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="merged"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"merged","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
   fi
 
   echo "$pr_url"
