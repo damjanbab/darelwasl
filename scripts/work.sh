@@ -827,7 +827,7 @@ cmd="${1:-}"
 shift || true
 case "$cmd" in
   new) cmd_new "$@" ;;
-  list) cmd_list ;;
+  list) cmd_list "$@" ;;
   show) cmd_show "${1:-}" ;;
   search) cmd_search "${1:-}" ;;
   path) cmd_path "${1:-}" ;;

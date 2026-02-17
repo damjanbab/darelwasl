@@ -1,13 +1,14 @@
+work/closed_at: 2026-02-17T23:26:01Z
 work/id: 20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/type: governance
-work/status: open
+work/status: closed
 work/playbook: work/production-pipeline
 work/summary: ops-governance agent: allow editing AGENTS.md
 work/branch: work/20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/worktree: /opt/darelwasl/target/worktrees/20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/base: main
 work/created_at: 2026-02-17T17:42:42Z
-work/updated_at: 2026-02-17T17:51:52Z
+work/updated_at: 2026-02-17T23:26:01Z
 
 # Notes
 

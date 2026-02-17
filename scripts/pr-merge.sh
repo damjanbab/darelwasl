@@ -128,9 +128,10 @@ tmp_merge_worktree() {
 
 cleanup_worktree() {
   local wt="$1"
-  if [[ -d "$wt/.git" ]]; then
-    git -C "$ROOT" worktree remove --force "$wt" >/dev/null 2>&1 || true
-  fi
+  # In git worktrees, `.git` is typically a file (not a directory). Always try to
+  # deregister the worktree path, even if the directory is already gone, so we
+  # don't leave stale worktree entries behind.
+  git -C "$ROOT" worktree remove --force "$wt" >/dev/null 2>&1 || true
   rm -rf "$wt" >/dev/null 2>&1 || true
 }
 

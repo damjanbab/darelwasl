@@ -1,18 +1,21 @@
 work/pr_url: https://github.com/damjanbab/darelwasl/pull/77
 work/id: 20260217-223404-work-prod-proof-modes-by-work-type-durable-previ
 work/type: governance
-work/status: open
+work/status: closed
 work/playbook: work/isolate-pr
 work/summary: work-prod: proof modes by work type + durable preview processes
 work/branch: work/20260217-223404-work-prod-proof-modes-by-work-type-durable-previ
 work/worktree: target/worktrees/20260217-223404-work-prod-proof-modes-by-work-type-durable-previ
 work/base: main
 work/prereqs: []
-work/lock: 
+work/lock:
 work/created_at: 2026-02-17T22:34:04Z
-work/updated_at: 2026-02-17T22:39:11Z
+work/updated_at: 2026-02-17T23:28:12Z
+work/closed_at: 2026-02-17T23:28:12Z
 
 # Notes
+
+Closed: merged via PR #77 on 2026-02-17.
 
 ## Work brief
 
