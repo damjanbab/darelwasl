@@ -89,6 +89,33 @@ check_agents_md_playbooks() {
   echo "AGENTS.md playbooks look consistent."
 }
 
+check_agents_md_spec_only_role() {
+  echo "Checking AGENTS.md spec-only role marker..."
+  local f="$ROOT/AGENTS.md"
+  if [ ! -s "$f" ]; then
+    echo "Missing or empty: $f"
+    exit 1
+  fi
+
+  # Enforce that the spec-only guidance is prominent and not quietly moved deeper in the doc.
+  if ! head -n 160 "$f" | grep -q "DW_SPEC_ONLY_AGENT_ROLE_MARKER"; then
+    echo "AGENTS.md missing required spec-only marker near top: DW_SPEC_ONLY_AGENT_ROLE_MARKER"
+    exit 1
+  fi
+
+  if ! head -n 160 "$f" | grep -q "scripts/work-prod\\.sh approve-spec"; then
+    echo "AGENTS.md spec-only section must mention: scripts/work-prod.sh approve-spec <work-id>"
+    exit 1
+  fi
+
+  if ! head -n 160 "$f" | grep -q "scripts/work-prod\\.sh run"; then
+    echo "AGENTS.md spec-only section must mention: scripts/work-prod.sh run <work-id> --lab stable"
+    exit 1
+  fi
+
+  echo "AGENTS.md spec-only role marker present."
+}
+
 check_governance() {
   echo "Checking repo housekeeping invariants..."
 
@@ -134,6 +161,7 @@ check_governance() {
   fi
 
   check_agents_md_playbooks
+  check_agents_md_spec_only_role
 
   echo "Auditing work tracking (non-fatal)..."
   (cd "$ROOT" && scripts/work.sh audit --no-fetch)

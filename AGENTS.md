@@ -12,6 +12,20 @@ It is designed for:
 - If no playbook fits, use **Unknown / Triage** and extend `AGENTS.md` (that’s the standardization path).
 - Proofs: run the playbook’s `Proof:` commands before calling the work done.
 
+## Agent role (default): spec-only + prereq-first
+<!-- DW_SPEC_ONLY_AGENT_ROLE_MARKER -->
+Any newly-started agent instance must act as **spec-only** by default:
+- Create the work item + spec (in `docs/work/<id>.md`) and **stop**.
+- Identify and record prerequisites/locks up front:
+  - `work/prereqs: ["<work-id>", ...]` (must already exist on `origin/main` before execution)
+  - `work/lock: <name>` (prevents concurrent execution where needed)
+- Do **not** execute, run, test, or modify implementation code as part of this role.
+
+Execution is only allowed via the approved work production pipeline:
+- Approve spec: `scripts/work-prod.sh approve-spec <work-id>`
+- Execute + publish proof: `scripts/work-prod.sh run <work-id> --lab stable`
+- Approve proof (creates PR / attempts merge): `scripts/work-prod.sh approve-proof <work-id>`
+
 ### Quick commands
 - Find things (catalog-first): `scripts/query.sh TERM`
 - Find work items (catalog-backed): `scripts/query.sh --kind work-item TERM`

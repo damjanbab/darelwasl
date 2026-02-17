@@ -2,6 +2,10 @@
 
 ## Rule
 - Treat a **work id** as the unit of execution and review.
+- Interactive agents are **spec-only by default**:
+  - They may create/update the work item + spec (`docs/work/<id>.md`), including `work/prereqs` and `work/lock`.
+  - They must stop after producing the spec and must not execute changes directly.
+  - Execution happens only after `scripts/work-prod.sh approve-spec <id>`, via `scripts/work-prod.sh run <id> --lab stable`, and requires proof approval.
 - Before executing work, the system must verify prerequisites exist on `main`:
   - A playbook exists for the work (`scripts/playbook.sh show <id>` must succeed).
   - A matching agent contract exists (allowed paths + proofs).
