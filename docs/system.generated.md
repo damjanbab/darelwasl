@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `085d2181157f9d15542820dd39d471d3e0ffe4ebc4324e4d4c8ca945771422f6`
+- Catalog version: `aeaae0712c053a92e73e76ba80255faf5b8077390804739ab171d5552c46696b`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -452,6 +452,7 @@ Common queries:
 
 - account-statement-pdf.js
 - agent
+- agent-runner
 - app-smoke.js
 - catalog_summary.txt
 - catalog_summary.txt
@@ -467,6 +468,8 @@ Common queries:
 - final_merge.txt
 - generate-docs.sh
 - git-credential-dw.sh
+- git-resolve-conflicts.py
+- github-token.sh
 - high_intake.py
 - hooks.sh
 - lab.sh
@@ -476,6 +479,7 @@ Common queries:
 - operations.json
 - plan.schema.json
 - playbook.sh
+- pr-merge.sh
 - preview
 - promote-live.sh
 - query.sh
@@ -498,6 +502,7 @@ Common queries:
 - theme-css-vars.sh
 - website-agent
 - webterm-ui.sh
+- work-prod.sh
 - work.sh
 - xref.clj
 
@@ -613,3 +618,4 @@ Work items live in `docs/work/` and can be queried via:
 - `scripts/query.sh --kind work-item TERM`
 - `scripts/work.sh list --open`
 
+- work-item/20260217-160413-work-prod-pipeline-preview-auto-auth-proof-deliv
