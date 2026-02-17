@@ -51,7 +51,7 @@ def _has_conflict_markers(text: str) -> bool:
 
 
 def _default_model() -> str:
-    return (os.environ.get("DARELWASL_WORK_MODEL") or "gpt-5.2-high").strip()
+    return (os.environ.get("DARELWASL_WORK_MODEL") or "gpt-5.2").strip()
 
 
 @dataclass(frozen=True)
@@ -80,7 +80,7 @@ def _build_prompt(files: list[str]) -> str:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="git-resolve-conflicts")
     p.add_argument("--worktree", required=True, help="Path to git worktree in conflicted state (rebase/merge)")
-    p.add_argument("--model", default=None, help="Codex model (default: env DARELWASL_WORK_MODEL or gpt-5.2-high)")
+    p.add_argument("--model", default=None, help="Codex model (default: env DARELWASL_WORK_MODEL or gpt-5.2)")
     p.add_argument("--files", default="", help="Comma-separated conflicting files (default: auto-detect via git)")
     args = p.parse_args(argv)
 
@@ -162,4 +162,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

@@ -15,7 +15,7 @@ Commands:
 Environment:
   GITHUB_TOKEN                     Required.
   DEPLOY_APPROVED=1                Required to actually merge into main.
-  DARELWASL_WORK_MODEL=<model>     Used for conflict resolution (default gpt-5.2-high).
+  DARELWASL_WORK_MODEL=<model>     Used for conflict resolution (default gpt-5.2).
 
 Notes:
   - Conflict resolution is best-effort: rebase PR branch onto base, resolve conflicts
