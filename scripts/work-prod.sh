@@ -149,7 +149,8 @@ ensure_worktree() {
   local id="$1"
   require_work_item "$id"
   local wt; wt="$(worktree_path "$id")"
-  if [ -z "${wt:-}" ] || [ ! -d "$wt/.git" ]; then
+  # In git worktrees, `.git` is typically a file (not a directory).
+  if [ -z "${wt:-}" ] || [ ! -e "$wt/.git" ]; then
     wt="$(scripts/work.sh start "$id")"
   fi
   echo "$wt"
