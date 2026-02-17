@@ -40,3 +40,34 @@ work/updated_at: 2026-02-17T21:47:56Z
   - identify prerequisites/locks,
   - and stop (no implementation) until the work is approved into `work-prod`.
 - `scripts/checks.sh governance` fails if the spec-only role section is missing (or the marker string is removed).
+## Approved spec
+
+- approved_at: `2026-02-17T21:50:57Z`
+- agent: `agents/ops-governance/AGENT.json`
+- model: `gpt-5.2`
+
+### Request
+
+```
+governance: Codify the spec-only agent role and prereq-first workflow.
+
+Goal
+- Ensure any new agent instance immediately understands it must only create the work item + spec, identify prerequisites/locks, and stop. Execution must only happen via the approved work production pipeline (approve-spec -> execute/run -> proof -> approve-proof).
+
+Scope (allowed paths only)
+- Update `AGENTS.md` to add a prominent section near the top stating the spec-only role and pointing to `scripts/work-prod.sh approve-spec` + `scripts/work-prod.sh run` as the execution path.
+- Update `policies/work-production-pipeline.md` to restate the spec-only expectation for interactive agents (documentation/guardrail only).
+- Update `docs/work/README.md` to reflect that creating work/spec is the default agent responsibility; implementation is gated by `work-prod` approval.
+- Update `scripts/checks.sh` (governance) to assert the new AGENTS.md spec-only section/marker exists, so the contract can’t drift silently.
+
+Acceptance
+- The spec-only role is explicit, easy to find, and enforced by `scripts/checks.sh governance`.
+
+Proof
+- `scripts/checks.sh governance`
+
+Non-goals
+- No pipeline behavior changes beyond docs/guardrails.
+- No catalog/query/playbook indexing work in this work item.
+```
+
