@@ -43,17 +43,23 @@
 (defn json-response
   [payload]
   (-> (resp/response (json/write-str payload))
-      (resp/content-type "application/json; charset=utf-8")))
+      (resp/content-type "application/json; charset=utf-8")
+      (resp/header "Cache-Control" "no-store, max-age=0")
+      (resp/header "Pragma" "no-cache")))
 
 (defn text-response
   [s]
   (-> (resp/response (str s))
-      (resp/content-type "text/plain; charset=utf-8")))
+      (resp/content-type "text/plain; charset=utf-8")
+      (resp/header "Cache-Control" "no-store, max-age=0")
+      (resp/header "Pragma" "no-cache")))
 
 (defn html-response
   [s]
   (-> (resp/response s)
-      (resp/content-type "text/html; charset=utf-8")))
+      (resp/content-type "text/html; charset=utf-8")
+      (resp/header "Cache-Control" "no-store, max-age=0")
+      (resp/header "Pragma" "no-cache")))
 
 (defn- file-response
   [^Path path content-type disposition filename]
@@ -376,7 +382,10 @@
             (let [uri (:uri req)
                   m (:request-method req)]
               (cond
-                (and (= m :get) (= uri "/")) (html-response (ui/terminals-page cfg))
+                (and (= m :get) (= uri "/"))
+                (if (= (ui-role cfg) "canary")
+                  (redirect (ui/ui-url cfg (str "/lab?session=" (:lab-canary-session cfg))))
+                  (html-response (ui/terminals-page cfg)))
                 (and (= m :get) (= uri "/api/sessions")) (handle-sessions cfg req)
                 (and (= m :get) (= uri "/api/work/list")) (handle-work-list cfg req)
                 (and (= m :get) (= uri "/api/work/file")) (handle-work-file cfg req)
