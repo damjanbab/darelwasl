@@ -410,7 +410,14 @@ def start_service_with_env(root: Path, run_id: str, *, env: dict[str, str]) -> i
     log_path = logs / "service.log"
     pid_path = preview_dir(root, run_id) / "service.pid"
 
-    cmd = ["bash", "-lc", f"nohup clojure -M:dev > {shlex.quote(str(log_path))} 2>&1 & echo $!"]
+    # IMPORTANT: previews must survive non-interactive callers (e.g. web handlers, CI-like runners).
+    # `nohup` is not sufficient in some harnesses that reap background children after the parent exits.
+    # `setsid` starts the service in a new session so it remains alive until explicitly stopped.
+    cmd = [
+        "bash",
+        "-lc",
+        f"setsid clojure -M:dev > {shlex.quote(str(log_path))} 2>&1 < /dev/null & echo $!",
+    ]
     proc = subprocess.run(cmd, cwd=str(wt), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=True)
     pid = int(proc.stdout.strip().splitlines()[-1])
     pid_path.write_text(str(pid) + "\n", encoding="utf-8")
