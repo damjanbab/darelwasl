@@ -491,10 +491,34 @@ p=subprocess.run(cmd, cwd="$ROOT", stdout=subprocess.PIPE, stderr=subprocess.STD
 print(p.stdout)
 sys.exit(p.returncode)
 PY
-)"
+  )"
   # scripts/preview prints JSON on success; capture last {...}.
   local preview_json
-  preview_json="$(printf "%s" "$out_json" | python3 -c 'import json,sys,re; s=sys.stdin.read(); ms=list(re.finditer(r\"\\{\", s));\n\nif not ms:\n  raise SystemExit(1)\nlast=s[ms[-1].start():]\ndata=json.loads(last)\nprint(json.dumps(data))')" || die "preview start failed:\n$out_json"
+  preview_json="$(printf "%s" "$out_json" | python3 - <<'PY'
+import json, sys
+
+s = sys.stdin.read()
+try:
+    d = json.loads(s)
+    print(json.dumps(d))
+    raise SystemExit(0)
+except Exception:
+    pass
+
+# Best-effort: find a JSON object at the end of mixed output.
+for i in range(len(s) - 1, -1, -1):
+    if s[i] != "{":
+        continue
+    try:
+        d = json.loads(s[i:])
+        print(json.dumps(d))
+        raise SystemExit(0)
+    except Exception:
+        continue
+
+raise SystemExit(1)
+PY
+)" || die "preview start failed:\n$out_json"
 
   local app_url site_url expires_at
   app_url="$(printf "%s" "$preview_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("urls") or {}).get("app",""))')"
