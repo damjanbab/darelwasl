@@ -446,7 +446,7 @@ cmd_pr_create() {
   # Load token into $GITHUB_TOKEN (does not persist).
   # shellcheck source=/dev/null
   source "$ROOT/scripts/load_github_token.sh" >/dev/null || true
-  [ -n "${GITHUB_TOKEN:-}" ] || die "GITHUB_TOKEN not loaded"
+  [ -n "${GITHUB_TOKEN:-}" ] || die "GITHUB_TOKEN not loaded (store it: scripts/secrets.sh set github/token)"
 
   if ! curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" https://api.github.com/user >/dev/null; then
     die "GitHub token validation failed (revoke and re-issue; then store it as github/token)"
