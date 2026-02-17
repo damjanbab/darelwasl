@@ -722,7 +722,7 @@ PY
 <<<"$json"
 )"
   if [[ -z "$pr_url" ]]; then
-    pr_url="$(printf "%s" "$json" | sed -nE 's/.*"html_url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\\1/p' | head -n1)"
+    pr_url="$(printf "%s" "$json" | sed -nE 's/.*"html_url"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n1)"
   fi
 
   if [[ "$http_code" == "201" && -n "$pr_url" ]]; then
