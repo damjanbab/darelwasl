@@ -17,13 +17,13 @@ system-wide (for the `darelwasl.service` environment) from the Lab inbox:
 - Run: `scripts/github-token.sh install-from-lab --lab stable --name token.txt`
 
 ## Model pinning
-Default agent model is `gpt-5.2-high`.
+Default agent model is `gpt-5.2`.
 
 Override (only when needed):
 - `DARELWASL_WORK_MODEL=<model>`
 
 Note:
-- If you’re running Codex via ChatGPT device auth and `gpt-5.2-high` is rejected as unsupported, set `DARELWASL_WORK_MODEL=gpt-5.2`.
+- If you want higher reasoning, set `DARELWASL_WORK_MODEL=gpt-5.2-high` (only if your Codex auth supports it).
 
 ## Merge gating
 Merging into `main` is gated:

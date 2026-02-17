@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_DIR="${DW_WORK_PROD_STATE_DIR:-$ROOT/data/work-prod/works}"
 ARTIFACT_DIR="${DW_WORK_PROD_ARTIFACT_DIR:-$ROOT/target/work-prod}"
 LOCK_DIR="${DW_WORK_PROD_LOCK_DIR:-$ROOT/data/work-prod/locks}"
-DEFAULT_MODEL="${DARELWASL_WORK_MODEL:-gpt-5.2-high}"
+DEFAULT_MODEL="${DARELWASL_WORK_MODEL:-gpt-5.2}"
 
 usage() {
   cat <<'EOF'

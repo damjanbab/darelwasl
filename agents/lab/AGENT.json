@@ -1,0 +1,26 @@
+{
+  "format": "darelwasl/agent",
+  "version": 1,
+  "id": "lab",
+  "title": "Lab agent",
+  "allowed_paths": [
+    "src/darelwasl/webterm/",
+    "ops/webterm-ui/",
+    "scripts/webterm-ui.sh",
+    "docs/ops/",
+    "policies/",
+    "agents/",
+    "registries/agents.edn",
+    "registries/policies.edn"
+  ],
+  "sandbox": {
+    "codex_exec_sandbox": "workspace-write"
+  },
+  "proofs": {
+    "commands": [
+      "clojure -M -m darelwasl.webterm.server --check",
+      "scripts/webterm-ui.sh smoke",
+      "scripts/checks.sh governance"
+    ]
+  }
+}

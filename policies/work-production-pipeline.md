@@ -9,7 +9,7 @@
 - If the work spec declares `work/lock`, the system must not execute multiple works holding the same lock concurrently.
 - The system must **reconsolidate** with `origin/main` before execution and before PR creation.
 - The system must produce **user-visible proof** in the Lab (outbox) and require user approval before PR creation/merge.
-- Work execution and conflict resolution must use the pinned model `gpt-5.2-high` (configurable only by explicit environment override).
+- Work execution and conflict resolution must use the pinned model `gpt-5.2` (override only when explicitly set via `DARELWASL_WORK_MODEL`).
 
 ## Enforcement (current)
 - Orchestrator: `scripts/work-prod.sh`
