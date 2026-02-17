@@ -58,35 +58,17 @@ state_write() {
 
 json_get() {
   local key="$1"
-  python3 - <<PY
-import json,sys
-data=json.loads(sys.stdin.read() or "{}")
-print(data.get("$key","") or "")
-PY
+  python3 -c 'import json,sys; data=json.loads(sys.stdin.read() or "{}"); print(data.get(sys.argv[1],"") or "")' "$key"
 }
 
 json_set() {
   local key="$1" value="$2"
-  python3 - <<PY
-import json,sys
-key="$key"
-value="$value"
-data=json.loads(sys.stdin.read() or "{}")
-data[key]=value
-print(json.dumps(data, indent=2, sort_keys=True))
-PY
+  python3 -c 'import json,sys; key=sys.argv[1]; value=sys.argv[2]; data=json.loads(sys.stdin.read() or "{}"); data[key]=value; print(json.dumps(data, indent=2, sort_keys=True))' "$key" "$value"
 }
 
 json_set_obj() {
-  local key="$1"
-  python3 - <<PY
-import json,sys
-key="$key"
-data=json.loads(sys.stdin.read() or "{}")
-payload=json.loads(sys.stdin.readline())
-data[key]=payload
-print(json.dumps(data, indent=2, sort_keys=True))
-PY
+  local key="$1" payload_json="${2:-{}}"
+  python3 -c 'import json,sys; key=sys.argv[1]; payload=json.loads(sys.argv[2] or "{}"); data=json.loads(sys.stdin.read() or "{}"); data[key]=payload; print(json.dumps(data, indent=2, sort_keys=True))' "$key" "$payload_json"
 }
 
 worktree_path() {
