@@ -97,6 +97,18 @@ work_prereqs() {
   scripts/work.sh show "$id" | sed -nE 's/^work\/prereqs:[[:space:]]*//p' | head -n1
 }
 
+work_type() {
+  local id="$1"
+  (scripts/work.sh show "$id" | rg -n "^work/type:" -o || true) >/dev/null 2>&1
+  scripts/work.sh show "$id" | sed -nE 's/^work\/type:[[:space:]]*//p' | head -n1 | xargs || true
+}
+
+work_proof_mode() {
+  local id="$1"
+  (scripts/work.sh show "$id" | rg -n "^work/proof:" -o || true) >/dev/null 2>&1
+  scripts/work.sh show "$id" | sed -nE 's/^work\/proof:[[:space:]]*//p' | head -n1 | xargs || true
+}
+
 prereq_ids() {
   local raw="${1:-}"
   python3 - "$raw" <<'PY'
@@ -667,6 +679,85 @@ TXT
   echo "$out"
 }
 
+escape_html() {
+  python3 -c 'import html,sys; print(html.escape(sys.stdin.read()))'
+}
+
+write_governance_proof_html() {
+  local id="$1" sha="$2" wt="$3"
+  local out_dir="$ARTIFACT_DIR/$id"
+  mkdir -p "$out_dir"
+  local out="$out_dir/work-proof-$id.html"
+
+  local agent_log
+  agent_log="$(ls -1 "$ROOT/target/work-runs/$id"/*/agent.log 2>/dev/null | head -n1 || true)"
+
+  local git_stat git_names git_log log_tail
+  git_stat="$(cd "$wt" && git --no-pager show --stat -n 1 "$sha" | escape_html || true)"
+  git_names="$(cd "$wt" && git --no-pager show --name-only --pretty='' -n 1 "$sha" | sed '/^$/d' | head -n 200 | escape_html || true)"
+  git_log="$(cd "$wt" && git --no-pager log --oneline -n 8 | escape_html || true)"
+  if [ -n "${agent_log:-}" ] && [ -s "$agent_log" ]; then
+    log_tail="$(tail -n 240 "$agent_log" | escape_html || true)"
+  else
+    log_tail=""
+  fi
+
+  cat >"$out" <<HTML
+<!doctype html>
+<meta charset="utf-8">
+<title>Work proof: $id</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; max-width: 980px; }
+  .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin: 12px 0; }
+  .muted { color: #6b7280; }
+  code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+  pre { background: #f3f4f6; padding: 12px; border-radius: 10px; overflow: auto; }
+  .cta { display: inline-block; padding: 10px 14px; border-radius: 10px; background: #111827; color: #fff; text-decoration: none; }
+</style>
+<h1>Work proof</h1>
+<div class="card">
+  <div><strong>Work id</strong>: <code>$id</code></div>
+  <div><strong>Kind</strong>: <code>governance</code> (no preview)</div>
+  <div><strong>SHA</strong>: <code>$sha</code></div>
+</div>
+<div class="card">
+  <h2>Approval</h2>
+  <div class="muted">Use the Lab UI “Approve” button, or run:</div>
+  <pre><code>scripts/work-prod.sh approve-proof $id</code></pre>
+</div>
+<div class="card">
+  <h2>Change summary</h2>
+  <div class="muted">Latest commit (stat):</div>
+  <pre><code>${git_stat}</code></pre>
+  <div class="muted">Files (latest commit):</div>
+  <pre><code>${git_names}</code></pre>
+  <div class="muted">Recent commits:</div>
+  <pre><code>${git_log}</code></pre>
+</div>
+<div class="card">
+  <h2>Proof output</h2>
+  <div class="muted">Agent log (tail): <code>${agent_log:-"(missing)"}</code></div>
+  <pre><code>${log_tail}</code></pre>
+</div>
+HTML
+
+  echo "$out"
+}
+
+write_governance_links_txt() {
+  local id="$1" sha="$2"
+  local out_dir="$ARTIFACT_DIR/$id"
+  mkdir -p "$out_dir"
+  local out="$out_dir/work-links-$id.txt"
+  cat >"$out" <<TXT
+work_id=$id
+proof_kind=governance
+sha=$sha
+approve_cmd=scripts/work-prod.sh approve-proof $id
+TXT
+  echo "$out"
+}
+
 cmd_preview() {
   local id="${1:-}"; shift || true
   [ -n "$id" ] || die "preview requires <id>"
@@ -776,6 +867,74 @@ PY
     state_write "$id"
 }
 
+cmd_proof() {
+  local id="${1:-}"; shift || true
+  [ -n "$id" ] || die "proof requires <id>"
+  ensure_dirs
+
+  local lab="stable" public_host="https://haloeddepth.com"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lab) lab="${2:-}"; shift 2 ;;
+      --public-host) public_host="${2:-}"; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "proof: unknown arg: $1" ;;
+    esac
+  done
+
+  local status; status="$(state_read "$id" | json_get status)"
+  [ "$status" = "executed" ] || die "work $id not executed (status=$status)"
+
+  local explicit_mode inferred_mode
+  explicit_mode="$(work_proof_mode "$id")"
+  if [ -n "${explicit_mode:-}" ]; then
+    inferred_mode="$explicit_mode"
+  else
+    case "$(work_type "$id")" in
+      governance|investigate|question) inferred_mode="governance" ;;
+      *) inferred_mode="preview" ;;
+    esac
+  fi
+
+  case "$inferred_mode" in
+    governance)
+      local wt sha
+      wt="$(ensure_worktree "$id")"
+      sha="$(cd "$wt" && git rev-parse HEAD)"
+      local proof_html; proof_html="$(write_governance_proof_html "$id" "$sha" "$wt")"
+      local links_txt; links_txt="$(write_governance_links_txt "$id" "$sha")"
+
+      case "$lab" in
+        stable) "$ROOT/scripts/lab.sh" --stable put-outbox "$proof_html" ;;
+        canary) "$ROOT/scripts/lab.sh" --canary put-outbox "$proof_html" ;;
+        session:*) n="${lab#session:}"; "$ROOT/scripts/lab.sh" --session "$n" put-outbox "$proof_html" ;;
+        *) die "Unknown --lab: $lab (expected stable|canary|session:N)" ;;
+      esac
+      case "$lab" in
+        stable) "$ROOT/scripts/lab.sh" --stable put-outbox "$links_txt" ;;
+        canary) "$ROOT/scripts/lab.sh" --canary put-outbox "$links_txt" ;;
+        session:*) n="${lab#session:}"; "$ROOT/scripts/lab.sh" --session "$n" put-outbox "$links_txt" ;;
+        *) die "Unknown --lab: $lab (expected stable|canary|session:N)" ;;
+      esac
+
+      local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      state_read "$id" | \
+        DW_NOW="$now" \
+        DW_SHA="$sha" \
+        DW_PROOF_HTML="$proof_html" \
+        DW_LINKS_TXT="$links_txt" \
+        python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="proof_ready"; d["updated_at"]=now; d["proof"]={"kind":"governance","sha":os.environ.get("DW_SHA",""),"proof_html":os.environ.get("DW_PROOF_HTML",""),"links_txt":os.environ.get("DW_LINKS_TXT","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | \
+        state_write "$id"
+      ;;
+    preview|"")
+      cmd_preview "$id" --lab "$lab" --public-host "$public_host"
+      ;;
+    *)
+      die "Unknown proof mode: $inferred_mode (expected governance|preview)"
+      ;;
+  esac
+}
+
 cmd_run() {
   local id="${1:-}"; shift || true
   [ -n "$id" ] || die "run requires <id>"
@@ -798,12 +957,12 @@ cmd_run() {
       return 0
       ;;
     executed)
-      cmd_preview "$id" --lab "$lab" --public-host "$public_host"
+      cmd_proof "$id" --lab "$lab" --public-host "$public_host"
       return 0
       ;;
     spec_approved|blocked_on_prereqs|blocked_on_lock)
       cmd_execute "$id" --lab "$lab" || return $?
-      cmd_preview "$id" --lab "$lab" --public-host "$public_host"
+      cmd_proof "$id" --lab "$lab" --public-host "$public_host"
       return 0
       ;;
     failed)
