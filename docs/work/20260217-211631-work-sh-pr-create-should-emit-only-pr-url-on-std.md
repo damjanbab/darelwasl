@@ -14,4 +14,4 @@ work/updated_at: 2026-02-17T21:16:31Z
 # Notes
 
 ## Proof
-- [ ] <fill in exact commands, ideally from the playbook>
+- [x] `scripts/checks.sh governance`
