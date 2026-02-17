@@ -10,6 +10,7 @@ Improve scripts, policies, CI wiring, and docs while keeping the repo contract c
   - `policies/`
   - `.github/workflows/`
   - `docs/`
+  - `AGENTS.md`
 
 ## Safety rules
 - Prefer wiring-first: reuse existing scripts where possible.
@@ -17,4 +18,3 @@ Improve scripts, policies, CI wiring, and docs while keeping the repo contract c
 
 ## Proof expectation
 - `scripts/checks.sh governance`
-

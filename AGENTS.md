@@ -89,6 +89,7 @@ Workflow:
 ## Ops runbooks
 - Telegram dev/prod bots + promotion: `docs/ops/telegram-bots.md`
 - `code.haloeddepth.com` endpoint (web terminals): `docs/ops/code-haloeddepth-com.md`
+- Portal (app) work verification + previews: `docs/ops/portal-work.md`
 - Secrets vault (Datomic + master key): `docs/ops/secrets.md`
 - Telegram commands + documents flows: `docs/telegram.md`
 
@@ -248,6 +249,34 @@ Use the closest playbook, then follow it top-to-bottom. If none fit, use **Unkno
 - Next:
   - If you want auto-published PDFs in the Lab outbox, enable `DW_LAB_AUTO_OUTBOX=1` in the environment running the PDF generators.
   - For risky Lab changes: validate in canary first, then swap stable/canary per `policies/lab-canary-upgrades.md`.
+
+### Playbook: portal/work — portal (app) work via preview + Lab proof
+- When: You need to change the internal app/portal and require a proofable preview review flow.
+- Start:
+  - Read: `docs/ops/portal-work.md` and `docs/ops/work-production.md`
+  - Choose the correct agent contract (do not mix scopes):
+    - UI-only (portal UI / styling): `agents/app-ui/AGENT.json` (proof: `npm run check`)
+    - API-only (routes/actions/contracts): `agents/backend/AGENT.json` (proof: `scripts/checks.sh actions`)
+    - If you need both UI + API changes, split into **two works** (one per agent; backend first if the UI depends on it).
+  - Use the work production pipeline end-to-end:
+    - Create work: `scripts/work-prod.sh new --type change --playbook portal/work --summary "<summary>"`
+    - Start worktree: `scripts/work.sh start <work-id>`
+    - Init: `scripts/work-prod.sh init <work-id> --agent agents/<agent>/AGENT.json --request "<request>"`
+    - Approve spec: `scripts/work-prod.sh approve-spec <work-id>`
+    - Execute: `scripts/work-prod.sh execute <work-id>`
+    - Preview + outbox proof: `scripts/work-prod.sh preview <work-id> --lab stable`
+    - Verify via the **haloeddepth.com** preview links in the Lab outbox, then approve:
+      - Open: `work-proof-<id>.html` (or `work-links-<id>.txt`)
+      - Approve: `scripts/work-prod.sh approve-proof <work-id>` (or use the approve link)
+- Policies:
+  - `policies/work-production-pipeline.md`
+  - `policies/verification-required.md`
+  - `policies/pr-required.md`
+- Proof:
+  - `scripts/checks.sh governance`
+  - Manual: verify portal behavior on the **haloeddepth.com** preview links delivered in the Lab outbox (per `docs/ops/portal-work.md`), then approve proof.
+- Next:
+  - Stop the preview when done: `scripts/preview stop <preview_id>` (preview id is in `work-links-<id>.txt`).
 
 ### Playbook: work/isolate-pr — isolated work + PR submission
 - When: Any `change:` or `governance:` work that should not touch the base working tree.
