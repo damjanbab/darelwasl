@@ -14,4 +14,6 @@ work/updated_at: 2026-02-17T20:51:40Z
 # Notes
 
 ## Proof
-- [ ] <fill in exact commands, ideally from the playbook>
+- [x] `clojure -M -m darelwasl.webterm.server --check`
+- [x] `scripts/webterm-ui.sh smoke`
+- [x] `scripts/checks.sh governance`

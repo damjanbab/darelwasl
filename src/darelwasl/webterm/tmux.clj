@@ -67,6 +67,24 @@
       (throw (ex-info "tmux send-keys failed" {:stderr err :session name}))))
   nil)
 
+(defn paste-text!
+  [cfg n text]
+  (let [name (session-name cfg n)
+        text (str text)
+        max-len 8000]
+    (ensure-session! cfg n)
+    (when (> (count text) max-len)
+      (throw (ex-info "paste too long" {:status 413 :max_len max-len :len (count text)})))
+    ;; Use a named tmux buffer so we can paste without quoting issues.
+    (let [{:keys [exit err]} (tmux cfg "set-buffer" "-b" "dw_ref" text)]
+      (when-not (zero? exit)
+        (throw (ex-info "tmux set-buffer failed" {:stderr err :session name}))))
+    (let [{:keys [exit err]} (tmux cfg "paste-buffer" "-b" "dw_ref" "-t" name)]
+      (when-not (zero? exit)
+        (throw (ex-info "tmux paste-buffer failed" {:stderr err :session name}))))
+    (tmux cfg "delete-buffer" "-b" "dw_ref")
+    nil))
+
 (defn capture-history
   [cfg n lines]
   (let [name (session-name cfg n)
@@ -83,4 +101,3 @@
     (tmux cfg "clear-history" "-t" name)
     (tmux cfg "send-keys" "-t" name "clear" "C-m"))
   nil)
-
