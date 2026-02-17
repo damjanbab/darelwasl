@@ -530,7 +530,7 @@ PY
 
   # Token is in manifest; infer from urls (?t=...).
   local token
-  token="$(python3 -c 'import re,sys; s=sys.argv[1]; m=re.search(r\"[?&]t=([^&]+)\", s); print(m.group(1) if m else \"\")' "$app_url")"
+  token="$(python3 -c 'import re,sys; s=sys.argv[1]; m=re.search(r"[?&]t=([^&]+)", s); print(m.group(1) if m else "")' "$app_url")"
   [ -n "$token" ] || die "unable to infer token from app url"
 
   local approve_url="${public_host}/_preview/${id}/approve/?t=${token}"
