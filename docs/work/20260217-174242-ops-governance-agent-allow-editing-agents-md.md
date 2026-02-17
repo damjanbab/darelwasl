@@ -1,3 +1,4 @@
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/70
 work/id: 20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/type: governance
 work/status: open
@@ -7,7 +8,7 @@ work/branch: work/20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/worktree: /opt/darelwasl/target/worktrees/20260217-174242-ops-governance-agent-allow-editing-agents-md
 work/base: main
 work/created_at: 2026-02-17T17:42:42Z
-work/updated_at: 2026-02-17T17:53:48Z
+work/updated_at: 2026-02-17T18:00:53Z
 
 # Notes
 
