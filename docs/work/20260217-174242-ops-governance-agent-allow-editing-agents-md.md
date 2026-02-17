@@ -13,3 +13,15 @@ work/updated_at: 2026-02-17T17:42:42Z
 
 ## Proof
 - [ ] <fill in exact commands, ideally from the playbook>
+## Approved spec
+
+- approved_at: `2026-02-17T17:42:54Z`
+- agent: `agents/ops-governance/AGENT.json`
+- model: `gpt-5.2`
+
+### Request
+
+```
+Update agents/ops-governance/AGENT.json so allowed_paths includes the repo root file AGENTS.md (exact file path). Keep existing paths and proofs unchanged.
+```
+
