@@ -1,3 +1,4 @@
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/74
 work/id: 20260217-202627-lab-agent-contract-json-pin-work-model-to-gpt-5-
 work/type: governance
 work/status: open
@@ -9,7 +10,7 @@ work/base: main
 work/prereqs: []
 work/lock: 
 work/created_at: 2026-02-17T20:26:28Z
-work/updated_at: 2026-02-17T20:26:28Z
+work/updated_at: 2026-02-17T20:29:43Z
 
 # Notes
 
