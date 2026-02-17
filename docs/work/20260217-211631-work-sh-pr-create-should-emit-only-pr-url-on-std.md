@@ -1,3 +1,4 @@
+work/pr_url: https://github.com/damjanbab/darelwasl/pull/76
 work/id: 20260217-211631-work-sh-pr-create-should-emit-only-pr-url-on-std
 work/type: governance
 work/status: open
@@ -9,7 +10,7 @@ work/base: main
 work/prereqs: []
 work/lock: 
 work/created_at: 2026-02-17T21:16:31Z
-work/updated_at: 2026-02-17T21:16:31Z
+work/updated_at: 2026-02-17T21:17:13Z
 
 # Notes
 
