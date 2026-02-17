@@ -82,6 +82,33 @@ work_branch() {
   scripts/work.sh show "$id" | sed -nE 's/^work\/branch:[[:space:]]*//p' | head -n1
 }
 
+preview_run_id() {
+  # scripts/preview enforces: kebab-case [a-z0-9-], length 3..49.
+  # Our work ids can be longer, so derive a stable, short preview id when needed.
+  local work_id="$1"
+  python3 - "$work_id" <<'PY'
+import hashlib, re, sys
+
+work_id = (sys.argv[1] or "").strip()
+pat = re.compile(r"[a-z0-9][a-z0-9-]{2,48}$")
+if pat.fullmatch(work_id):
+    print(work_id)
+    raise SystemExit(0)
+
+slug = re.sub(r"[^a-z0-9]+", "-", work_id.lower()).strip("-")
+slug = slug or "work"
+suffix = hashlib.sha1(work_id.encode("utf-8")).hexdigest()[:8]
+prefix = "wp-"
+maxlen = 49
+avail = maxlen - len(prefix) - 1 - len(suffix)
+base = slug[:max(avail, 1)].strip("-") or "work"
+out = f"{prefix}{base}-{suffix}"
+if not pat.fullmatch(out):
+    raise SystemExit(f"derived preview id invalid: {out!r}")
+print(out)
+PY
+}
+
 require_work_item() {
   local id="$1"
   [ -s "$ROOT/docs/work/$id.md" ] || die "Work item missing: docs/work/$id.md (create: scripts/work.sh new ...)"
@@ -149,7 +176,8 @@ ensure_worktree() {
   local id="$1"
   require_work_item "$id"
   local wt; wt="$(worktree_path "$id")"
-  if [ -z "${wt:-}" ] || [ ! -d "$wt/.git" ]; then
+  # In git worktrees, `.git` is typically a file (not a directory).
+  if [ -z "${wt:-}" ] || [ ! -e "$wt/.git" ]; then
     wt="$(scripts/work.sh start "$id")"
   fi
   echo "$wt"
@@ -373,7 +401,7 @@ cmd_execute() {
 }
 
 write_proof_html() {
-  local id="$1" app_url="$2" site_url="$3" approve_url="$4"
+  local id="$1" preview_id="$2" app_url="$3" site_url="$4" approve_url="$5"
   local out_dir="$ARTIFACT_DIR/$id"
   mkdir -p "$out_dir"
   local out="$out_dir/work-proof-$id.html"
@@ -407,19 +435,20 @@ write_proof_html() {
 <div class="card">
   <h2>Service control</h2>
   <div class="muted">Stop the preview when done:</div>
-  <pre><code>scripts/preview stop $id</code></pre>
+  <pre><code>scripts/preview stop $preview_id</code></pre>
 </div>
 HTML
   echo "$out"
 }
 
 write_links_txt() {
-  local id="$1" app_url="$2" site_url="$3" approve_url="$4" expires_at="$5"
+  local id="$1" preview_id="$2" app_url="$3" site_url="$4" approve_url="$5" expires_at="$6"
   local out_dir="$ARTIFACT_DIR/$id"
   mkdir -p "$out_dir"
   local out="$out_dir/work-links-$id.txt"
   cat >"$out" <<TXT
 work_id=$id
+preview_id=$preview_id
 app_url=$app_url
 site_url=$site_url
 approve_url=$approve_url
@@ -450,19 +479,47 @@ cmd_preview() {
   local branch; branch="$(scripts/work.sh show "$id" | sed -nE 's/^work\/branch:[[:space:]]*//p' | head -n1)"
   [ -n "$branch" ] || branch="work/$id"
 
+  local preview_id
+  preview_id="$(preview_run_id "$id")"
+
   # Start preview from the work branch ref.
   local out_json
   out_json="$(python3 - <<PY
 import json,subprocess,shlex,sys
-cmd=["bash","-lc", "scripts/preview start " + shlex.quote("$id") + " --ref " + shlex.quote("$branch") + " --mode both --public-host " + shlex.quote("$public_host") + " --verify light"]
+cmd=["bash","-lc", "scripts/preview start " + shlex.quote("$preview_id") + " --ref " + shlex.quote("$branch") + " --mode both --public-host " + shlex.quote("$public_host") + " --verify light"]
 p=subprocess.run(cmd, cwd="$ROOT", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 print(p.stdout)
 sys.exit(p.returncode)
 PY
-)"
+  )"
   # scripts/preview prints JSON on success; capture last {...}.
   local preview_json
-  preview_json="$(printf "%s" "$out_json" | python3 -c 'import json,sys,re; s=sys.stdin.read(); ms=list(re.finditer(r\"\\{\", s));\n\nif not ms:\n  raise SystemExit(1)\nlast=s[ms[-1].start():]\ndata=json.loads(last)\nprint(json.dumps(data))')" || die "preview start failed:\n$out_json"
+  preview_json="$(python3 - "$out_json" <<'PY'
+import json, sys
+
+_s = sys.argv[1] if len(sys.argv) > 1 else ""
+s = _s
+try:
+    d = json.loads(s)
+    print(json.dumps(d))
+    raise SystemExit(0)
+except Exception:
+    pass
+
+# Best-effort: find a JSON object at the end of mixed output.
+for i in range(len(s) - 1, -1, -1):
+    if s[i] != "{":
+        continue
+    try:
+        d = json.loads(s[i:])
+        print(json.dumps(d))
+        raise SystemExit(0)
+    except Exception:
+        continue
+
+raise SystemExit(1)
+PY
+)" || die "preview start failed:\n$out_json"
 
   local app_url site_url expires_at
   app_url="$(printf "%s" "$preview_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("urls") or {}).get("app",""))')"
@@ -473,12 +530,12 @@ PY
 
   # Token is in manifest; infer from urls (?t=...).
   local token
-  token="$(python3 -c 'import re,sys; s=sys.argv[1]; m=re.search(r\"[?&]t=([^&]+)\", s); print(m.group(1) if m else \"\")' "$app_url")"
+  token="$(python3 -c 'import re,sys; s=sys.argv[1]; m=re.search(r"[?&]t=([^&]+)", s); print(m.group(1) if m else "")' "$app_url")"
   [ -n "$token" ] || die "unable to infer token from app url"
 
   local approve_url="${public_host}/_preview/${id}/approve/?t=${token}"
-  local proof_html; proof_html="$(write_proof_html "$id" "$app_url" "$site_url" "$approve_url")"
-  local links_txt; links_txt="$(write_links_txt "$id" "$app_url" "$site_url" "$approve_url" "$expires_at")"
+  local proof_html; proof_html="$(write_proof_html "$id" "$preview_id" "$app_url" "$site_url" "$approve_url")"
+  local links_txt; links_txt="$(write_links_txt "$id" "$preview_id" "$app_url" "$site_url" "$approve_url" "$expires_at")"
 
   case "$lab" in
     stable) "$ROOT/scripts/lab.sh" --stable put-outbox "$proof_html" ;;
@@ -499,12 +556,13 @@ PY
   state_read "$id" | \
     DW_NOW="$now" \
     DW_PREVIEW_JSON_FILE="$preview_json_file" \
+    DW_PREVIEW_ID="$preview_id" \
     DW_TOKEN="$token" \
     DW_EXPIRES_AT="$expires_at" \
     DW_PROOF_HTML="$proof_html" \
     DW_LINKS_TXT="$links_txt" \
     DW_APPROVE_URL="$approve_url" \
-    python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; preview=json.load(open(os.environ["DW_PREVIEW_JSON_FILE"],"r",encoding="utf-8")); d["status"]="proof_ready"; d["updated_at"]=now; d["preview"]={"json": preview, "token": os.environ.get("DW_TOKEN",""), "expires_at": os.environ.get("DW_EXPIRES_AT",""), "proof_html": os.environ.get("DW_PROOF_HTML",""), "links_txt": os.environ.get("DW_LINKS_TXT",""), "approve_url": os.environ.get("DW_APPROVE_URL","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | \
+    python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; preview=json.load(open(os.environ["DW_PREVIEW_JSON_FILE"],"r",encoding="utf-8")); d["status"]="proof_ready"; d["updated_at"]=now; d["preview"]={"id": os.environ.get("DW_PREVIEW_ID",""), "json": preview, "token": os.environ.get("DW_TOKEN",""), "expires_at": os.environ.get("DW_EXPIRES_AT",""), "proof_html": os.environ.get("DW_PROOF_HTML",""), "links_txt": os.environ.get("DW_LINKS_TXT",""), "approve_url": os.environ.get("DW_APPROVE_URL","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | \
     state_write "$id"
 }
 
