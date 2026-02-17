@@ -25,6 +25,8 @@
   ["src/darelwasl/http/routes"
    "src/darelwasl/http.clj"])
 
+(def ^:private work-root "docs/work")
+
 (defn- read-edn
   [path]
   (with-open [r (java.io.PushbackReader. (io/reader (io/file path)))]
@@ -131,6 +133,52 @@
                    :name name
                    :source (normalize-source file)}))))))
 
+(defn- parse-work-headers
+  [text]
+  (let [lines (str/split-lines (or text ""))]
+    (reduce
+      (fn [acc line]
+        (if-let [[_ k v] (re-matches #"^work/([a-zA-Z0-9_\\-]+):[[:space:]]*(.*)$" line)]
+          (assoc acc (keyword "work" k) (str/trim (str v)))
+          acc))
+      {}
+      lines)))
+
+(defn- work-item-entries
+  []
+  ;; Use tracked files so generated docs don't drift based on local untracked/ignored artifacts.
+  (let [{:keys [exit out err]} (shell/sh "git" "ls-files" work-root)]
+    (when-not (zero? exit)
+      (throw (ex-info "git ls-files docs/work failed" {:exit exit :err err})))
+    (->> (str/split-lines (or out ""))
+         (remove str/blank?)
+         (remove #(= % (str work-root "/README.md")))
+         (filter #(str/ends-with? % ".md"))
+         (map io/file)
+         (filter #(.isFile ^java.io.File %))
+         (map (fn [file]
+                (let [path (normalize-source file)
+                      headers (parse-work-headers (slurp file))
+                      id (:work/id headers)
+                      status (:work/status headers)
+                      type (:work/type headers)
+                      playbook (:work/playbook headers)
+                      summary (:work/summary headers)]
+                  (when (and (some? id)
+                             (not (str/blank? id))
+                             (not (str/includes? id "<")))
+                    {:id (str "work-item/" id)
+                     :kind :work-item
+                     :name (str (or status "?")
+                                " "
+                                (or type "?")
+                                (when-not (str/blank? playbook) (str " " playbook))
+                                " — "
+                                (or summary ""))
+                     :source path
+                     :data headers}))))
+         (remove nil?))))
+
 (defn- route-paths
   []
   (let [files (map io/file route-root-paths)
@@ -172,6 +220,7 @@
                       (list-namespaces)
                       (config-env-vars)
                       (script-entries)
+                      (work-item-entries)
                       (route-paths))
                      (remove nil?)
                      (sort-by :id)

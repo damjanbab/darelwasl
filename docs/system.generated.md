@@ -2,7 +2,7 @@
 
 This file is auto-generated. Do not edit by hand.
 
-- Catalog version: `1b59e9a0d5ab00c3fdf20b50fd19c1cbbf9e4a1f2889c14f73f1a0f12c28f3d3`
+- Catalog version: `f4b8eff43a007901abb4697fc3381d23f418971d90f12aa21ae1ef61d004379a`
 - Catalog file: `docs/catalog.edn`
 
 ## Registry Summary
@@ -602,3 +602,18 @@ Common queries:
 - darelwasl.workers.telegram-poller
 - darelwasl.workspace
 - darelwasl.workspaces
+
+## Work items (open)
+
+Work items live in `docs/work/` and can be queried via:
+
+- `scripts/query.sh --kind work-item TERM`
+- `scripts/work.sh list --open`
+
+- work-item/20260215-201345-lab-ui-professional-design-history-scroll-codex-
+- work-item/20260216-130953-enforce-pr-workflow-parallel-worktrees-hooks-wor
+- work-item/20260216-162647-fix-secrets-vault-set-lab-inbox-token-ingest-pr-
+- work-item/20260216-174051-agents-wire-discovery-first-one-off-vs-workflow-
+- work-item/20260216-174943-file-library-allow-txt-uploads-for-one-off-secre
+- work-item/20260216-190824-lab-canary-first-webterm-ui-deploy-proctor-link
+- work-item/20260217-013524-work-items-are-queryable-via-catalog-better-work
