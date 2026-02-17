@@ -202,8 +202,13 @@ cmd_new() {
     local n
     n="$(printf "%s" "$dirty" | wc -l | tr -d ' ')"
     if [[ "$n" == "1" ]] && printf "%s" "$dirty" | rg -q "^\\?\\?[[:space:]]+${wf//\//\\/}$"; then
-      (cd "$ROOT" && git add "$wf" && git commit -m "work: ${new_id} (work-prod)" >/dev/null 2>&1) || true
+      (cd "$ROOT" && git add "$wf" && git commit -m "work: ${new_id} (work-prod)" >/dev/null 2>&1) \
+        || die "Failed to auto-commit work item file: $wf"
     fi
+  fi
+  dirty="$(cd "$ROOT" && git status --porcelain=v1 || true)"
+  if [ -n "${dirty:-}" ]; then
+    die "Base checkout left dirty after work creation. Resolve and retry: git status shows:\n$dirty"
   fi
 
   echo "$new_id"
@@ -240,6 +245,8 @@ cmd_init() {
   if [ -e "$st" ]; then
     die "State already exists: $st"
   fi
+  local request_json
+  request_json="$(DW_WORK_PROD_REQUEST="$request" python3 -c 'import json,os; print(json.dumps(os.environ.get("DW_WORK_PROD_REQUEST","")))' )"
   cat >"$st" <<JSON
 {
   "format": "darelwasl/work-prod",
@@ -250,11 +257,7 @@ cmd_init() {
   "status": "draft",
   "agent_json": "$agent",
   "model": "$model",
-  "request": $(python3 - <<PY
-import json
-print(json.dumps("""$request"""))
-PY
-),
+  "request": $request_json,
   "events": []
 }
 JSON
@@ -265,44 +268,46 @@ record_approved_spec_if_missing() {
   local wt="$1" id="$2" now="$3" agent_json="$4" model="$5" request="$6"
   local f="$wt/docs/work/$id.md"
   [ -s "$f" ] || die "Work item missing in worktree: $f"
-  python3 - <<PY
-import json,sys
+  DW_WORK_FILE="$f" \
+  DW_APPROVED_AT="$now" \
+  DW_AGENT_JSON="$agent_json" \
+  DW_MODEL="$model" \
+  DW_REQUEST="$request" \
+  python3 - <<'PY'
+import os
+import sys
 from pathlib import Path
 
-payload = {
-  "path": "$f",
-  "now": "$now",
-  "agent": "$agent_json",
-  "model": "$model",
-  "request": $(
-    python3 - <<'J'
-import json,sys
-print(json.dumps(sys.stdin.read()))
-J
-    <<<"$request"
-  )
-}
-path=Path(payload["path"])
-text=path.read_text(encoding="utf-8")
-if "\n## Approved spec\n" in text or text.startswith("## Approved spec\n"):
-  sys.exit(3)
+path = Path(os.environ["DW_WORK_FILE"])
+text = path.read_text(encoding="utf-8")
 
-block="\\n".join([
-  "",
-  "## Approved spec",
-  "",
-  f"- approved_at: `{payload['now']}`",
-  f"- agent: `{payload['agent']}`",
-  f"- model: `{payload['model']}`",
-  "",
-  "### Request",
-  "",
-  "```",
-  (payload["request"] or "").rstrip("\\n"),
-  "```",
-  "",
-])
-path.write_text(text.rstrip("\\n") + block + "\\n", encoding="utf-8")
+if "\n## Approved spec\n" in text or text.startswith("## Approved spec\n"):
+    sys.exit(3)
+
+approved_at = os.environ.get("DW_APPROVED_AT", "")
+agent = os.environ.get("DW_AGENT_JSON", "")
+model = os.environ.get("DW_MODEL", "")
+request = (os.environ.get("DW_REQUEST", "") or "").rstrip("\n")
+
+block = "\n".join(
+    [
+        "",
+        "## Approved spec",
+        "",
+        f"- approved_at: `{approved_at}`",
+        f"- agent: `{agent}`",
+        f"- model: `{model}`",
+        "",
+        "### Request",
+        "",
+        "```",
+        request,
+        "```",
+        "",
+    ]
+)
+
+path.write_text(text.rstrip("\n") + block + "\n", encoding="utf-8")
 PY
 }
 
@@ -331,15 +336,7 @@ cmd_approve_spec() {
     (cd "$wt" && git add "docs/work/$id.md" && git commit -m "work-prod($id): approve spec" >/dev/null 2>&1) || true
   fi
 
-  state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys,datetime
-d=json.loads(sys.stdin.read())
-now="$now"
-d["status"]="spec_approved"
-d["updated_at"]=now
-d.setdefault("events",[]).append({"at":now,"kind":"spec_approved"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+  DW_NOW="$now" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="spec_approved"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"spec_approved"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 }
 
 cmd_execute() {
@@ -363,15 +360,7 @@ cmd_execute() {
   fi
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys
-d=json.loads(sys.stdin.read())
-now="$now"
-d["status"]="executing"
-d["updated_at"]=now
-d.setdefault("events",[]).append({"at":now,"kind":"executing"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+  DW_NOW="$now" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; d["status"]="executing"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"executing"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 
   "$ROOT/scripts/agent-runner" run \
     --work-id "$id" \
@@ -382,16 +371,7 @@ PY
 
   local sha; sha="$(cd "$wt" && git rev-parse HEAD)"
   local now2; now2="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys
-d=json.loads(sys.stdin.read())
-now="$now2"
-d["status"]="executed"
-d["updated_at"]=now
-d["executed_sha"]="$sha"
-d.setdefault("events",[]).append({"at":now,"kind":"executed","sha":"$sha"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+  DW_NOW="$now2" DW_SHA="$sha" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; sha=os.environ["DW_SHA"]; d["status"]="executed"; d["updated_at"]=now; d["executed_sha"]=sha; d.setdefault("events",[]).append({"at":now,"kind":"executed","sha":sha}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 }
 
 write_proof_html() {
@@ -484,17 +464,7 @@ PY
 )"
   # scripts/preview prints JSON on success; capture last {...}.
   local preview_json
-  preview_json="$(printf "%s" "$out_json" | python3 - <<'PY'
-import json,sys,re
-s=sys.stdin.read()
-ms=list(re.finditer(r"\{", s))
-if not ms:
-  raise SystemExit(1)
-last=s[ms[-1].start():]
-data=json.loads(last)
-print(json.dumps(data))
-PY
-)" || die "preview start failed:\n$out_json"
+  preview_json="$(printf "%s" "$out_json" | python3 -c 'import json,sys,re; s=sys.stdin.read(); ms=list(re.finditer(r\"\\{\", s));\n\nif not ms:\n  raise SystemExit(1)\nlast=s[ms[-1].start():]\ndata=json.loads(last)\nprint(json.dumps(data))')" || die "preview start failed:\n$out_json"
 
   local app_url site_url expires_at
   app_url="$(printf "%s" "$preview_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("urls") or {}).get("app",""))')"
@@ -505,13 +475,7 @@ PY
 
   # Token is in manifest; infer from urls (?t=...).
   local token
-  token="$(python3 - <<PY
-import re,sys
-s="$app_url"
-m=re.search(r"[?&]t=([^&]+)", s)
-print(m.group(1) if m else "")
-PY
-)"
+  token="$(python3 -c 'import re,sys; s=sys.argv[1]; m=re.search(r\"[?&]t=([^&]+)\", s); print(m.group(1) if m else \"\")' "$app_url")"
   [ -n "$token" ] || die "unable to infer token from app url"
 
   local approve_url="${public_host}/_preview/${id}/approve/?t=${token}"
@@ -532,16 +496,16 @@ PY
   esac
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys
-d=json.loads(sys.stdin.read())
-now="$now"
-d["status"]="proof_ready"
-d["updated_at"]=now
-d["preview"]={"json": json.loads("""$preview_json"""), "token":"$token", "expires_at":"$expires_at", "proof_html":"$proof_html", "links_txt":"$links_txt", "approve_url":"$approve_url"}
-d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+  local preview_json_file="$ARTIFACT_DIR/$id/preview.json"
+  printf "%s" "$preview_json" >"$preview_json_file"
+  DW_NOW="$now" \
+  DW_PREVIEW_JSON_FILE="$preview_json_file" \
+  DW_TOKEN="$token" \
+  DW_EXPIRES_AT="$expires_at" \
+  DW_PROOF_HTML="$proof_html" \
+  DW_LINKS_TXT="$links_txt" \
+  DW_APPROVE_URL="$approve_url" \
+  state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; preview=json.load(open(os.environ["DW_PREVIEW_JSON_FILE"],"r",encoding="utf-8")); d["status"]="proof_ready"; d["updated_at"]=now; d["preview"]={"json": preview, "token": os.environ.get("DW_TOKEN",""), "expires_at": os.environ.get("DW_EXPIRES_AT",""), "proof_html": os.environ.get("DW_PROOF_HTML",""), "links_txt": os.environ.get("DW_LINKS_TXT",""), "approve_url": os.environ.get("DW_APPROVE_URL","")}; d.setdefault("events",[]).append({"at":now,"kind":"proof_ready"}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 }
 
 cmd_approve_proof() {
@@ -567,29 +531,12 @@ cmd_approve_proof() {
   pr_url="$(scripts/work.sh pr-create "$id")"
 
   local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys
-d=json.loads(sys.stdin.read())
-now="$now"
-d["status"]="pr_created"
-d["updated_at"]=now
-d["pr_url"]="$pr_url"
-d.setdefault("events",[]).append({"at":now,"kind":"pr_created","url":"$pr_url"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+  DW_NOW="$now" DW_PR_URL="$pr_url" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="pr_created"; d["updated_at"]=now; d["pr_url"]=url; d.setdefault("events",[]).append({"at":now,"kind":"pr_created","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
 
   # Attempt merge (requires DEPLOY_APPROVED=1 + GitHub token).
   if scripts/pr-merge.sh merge-work "$id" --resolve >/dev/null 2>&1; then
     local now3; now3="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    state_read "$id" | python3 - <<PY | state_write "$id"
-import json,sys
-d=json.loads(sys.stdin.read())
-now="$now3"
-d["status"]="merged"
-d["updated_at"]=now
-d.setdefault("events",[]).append({"at":now,"kind":"merged","url":"$pr_url"})
-print(json.dumps(d, indent=2, sort_keys=True))
-PY
+    DW_NOW="$now3" DW_PR_URL="$pr_url" state_read "$id" | python3 -c 'import json,os,sys; d=json.loads(sys.stdin.read() or "{}"); now=os.environ["DW_NOW"]; url=os.environ.get("DW_PR_URL",""); d["status"]="merged"; d["updated_at"]=now; d.setdefault("events",[]).append({"at":now,"kind":"merged","url":url}); print(json.dumps(d, indent=2, sort_keys=True))' | state_write "$id"
   fi
 
   echo "$pr_url"
